@@ -1,0 +1,5 @@
+---
+alwaysApply: true
+---
+### 1,online-ppt-web是前端工程项目，基于vue3+typescript+pina
+### 2,online-ppt-backend是基于nodeJs开发的小型接口服务项目， 服务于online-ppt-web前端
