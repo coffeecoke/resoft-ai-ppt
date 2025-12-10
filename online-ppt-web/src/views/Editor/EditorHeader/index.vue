@@ -37,7 +37,7 @@
                 mainMenuVisible = false
               }">
                 <span class="icon"><IconNotes theme="multi-color" :fill="['#333', '#d14424', '#fff']" /></span>
-                <span class="label">RSAiPPT</span>
+                <span class="label">RsAiPPT</span>
                 <span class="sub-label">（专属格式）</span>
               </FileInput>
             </div>
@@ -85,7 +85,7 @@
         </Popover>
       </div>
       <div class="menu-item" v-tooltip="'AI生成PPT'" @click="openAIPPTDialog(); mainMenuVisible = false">
-        <span class="text ai">AI</span>
+        <span class="text ai">RsAI</span>
       </div>
       <div class="menu-item" v-tooltip="'导出'" @click="setDialogForExport('pptx')">
         <IconDownload class="icon" />
@@ -196,7 +196,7 @@ const openAIPPTDialog = () => {
     color: #666;
   }
   .text {
-    width: 18px;
+    width: 50px;
     text-align: center;
     font-size: 17px;
   }

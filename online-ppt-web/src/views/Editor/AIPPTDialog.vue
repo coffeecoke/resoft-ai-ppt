@@ -20,7 +20,10 @@
           <div class="submit" type="primary" @click="createOutline()"><IconSend class="icon" /> AI 生成</div>
         </template>
       </Input>
-
+      
+      <div class="recommends">
+        <div class="recommend" v-for="(item, index) in recommends" :key="index" @click="setKeyword(item)">{{ item }}</div>
+      </div>
       <!-- Word上传区域 -->
       <div class="word-upload-section">
         <div class="section-label">📄 参考文档（可选）</div>
@@ -51,9 +54,7 @@
         </div>
       </div>
 
-      <div class="recommends">
-        <div class="recommend" v-for="(item, index) in recommends" :key="index" @click="setKeyword(item)">{{ item }}</div>
-      </div>
+      
       <div class="configs">
         <div class="config-item">
           <div class="label">语言：</div>
