@@ -139,7 +139,33 @@ interface PPTBaseElement {
 }
 
 
-export type TextType = 'title' | 'subtitle' | 'content' | 'item' | 'itemTitle' | 'notes' | 'header' | 'footer' | 'partNumber' | 'itemNumber'
+export type TextType = 
+  // 基础类型
+  | 'title'        // 标题
+  | 'subtitle'     // 副标题
+  | 'content'      // 正文
+  | 'item'         // 列表项目
+  | 'itemTitle'    // 列表项标题
+  | 'notes'        // 注释
+  | 'header'       // 页眉
+  | 'footer'       // 页脚
+  | 'partNumber'   // 节编号
+  | 'itemNumber'   // 项目编号
+  // === 方案A扩展类型 ===
+  // 对比页专用
+  | 'leftTitle'    // 左侧标题
+  | 'leftItem'     // 左侧内容项
+  | 'rightTitle'   // 右侧标题
+  | 'rightItem'    // 右侧内容项
+  // 时间线专用
+  | 'timeLabel'    // 时间标签（如"2020年"、"Q1"）
+  // 数据统计专用
+  | 'statValue'    // 统计数值（如"98%"）
+  | 'statLabel'    // 数值说明
+  // 引用页专用
+  | 'quote'        // 引用内容
+  | 'author'       // 作者名
+  | 'authorTitle'  // 作者头衔
 
 /**
  * 文本元素

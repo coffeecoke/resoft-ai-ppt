@@ -73,6 +73,7 @@ const slideTypeOptions = ref<{ label: string; value: SlideType | '' }[]>([
 
 const textTypeOptions = ref<{ label: string; value: TextType | '' }[]>([
   { label: '未标记类型', value: '' },
+  // 基础类型
   { label: '标题', value: 'title' },
   { label: '副标题', value: 'subtitle' },
   { label: '正文', value: 'content' },
@@ -83,6 +84,20 @@ const textTypeOptions = ref<{ label: string; value: TextType | '' }[]>([
   { label: '页脚', value: 'footer' },
   { label: '节编号', value: 'partNumber' },
   { label: '项目编号', value: 'itemNumber' },
+  // 扩展类型 - 对比页
+  { label: '【对比】左侧标题', value: 'leftTitle' },
+  { label: '【对比】左侧内容', value: 'leftItem' },
+  { label: '【对比】右侧标题', value: 'rightTitle' },
+  { label: '【对比】右侧内容', value: 'rightItem' },
+  // 扩展类型 - 时间线
+  { label: '【时间线】时间标签', value: 'timeLabel' },
+  // 扩展类型 - 数据统计
+  { label: '【统计】数值', value: 'statValue' },
+  { label: '【统计】数值说明', value: 'statLabel' },
+  // 扩展类型 - 引用页
+  { label: '【引用】引用内容', value: 'quote' },
+  { label: '【引用】作者', value: 'author' },
+  { label: '【引用】作者头衔', value: 'authorTitle' },
 ])
 
 const imageTypeOptions = ref<{ label: string; value: ImageType | '' }[]>([

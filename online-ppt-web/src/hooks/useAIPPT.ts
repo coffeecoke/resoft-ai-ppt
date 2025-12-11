@@ -558,12 +558,18 @@ export default () => {
         const templates = comparisonTemplates.length > 0 ? comparisonTemplates : contentTemplates
         const template = templates[Math.floor(Math.random() * templates.length)]
         
-        // 将对比数据转换为 items 格式以兼容 content 模板
+        // 检查是否有专用的对比类型文本元素
+        const hasComparisonTextTypes = template.elements.some(el => 
+          checkTextType(el, 'leftTitle') || checkTextType(el, 'rightTitle')
+        )
+        
+        // 将对比数据转换为 items 格式以兼容 content 模板（降级用）
         const comparisonItems = [
           { title: item.data.leftTitle, text: item.data.leftItems.join('；') },
           { title: item.data.rightTitle, text: item.data.rightItems.join('；') }
         ]
         
+        // 降级用：按位置排序的 itemTitle 和 item
         const sortedTitleItemIds = template.elements.filter(el => checkTextType(el, 'itemTitle')).sort((a, b) => {
           const aIndex = a.left + a.top * 2
           const bIndex = b.left + b.top * 2
@@ -576,12 +582,57 @@ export default () => {
           return aIndex - bIndex
         }).map(el => el.id)
         
+        // 专用类型：按位置排序的 leftItem 和 rightItem
+        const sortedLeftItemIds = template.elements.filter(el => checkTextType(el, 'leftItem')).sort((a, b) => {
+          const aIndex = a.top
+          const bIndex = b.top
+          return aIndex - bIndex
+        }).map(el => el.id)
+        
+        const sortedRightItemIds = template.elements.filter(el => checkTextType(el, 'rightItem')).sort((a, b) => {
+          const aIndex = a.top
+          const bIndex = b.top
+          return aIndex - bIndex
+        }).map(el => el.id)
+        
         const elements = template.elements.map(el => {
           if (el.type === 'image' && el.imageType && imgPool.value.length) return getNewImgElement(el)
           if (el.type !== 'text' && el.type !== 'shape') return el
+          
+          // 页面标题
           if (checkTextType(el, 'title') && item.data.title) {
             return getNewTextElement({ el, text: item.data.title, maxLine: 1 })
           }
+          
+          // === 专用类型匹配 ===
+          if (hasComparisonTextTypes) {
+            // 左侧标题
+            if (checkTextType(el, 'leftTitle') && item.data.leftTitle) {
+              return getNewTextElement({ el, text: item.data.leftTitle, maxLine: 1 })
+            }
+            // 右侧标题
+            if (checkTextType(el, 'rightTitle') && item.data.rightTitle) {
+              return getNewTextElement({ el, text: item.data.rightTitle, maxLine: 1 })
+            }
+            // 左侧内容项
+            if (checkTextType(el, 'leftItem')) {
+              const index = sortedLeftItemIds.findIndex(id => id === el.id)
+              const leftItem = item.data.leftItems[index]
+              if (leftItem) {
+                return getNewTextElement({ el, text: leftItem, maxLine: 2 })
+              }
+            }
+            // 右侧内容项
+            if (checkTextType(el, 'rightItem')) {
+              const index = sortedRightItemIds.findIndex(id => id === el.id)
+              const rightItem = item.data.rightItems[index]
+              if (rightItem) {
+                return getNewTextElement({ el, text: rightItem, maxLine: 2 })
+              }
+            }
+          }
+          
+          // === 降级匹配（使用 itemTitle/item）===
           if (checkTextType(el, 'itemTitle')) {
             const index = sortedTitleItemIds.findIndex(id => id === el.id)
             const compItem = comparisonItems[index]
@@ -608,7 +659,13 @@ export default () => {
       else if (item.type === 'timeline') {
         // 时间线页：优先使用专门模板，否则降级到 content 模板
         const templates = timelineTemplates.length > 0 ? timelineTemplates : contentTemplates
-        const _templates = getUseableTemplates(templates, item.data.items.length, 'item')
+        
+        // 检查是否有专用的时间线类型文本元素
+        const hasTimelineTextTypes = templates.some(t => 
+          t.elements.some(el => checkTextType(el, 'timeLabel'))
+        )
+        
+        const _templates = getUseableTemplates(templates, item.data.items.length, hasTimelineTextTypes ? 'timeLabel' : 'item')
         const template = _templates[Math.floor(Math.random() * _templates.length)]
         
         // 将时间线数据转换为 items 格式
@@ -617,6 +674,14 @@ export default () => {
           text: i.event
         }))
         
+        // 专用类型：timeLabel
+        const sortedTimeLabelIds = template.elements.filter(el => checkTextType(el, 'timeLabel')).sort((a, b) => {
+          const aIndex = a.left + a.top * 2
+          const bIndex = b.left + b.top * 2
+          return aIndex - bIndex
+        }).map(el => el.id)
+        
+        // 降级用：itemTitle
         const sortedTitleItemIds = template.elements.filter(el => checkTextType(el, 'itemTitle')).sort((a, b) => {
           const aIndex = a.left + a.top * 2
           const bIndex = b.left + b.top * 2
@@ -641,9 +706,22 @@ export default () => {
         const elements = template.elements.map(el => {
           if (el.type === 'image' && el.imageType && imgPool.value.length) return getNewImgElement(el)
           if (el.type !== 'text' && el.type !== 'shape') return el
+          
+          // 页面标题
           if (checkTextType(el, 'title') && item.data.title) {
             return getNewTextElement({ el, text: item.data.title, maxLine: 1 })
           }
+          
+          // === 专用类型匹配：timeLabel ===
+          if (checkTextType(el, 'timeLabel')) {
+            const index = sortedTimeLabelIds.findIndex(id => id === el.id)
+            const tlItem = timelineItems[index]
+            if (tlItem && tlItem.title) {
+              return getNewTextElement({ el, text: tlItem.title, longestText: longestTitle, maxLine: 1 })
+            }
+          }
+          
+          // === 降级匹配：itemTitle ===
           if (checkTextType(el, 'itemTitle')) {
             const index = sortedTitleItemIds.findIndex(id => id === el.id)
             const tlItem = timelineItems[index]
@@ -651,6 +729,8 @@ export default () => {
               return getNewTextElement({ el, text: tlItem.title, longestText: longestTitle, maxLine: 1 })
             }
           }
+          
+          // 事件描述
           if (checkTextType(el, 'item')) {
             const index = sortedTextItemIds.findIndex(id => id === el.id)
             const tlItem = timelineItems[index]
@@ -674,7 +754,13 @@ export default () => {
       else if (item.type === 'statistics') {
         // 数据统计页：优先使用专门模板，否则降级到 content 模板
         const templates = statisticsTemplates.length > 0 ? statisticsTemplates : contentTemplates
-        const _templates = getUseableTemplates(templates, item.data.items.length, 'item')
+        
+        // 检查是否有专用的统计类型文本元素
+        const hasStatisticsTextTypes = templates.some(t => 
+          t.elements.some(el => checkTextType(el, 'statValue'))
+        )
+        
+        const _templates = getUseableTemplates(templates, item.data.items.length, hasStatisticsTextTypes ? 'statValue' : 'item')
         const template = _templates[Math.floor(Math.random() * _templates.length)]
         
         // 将统计数据转换为 items 格式
@@ -683,6 +769,20 @@ export default () => {
           text: i.label     // 说明作为内容
         }))
         
+        // 专用类型：statValue 和 statLabel
+        const sortedStatValueIds = template.elements.filter(el => checkTextType(el, 'statValue')).sort((a, b) => {
+          const aIndex = a.left + a.top * 2
+          const bIndex = b.left + b.top * 2
+          return aIndex - bIndex
+        }).map(el => el.id)
+        
+        const sortedStatLabelIds = template.elements.filter(el => checkTextType(el, 'statLabel')).sort((a, b) => {
+          const aIndex = a.left + a.top * 2
+          const bIndex = b.left + b.top * 2
+          return aIndex - bIndex
+        }).map(el => el.id)
+        
+        // 降级用：itemTitle 和 item
         const sortedTitleItemIds = template.elements.filter(el => checkTextType(el, 'itemTitle')).sort((a, b) => {
           const aIndex = a.left + a.top * 2
           const bIndex = b.left + b.top * 2
@@ -701,9 +801,31 @@ export default () => {
         const elements = template.elements.map(el => {
           if (el.type === 'image' && el.imageType && imgPool.value.length) return getNewImgElement(el)
           if (el.type !== 'text' && el.type !== 'shape') return el
+          
+          // 页面标题
           if (checkTextType(el, 'title') && item.data.title) {
             return getNewTextElement({ el, text: item.data.title, maxLine: 1 })
           }
+          
+          // === 专用类型匹配：statValue ===
+          if (checkTextType(el, 'statValue')) {
+            const index = sortedStatValueIds.findIndex(id => id === el.id)
+            const statItem = statItems[index]
+            if (statItem && statItem.title) {
+              return getNewTextElement({ el, text: statItem.title, longestText: longestTitle, maxLine: 1 })
+            }
+          }
+          
+          // === 专用类型匹配：statLabel ===
+          if (checkTextType(el, 'statLabel')) {
+            const index = sortedStatLabelIds.findIndex(id => id === el.id)
+            const statItem = statItems[index]
+            if (statItem && statItem.text) {
+              return getNewTextElement({ el, text: statItem.text, longestText, maxLine: 2 })
+            }
+          }
+          
+          // === 降级匹配：itemTitle ===
           if (checkTextType(el, 'itemTitle')) {
             const index = sortedTitleItemIds.findIndex(id => id === el.id)
             const statItem = statItems[index]
@@ -711,6 +833,8 @@ export default () => {
               return getNewTextElement({ el, text: statItem.title, longestText: longestTitle, maxLine: 1 })
             }
           }
+          
+          // === 降级匹配：item ===
           if (checkTextType(el, 'item')) {
             const index = sortedTextItemIds.findIndex(id => id === el.id)
             const statItem = statItems[index]
@@ -732,9 +856,30 @@ export default () => {
         const templates = quoteTemplates.length > 0 ? quoteTemplates : transitionTemplates
         const template = templates[Math.floor(Math.random() * templates.length)]
         
+        // 检查是否有专用的引用类型文本元素
+        const hasQuoteTextTypes = template.elements.some(el => checkTextType(el, 'quote'))
+        
         const elements = template.elements.map(el => {
           if (el.type === 'image' && el.imageType && imgPool.value.length) return getNewImgElement(el)
           if (el.type !== 'text' && el.type !== 'shape') return el
+          
+          // === 专用类型匹配 ===
+          if (hasQuoteTextTypes) {
+            // 引用内容
+            if (checkTextType(el, 'quote') && item.data.quote) {
+              return getNewTextElement({ el, text: `"${item.data.quote}"`, maxLine: 4 })
+            }
+            // 作者名
+            if (checkTextType(el, 'author') && item.data.author) {
+              return getNewTextElement({ el, text: item.data.author, maxLine: 1 })
+            }
+            // 作者头衔
+            if (checkTextType(el, 'authorTitle') && item.data.title) {
+              return getNewTextElement({ el, text: item.data.title, maxLine: 1 })
+            }
+          }
+          
+          // === 降级匹配 ===
           // quote 内容映射到 title（主要内容）
           if (checkTextType(el, 'title') && item.data.quote) {
             return getNewTextElement({ el, text: `"${item.data.quote}"`, maxLine: 3 })
