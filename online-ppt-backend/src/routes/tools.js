@@ -2,9 +2,11 @@ import { Router } from 'express'
 import multer from 'multer'
 import aiService from '../services/aiService.js'
 import wordService from '../services/wordService.js'
+import slotService from '../services/slotService.js'
 import { buildOutlineMessages } from '../prompts/outlinePrompt.js'
 import { buildWordOutlineMessages } from '../prompts/wordOutlinePrompt.js'
 import { buildAIPPTMessages } from '../prompts/aipptPrompt.js'
+import { buildTemplateFillMessages } from '../prompts/templateFillPrompt.js'
 
 const router = Router()
 
@@ -268,6 +270,209 @@ router.get('/models', (req, res) => {
     { value: 'gpt-4o', label: 'GPT-4o (OpenAI)', provider: 'OpenAI' },
   ]
   res.json(models)
+})
+
+// ============ 方案D：模板填充相关接口 ============
+
+/**
+ * API 4: 提取模板槽位
+ * 
+ * POST /tools/extract_slots
+ * 
+ * Request Body:
+ * {
+ *   "slides": [...] // PPT模板的slides数组
+ * }
+ * 
+ * Response:
+ * {
+ *   "success": true,
+ *   "data": {
+ *     "totalPages": 6,
+ *     "totalSlots": 25,
+ *     "structure": [...],  // 结构摘要
+ *     "slots": [...]       // 详细槽位列表
+ *   }
+ * }
+ */
+router.post('/extract_slots', async (req, res) => {
+  try {
+    const { slides } = req.body
+
+    if (!slides || !Array.isArray(slides)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: '请提供有效的模板slides数组' 
+      })
+    }
+
+    console.log(`[槽位提取] 开始提取, 页面数: ${slides.length}`)
+
+    // 提取槽位
+    const result = slotService.extractSlots(slides)
+
+    console.log(`[槽位提取] 完成, 总槽位数: ${result.totalSlots}`)
+
+    res.json({ 
+      success: true, 
+      data: result 
+    })
+
+  } catch (error) {
+    console.error('[槽位提取] 错误:', error)
+    res.status(500).json({ 
+      success: false, 
+      error: error.message || '槽位提取失败' 
+    })
+  }
+})
+
+/**
+ * API 5: 生成模板填充内容
+ * 
+ * POST /tools/generate_fill_content
+ * 
+ * Request Body:
+ * {
+ *   "slots": {...},           // extractSlots返回的数据
+ *   "topic": "PPT主题",
+ *   "wordContent": "参考文档内容（可选）",
+ *   "model": "GLM-4.5-Flash"
+ * }
+ * 
+ * Response:
+ * {
+ *   "success": true,
+ *   "data": {
+ *     "slot_id_1": "生成的内容1",
+ *     "slot_id_2": "生成的内容2",
+ *     ...
+ *   }
+ * }
+ */
+router.post('/generate_fill_content', async (req, res) => {
+  try {
+    const { 
+      slots, 
+      topic, 
+      wordContent = '',
+      model = 'GLM-4.5-Flash' 
+    } = req.body
+
+    if (!slots || !topic) {
+      return res.status(400).json({ 
+        success: false, 
+        error: '请提供槽位信息和主题' 
+      })
+    }
+
+    console.log(`[内容生成] 主题: ${topic}, 模型: ${model}, 槽位数: ${slots.totalSlots}`)
+
+    // 生成结构描述
+    const structurePrompt = slotService.generateStructurePrompt(slots)
+
+    // 构建消息
+    const messages = buildTemplateFillMessages(structurePrompt, topic, wordContent, model)
+
+    // 调用AI生成内容
+    const result = await aiService.chat(model, messages, {
+      temperature: 0.7,
+      maxTokens: 8192
+    })
+
+    // 解析AI返回的JSON
+    let contentMap = {}
+    try {
+      // 尝试提取JSON
+      const jsonMatch = result.match(/\{[\s\S]*\}/)
+      if (jsonMatch) {
+        contentMap = JSON.parse(jsonMatch[0])
+      } else {
+        throw new Error('未找到有效的JSON')
+      }
+    } catch (parseError) {
+      console.error('[内容生成] JSON解析失败:', parseError)
+      console.error('[内容生成] AI原始返回:', result)
+      return res.status(500).json({ 
+        success: false, 
+        error: 'AI返回内容解析失败，请重试' 
+      })
+    }
+
+    console.log(`[内容生成] 完成, 生成槽位数: ${Object.keys(contentMap).length}`)
+
+    res.json({ 
+      success: true, 
+      data: contentMap 
+    })
+
+  } catch (error) {
+    console.error('[内容生成] 错误:', error)
+    res.status(500).json({ 
+      success: false, 
+      error: error.message || '内容生成失败' 
+    })
+  }
+})
+
+/**
+ * API 6: 填充模板
+ * 
+ * POST /tools/fill_template
+ * 
+ * Request Body:
+ * {
+ *   "slides": [...],          // 原始模板slides
+ *   "contentMap": {...}       // 槽位内容映射
+ * }
+ * 
+ * Response:
+ * {
+ *   "success": true,
+ *   "data": {
+ *     "slides": [...]         // 填充后的slides
+ *   }
+ * }
+ */
+router.post('/fill_template', async (req, res) => {
+  try {
+    const { slides, contentMap } = req.body
+
+    if (!slides || !Array.isArray(slides)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: '请提供有效的模板slides数组' 
+      })
+    }
+
+    if (!contentMap || typeof contentMap !== 'object') {
+      return res.status(400).json({ 
+        success: false, 
+        error: '请提供有效的内容映射' 
+      })
+    }
+
+    console.log(`[模板填充] 开始填充, 页面数: ${slides.length}, 内容数: ${Object.keys(contentMap).length}`)
+
+    // 填充模板
+    const filledSlides = slotService.fillTemplate(slides, contentMap)
+
+    console.log(`[模板填充] 完成`)
+
+    res.json({ 
+      success: true, 
+      data: {
+        slides: filledSlides
+      }
+    })
+
+  } catch (error) {
+    console.error('[模板填充] 错误:', error)
+    res.status(500).json({ 
+      success: false, 
+      error: error.message || '模板填充失败' 
+    })
+  }
 })
 
 export default router

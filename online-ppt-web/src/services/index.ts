@@ -45,6 +45,49 @@ interface AIWritingPayload {
   command: string
 }
 
+// ============ 方案D：模板填充相关类型 ============
+
+// 槽位信息
+export interface SlotInfo {
+  id: string
+  pageIndex: number
+  pageType: string
+  elementType: string
+  textType: string
+  currentText: string
+  position: {
+    left: number
+    top: number
+    width: number
+    height: number
+  }
+}
+
+// 页面结构
+export interface PageStructure {
+  pageIndex: number
+  pageType: string
+  slotCount: number
+  slots: {
+    id: string
+    textType: string
+    currentText: string
+  }[]
+}
+
+// 槽位提取结果
+export interface ExtractSlotsResult {
+  totalPages: number
+  totalSlots: number
+  structure: PageStructure[]
+  slots: SlotInfo[]
+}
+
+// 内容映射
+export interface ContentMap {
+  [slotId: string]: string
+}
+
 // Word解析响应
 interface ParseWordResponse {
   success: boolean
@@ -168,6 +211,66 @@ export default {
         model: 'ark-doubao-seed-1.6-flash',
         stream: true,
       }),
+    })
+  },
+
+  // ============ 方案D：模板填充相关接口 ============
+
+  /**
+   * 提取模板槽位
+   * 
+   * @param slides PPT模板的slides数组
+   * @returns 槽位提取结果
+   */
+  extractSlots(slides: any[]): Promise<{ success: boolean; data: ExtractSlotsResult; error?: string }> {
+    return axios.post(`${SERVER_URL}/tools/extract_slots`, { slides })
+  },
+
+  /**
+   * 生成模板填充内容
+   * 
+   * @param slots 槽位信息（extractSlots返回的数据）
+   * @param topic PPT主题
+   * @param wordContent 参考文档内容（可选）
+   * @param model AI模型
+   * @returns 内容映射
+   */
+  generateFillContent({
+    slots,
+    topic,
+    wordContent,
+    model = 'GLM-4.5-Flash',
+  }: {
+    slots: ExtractSlotsResult
+    topic: string
+    wordContent?: string
+    model?: string
+  }): Promise<{ success: boolean; data: ContentMap; error?: string }> {
+    return axios.post(`${SERVER_URL}/tools/generate_fill_content`, {
+      slots,
+      topic,
+      wordContent,
+      model,
+    })
+  },
+
+  /**
+   * 填充模板
+   * 
+   * @param slides 原始模板slides
+   * @param contentMap 内容映射
+   * @returns 填充后的slides
+   */
+  fillTemplate({
+    slides,
+    contentMap,
+  }: {
+    slides: any[]
+    contentMap: ContentMap
+  }): Promise<{ success: boolean; data: { slides: any[] }; error?: string }> {
+    return axios.post(`${SERVER_URL}/tools/fill_template`, {
+      slides,
+      contentMap,
     })
   },
 }

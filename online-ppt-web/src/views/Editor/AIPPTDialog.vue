@@ -2,10 +2,138 @@
   <div class="aippt-dialog">
     <div class="header">
       <span class="title">AIPPT</span>
-      <span class="subtite" v-if="step === 'template'">从下方挑选合适的模板生成PPT，或<span class="local" v-tooltip="'上传.pptist格式模板文件'" @click="uploadLocalTemplate()">使用本地模板生成</span></span>
+      <!-- 模式选择 -->
+      <span class="subtite" v-if="step === 'mode'">请选择生成方式</span>
+      <!-- 智能生成模式 -->
+      <span class="subtite" v-else-if="step === 'template'">从下方挑选合适的模板生成PPT，或<span class="local" v-tooltip="'上传.pptist格式模板文件'" @click="uploadLocalTemplate()">使用本地模板生成</span></span>
       <span class="subtite" v-else-if="step === 'outline'">确认下方内容大纲（点击编辑内容，右键添加/删除大纲项），开始选择模板</span>
-      <span class="subtite" v-else>在下方输入您的PPT主题，并适当补充信息，如行业、岗位、学科、用途等</span>
+      <span class="subtite" v-else-if="step === 'setup'">在下方输入您的PPT主题，并适当补充信息，如行业、岗位、学科、用途等</span>
+      <!-- 模板填充模式 -->
+      <span class="subtite" v-else-if="step === 'fill-template'">选择一个模板，AI将根据主题填充内容</span>
+      <span class="subtite" v-else-if="step === 'fill-input'">输入主题，AI将根据模板结构生成内容</span>
+      <span class="subtite" v-else-if="step === 'fill-preview'">预览并编辑生成的内容，确认后生成PPT</span>
     </div>
+    
+    <!-- 模式选择界面 -->
+    <div class="mode-select" v-if="step === 'mode'">
+      <div class="mode-card" @click="selectMode('smart')">
+        <div class="mode-icon">💡</div>
+        <div class="mode-title">智能生成</div>
+        <div class="mode-desc">AI自动规划内容结构</div>
+        <div class="mode-hint">适合不确定用什么模板时</div>
+      </div>
+      <div class="mode-card" @click="selectMode('fill')">
+        <div class="mode-icon">📝</div>
+        <div class="mode-title">模板填充</div>
+        <div class="mode-desc">选定模板，AI填充内容</div>
+        <div class="mode-hint">100%保留模板样式</div>
+      </div>
+    </div>
+    
+    <!-- ========== 模板填充模式 ========== -->
+    
+    <!-- 模板填充：选择模板 -->
+    <div class="fill-template-select" v-if="step === 'fill-template'">
+      <div class="templates">
+        <div class="template" 
+          :class="{ 'selected': fillSelectedTemplate === template.id }" 
+          v-for="template in templates" 
+          :key="template.id" 
+          @click="fillSelectedTemplate = template.id"
+        >
+          <img :src="template.cover" :alt="template.name">
+        </div>
+      </div>
+      <div class="btns">
+        <Button class="btn" type="primary" @click="goToFillInput()">下一步</Button>
+        <Button class="btn" @click="step = 'mode'">返回</Button>
+      </div>
+    </div>
+    
+    <!-- 模板填充：输入主题 -->
+    <div class="fill-input" v-if="step === 'fill-input'">
+      <Input class="input" 
+        ref="fillInputRef"
+        v-model:value="fillKeyword" 
+        :maxlength="50" 
+        placeholder="请输入PPT主题" 
+        @enter="generateFillContent()"
+      >
+        <template #suffix>
+          <span class="count">{{ fillKeyword.length }} / 50</span>
+        </template>
+      </Input>
+      
+      <!-- Word上传 -->
+      <div class="word-upload-section">
+        <div class="section-label">📄 参考文档（可选）</div>
+        <FileInput 
+          v-if="!fillWordFile"
+          accept=".docx" 
+          @change="handleFillWordUpload"
+        >
+          <div class="upload-trigger" :class="{ 'parsing': fillWordParsing }">
+            <span v-if="fillWordParsing">解析中...</span>
+            <template v-else>
+              <span>点击上传Word文档</span>
+              <span class="hint">AI将参考文档内容生成更贴合的内容</span>
+            </template>
+          </div>
+        </FileInput>
+        <div v-if="fillWordFile && !fillWordParsing" class="uploaded-file">
+          <span class="file-info">
+            <span class="file-icon">📄</span>
+            <span class="file-name">{{ fillWordFile.name }}</span>
+            <span class="word-count" v-if="fillWordContent">({{ fillWordContent.wordCount }}字)</span>
+          </span>
+          <span class="remove-btn" @click="removeFillWordFile">删除</span>
+        </div>
+      </div>
+      
+      <!-- 模型选择 -->
+      <div class="configs">
+        <div class="config-item">
+          <div class="label">模型：</div>
+          <Select 
+            class="config-content"
+            style="width: 200px;"
+            v-model:value="fillModel"
+            :options="modelOptions"
+          />
+        </div>
+      </div>
+      
+      <div class="btns" style="margin-top: 20px;">
+        <Button class="btn" type="primary" @click="generateFillContent()" :disabled="!fillKeyword">生成内容</Button>
+        <Button class="btn" @click="step = 'fill-template'">返回选模板</Button>
+      </div>
+    </div>
+    
+    <!-- 模板填充：预览编辑内容 -->
+    <div class="fill-preview" v-if="step === 'fill-preview'">
+      <div class="preview-content">
+        <div class="page-group" v-for="page in fillSlots?.structure" :key="page.pageIndex">
+          <div class="page-title">📄 第{{ page.pageIndex + 1 }}页 - {{ getPageTypeName(page.pageType) }}</div>
+          <div class="slot-list">
+            <div class="slot-item" v-for="slot in page.slots" :key="slot.id">
+              <div class="slot-label">{{ getTextTypeName(slot.textType) }}：</div>
+              <Input 
+                class="slot-input"
+                v-model:value="fillContentMap[slot.id]" 
+                :placeholder="slot.currentText"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="btns">
+        <Button class="btn" type="primary" @click="applyFillTemplate()">确认生成PPT</Button>
+        <Button class="btn" @click="generateFillContent()">🔄 重新生成</Button>
+        <Button class="btn" @click="step = 'fill-input'">返回</Button>
+      </div>
+    </div>
+    
+    <!-- ========== 智能生成模式（原有流程） ========== -->
     
     <template v-if="step === 'setup'">
       <Input class="input" 
@@ -148,7 +276,7 @@
 <script lang="ts" setup>
 import { ref, onMounted, useTemplateRef } from 'vue'
 import { storeToRefs } from 'pinia'
-import api, { type WordContent } from '@/services'
+import api, { type WordContent, type ExtractSlotsResult, type ContentMap } from '@/services'
 import useAIPPT from '@/hooks/useAIPPT'
 import useSlideHandler from '@/hooks/useSlideHandler'
 import type { AIPPTSlide } from '@/types/AIPPT'
@@ -172,6 +300,9 @@ const { templates } = storeToRefs(slidesStore)
 const { resetSlides, isEmptySlide } = useSlideHandler()
 const { AIPPT, presetImgPool, getMdContent } = useAIPPT()
 
+// 步骤类型
+type StepType = 'mode' | 'setup' | 'outline' | 'template' | 'fill-template' | 'fill-input' | 'fill-preview'
+
 const language = ref('中文')
 const style = ref('通用')
 const img = ref('')
@@ -181,15 +312,27 @@ const selectedTemplate = ref('template_1')
 const loading = ref(false)
 const outlineCreating = ref(false)
 const overwrite = ref(true)
-const step = ref<'setup' | 'outline' | 'template'>('setup')
+const step = ref<StepType>('mode')  // 默认显示模式选择
 const model = ref('GLM-4.5-Flash')
 const outlineRef = useTemplateRef<HTMLElement>('outlineRef')
 const inputRef = useTemplateRef<InstanceType<typeof Input>>('inputRef')
 
-// Word上传相关状态
+// Word上传相关状态（智能生成模式）
 const wordFile = ref<File | null>(null)
 const wordContent = ref<WordContent | null>(null)
 const wordParsing = ref(false)
+
+// ============ 模板填充模式状态 ============
+const fillSelectedTemplate = ref('template_1')
+const fillKeyword = ref('')
+const fillModel = ref('GLM-4.5-Flash')
+const fillWordFile = ref<File | null>(null)
+const fillWordContent = ref<WordContent | null>(null)
+const fillWordParsing = ref(false)
+const fillSlots = ref<ExtractSlotsResult | null>(null)
+const fillContentMap = ref<ContentMap>({})
+const fillTemplateData = ref<{ slides: Slide[], theme: SlideTheme } | null>(null)
+const fillInputRef = useTemplateRef<InstanceType<typeof Input>>('fillInputRef')
 
 const recommends = ref([
   '一表通售前交流',
@@ -261,6 +404,203 @@ const removeWordFile = () => {
   wordFile.value = null
   wordContent.value = null
 }
+
+// ============ 模式选择 ============
+const selectMode = (mode: 'smart' | 'fill') => {
+  if (mode === 'smart') {
+    step.value = 'setup'
+    setTimeout(() => inputRef.value?.focus(), 100)
+  } else {
+    step.value = 'fill-template'
+  }
+}
+
+// ============ 模板填充模式方法 ============
+
+// 进入输入主题步骤
+const goToFillInput = async () => {
+  if (!fillSelectedTemplate.value) {
+    message.error('请先选择一个模板')
+    return
+  }
+  
+  loading.value = true
+  
+  try {
+    // 加载模板数据
+    const templateData = await api.getMockData(fillSelectedTemplate.value)
+    fillTemplateData.value = templateData
+    
+    // 提取槽位
+    const result = await api.extractSlots(templateData.slides)
+    if (result.success) {
+      fillSlots.value = result.data
+      console.log('✅ 槽位提取成功:', result.data)
+    } else {
+      throw new Error(result.error || '槽位提取失败')
+    }
+    
+    step.value = 'fill-input'
+    setTimeout(() => fillInputRef.value?.focus(), 100)
+  } catch (error: any) {
+    console.error('❌ 模板加载失败:', error)
+    message.error(error.message || '模板加载失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+// 处理模板填充模式的Word上传
+const handleFillWordUpload = async (files: FileList) => {
+  const file = files[0]
+  if (!file) return
+  
+  if (!file.name.endsWith('.docx')) {
+    message.error('请上传.docx格式的Word文档')
+    return
+  }
+  
+  if (file.size > 10 * 1024 * 1024) {
+    message.error('文件大小不能超过10MB')
+    return
+  }
+  
+  fillWordFile.value = file
+  fillWordParsing.value = true
+  
+  try {
+    const result = await api.parseWord(file)
+    if (result.success) {
+      fillWordContent.value = result.data
+      message.success(`文档解析成功，共${result.data.wordCount}字`)
+    } else {
+      throw new Error(result.error || '解析失败')
+    }
+  } catch (error: any) {
+    message.error(error.message || '文档解析失败')
+    fillWordFile.value = null
+    fillWordContent.value = null
+  } finally {
+    fillWordParsing.value = false
+  }
+}
+
+// 删除模板填充模式的Word文件
+const removeFillWordFile = () => {
+  fillWordFile.value = null
+  fillWordContent.value = null
+}
+
+// 生成填充内容
+const generateFillContent = async () => {
+  if (!fillKeyword.value) {
+    message.error('请输入PPT主题')
+    return
+  }
+  
+  if (!fillSlots.value) {
+    message.error('模板槽位信息丢失，请返回重新选择模板')
+    return
+  }
+  
+  loading.value = true
+  
+  try {
+    const result = await api.generateFillContent({
+      slots: fillSlots.value,
+      topic: fillKeyword.value,
+      wordContent: fillWordContent.value?.text || '',
+      model: fillModel.value,
+    })
+    
+    if (result.success) {
+      fillContentMap.value = result.data
+      console.log('✅ 内容生成成功:', result.data)
+      step.value = 'fill-preview'
+    } else {
+      throw new Error(result.error || '内容生成失败')
+    }
+  } catch (error: any) {
+    console.error('❌ 内容生成失败:', error)
+    message.error(error.message || '内容生成失败，请重试')
+  } finally {
+    loading.value = false
+  }
+}
+
+// 应用模板填充
+const applyFillTemplate = async () => {
+  if (!fillTemplateData.value || !fillContentMap.value) {
+    message.error('数据丢失，请重新生成')
+    return
+  }
+  
+  loading.value = true
+  
+  try {
+    // 调用填充接口
+    const result = await api.fillTemplate({
+      slides: fillTemplateData.value.slides,
+      contentMap: fillContentMap.value,
+    })
+    
+    if (result.success) {
+      // 重置当前幻灯片
+      if (overwrite.value) resetSlides()
+      
+      // 设置新的幻灯片
+      slidesStore.setSlides(result.data.slides)
+      slidesStore.setTheme(fillTemplateData.value.theme)
+      
+      message.success('PPT生成成功！')
+      mainStore.setAIPPTDialogState(false)
+    } else {
+      throw new Error(result.error || '模板填充失败')
+    }
+  } catch (error: any) {
+    console.error('❌ 模板填充失败:', error)
+    message.error(error.message || '模板填充失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+// 获取页面类型名称
+const getPageTypeName = (type: string) => {
+  const names: Record<string, string> = {
+    'cover': '封面',
+    'contents': '目录',
+    'transition': '过渡页',
+    'content': '内容页',
+    'end': '结束页',
+    'text_image': '图文页',
+    'comparison': '对比页',
+    'timeline': '时间线页',
+    'statistics': '数据统计页',
+    'quote': '引用页',
+    'unknown': '未知类型'
+  }
+  return names[type] || type
+}
+
+// 获取文本类型名称
+const getTextTypeName = (type: string) => {
+  const names: Record<string, string> = {
+    'title': '标题',
+    'subtitle': '副标题',
+    'content': '正文',
+    'item': '列表项',
+    'itemTitle': '项标题',
+    'itemNumber': '编号',
+    'partNumber': '节编号',
+    'header': '页眉',
+    'footer': '页脚',
+    'notes': '注释',
+  }
+  return names[type] || type
+}
+
+// ============ 智能生成模式方法（原有） ============
 
 const createOutline = async () => {
   if (!keyword.value) return message.error('请先输入PPT主题')
@@ -536,6 +876,168 @@ const uploadLocalTemplate = () => {
       &:hover {
         text-decoration: underline;
       }
+    }
+  }
+}
+
+/* 模式选择样式 */
+.mode-select {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  margin-top: 30px;
+  margin-bottom: 20px;
+  
+  .mode-card {
+    width: 200px;
+    padding: 24px 20px;
+    border: 2px solid $borderColor;
+    border-radius: 12px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.25s;
+    
+    &:hover {
+      border-color: $themeColor;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      transform: translateY(-2px);
+    }
+    
+    .mode-icon {
+      font-size: 36px;
+      margin-bottom: 12px;
+    }
+    
+    .mode-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 8px;
+    }
+    
+    .mode-desc {
+      font-size: 13px;
+      color: #666;
+      margin-bottom: 8px;
+    }
+    
+    .mode-hint {
+      font-size: 12px;
+      color: #999;
+    }
+  }
+}
+
+/* 模板填充模式样式 */
+.fill-template-select {
+  .templates {
+    max-height: 400px;
+    overflow: auto;
+    display: flex;
+    margin-bottom: 15px;
+    @include flex-grid-layout();
+  
+    .template {
+      border: 2px solid $borderColor;
+      border-radius: $borderRadius;
+      cursor: pointer;
+      @include flex-grid-layout-children(2, 49%);
+
+      &.selected {
+        border-color: $themeColor;
+      }
+  
+      img {
+        width: 100%;
+        min-height: 150px;
+      }
+    }
+  }
+  
+  .btns {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    
+    .btn {
+      width: 120px;
+    }
+  }
+}
+
+.fill-input {
+  .input {
+    margin-bottom: 15px;
+  }
+  
+  .btns {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    
+    .btn {
+      width: 140px;
+    }
+  }
+}
+
+.fill-preview {
+  .preview-content {
+    max-height: 400px;
+    overflow: auto;
+    padding: 10px;
+    background-color: #f9f9f9;
+    border-radius: $borderRadius;
+    margin-bottom: 15px;
+  }
+  
+  .page-group {
+    margin-bottom: 16px;
+    padding: 12px;
+    background-color: #fff;
+    border-radius: $borderRadius;
+    border: 1px solid #eee;
+    
+    .page-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #eee;
+    }
+    
+    .slot-list {
+      .slot-item {
+        display: flex;
+        align-items: center;
+        margin-bottom: 8px;
+        
+        &:last-child {
+          margin-bottom: 0;
+        }
+        
+        .slot-label {
+          width: 80px;
+          font-size: 12px;
+          color: #666;
+          flex-shrink: 0;
+        }
+        
+        .slot-input {
+          flex: 1;
+        }
+      }
+    }
+  }
+  
+  .btns {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    
+    .btn {
+      width: 140px;
     }
   }
 }
