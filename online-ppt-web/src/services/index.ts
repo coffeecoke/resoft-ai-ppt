@@ -1,7 +1,10 @@
 import axios from './config'
 
 // export const SERVER_URL = 'http://localhost:5000'
-export const SERVER_URL = (import.meta.env.MODE === 'development') ? '/api' : 'https://server.pptist.cn'
+// 支持环境变量配置，Docker部署时可通过环境变量设置
+// 如果未设置环境变量，默认使用 /api（适用于Docker部署和开发环境）
+// Nginx会自动将 /api 代理到后端服务
+export const SERVER_URL = import.meta.env.VITE_API_BASE_URL || '/api'
 
 interface ImageSearchPayload {
   query: string;
