@@ -299,8 +299,102 @@ function escapeHtml(text) {
     .replace(/"/g, '&quot;')
 }
 
+/**
+ * 按页拆分槽位数据，用于分批处理
+ * @param {Object} slotsData - extractSlots的返回值
+ * @param {number} batchSize - 每批最大槽位数
+ * @returns {Array<Object>} 分批后的槽位数据数组
+ */
+export function splitSlotsByPage(slotsData, batchSize = 50) {
+  const { structure, slots } = slotsData
+  const batches = []
+  
+  let currentBatch = {
+    totalPages: 0,
+    totalSlots: 0,
+    structure: [],
+    slots: []
+  }
+  
+  for (const page of structure) {
+    // 获取当前页的所有槽位
+    const pageSlots = slots.filter(s => s.pageIndex === page.pageIndex)
+    
+    // 检查是否需要开启新批次
+    // 策略：尽量让同一页的槽位在同一批次，但如果单页槽位超过batchSize，则强制分割
+    if (currentBatch.totalSlots + pageSlots.length > batchSize && currentBatch.totalSlots > 0) {
+      // 当前批次已满，保存并开启新批次
+      batches.push(currentBatch)
+      currentBatch = {
+        totalPages: 0,
+        totalSlots: 0,
+        structure: [],
+        slots: []
+      }
+    }
+    
+    // 如果单页槽位太多，需要拆分该页
+    if (pageSlots.length > batchSize) {
+      // 先保存当前批次（如果有内容）
+      if (currentBatch.totalSlots > 0) {
+        batches.push(currentBatch)
+        currentBatch = {
+          totalPages: 0,
+          totalSlots: 0,
+          structure: [],
+          slots: []
+        }
+      }
+      
+      // 将大页拆分成多个批次
+      for (let i = 0; i < pageSlots.length; i += batchSize) {
+        const slotChunk = pageSlots.slice(i, i + batchSize)
+        batches.push({
+          totalPages: 1,
+          totalSlots: slotChunk.length,
+          structure: [{
+            pageIndex: page.pageIndex,
+            pageType: page.pageType,
+            slotCount: slotChunk.length,
+            slots: slotChunk.map(s => ({
+              id: s.id,
+              textType: s.textType,
+              currentText: s.currentText
+            }))
+          }],
+          slots: slotChunk
+        })
+      }
+    } else {
+      // 正常添加页面到当前批次
+      currentBatch.totalPages++
+      currentBatch.totalSlots += pageSlots.length
+      currentBatch.structure.push({
+        pageIndex: page.pageIndex,
+        pageType: page.pageType,
+        slotCount: pageSlots.length,
+        slots: page.slots
+      })
+      currentBatch.slots.push(...pageSlots)
+    }
+  }
+  
+  // 保存最后一个批次
+  if (currentBatch.totalSlots > 0) {
+    batches.push(currentBatch)
+  }
+  
+  console.log(`[槽位分批] 原始 ${slotsData.totalSlots} 个槽位 -> ${batches.length} 批`)
+  batches.forEach((b, i) => {
+    console.log(`  批次${i + 1}: ${b.totalSlots} 个槽位, ${b.totalPages} 页`)
+  })
+  
+  return batches
+}
+
 export default {
   extractSlots,
   generateStructurePrompt,
-  fillTemplate
+  fillTemplate,
+  splitSlotsByPage
 }

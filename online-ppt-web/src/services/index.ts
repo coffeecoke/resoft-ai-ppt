@@ -246,11 +246,14 @@ export default {
     wordContent?: string
     model?: string
   }): Promise<{ success: boolean; data: ContentMap; error?: string }> {
+    // 分批处理可能需要较长时间，设置10分钟超时
     return axios.post(`${SERVER_URL}/tools/generate_fill_content`, {
       slots,
       topic,
       wordContent,
       model,
+    }, {
+      timeout: 600000  // 10分钟超时
     })
   },
 

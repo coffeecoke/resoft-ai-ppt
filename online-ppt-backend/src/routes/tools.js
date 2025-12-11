@@ -366,56 +366,50 @@ router.post('/generate_fill_content', async (req, res) => {
       })
     }
 
-    // 检查槽位数量限制
-    const MAX_SLOTS = 100
-    if (slots.totalSlots > MAX_SLOTS) {
-      console.warn(`[内容生成] 槽位数过多: ${slots.totalSlots}, 超过限制 ${MAX_SLOTS}`)
-      return res.status(400).json({
-        success: false,
-        error: `模板槽位过多（${slots.totalSlots}个），请选择更简单的模板（建议不超过${MAX_SLOTS}个槽位）`
-      })
+    const BATCH_SIZE = 50  // 每批处理的槽位数
+    const totalSlots = slots.totalSlots
+
+    console.log(`[内容生成] 主题: ${topic}, 模型: ${model}, 总槽位数: ${totalSlots}`)
+
+    // 如果槽位数较少，直接处理
+    if (totalSlots <= BATCH_SIZE) {
+      const contentMap = await generateContentForSlots(slots, topic, wordContent, model)
+      return res.json({ success: true, data: contentMap })
     }
 
-    console.log(`[内容生成] 主题: ${topic}, 模型: ${model}, 槽位数: ${slots.totalSlots}`)
+    // 槽位数较多，分批处理
+    console.log(`[内容生成] 槽位较多，启用分批处理模式，每批 ${BATCH_SIZE} 个`)
+    
+    const batches = slotService.splitSlotsByPage(slots, BATCH_SIZE)
+    console.log(`[内容生成] 分成 ${batches.length} 批处理`)
 
-    // 生成结构描述（优化版本，限制长度）
-    const structurePrompt = slotService.generateStructurePrompt(slots, { maxSlots: MAX_SLOTS })
-
-    // 构建消息
-    const messages = buildTemplateFillMessages(structurePrompt, topic, wordContent, model)
-
-    console.log(`[内容生成] Prompt长度: ${JSON.stringify(messages).length} 字符`)
-
-    // 调用AI生成内容（增加超时时间）
-    const result = await aiService.chat(model, messages, {
-      temperature: 0.7,
-      maxTokens: 8192
-    })
-
-    // 解析AI返回的JSON
-    let contentMap = {}
-    try {
-      // 尝试提取JSON
-      const jsonMatch = result.match(/\{[\s\S]*\}/)
-      if (jsonMatch) {
-        contentMap = JSON.parse(jsonMatch[0])
-      } else {
-        throw new Error('未找到有效的JSON')
+    let allContentMap = {}
+    
+    for (let i = 0; i < batches.length; i++) {
+      const batch = batches[i]
+      console.log(`[内容生成] 处理第 ${i + 1}/${batches.length} 批，槽位数: ${batch.totalSlots}`)
+      
+      try {
+        const batchContent = await generateContentForSlots(batch, topic, wordContent, model, {
+          batchIndex: i + 1,
+          totalBatches: batches.length,
+          previousContent: allContentMap  // 传递已生成的内容，保持连贯性
+        })
+        
+        // 合并结果
+        allContentMap = { ...allContentMap, ...batchContent }
+        console.log(`[内容生成] 第 ${i + 1} 批完成，累计生成: ${Object.keys(allContentMap).length} 个槽位`)
+      } catch (batchError) {
+        console.error(`[内容生成] 第 ${i + 1} 批失败:`, batchError)
+        // 继续处理下一批，不中断整个流程
       }
-    } catch (parseError) {
-      console.error('[内容生成] JSON解析失败:', parseError)
-      console.error('[内容生成] AI原始返回:', result)
-      return res.status(500).json({ 
-        success: false, 
-        error: 'AI返回内容解析失败，请重试' 
-      })
     }
 
-    console.log(`[内容生成] 完成, 生成槽位数: ${Object.keys(contentMap).length}`)
+    console.log(`[内容生成] 全部完成，共生成: ${Object.keys(allContentMap).length} 个槽位`)
 
     res.json({ 
       success: true, 
-      data: contentMap 
+      data: allContentMap 
     })
 
   } catch (error) {
@@ -426,6 +420,56 @@ router.post('/generate_fill_content', async (req, res) => {
     })
   }
 })
+
+/**
+ * 为一批槽位生成内容
+ */
+async function generateContentForSlots(slots, topic, wordContent, model, options = {}) {
+  const { batchIndex, totalBatches, previousContent } = options
+  
+  // 生成结构描述
+  let structurePrompt = slotService.generateStructurePrompt(slots)
+  
+  // 如果是分批处理，添加上下文信息
+  if (batchIndex && totalBatches) {
+    structurePrompt = `【分批处理】这是第 ${batchIndex}/${totalBatches} 批内容\n\n` + structurePrompt
+    
+    // 如果有之前的内容，添加摘要以保持连贯性
+    if (previousContent && Object.keys(previousContent).length > 0) {
+      const prevSummary = Object.entries(previousContent)
+        .slice(-5)  // 只取最后5个作为参考
+        .map(([id, text]) => `${id}: ${String(text).substring(0, 30)}...`)
+        .join('\n')
+      structurePrompt += `\n\n【已生成内容参考】\n${prevSummary}\n\n请保持内容风格一致。`
+    }
+  }
+
+  // 构建消息
+  const messages = buildTemplateFillMessages(structurePrompt, topic, wordContent, model)
+
+  // 调用AI生成内容
+  const result = await aiService.chat(model, messages, {
+    temperature: 0.7,
+    maxTokens: 8192
+  })
+
+  // 解析AI返回的JSON
+  let contentMap = {}
+  try {
+    const jsonMatch = result.match(/\{[\s\S]*\}/)
+    if (jsonMatch) {
+      contentMap = JSON.parse(jsonMatch[0])
+    } else {
+      throw new Error('未找到有效的JSON')
+    }
+  } catch (parseError) {
+    console.error('[内容生成] JSON解析失败:', parseError)
+    console.error('[内容生成] AI原始返回:', result.substring(0, 500))
+    throw new Error('AI返回内容解析失败')
+  }
+
+  return contentMap
+}
 
 /**
  * API 6: 填充模板

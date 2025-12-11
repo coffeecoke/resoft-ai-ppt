@@ -576,10 +576,9 @@ const goToFillInput = async () => {
       fillSlots.value = result.data
       console.log('✅ 槽位提取成功:', result.data)
       
-      // 检查槽位数量
-      const MAX_SLOTS = 100
-      if (result.data.totalSlots > MAX_SLOTS) {
-        message.warning(`模板较复杂（${result.data.totalSlots}个文本槽位），建议使用更简单的模板以获得更好效果`)
+      // 槽位数量提示
+      if (result.data.totalSlots > 100) {
+        message.info(`模板较复杂（${result.data.totalSlots}个槽位），系统将分批处理`)
       } else if (result.data.totalSlots > 50) {
         message.info(`模板共${result.data.totalSlots}个文本槽位，AI将为每个槽位生成内容`)
       }
@@ -650,17 +649,18 @@ const generateFillContent = async () => {
     return
   }
   
-  // 检查槽位数量
-  const MAX_SLOTS = 100
-  if (fillSlots.value.totalSlots > MAX_SLOTS) {
-    message.error(`模板槽位过多（${fillSlots.value.totalSlots}个），请选择更简单的模板（建议不超过${MAX_SLOTS}个）`)
-    return
+  // 槽位数量提示（不再阻止，后端支持分批处理）
+  const totalSlots = fillSlots.value.totalSlots
+  if (totalSlots > 100) {
+    message.info(`检测到${totalSlots}个槽位，将分批处理，请耐心等待...`)
+  } else if (totalSlots > 50) {
+    message.info(`正在处理${totalSlots}个槽位，请稍候...`)
   }
   
   loading.value = true
   
   try {
-    console.log(`📤 开始生成内容, 槽位数: ${fillSlots.value.totalSlots}`)
+    console.log(`📤 开始生成内容, 槽位数: ${totalSlots}`)
     
     const result = await api.generateFillContent({
       slots: fillSlots.value,
@@ -671,7 +671,9 @@ const generateFillContent = async () => {
     
     if (result.success) {
       fillContentMap.value = result.data
-      console.log('✅ 内容生成成功:', result.data)
+      const generatedCount = Object.keys(result.data).length
+      console.log(`✅ 内容生成成功: ${generatedCount}/${totalSlots} 个槽位`)
+      message.success(`成功生成 ${generatedCount} 个槽位内容`)
       step.value = 'fill-preview'
     } else {
       throw new Error(result.error || '内容生成失败')
@@ -684,7 +686,7 @@ const generateFillContent = async () => {
     if (error.message?.includes('槽位过多')) {
       errorMsg = error.message
     } else if (error.message?.includes('timeout') || error.message?.includes('超时')) {
-      errorMsg = '请求超时，模板可能过于复杂，请尝试更简单的模板'
+      errorMsg = '请求超时，模板可能过于复杂，请尝试更简单的模板或换一个模型'
     } else if (error.response?.data?.error) {
       errorMsg = error.response.data.error
     }
