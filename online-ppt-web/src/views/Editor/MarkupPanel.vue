@@ -57,11 +57,18 @@ const { handleElement, handleElementId } = storeToRefs(mainStore)
 
 const slideTypeOptions = ref<{ label: string; value: SlideType | '' }[]>([
   { label: '未标记类型', value: '' },
+  // 基础类型
   { label: '封面页', value: 'cover' },
   { label: '目录页', value: 'contents' },
   { label: '过渡页', value: 'transition' },
   { label: '内容页', value: 'content' },
   { label: '结束页', value: 'end' },
+  // 扩展类型（方案A）
+  { label: '图文页', value: 'text_image' },
+  { label: '对比页', value: 'comparison' },
+  { label: '时间线页', value: 'timeline' },
+  { label: '数据统计页', value: 'statistics' },
+  { label: '引用页', value: 'quote' },
 ])
 
 const textTypeOptions = ref<{ label: string; value: TextType | '' }[]>([
