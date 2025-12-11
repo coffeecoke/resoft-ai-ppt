@@ -714,7 +714,18 @@ export interface SectionTag {
   title?: string
 }
 
-export type SlideType = 'cover' | 'contents' | 'transition' | 'content' | 'end'
+export type SlideType = 
+  | 'cover'        // 封面页
+  | 'contents'     // 目录页
+  | 'transition'   // 过渡页
+  | 'content'      // 内容页
+  | 'end'          // 结束页
+  // === 方案A扩展类型 ===
+  | 'text_image'   // 图文页（左文右图/左图右文）
+  | 'comparison'   // 对比页（两列对比）
+  | 'timeline'     // 时间线页
+  | 'statistics'   // 数据统计页
+  | 'quote'        // 引用/金句页
 
 /**
  * 幻灯片页面

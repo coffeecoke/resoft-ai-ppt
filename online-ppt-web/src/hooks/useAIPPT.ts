@@ -310,11 +310,19 @@ export default () => {
       else AISlides.push(template)
     }
 
+    // 基础类型模板
     const coverTemplates = templateSlides.filter(slide => slide.type === 'cover')
     const contentsTemplates = templateSlides.filter(slide => slide.type === 'contents')
     const transitionTemplates = templateSlides.filter(slide => slide.type === 'transition')
     const contentTemplates = templateSlides.filter(slide => slide.type === 'content')
     const endTemplates = templateSlides.filter(slide => slide.type === 'end')
+    
+    // 扩展类型模板（方案A）- 如果没有专门模板则降级到 content
+    const textImageTemplates = templateSlides.filter(slide => slide.type === 'text_image')
+    const comparisonTemplates = templateSlides.filter(slide => slide.type === 'comparison')
+    const timelineTemplates = templateSlides.filter(slide => slide.type === 'timeline')
+    const statisticsTemplates = templateSlides.filter(slide => slide.type === 'statistics')
+    const quoteTemplates = templateSlides.filter(slide => slide.type === 'quote')
 
     if (!transitionTemplate.value) {
       const _transitionTemplate = transitionTemplates[Math.floor(Math.random() * transitionTemplates.length)]
@@ -520,6 +528,235 @@ export default () => {
           elements,
         })
       }
+      // ============ 方案A扩展类型处理 ============
+      
+      else if (item.type === 'text_image') {
+        // 图文页：优先使用专门模板，否则降级到 content 模板
+        const templates = textImageTemplates.length > 0 ? textImageTemplates : contentTemplates
+        const template = templates[Math.floor(Math.random() * templates.length)]
+        
+        const elements = template.elements.map(el => {
+          if (el.type === 'image' && el.imageType && imgPool.value.length) return getNewImgElement(el)
+          if (el.type !== 'text' && el.type !== 'shape') return el
+          if (checkTextType(el, 'title') && item.data.title) {
+            return getNewTextElement({ el, text: item.data.title, maxLine: 1 })
+          }
+          if (checkTextType(el, 'content') && item.data.text) {
+            return getNewTextElement({ el, text: item.data.text, maxLine: 6 })
+          }
+          return el
+        })
+        slides.push({
+          ...template,
+          id: nanoid(10),
+          elements,
+        })
+      }
+      
+      else if (item.type === 'comparison') {
+        // 对比页：优先使用专门模板，否则降级到 content 模板
+        const templates = comparisonTemplates.length > 0 ? comparisonTemplates : contentTemplates
+        const template = templates[Math.floor(Math.random() * templates.length)]
+        
+        // 将对比数据转换为 items 格式以兼容 content 模板
+        const comparisonItems = [
+          { title: item.data.leftTitle, text: item.data.leftItems.join('；') },
+          { title: item.data.rightTitle, text: item.data.rightItems.join('；') }
+        ]
+        
+        const sortedTitleItemIds = template.elements.filter(el => checkTextType(el, 'itemTitle')).sort((a, b) => {
+          const aIndex = a.left + a.top * 2
+          const bIndex = b.left + b.top * 2
+          return aIndex - bIndex
+        }).map(el => el.id)
+
+        const sortedTextItemIds = template.elements.filter(el => checkTextType(el, 'item')).sort((a, b) => {
+          const aIndex = a.left + a.top * 2
+          const bIndex = b.left + b.top * 2
+          return aIndex - bIndex
+        }).map(el => el.id)
+        
+        const elements = template.elements.map(el => {
+          if (el.type === 'image' && el.imageType && imgPool.value.length) return getNewImgElement(el)
+          if (el.type !== 'text' && el.type !== 'shape') return el
+          if (checkTextType(el, 'title') && item.data.title) {
+            return getNewTextElement({ el, text: item.data.title, maxLine: 1 })
+          }
+          if (checkTextType(el, 'itemTitle')) {
+            const index = sortedTitleItemIds.findIndex(id => id === el.id)
+            const compItem = comparisonItems[index]
+            if (compItem && compItem.title) {
+              return getNewTextElement({ el, text: compItem.title, maxLine: 1 })
+            }
+          }
+          if (checkTextType(el, 'item')) {
+            const index = sortedTextItemIds.findIndex(id => id === el.id)
+            const compItem = comparisonItems[index]
+            if (compItem && compItem.text) {
+              return getNewTextElement({ el, text: compItem.text, maxLine: 4 })
+            }
+          }
+          return el
+        })
+        slides.push({
+          ...template,
+          id: nanoid(10),
+          elements,
+        })
+      }
+      
+      else if (item.type === 'timeline') {
+        // 时间线页：优先使用专门模板，否则降级到 content 模板
+        const templates = timelineTemplates.length > 0 ? timelineTemplates : contentTemplates
+        const _templates = getUseableTemplates(templates, item.data.items.length, 'item')
+        const template = _templates[Math.floor(Math.random() * _templates.length)]
+        
+        // 将时间线数据转换为 items 格式
+        const timelineItems = item.data.items.map(i => ({
+          title: i.time,
+          text: i.event
+        }))
+        
+        const sortedTitleItemIds = template.elements.filter(el => checkTextType(el, 'itemTitle')).sort((a, b) => {
+          const aIndex = a.left + a.top * 2
+          const bIndex = b.left + b.top * 2
+          return aIndex - bIndex
+        }).map(el => el.id)
+
+        const sortedTextItemIds = template.elements.filter(el => checkTextType(el, 'item')).sort((a, b) => {
+          const aIndex = a.left + a.top * 2
+          const bIndex = b.left + b.top * 2
+          return aIndex - bIndex
+        }).map(el => el.id)
+        
+        const sortedNumberItemIds = template.elements.filter(el => checkTextType(el, 'itemNumber')).sort((a, b) => {
+          const aIndex = a.left + a.top * 2
+          const bIndex = b.left + b.top * 2
+          return aIndex - bIndex
+        }).map(el => el.id)
+
+        const longestTitle = timelineItems.reduce((longest, current) => current.title.length > longest.length ? current.title : longest, '')
+        const longestText = timelineItems.reduce((longest, current) => current.text.length > longest.length ? current.text : longest, '')
+        
+        const elements = template.elements.map(el => {
+          if (el.type === 'image' && el.imageType && imgPool.value.length) return getNewImgElement(el)
+          if (el.type !== 'text' && el.type !== 'shape') return el
+          if (checkTextType(el, 'title') && item.data.title) {
+            return getNewTextElement({ el, text: item.data.title, maxLine: 1 })
+          }
+          if (checkTextType(el, 'itemTitle')) {
+            const index = sortedTitleItemIds.findIndex(id => id === el.id)
+            const tlItem = timelineItems[index]
+            if (tlItem && tlItem.title) {
+              return getNewTextElement({ el, text: tlItem.title, longestText: longestTitle, maxLine: 1 })
+            }
+          }
+          if (checkTextType(el, 'item')) {
+            const index = sortedTextItemIds.findIndex(id => id === el.id)
+            const tlItem = timelineItems[index]
+            if (tlItem && tlItem.text) {
+              return getNewTextElement({ el, text: tlItem.text, longestText, maxLine: 4 })
+            }
+          }
+          if (checkTextType(el, 'itemNumber')) {
+            const index = sortedNumberItemIds.findIndex(id => id === el.id)
+            return getNewTextElement({ el, text: index + 1 + '', maxLine: 1, digitPadding: true })
+          }
+          return el
+        })
+        slides.push({
+          ...template,
+          id: nanoid(10),
+          elements,
+        })
+      }
+      
+      else if (item.type === 'statistics') {
+        // 数据统计页：优先使用专门模板，否则降级到 content 模板
+        const templates = statisticsTemplates.length > 0 ? statisticsTemplates : contentTemplates
+        const _templates = getUseableTemplates(templates, item.data.items.length, 'item')
+        const template = _templates[Math.floor(Math.random() * _templates.length)]
+        
+        // 将统计数据转换为 items 格式
+        const statItems = item.data.items.map(i => ({
+          title: i.value,   // 数值作为标题（更醒目）
+          text: i.label     // 说明作为内容
+        }))
+        
+        const sortedTitleItemIds = template.elements.filter(el => checkTextType(el, 'itemTitle')).sort((a, b) => {
+          const aIndex = a.left + a.top * 2
+          const bIndex = b.left + b.top * 2
+          return aIndex - bIndex
+        }).map(el => el.id)
+
+        const sortedTextItemIds = template.elements.filter(el => checkTextType(el, 'item')).sort((a, b) => {
+          const aIndex = a.left + a.top * 2
+          const bIndex = b.left + b.top * 2
+          return aIndex - bIndex
+        }).map(el => el.id)
+
+        const longestTitle = statItems.reduce((longest, current) => current.title.length > longest.length ? current.title : longest, '')
+        const longestText = statItems.reduce((longest, current) => current.text.length > longest.length ? current.text : longest, '')
+        
+        const elements = template.elements.map(el => {
+          if (el.type === 'image' && el.imageType && imgPool.value.length) return getNewImgElement(el)
+          if (el.type !== 'text' && el.type !== 'shape') return el
+          if (checkTextType(el, 'title') && item.data.title) {
+            return getNewTextElement({ el, text: item.data.title, maxLine: 1 })
+          }
+          if (checkTextType(el, 'itemTitle')) {
+            const index = sortedTitleItemIds.findIndex(id => id === el.id)
+            const statItem = statItems[index]
+            if (statItem && statItem.title) {
+              return getNewTextElement({ el, text: statItem.title, longestText: longestTitle, maxLine: 1 })
+            }
+          }
+          if (checkTextType(el, 'item')) {
+            const index = sortedTextItemIds.findIndex(id => id === el.id)
+            const statItem = statItems[index]
+            if (statItem && statItem.text) {
+              return getNewTextElement({ el, text: statItem.text, longestText, maxLine: 2 })
+            }
+          }
+          return el
+        })
+        slides.push({
+          ...template,
+          id: nanoid(10),
+          elements,
+        })
+      }
+      
+      else if (item.type === 'quote') {
+        // 引用页：优先使用专门模板，否则降级到 transition 模板（因为结构相似）
+        const templates = quoteTemplates.length > 0 ? quoteTemplates : transitionTemplates
+        const template = templates[Math.floor(Math.random() * templates.length)]
+        
+        const elements = template.elements.map(el => {
+          if (el.type === 'image' && el.imageType && imgPool.value.length) return getNewImgElement(el)
+          if (el.type !== 'text' && el.type !== 'shape') return el
+          // quote 内容映射到 title（主要内容）
+          if (checkTextType(el, 'title') && item.data.quote) {
+            return getNewTextElement({ el, text: `"${item.data.quote}"`, maxLine: 3 })
+          }
+          // author + title 映射到 content（次要内容）
+          if (checkTextType(el, 'content')) {
+            const authorText = [item.data.author, item.data.title].filter(Boolean).join(' · ')
+            if (authorText) {
+              return getNewTextElement({ el, text: `—— ${authorText}`, maxLine: 1 })
+            }
+          }
+          return el
+        })
+        slides.push({
+          ...template,
+          id: nanoid(10),
+          elements,
+        })
+      }
+      
+      // ============ 结束页处理 ============
+      
       else if (item.type === 'end') {
         const endTemplate = endTemplates[Math.floor(Math.random() * endTemplates.length)]
         const elements = endTemplate.elements.map(el => {
