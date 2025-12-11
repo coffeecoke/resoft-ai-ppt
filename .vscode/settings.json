@@ -1,0 +1,14 @@
+{
+  "typescript.preferences.noImplicitAny": false,
+  "typescript.preferences.strict": false,
+  "typescript.preferences.strictNullChecks": false,
+  "typescript.preferences.strictFunctionTypes": false,
+  "typescript.preferences.strictBindCallApply": false,
+  "typescript.preferences.strictPropertyInitialization": false,
+  "typescript.preferences.noImplicitThis": false,
+  "typescript.preferences.alwaysStrict": false,
+  "typescript.validate.enable": true,
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "javascript.validate.enable": true,
+  "typescript.preferences.includePackageJsonAutoImports": "on"
+}

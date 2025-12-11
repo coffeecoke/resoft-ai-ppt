@@ -134,7 +134,7 @@
           first
           style="width: 100%;"
           v-tooltip="'AI辅助'"
-        ><span :class="{ 'ai-loading': isAIWriting }">{{ isAIWriting ? '' : 'AI' }}</span></CheckboxButton>
+        ><span :class="{ 'ai-loading': isAIWriting }">{{ isAIWriting ? '' : 'RsAI' }}</span></CheckboxButton>
       </Popover>
       <CheckboxButton
         style="flex: 1;"
