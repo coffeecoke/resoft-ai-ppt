@@ -575,6 +575,14 @@ const goToFillInput = async () => {
     if (result.success) {
       fillSlots.value = result.data
       console.log('✅ 槽位提取成功:', result.data)
+      
+      // 检查槽位数量
+      const MAX_SLOTS = 100
+      if (result.data.totalSlots > MAX_SLOTS) {
+        message.warning(`模板较复杂（${result.data.totalSlots}个文本槽位），建议使用更简单的模板以获得更好效果`)
+      } else if (result.data.totalSlots > 50) {
+        message.info(`模板共${result.data.totalSlots}个文本槽位，AI将为每个槽位生成内容`)
+      }
     } else {
       throw new Error(result.error || '槽位提取失败')
     }
@@ -642,9 +650,18 @@ const generateFillContent = async () => {
     return
   }
   
+  // 检查槽位数量
+  const MAX_SLOTS = 100
+  if (fillSlots.value.totalSlots > MAX_SLOTS) {
+    message.error(`模板槽位过多（${fillSlots.value.totalSlots}个），请选择更简单的模板（建议不超过${MAX_SLOTS}个）`)
+    return
+  }
+  
   loading.value = true
   
   try {
+    console.log(`📤 开始生成内容, 槽位数: ${fillSlots.value.totalSlots}`)
+    
     const result = await api.generateFillContent({
       slots: fillSlots.value,
       topic: fillKeyword.value,
@@ -661,7 +678,18 @@ const generateFillContent = async () => {
     }
   } catch (error: any) {
     console.error('❌ 内容生成失败:', error)
-    message.error(error.message || '内容生成失败，请重试')
+    
+    // 友好的错误提示
+    let errorMsg = '内容生成失败，请重试'
+    if (error.message?.includes('槽位过多')) {
+      errorMsg = error.message
+    } else if (error.message?.includes('timeout') || error.message?.includes('超时')) {
+      errorMsg = '请求超时，模板可能过于复杂，请尝试更简单的模板'
+    } else if (error.response?.data?.error) {
+      errorMsg = error.response.data.error
+    }
+    
+    message.error(errorMsg)
   } finally {
     loading.value = false
   }

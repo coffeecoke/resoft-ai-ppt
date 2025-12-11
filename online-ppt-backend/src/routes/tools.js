@@ -366,15 +366,27 @@ router.post('/generate_fill_content', async (req, res) => {
       })
     }
 
+    // 检查槽位数量限制
+    const MAX_SLOTS = 100
+    if (slots.totalSlots > MAX_SLOTS) {
+      console.warn(`[内容生成] 槽位数过多: ${slots.totalSlots}, 超过限制 ${MAX_SLOTS}`)
+      return res.status(400).json({
+        success: false,
+        error: `模板槽位过多（${slots.totalSlots}个），请选择更简单的模板（建议不超过${MAX_SLOTS}个槽位）`
+      })
+    }
+
     console.log(`[内容生成] 主题: ${topic}, 模型: ${model}, 槽位数: ${slots.totalSlots}`)
 
-    // 生成结构描述
-    const structurePrompt = slotService.generateStructurePrompt(slots)
+    // 生成结构描述（优化版本，限制长度）
+    const structurePrompt = slotService.generateStructurePrompt(slots, { maxSlots: MAX_SLOTS })
 
     // 构建消息
     const messages = buildTemplateFillMessages(structurePrompt, topic, wordContent, model)
 
-    // 调用AI生成内容
+    console.log(`[内容生成] Prompt长度: ${JSON.stringify(messages).length} 字符`)
+
+    // 调用AI生成内容（增加超时时间）
     const result = await aiService.chat(model, messages, {
       temperature: 0.7,
       maxTokens: 8192

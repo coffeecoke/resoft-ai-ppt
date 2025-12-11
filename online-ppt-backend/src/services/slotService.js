@@ -121,26 +121,48 @@ export function extractSlots(slides) {
 /**
  * 生成用于AI提示的结构描述
  * @param {Object} extractedData - extractSlots的返回值
+ * @param {Object} options - 选项
+ * @param {number} options.maxSlots - 最大槽位数
  * @returns {string} 结构描述文本
  */
-export function generateStructurePrompt(extractedData) {
-  const { structure } = extractedData
+export function generateStructurePrompt(extractedData, options = {}) {
+  const { structure, totalSlots } = extractedData
+  const { maxSlots = 100 } = options
   
   const lines = ['【模板结构】']
+  lines.push(`共 ${structure.length} 页，${totalSlots} 个文本槽位`)
   
-  structure.forEach(page => {
+  let slotCount = 0
+  let truncated = false
+  
+  for (const page of structure) {
+    if (slotCount >= maxSlots) {
+      truncated = true
+      break
+    }
+    
     const pageTypeName = getPageTypeName(page.pageType)
     lines.push(`\n第${page.pageIndex + 1}页（${pageTypeName}）：`)
     
     if (page.slots.length === 0) {
       lines.push('  - 无文本槽位')
     } else {
-      page.slots.forEach((slot, idx) => {
+      for (const slot of page.slots) {
+        if (slotCount >= maxSlots) {
+          truncated = true
+          break
+        }
         const typeName = getTextTypeName(slot.textType)
-        lines.push(`  - slot_${slot.id}（${typeName}）: "${truncateText(slot.currentText, 20)}"`)
-      })
+        // 简化输出，减少token消耗
+        lines.push(`  - ${slot.id}（${typeName}）`)
+        slotCount++
+      }
     }
-  })
+  }
+  
+  if (truncated) {
+    lines.push(`\n... 更多槽位已省略，共${totalSlots}个`)
+  }
   
   return lines.join('\n')
 }
