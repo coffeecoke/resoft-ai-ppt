@@ -119,7 +119,47 @@ export function extractSlots(slides) {
 }
 
 /**
- * 生成用于AI提示的结构描述
+ * 分析内容格式特征
+ * @param {string} text - 原始文本内容
+ * @returns {Object} 格式特征
+ */
+function analyzeContentFormat(text) {
+  if (!text) return { type: 'text', hint: '' }
+  
+  const trimmed = text.trim()
+  const len = trimmed.length
+  
+  // 纯数字或带单位的数字
+  if (/^[\d,\.]+[%+\-]?$/.test(trimmed) || /^\d+[\d,\.]*\s*[万亿千百%+元个件人次年月日kKmMgG]?$/.test(trimmed)) {
+    return { type: 'number', hint: `数字格式，如"${trimmed}"` }
+  }
+  
+  // 带数字前缀的（如 "01"、"1."）
+  if (/^[0-9]{1,2}[\.、\s]/.test(trimmed)) {
+    return { type: 'numbered', hint: `带编号，约${len}字` }
+  }
+  
+  // 非常短的文本（标题类）
+  if (len <= 6) {
+    return { type: 'short', hint: `极短，${len}字以内` }
+  }
+  
+  // 短文本
+  if (len <= 15) {
+    return { type: 'title', hint: `短标题，约${len}字` }
+  }
+  
+  // 中等长度
+  if (len <= 50) {
+    return { type: 'subtitle', hint: `中等长度，约${len}字` }
+  }
+  
+  // 长文本
+  return { type: 'content', hint: `长文本，约${len}字` }
+}
+
+/**
+ * 生成用于AI提示的结构描述（包含格式约束）
  * @param {Object} extractedData - extractSlots的返回值
  * @param {Object} options - 选项
  * @param {number} options.maxSlots - 最大槽位数
@@ -129,8 +169,11 @@ export function generateStructurePrompt(extractedData, options = {}) {
   const { structure, totalSlots } = extractedData
   const { maxSlots = 100 } = options
   
-  const lines = ['【模板结构】']
+  const lines = ['【模板结构与格式要求】']
   lines.push(`共 ${structure.length} 页，${totalSlots} 个文本槽位`)
+  lines.push('')
+  lines.push('⚠️ 重要：请严格保持每个槽位的原有格式特征（长度、类型）！')
+  lines.push('')
   
   let slotCount = 0
   let truncated = false
@@ -142,26 +185,44 @@ export function generateStructurePrompt(extractedData, options = {}) {
     }
     
     const pageTypeName = getPageTypeName(page.pageType)
-    lines.push(`\n第${page.pageIndex + 1}页（${pageTypeName}）：`)
+    lines.push(`【第${page.pageIndex + 1}页 - ${pageTypeName}】`)
     
     if (page.slots.length === 0) {
-      lines.push('  - 无文本槽位')
+      lines.push('  (无文本槽位)')
     } else {
       for (const slot of page.slots) {
         if (slotCount >= maxSlots) {
           truncated = true
           break
         }
+        
         const typeName = getTextTypeName(slot.textType)
-        // 简化输出，减少token消耗
-        lines.push(`  - ${slot.id}（${typeName}）`)
+        const format = analyzeContentFormat(slot.currentText)
+        
+        // 输出格式：ID | 类型 | 格式约束 | 原内容示例
+        let line = `  ${slot.id} | ${typeName}`
+        
+        if (format.hint) {
+          line += ` | ${format.hint}`
+        }
+        
+        // 显示原内容（截断过长的）
+        if (slot.currentText) {
+          const preview = slot.currentText.length > 20 
+            ? slot.currentText.substring(0, 20) + '...'
+            : slot.currentText
+          line += ` | 原: "${preview}"`
+        }
+        
+        lines.push(line)
         slotCount++
       }
     }
+    lines.push('')
   }
   
   if (truncated) {
-    lines.push(`\n... 更多槽位已省略，共${totalSlots}个`)
+    lines.push(`... 更多槽位已省略，共${totalSlots}个`)
   }
   
   return lines.join('\n')
