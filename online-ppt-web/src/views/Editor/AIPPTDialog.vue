@@ -34,18 +34,51 @@
     
     <!-- 模板填充：选择模板 -->
     <div class="fill-template-select" v-if="step === 'fill-template'">
-      <div class="templates">
-        <div class="template" 
-          :class="{ 'selected': fillSelectedTemplate === template.id }" 
-          v-for="template in templates" 
-          :key="template.id" 
-          @click="fillSelectedTemplate = template.id"
+      <!-- 内置成品模板 -->
+      <div class="section-title">📁 内置成品模板</div>
+      <div class="full-templates" v-if="fullTemplateList.length">
+        <div class="full-template" 
+          :class="{ 'selected': fillSelectedTemplate === tpl.id }" 
+          v-for="tpl in fullTemplateList" 
+          :key="tpl.id" 
+          @click="selectFullTemplate(tpl)"
         >
-          <img :src="template.cover" :alt="template.name">
+          <div class="template-preview">
+            <div class="template-icon">📊</div>
+          </div>
+          <div class="template-info">
+            <div class="template-name">{{ tpl.name }}</div>
+            <div class="template-meta">{{ tpl.pageCount }}页 · {{ tpl.description }}</div>
+          </div>
         </div>
       </div>
+      <div class="no-templates" v-else>
+        <span>暂无内置模板</span>
+      </div>
+      
+      <!-- 上传本地模板 -->
+      <div class="section-title" style="margin-top: 20px;">📤 上传本地模板</div>
+      <div class="upload-local-template">
+        <FileInput 
+          accept=".pptist,.json" 
+          @change="handleLocalTemplateUpload"
+        >
+          <div class="upload-trigger" :class="{ 'has-file': localTemplateFile }">
+            <template v-if="localTemplateFile">
+              <span class="file-icon">✅</span>
+              <span class="file-name">{{ localTemplateFile.name }}</span>
+              <span class="clear-btn" @click.stop="clearLocalTemplate">清除</span>
+            </template>
+            <template v-else>
+              <span>点击上传 .pptist 或 .json 模板文件</span>
+              <span class="hint">使用您自己的PPT作为模板</span>
+            </template>
+          </div>
+        </FileInput>
+      </div>
+      
       <div class="btns">
-        <Button class="btn" type="primary" @click="goToFillInput()">下一步</Button>
+        <Button class="btn" type="primary" @click="goToFillInput()" :disabled="!fillSelectedTemplate && !localTemplateData">下一步</Button>
         <Button class="btn" @click="step = 'mode'">返回</Button>
       </div>
     </div>
@@ -323,7 +356,7 @@ const wordContent = ref<WordContent | null>(null)
 const wordParsing = ref(false)
 
 // ============ 模板填充模式状态 ============
-const fillSelectedTemplate = ref('template_1')
+const fillSelectedTemplate = ref('')
 const fillKeyword = ref('')
 const fillModel = ref('GLM-4.5-Flash')
 const fillWordFile = ref<File | null>(null)
@@ -333,6 +366,19 @@ const fillSlots = ref<ExtractSlotsResult | null>(null)
 const fillContentMap = ref<ContentMap>({})
 const fillTemplateData = ref<{ slides: Slide[], theme: SlideTheme } | null>(null)
 const fillInputRef = useTemplateRef<InstanceType<typeof Input>>('fillInputRef')
+
+// 成品模板库
+interface FullTemplateInfo {
+  id: string
+  name: string
+  description: string
+  pageCount: number
+  cover: string
+  file: string
+}
+const fullTemplateList = ref<FullTemplateInfo[]>([])
+const localTemplateFile = ref<File | null>(null)
+const localTemplateData = ref<{ slides: Slide[], theme: SlideTheme } | null>(null)
 
 const recommends = ref([
   '一表通售前交流',
@@ -406,29 +452,122 @@ const removeWordFile = () => {
 }
 
 // ============ 模式选择 ============
-const selectMode = (mode: 'smart' | 'fill') => {
+const selectMode = async (mode: 'smart' | 'fill') => {
   if (mode === 'smart') {
     step.value = 'setup'
     setTimeout(() => inputRef.value?.focus(), 100)
   } else {
+    // 加载成品模板库索引
+    await loadFullTemplateList()
     step.value = 'fill-template'
   }
+}
+
+// 加载成品模板库索引
+const loadFullTemplateList = async () => {
+  try {
+    const response = await fetch('/mocks/full_templates/index.json')
+    const data = await response.json()
+    fullTemplateList.value = data.templates || []
+    console.log('✅ 成品模板库加载成功:', fullTemplateList.value)
+  } catch (error) {
+    console.error('❌ 成品模板库加载失败:', error)
+    fullTemplateList.value = []
+  }
+}
+
+// 选择成品模板
+const selectFullTemplate = (tpl: FullTemplateInfo) => {
+  fillSelectedTemplate.value = tpl.id
+  localTemplateFile.value = null
+  localTemplateData.value = null
+}
+
+// 上传本地模板
+const handleLocalTemplateUpload = async (files: FileList) => {
+  const file = files[0]
+  if (!file) return
+  
+  try {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        let content = e.target?.result as string
+        
+        // 如果是.pptist文件，需要解密
+        if (file.name.endsWith('.pptist')) {
+          content = decrypt(content)
+        }
+        
+        const data = JSON.parse(content)
+        
+        if (!data.slides || !Array.isArray(data.slides)) {
+          throw new Error('无效的模板文件格式')
+        }
+        
+        localTemplateFile.value = file
+        localTemplateData.value = {
+          slides: data.slides,
+          theme: data.theme || {}
+        }
+        fillSelectedTemplate.value = ''  // 清除内置模板选择
+        
+        message.success(`模板加载成功，共${data.slides.length}页`)
+        console.log('✅ 本地模板加载成功:', data)
+      } catch (parseError) {
+        console.error('❌ 模板解析失败:', parseError)
+        message.error('模板文件格式错误，请检查文件')
+      }
+    }
+    reader.readAsText(file)
+  } catch (error: any) {
+    console.error('❌ 模板上传失败:', error)
+    message.error(error.message || '模板上传失败')
+  }
+}
+
+// 清除本地模板
+const clearLocalTemplate = () => {
+  localTemplateFile.value = null
+  localTemplateData.value = null
 }
 
 // ============ 模板填充模式方法 ============
 
 // 进入输入主题步骤
 const goToFillInput = async () => {
-  if (!fillSelectedTemplate.value) {
-    message.error('请先选择一个模板')
+  // 检查是否选择了模板
+  if (!fillSelectedTemplate.value && !localTemplateData.value) {
+    message.error('请先选择一个模板或上传本地模板')
     return
   }
   
   loading.value = true
   
   try {
-    // 加载模板数据
-    const templateData = await api.getMockData(fillSelectedTemplate.value)
+    let templateData: { slides: Slide[], theme: SlideTheme }
+    
+    if (localTemplateData.value) {
+      // 使用本地上传的模板
+      templateData = localTemplateData.value
+      console.log('📂 使用本地上传的模板')
+    } else {
+      // 从成品模板库加载
+      const selectedTpl = fullTemplateList.value.find(t => t.id === fillSelectedTemplate.value)
+      if (!selectedTpl) {
+        throw new Error('未找到选择的模板')
+      }
+      
+      console.log('📂 加载成品模板:', selectedTpl.file)
+      const response = await fetch(`/mocks/full_templates/${selectedTpl.file}`)
+      const data = await response.json()
+      
+      templateData = {
+        slides: data.slides,
+        theme: data.theme || {}
+      }
+    }
+    
     fillTemplateData.value = templateData
     
     // 提取槽位
@@ -930,26 +1069,133 @@ const uploadLocalTemplate = () => {
 
 /* 模板填充模式样式 */
 .fill-template-select {
-  .templates {
-    max-height: 400px;
-    overflow: auto;
-    display: flex;
-    margin-bottom: 15px;
-    @include flex-grid-layout();
+  .section-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 12px;
+  }
   
-    .template {
+  .full-templates {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 10px;
+    
+    .full-template {
+      width: calc(50% - 6px);
+      padding: 12px;
       border: 2px solid $borderColor;
       border-radius: $borderRadius;
       cursor: pointer;
-      @include flex-grid-layout-children(2, 49%);
-
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      transition: all 0.25s;
+      
+      &:hover {
+        border-color: $themeColor;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      }
+      
       &.selected {
         border-color: $themeColor;
+        background-color: rgba($themeColor, 0.05);
       }
+      
+      .template-preview {
+        width: 60px;
+        height: 45px;
+        background-color: #f5f5f5;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        
+        .template-icon {
+          font-size: 24px;
+        }
+      }
+      
+      .template-info {
+        flex: 1;
+        
+        .template-name {
+          font-size: 14px;
+          font-weight: 600;
+          color: #333;
+          margin-bottom: 4px;
+        }
+        
+        .template-meta {
+          font-size: 12px;
+          color: #999;
+        }
+      }
+    }
+  }
   
-      img {
-        width: 100%;
-        min-height: 150px;
+  .no-templates {
+    padding: 20px;
+    text-align: center;
+    color: #999;
+    font-size: 13px;
+    background-color: #f9f9f9;
+    border-radius: $borderRadius;
+  }
+  
+  .upload-local-template {
+    .upload-trigger {
+      border: 1px dashed #d9d9d9;
+      border-radius: $borderRadius;
+      padding: 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.25s;
+      font-size: 13px;
+      color: #666;
+      
+      &:hover {
+        border-color: $themeColor;
+        color: $themeColor;
+      }
+      
+      &.has-file {
+        border-style: solid;
+        border-color: #52c41a;
+        background-color: #f6ffed;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        
+        .file-icon {
+          color: #52c41a;
+        }
+        
+        .file-name {
+          color: #333;
+          max-width: 200px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        
+        .clear-btn {
+          color: #ff4d4f;
+          font-size: 12px;
+          
+          &:hover {
+            text-decoration: underline;
+          }
+        }
+      }
+      
+      .hint {
+        display: block;
+        font-size: 12px;
+        color: #999;
+        margin-top: 4px;
       }
     }
   }
@@ -958,6 +1204,7 @@ const uploadLocalTemplate = () => {
     display: flex;
     justify-content: center;
     gap: 10px;
+    margin-top: 20px;
     
     .btn {
       width: 120px;

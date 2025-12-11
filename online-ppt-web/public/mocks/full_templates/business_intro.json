@@ -1,0 +1,380 @@
+{
+  "title": "商务介绍模板",
+  "width": 1000,
+  "height": 562.5,
+  "theme": {
+    "themeColors": ["rgb(0, 100, 80)"],
+    "fontColor": "rgb(51, 51, 51)",
+    "fontName": "",
+    "backgroundColor": "rgb(255, 255, 255)"
+  },
+  "slides": [
+    {
+      "id": "biz_cover",
+      "type": "cover",
+      "elements": [
+        {
+          "type": "shape",
+          "id": "cover_bg",
+          "left": 0,
+          "top": 0,
+          "width": 400,
+          "height": 562.5,
+          "viewBox": [200, 200],
+          "path": "M 0 0 L 200 0 L 200 200 L 0 200 Z",
+          "fill": "rgb(0, 100, 80)",
+          "fixedRatio": false,
+          "rotate": 0,
+          "lock": true
+        },
+        {
+          "type": "text",
+          "id": "cover_title",
+          "left": 450,
+          "top": 180,
+          "width": 500,
+          "height": 100,
+          "content": "<p><strong><span style=\"font-size: 42px; color: rgb(0, 100, 80);\">公司介绍</span></strong></p>",
+          "rotate": 0,
+          "defaultFontName": "",
+          "defaultColor": "#333",
+          "textType": "title"
+        },
+        {
+          "type": "text",
+          "id": "cover_subtitle",
+          "left": 450,
+          "top": 300,
+          "width": 500,
+          "height": 60,
+          "content": "<p><span style=\"font-size: 18px; color: #666;\">专业 · 创新 · 值得信赖</span></p>",
+          "rotate": 0,
+          "defaultFontName": "",
+          "defaultColor": "#666",
+          "textType": "subtitle"
+        },
+        {
+          "type": "text",
+          "id": "cover_logo",
+          "left": 100,
+          "top": 250,
+          "width": 200,
+          "height": 60,
+          "content": "<p style=\"text-align: center;\"><strong><span style=\"font-size: 24px; color: #ffffff;\">LOGO</span></strong></p>",
+          "rotate": 0,
+          "defaultFontName": "",
+          "defaultColor": "#ffffff",
+          "textType": "content"
+        }
+      ],
+      "background": {
+        "type": "solid",
+        "color": "#f5f5f5"
+      }
+    },
+    {
+      "id": "biz_about",
+      "type": "content",
+      "elements": [
+        {
+          "type": "shape",
+          "id": "about_accent",
+          "left": 0,
+          "top": 0,
+          "width": 10,
+          "height": 562.5,
+          "viewBox": [200, 200],
+          "path": "M 0 0 L 200 0 L 200 200 L 0 200 Z",
+          "fill": "rgb(0, 100, 80)",
+          "fixedRatio": false,
+          "rotate": 0,
+          "lock": true
+        },
+        {
+          "type": "text",
+          "id": "about_title",
+          "left": 50,
+          "top": 40,
+          "width": 300,
+          "height": 50,
+          "content": "<p><strong><span style=\"font-size: 28px; color: rgb(0, 100, 80);\">关于我们</span></strong></p>",
+          "rotate": 0,
+          "defaultFontName": "",
+          "defaultColor": "#333",
+          "textType": "title"
+        },
+        {
+          "type": "text",
+          "id": "about_content",
+          "left": 50,
+          "top": 120,
+          "width": 900,
+          "height": 400,
+          "content": "<p><span style=\"font-size: 18px;\">我们是一家专注于创新的科技公司，致力于为客户提供最优质的产品和服务。</span></p><p><span style=\"font-size: 18px;\">公司成立以来，始终秉承客户至上的理念，不断追求卓越。</span></p>",
+          "rotate": 0,
+          "defaultFontName": "",
+          "defaultColor": "#333",
+          "textType": "content"
+        }
+      ],
+      "background": {
+        "type": "solid",
+        "color": "#ffffff"
+      }
+    },
+    {
+      "id": "biz_service",
+      "type": "content",
+      "elements": [
+        {
+          "type": "shape",
+          "id": "service_accent",
+          "left": 0,
+          "top": 0,
+          "width": 10,
+          "height": 562.5,
+          "viewBox": [200, 200],
+          "path": "M 0 0 L 200 0 L 200 200 L 0 200 Z",
+          "fill": "rgb(0, 100, 80)",
+          "fixedRatio": false,
+          "rotate": 0,
+          "lock": true
+        },
+        {
+          "type": "text",
+          "id": "service_title",
+          "left": 50,
+          "top": 40,
+          "width": 300,
+          "height": 50,
+          "content": "<p><strong><span style=\"font-size: 28px; color: rgb(0, 100, 80);\">服务内容</span></strong></p>",
+          "rotate": 0,
+          "defaultFontName": "",
+          "defaultColor": "#333",
+          "textType": "title"
+        },
+        {
+          "type": "text",
+          "id": "service_item1_title",
+          "left": 80,
+          "top": 120,
+          "width": 250,
+          "height": 40,
+          "content": "<p><strong><span style=\"font-size: 18px; color: rgb(0, 100, 80);\">服务一</span></strong></p>",
+          "rotate": 0,
+          "defaultFontName": "",
+          "defaultColor": "#333",
+          "textType": "itemTitle"
+        },
+        {
+          "type": "text",
+          "id": "service_item1_desc",
+          "left": 80,
+          "top": 160,
+          "width": 250,
+          "height": 80,
+          "content": "<p><span style=\"font-size: 14px; color: #666;\">专业的技术支持和咨询服务</span></p>",
+          "rotate": 0,
+          "defaultFontName": "",
+          "defaultColor": "#666",
+          "textType": "item"
+        },
+        {
+          "type": "text",
+          "id": "service_item2_title",
+          "left": 380,
+          "top": 120,
+          "width": 250,
+          "height": 40,
+          "content": "<p><strong><span style=\"font-size: 18px; color: rgb(0, 100, 80);\">服务二</span></strong></p>",
+          "rotate": 0,
+          "defaultFontName": "",
+          "defaultColor": "#333",
+          "textType": "itemTitle"
+        },
+        {
+          "type": "text",
+          "id": "service_item2_desc",
+          "left": 380,
+          "top": 160,
+          "width": 250,
+          "height": 80,
+          "content": "<p><span style=\"font-size: 14px; color: #666;\">定制化解决方案设计</span></p>",
+          "rotate": 0,
+          "defaultFontName": "",
+          "defaultColor": "#666",
+          "textType": "item"
+        },
+        {
+          "type": "text",
+          "id": "service_item3_title",
+          "left": 680,
+          "top": 120,
+          "width": 250,
+          "height": 40,
+          "content": "<p><strong><span style=\"font-size: 18px; color: rgb(0, 100, 80);\">服务三</span></strong></p>",
+          "rotate": 0,
+          "defaultFontName": "",
+          "defaultColor": "#333",
+          "textType": "itemTitle"
+        },
+        {
+          "type": "text",
+          "id": "service_item3_desc",
+          "left": 680,
+          "top": 160,
+          "width": 250,
+          "height": 80,
+          "content": "<p><span style=\"font-size: 14px; color: #666;\">全程项目管理与执行</span></p>",
+          "rotate": 0,
+          "defaultFontName": "",
+          "defaultColor": "#666",
+          "textType": "item"
+        }
+      ],
+      "background": {
+        "type": "solid",
+        "color": "#ffffff"
+      }
+    },
+    {
+      "id": "biz_advantage",
+      "type": "content",
+      "elements": [
+        {
+          "type": "shape",
+          "id": "adv_accent",
+          "left": 0,
+          "top": 0,
+          "width": 10,
+          "height": 562.5,
+          "viewBox": [200, 200],
+          "path": "M 0 0 L 200 0 L 200 200 L 0 200 Z",
+          "fill": "rgb(0, 100, 80)",
+          "fixedRatio": false,
+          "rotate": 0,
+          "lock": true
+        },
+        {
+          "type": "text",
+          "id": "adv_title",
+          "left": 50,
+          "top": 40,
+          "width": 300,
+          "height": 50,
+          "content": "<p><strong><span style=\"font-size: 28px; color: rgb(0, 100, 80);\">核心优势</span></strong></p>",
+          "rotate": 0,
+          "defaultFontName": "",
+          "defaultColor": "#333",
+          "textType": "title"
+        },
+        {
+          "type": "text",
+          "id": "adv_item1",
+          "left": 80,
+          "top": 130,
+          "width": 400,
+          "height": 40,
+          "content": "<p><span style=\"font-size: 18px;\">✓ 十年行业经验积累</span></p>",
+          "rotate": 0,
+          "defaultFontName": "",
+          "defaultColor": "#333",
+          "textType": "item"
+        },
+        {
+          "type": "text",
+          "id": "adv_item2",
+          "left": 80,
+          "top": 190,
+          "width": 400,
+          "height": 40,
+          "content": "<p><span style=\"font-size: 18px;\">✓ 专业技术团队支持</span></p>",
+          "rotate": 0,
+          "defaultFontName": "",
+          "defaultColor": "#333",
+          "textType": "item"
+        },
+        {
+          "type": "text",
+          "id": "adv_item3",
+          "left": 80,
+          "top": 250,
+          "width": 400,
+          "height": 40,
+          "content": "<p><span style=\"font-size: 18px;\">✓ 完善的售后服务体系</span></p>",
+          "rotate": 0,
+          "defaultFontName": "",
+          "defaultColor": "#333",
+          "textType": "item"
+        },
+        {
+          "type": "text",
+          "id": "adv_item4",
+          "left": 80,
+          "top": 310,
+          "width": 400,
+          "height": 40,
+          "content": "<p><span style=\"font-size: 18px;\">✓ 持续创新研发能力</span></p>",
+          "rotate": 0,
+          "defaultFontName": "",
+          "defaultColor": "#333",
+          "textType": "item"
+        }
+      ],
+      "background": {
+        "type": "solid",
+        "color": "#ffffff"
+      }
+    },
+    {
+      "id": "biz_end",
+      "type": "end",
+      "elements": [
+        {
+          "type": "shape",
+          "id": "end_bg",
+          "left": 0,
+          "top": 0,
+          "width": 1000,
+          "height": 562.5,
+          "viewBox": [200, 200],
+          "path": "M 0 0 L 200 0 L 200 200 L 0 200 Z",
+          "fill": "rgb(0, 100, 80)",
+          "fixedRatio": false,
+          "rotate": 0,
+          "lock": true
+        },
+        {
+          "type": "text",
+          "id": "end_thanks",
+          "left": 100,
+          "top": 180,
+          "width": 800,
+          "height": 100,
+          "content": "<p style=\"text-align: center;\"><strong><span style=\"font-size: 48px; color: #ffffff;\">感谢聆听</span></strong></p>",
+          "rotate": 0,
+          "defaultFontName": "",
+          "defaultColor": "#ffffff",
+          "textType": "title"
+        },
+        {
+          "type": "text",
+          "id": "end_contact",
+          "left": 100,
+          "top": 300,
+          "width": 800,
+          "height": 80,
+          "content": "<p style=\"text-align: center;\"><span style=\"font-size: 18px; color: #ffffff;\">联系方式：contact@company.com</span></p>",
+          "rotate": 0,
+          "defaultFontName": "",
+          "defaultColor": "#ffffff",
+          "textType": "content"
+        }
+      ],
+      "background": {
+        "type": "solid",
+        "color": "#ffffff"
+      }
+    }
+  ]
+}

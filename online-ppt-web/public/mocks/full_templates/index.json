@@ -1,0 +1,20 @@
+{
+  "templates": [
+    {
+      "id": "simple_report",
+      "name": "简约汇报",
+      "description": "适合工作汇报、项目总结",
+      "pageCount": 6,
+      "cover": "/mocks/full_templates/covers/simple_report.png",
+      "file": "simple_report.json"
+    },
+    {
+      "id": "business_intro",
+      "name": "商务介绍",
+      "description": "适合公司介绍、产品推介",
+      "pageCount": 5,
+      "cover": "/mocks/full_templates/covers/business_intro.png",
+      "file": "business_intro.json"
+    }
+  ]
+}
