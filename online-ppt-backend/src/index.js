@@ -11,7 +11,9 @@ const PORT = process.env.PORT || 5001
 
 // 中间件
 app.use(cors())
-app.use(express.json())
+// 增加请求体大小限制到50MB，以支持大Word文档内容传输
+app.use(express.json({ limit: '50mb' }))
+app.use(express.urlencoded({ extended: true, limit: '50mb' }))
 
 // 路由
 app.use('/tools', toolsRouter)

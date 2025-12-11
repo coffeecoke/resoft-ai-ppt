@@ -7,7 +7,7 @@ import vue from '@vitejs/plugin-vue'
 export default defineConfig({
   base: '',
   plugins: [
-    vue(),
+    vue(), // Vue 插件默认会生成 source map，开发模式下可在浏览器控制台看到 .vue 文件路径
   ],
   server: {
     host: '127.0.0.1',
@@ -53,6 +53,7 @@ export default defineConfig({
     }
   },
   css: {
+    devSourcemap: true, // 开发模式下启用 CSS source map，可在浏览器控制台看到源码路径
     preprocessorOptions: {
       scss: {
         additionalData: `
@@ -61,6 +62,13 @@ export default defineConfig({
         `
       },
     },
+  },
+  esbuild: {
+    // 启用 esbuild 的 source map，用于 TypeScript/JavaScript 文件
+    sourcemap: true,
+  },
+  build: {
+    sourcemap: true, // 构建时也生成 source map
   },
   resolve: {
     alias: {

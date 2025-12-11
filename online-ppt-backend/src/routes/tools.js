@@ -1,9 +1,88 @@
 import { Router } from 'express'
+import multer from 'multer'
 import aiService from '../services/aiService.js'
+import wordService from '../services/wordService.js'
 import { buildOutlineMessages } from '../prompts/outlinePrompt.js'
+import { buildWordOutlineMessages } from '../prompts/wordOutlinePrompt.js'
 import { buildAIPPTMessages } from '../prompts/aipptPrompt.js'
 
 const router = Router()
+
+// 配置multer用于文件上传
+const upload = multer({ 
+  dest: 'uploads/',
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 限制10MB
+  },
+  fileFilter: (req, file, cb) => {
+    // 只允许.docx文件
+    if (file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+        file.originalname.endsWith('.docx')) {
+      cb(null, true)
+    } else {
+      cb(new Error('只支持.docx格式的Word文档'))
+    }
+  }
+})
+
+/**
+ * API 0: Word文档解析
+ * 
+ * POST /tools/parse_word
+ * Content-Type: multipart/form-data
+ * 
+ * Request:
+ *   - file: Word文件 (.docx)
+ * 
+ * Response:
+ * {
+ *   "success": true,
+ *   "data": {
+ *     "title": "文档标题",
+ *     "text": "纯文本内容",
+ *     "markdown": "Markdown格式内容",
+ *     "wordCount": 3500
+ *   }
+ * }
+ */
+router.post('/parse_word', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ 
+        success: false, 
+        error: '请上传Word文件' 
+      })
+    }
+
+    console.log(`[Word解析] 文件: ${req.file.originalname}, 大小: ${req.file.size} bytes`)
+
+    // 解析Word文档
+    const result = await wordService.parseWord(req.file.path)
+
+    // 删除临时文件
+    await wordService.deleteFile(req.file.path)
+
+    console.log(`[Word解析] 完成, 标题: ${result.title}, 字数: ${result.wordCount}`)
+
+    res.json({ 
+      success: true, 
+      data: result 
+    })
+
+  } catch (error) {
+    console.error('[Word解析] 错误:', error)
+    
+    // 尝试删除临时文件
+    if (req.file) {
+      await wordService.deleteFile(req.file.path)
+    }
+    
+    res.status(500).json({ 
+      success: false, 
+      error: error.message || '文档解析失败' 
+    })
+  }
+})
 
 /**
  * API 1: 大纲生成
@@ -15,23 +94,43 @@ const router = Router()
  *   "content": "PPT主题",
  *   "language": "中文",
  *   "model": "GLM-4.5-Flash",
- *   "stream": true
+ *   "stream": true,
+ *   "source": "word",           // 可选，来源标识：topic(默认) | word
+ *   "wordContent": {            // source为word时必填
+ *     "title": "文档标题",
+ *     "text": "文档文本",
+ *     "markdown": "文档Markdown"
+ *   }
  * }
  * 
  * Response: 流式返回Markdown格式大纲
  */
 router.post('/aippt_outline', async (req, res) => {
   try {
-    const { content, language = '中文', model = 'GLM-4.5-Flash', stream = true } = req.body
+    const { 
+      content, 
+      language = '中文', 
+      model = 'GLM-4.5-Flash', 
+      stream = true,
+      source,        // 新增：来源标识
+      wordContent    // 新增：Word文档内容
+    } = req.body
 
     if (!content) {
       return res.status(400).json({ error: '请提供PPT主题' })
     }
 
-    console.log(`[大纲生成] 主题: ${content}, 模型: ${model}, 语言: ${language}`)
-
-    // 构建消息（传入模型名称以支持兼容性处理）
-    const messages = buildOutlineMessages(content, language, model)
+    // 根据来源选择不同的Prompt
+    let messages
+    if (source === 'word' && wordContent) {
+      // Word模式：基于文档内容生成大纲
+      console.log(`[大纲生成] Word模式, 主题: ${content}, 模型: ${model}, 文档字数: ${wordContent.wordCount || '未知'}`)
+      messages = buildWordOutlineMessages(content, wordContent, language, model)
+    } else {
+      // 主题模式：纯主题生成大纲
+      console.log(`[大纲生成] 主题模式, 主题: ${content}, 模型: ${model}, 语言: ${language}`)
+      messages = buildOutlineMessages(content, language, model)
+    }
 
     if (stream) {
       // 流式响应

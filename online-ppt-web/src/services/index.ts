@@ -1,7 +1,10 @@
 import axios from './config'
 
 // export const SERVER_URL = 'http://localhost:5000'
-export const SERVER_URL = (import.meta.env.MODE === 'development') ? '/api' : 'https://server.pptist.cn'
+// 支持环境变量配置，Docker部署时可通过环境变量设置
+// 如果未设置环境变量，默认使用 /api（适用于Docker部署和开发环境）
+// Nginx会自动将 /api 代理到后端服务
+export const SERVER_URL = import.meta.env.VITE_API_BASE_URL || '/api'
 
 interface ImageSearchPayload {
   query: string;
@@ -14,10 +17,20 @@ interface ImageSearchPayload {
   per_page?: number;
 }
 
+// Word文档解析结果
+export interface WordContent {
+  title: string
+  text: string
+  markdown: string
+  wordCount: number
+}
+
 interface AIPPTOutlinePayload {
   content: string
   language: string
   model: string
+  source?: 'topic' | 'word'    // 来源：topic(默认) | word
+  wordContent?: WordContent    // Word文档内容
 }
 
 interface AIPPTPayload {
@@ -32,6 +45,13 @@ interface AIWritingPayload {
   command: string
 }
 
+// Word解析响应
+interface ParseWordResponse {
+  success: boolean
+  data: WordContent
+  error?: string
+}
+
 export default {
   getMockData(filename: string): Promise<any> {
     return axios.get(`./mocks/${filename}.json`)
@@ -41,29 +61,64 @@ export default {
     return axios.post(`${SERVER_URL}/tools/img_search`, body)
   },
 
+  /**
+   * 解析Word文档
+   * 
+   * @param file Word文件 (.docx)
+   * @returns 解析结果
+   */
+  parseWord(file: File): Promise<ParseWordResponse> {
+    const formData = new FormData()
+    formData.append('file', file)
+    
+    return axios.post(`${SERVER_URL}/tools/parse_word`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    })
+  },
+
+  /**
+   * 生成PPT大纲
+   * 
+   * 支持两种模式：
+   * 1. 主题模式：只传content，AI根据主题自由发挥
+   * 2. Word模式：传content + wordContent，AI参考文档内容生成
+   */
   AIPPT_Outline({
     content,
     language,
     model,
+    source,
+    wordContent,
   }: AIPPTOutlinePayload): Promise<any> {
-    console.log('📤 AIPPT_Outline 请求参数:', {
+    // 构建请求体
+    const body: Record<string, any> = {
       content,
       language,
       model,
       stream: true,
-    })
+    }
+    
+    // 如果有Word内容，添加到请求体
+    if (source === 'word' && wordContent) {
+      body.source = 'word'
+      body.wordContent = {
+        title: wordContent.title,
+        text: wordContent.text,
+        markdown: wordContent.markdown,
+        wordCount: wordContent.wordCount,
+      }
+    }
+    
+    console.log('📤 AIPPT_Outline 请求参数:', body)
     
     return fetch(`${SERVER_URL}/tools/aippt_outline`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        content,
-        language,
-        model,
-        stream: true,
-      }),
+      body: JSON.stringify(body),
     }).then(response => {
       console.log('📥 AIPPT_Outline 响应对象:', {
         status: response.status,

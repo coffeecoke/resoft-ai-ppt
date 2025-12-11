@@ -184,6 +184,14 @@ watch(isHandleElement, () => {
   &.lock .element-content {
     cursor: default;
   }
+
+  // 添加hover效果：放大和阴影
+  &:not(.lock):hover .element-content {
+    transform: scale(1.02);
+    box-shadow: 0 0 8px rgba(0, 0, 0, 0.15);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    border-radius: 6px;
+  }
 }
 .rotate-wrapper {
   width: 100%;
@@ -195,6 +203,8 @@ watch(isHandleElement, () => {
   line-height: 1.5;
   word-break: break-word;
   cursor: move;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transform-origin: center center;
 
   .text {
     position: relative;
