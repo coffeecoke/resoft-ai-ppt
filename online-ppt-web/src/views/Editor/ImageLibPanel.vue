@@ -10,7 +10,7 @@
       display: 'flex',
       flexDirection: 'column',
     }"
-    title="图片库（来自 pexels.com）" 
+    title="AI图片搜索（来自 pexels.com）" 
     @close="close()"
   >
     <div class="container" v-loading="{ state: loading, text: '加载中...' }">
@@ -42,17 +42,28 @@
         :list="imgs"
         :columnSpacing="5"
         :columnWidth="160"
-        @scrollToBottom="loadMore()"
       >
         <template v-slot:default="props">
           <div class="img-item">
             <img :src="props.src">
             <div class="mask">
-              <Button type="primary" size="small" @click="createImageElement(props.src)">插入</Button>
+              <Button type="primary" size="small" @click="selectImage(props.src)">插入</Button>
             </div>
           </div>
         </template>
       </ImageWaterfallViewer>
+      
+      <div class="load-more-footer" v-if="imgs.length > 0">
+        <Button 
+          v-if="hasMore" 
+          :loading="loading" 
+          @click="loadMore()"
+          class="load-more-btn"
+        >
+          {{ loading ? '加载中...' : '加载更多' }}
+        </Button>
+        <span v-else class="no-more-text">没有更多图片了</span>
+      </div>
     </div>
   </MoveablePanel>
 </template>
@@ -88,9 +99,8 @@ const loading = ref(false)
 const orientationVisible = ref(false)
 const searchWord = ref('')
 const page = ref(1)
-const perPage = ref(50)
-const total = ref(0)
-const max = ref(500)
+const perPage = ref(6)
+const hasMore = ref(true)
 const orientation = ref<Orientation>('all')
 const orientationOptions: {
   key: Orientation
@@ -112,6 +122,18 @@ const close = () => {
   mainStore.setImageLibPanelState(false)
 }
 
+// 选择图片
+const selectImage = (src: string) => {
+  if (mainStore.imageLibPanelCallback) {
+    // 使用回调（如设置背景图）
+    mainStore.imageLibPanelCallback(src)
+  } else {
+    // 默认行为：插入图片元素
+    createImageElement(src)
+  }
+  close()
+}
+
 onMounted(() => {
   search('风景')
 })
@@ -123,17 +145,35 @@ const search = (q?: string) => {
   loading.value = true
   page.value = 1
 
-  api.searchImage({
-    query,
-    per_page: perPage.value,
+  // orientation 'all' 时不传值，让后端处理
+  const searchParams: any = {
+    keyword: query,
+    count: perPage.value,
     page: page.value,
-    orientation: orientation.value,
-  }).then(ret => {
-    imgs.value = ret.data
-    total.value = ret.total
+  }
+  
+  if (orientation.value !== 'all') {
+    searchParams.orientation = orientation.value
+  }
 
+  api.searchImages(searchParams).then(ret => {
+    if (ret.success && ret.data) {
+      // 适配新接口返回格式
+      imgs.value = ret.data.images.map((img: any) => ({
+        id: img.id,
+        width: img.width,
+        height: img.height,
+        src: img.src
+      }))
+      hasMore.value = ret.data.hasMore !== false  // 是否还有更多图片
+    } else {
+      message.error(ret.error || '图片搜索失败')
+      imgs.value = []
+      hasMore.value = false
+    }
     loading.value = false
-  }).catch(() => {
+  }).catch((err) => {
+    message.error('图片搜索失败：' + (err.message || '网络错误'))
     loading.value = false
   })
 }
@@ -145,22 +185,37 @@ const setOrientation = (value: Orientation) => {
 
 const loadMore = () => {
   if (loading.value) return
-  
-  const count = page.value * perPage.value
-  if (count >= Math.min(max.value, total.value)) return
+  if (!hasMore.value) return  // 没有更多了，不再加载
   
   loading.value = true
   page.value += 1
 
-  api.searchImage({
-    query: searchWord.value || '风景',
-    per_page: perPage.value,
+  const searchParams: any = {
+    keyword: searchWord.value || '风景',
+    count: perPage.value,
     page: page.value,
-    orientation: orientation.value,
-  }).then(ret => {
-    imgs.value = [...imgs.value, ...ret.data]
+  }
+  
+  if (orientation.value !== 'all') {
+    searchParams.orientation = orientation.value
+  }
+
+  api.searchImages(searchParams).then(ret => {
+    if (ret.success && ret.data) {
+      const newImages = ret.data.images.map((img: any) => ({
+        id: img.id,
+        width: img.width,
+        height: img.height,
+        src: img.src
+      }))
+      imgs.value = [...imgs.value, ...newImages]
+      hasMore.value = ret.data.hasMore !== false  // 更新是否还有更多
+    } else {
+      hasMore.value = false
+    }
     loading.value = false
   }).catch(() => {
+    hasMore.value = false
     loading.value = false
   })
 }
@@ -222,6 +277,22 @@ const loadMore = () => {
     align-items: center;
     background: rgba(0, 0, 0, .25);
     @include absolute-0();
+  }
+}
+.load-more-footer {
+  text-align: center;
+  padding: 15px 0;
+  flex-shrink: 0;
+  border-top: 1px solid var(--border-color);
+  
+  .load-more-btn {
+    width: 90%;
+    max-width: 200px;
+  }
+  
+  .no-more-text {
+    color: var(--text-tertiary);
+    font-size: 12px;
   }
 }
 </style>

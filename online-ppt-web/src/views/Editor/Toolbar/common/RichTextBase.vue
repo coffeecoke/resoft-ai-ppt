@@ -124,7 +124,7 @@
     </ButtonGroup>
 
     <ButtonGroup class="row" passive>
-      <Popover trigger="click" v-model:value="AIPopoverVisible" style="width: 25%;">
+      <!-- <Popover trigger="click" v-model:value="AIPopoverVisible" style="width: 25%;">
         <template #content>
           <PopoverMenuItem center @click="execAI('美化改写')">美化</PopoverMenuItem>
           <PopoverMenuItem center @click="execAI('扩写丰富')">扩写</PopoverMenuItem>
@@ -134,8 +134,9 @@
           first
           style="width: 100%;"
           v-tooltip="'AI辅助'"
-        ><span :class="{ 'ai-loading': isAIWriting }">{{ isAIWriting ? '' : 'RsAI' }}</span></CheckboxButton>
-      </Popover>
+        ><span :class="{ 'ai-loading': isAIWriting }">{{ isAIWriting ? '' : 'RsAI' }}</span>
+        </CheckboxButton>
+      </Popover> -->
       <CheckboxButton
         style="flex: 1;"
         v-tooltip="'清除格式'"

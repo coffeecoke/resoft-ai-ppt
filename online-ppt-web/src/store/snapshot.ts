@@ -35,10 +35,11 @@ export const useSnapshotStore = defineStore('snapshot', {
 
     async initSnapshotDatabase() {
       const slidesStore = useSlidesStore()
-  
+      // 兜底：确保 slides 为数组，避免 JSON.parse(undefined) 报错
+      const safeSlides = Array.isArray(slidesStore.slides) ? slidesStore.slides : []
       const newFirstSnapshot = {
         index: slidesStore.slideIndex,
-        slides: JSON.parse(JSON.stringify(slidesStore.slides)),
+        slides: JSON.parse(JSON.stringify(safeSlides)),
       }
       await db.snapshots.add(newFirstSnapshot)
       this.setSnapshotCursor(0)

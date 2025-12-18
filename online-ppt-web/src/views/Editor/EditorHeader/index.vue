@@ -1,6 +1,11 @@
 <template>
   <div class="editor-header">
     <div class="left">
+      <!-- 模板编辑模式：显示返回按钮 -->
+      <div v-if="isTemplateEditMode" class="back-to-admin" @click="goBackToAdmin" v-tooltip="'返回模板管理'">
+        <span class="arrow">←</span>
+        <span class="text">模板管理</span>
+      </div>
       <Popover trigger="click" placement="bottom-start" v-model:value="mainMenuVisible">
         <template #content>
           <div class="main-menu">
@@ -72,6 +77,16 @@
     </div>
 
     <div class="right">
+      <!-- 模板编辑模式：显示保存和发布按钮 -->
+      <template v-if="isTemplateEditMode">
+        <div class="menu-item template-btn" v-tooltip="'保存模板到后端'" @click="handleSaveTemplate" :class="{ disabled: saving }">
+          <span class="text">{{ saving ? '保存中...' : '保存' }}</span>
+        </div>
+        <div class="menu-item template-btn publish-btn" v-tooltip="'发布模板'" @click="handlePublishTemplate" :class="{ disabled: publishing }">
+          <span class="text">{{ publishing ? '发布中...' : ' 发布' }}</span>
+        </div>
+      </template>
+      
       <div class="group-menu-item">
         <div class="menu-item" v-tooltip="'幻灯片放映（F5）'" @click="enterScreening()">
           <IconPpt class="icon" />
@@ -86,6 +101,14 @@
       </div>
       <div class="menu-item" v-tooltip="'AI生成PPT'" @click="openAIPPTDialog(); mainMenuVisible = false">
         <span class="text ai">RsAI</span>
+      </div>
+      <div 
+        class="menu-item ai-edit-btn" 
+        :class="{ active: showAIEditPanel }"
+        v-tooltip="showAIEditPanel ? '关闭AI助手' : '打开AI助手'"
+        @click="toggleAIEditPanel()"
+      >
+        <span class="icon">✨</span>
       </div>
       <div class="menu-item" v-tooltip="'导出'" @click="setDialogForExport('pptx')">
         <IconDownload class="icon" />
@@ -107,12 +130,14 @@
 </template>
 
 <script lang="ts" setup>
-import { nextTick, ref, useTemplateRef } from 'vue'
+import { nextTick, ref, useTemplateRef, computed, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useMainStore, useSlidesStore } from '@/store'
+import { useRoute, useRouter } from 'vue-router'
 import useScreening from '@/hooks/useScreening'
 import useImport from '@/hooks/useImport'
 import useSlideHandler from '@/hooks/useSlideHandler'
+import { useAutoSave } from '@/hooks/useAutoSave'
 import type { DialogForExportTypes } from '@/types/export'
 
 import HotkeyDoc from './HotkeyDoc.vue'
@@ -124,9 +149,122 @@ import Popover from '@/components/Popover.vue'
 import PopoverMenuItem from '@/components/PopoverMenuItem.vue'
 import Divider from '@/components/Divider.vue'
 
+const route = useRoute()
+const router = useRouter()
+
 const mainStore = useMainStore()
 const slidesStore = useSlidesStore()
 const { title } = storeToRefs(slidesStore)
+const { showAIEditPanel } = storeToRefs(mainStore)
+
+// 检测是否为模板编辑模式（URL 中有 templateId 参数）
+const isTemplateEditMode = computed(() => {
+  return !!route.query.templateId
+})
+
+// 返回模板管理页面
+const goBackToAdmin = () => {
+  router.push('/admin/templates')
+}
+
+// ===== 自动保存（仅在模板编辑模式下生效） =====
+const currentTemplateId = computed(() => route.query.templateId as string | undefined)
+
+const getTemplateData = () => ({
+  title: slidesStore.title || '未命名模板',
+  width: 1000,
+  height: 562.5,
+  theme: slidesStore.theme,
+  slides: slidesStore.slides,
+})
+
+const {
+  saving: autoSaving,
+  lastSaveTime,
+  hasUnsavedChanges,
+  markAsChanged,
+} = useAutoSave(currentTemplateId.value, getTemplateData)
+
+// 监听 slides 变化，标记为“有未保存变更”
+watch(
+  () => slidesStore.slides,
+  () => {
+    if (isTemplateEditMode.value) {
+      markAsChanged()
+    }
+  },
+  { deep: true }
+)
+
+// 保存和发布状态
+const saving = ref(false)
+const publishing = ref(false)
+
+// 保存模板到后端
+const handleSaveTemplate = async () => {
+  const templateId = route.query.templateId as string
+  if (!templateId || saving.value) return
+  
+  try {
+    saving.value = true
+    const { default: axios } = await import('@/services/config')
+    const { SERVER_URL } = await import('@/services')
+    const { default: message } = await import('@/utils/message')
+    
+    const templateData = {
+      title: slidesStore.title || '未命名模板',
+      width: 1000,
+      height: 562.5,
+      theme: slidesStore.theme,
+      slides: slidesStore.slides,
+    }
+
+    const resp = await axios.put(`${SERVER_URL}/templates/${templateId}`, {
+      templateData,
+      autoSave: false,
+    })
+
+    if (!resp?.success) {
+      throw new Error(resp?.error || '保存模板失败')
+    }
+
+    message.success('模板已保存')
+  } catch (error: any) {
+    console.error('[EditorHeader] 保存模板失败:', error)
+    const { default: message } = await import('@/utils/message')
+    message.error(error?.message || '保存模板失败')
+  } finally {
+    saving.value = false
+  }
+}
+
+// 发布模板（先保存，再更新状态为 published）
+const handlePublishTemplate = async () => {
+  const templateId = route.query.templateId as string
+  if (!templateId || publishing.value) return
+  
+  try {
+    publishing.value = true
+    await handleSaveTemplate()
+
+    const { default: axios } = await import('@/services/config')
+    const { SERVER_URL } = await import('@/services')
+    const { default: message } = await import('@/utils/message')
+    
+    const resp = await axios.post(`${SERVER_URL}/templates/${templateId}/publish`)
+    if (!resp?.success) {
+      throw new Error(resp?.error || '发布模板失败')
+    }
+
+    message.success('模板已发布')
+  } catch (error: any) {
+    console.error('[EditorHeader] 发布模板失败:', error)
+    const { default: message } = await import('@/utils/message')
+    message.error(error?.message || '发布模板失败')
+  } finally {
+    publishing.value = false
+  }
+}
 const { enterScreening, enterScreeningFromStart } = useScreening()
 const { importSpecificFile, importPPTXFile, importJSON, exporting } = useImport()
 const { resetSlides } = useSlideHandler()
@@ -165,6 +303,10 @@ const openMarkupPanel = () => {
 const openAIPPTDialog = () => {
   mainStore.setAIPPTDialogState(true)
 }
+
+const toggleAIEditPanel = () => {
+  mainStore.toggleAIEditPanel()
+}
 </script>
 
 <style lang="scss" scoped>
@@ -180,6 +322,68 @@ const openAIPPTDialog = () => {
   display: flex;
   justify-content: center;
   align-items: center;
+}
+
+.back-to-admin {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  margin-right: 8px;
+  border-radius: $borderRadius;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 14px;
+  color: #666;
+  background-color: #f5f5f5;
+  
+  &:hover {
+    background-color: #e8e8e8;
+    color: $themeColor;
+  }
+  
+  .arrow {
+    font-size: 16px;
+    font-weight: bold;
+  }
+  
+  .text {
+    font-size: 13px;
+  }
+}
+
+.template-btn {
+  margin: 0 4px;
+  padding: 6px 14px !important;
+  background-color: #f5f5f5;
+  border-radius: $borderRadius;
+  transition: all 0.2s;
+  
+  &:hover:not(.disabled) {
+    background-color: #e8e8e8;
+  }
+  
+  &.disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+  
+  .text {
+    font-size: 13px;
+    color: #333;
+  }
+  
+  &.publish-btn {
+    background-color: $themeColor;
+    
+    .text {
+      color: #fff;
+    }
+    
+    &:hover:not(.disabled) {
+      background-color: #40a9ff;
+    }
+  }
 }
 .menu-item {
   height: 30px;
@@ -361,5 +565,19 @@ const openAIPPTDialog = () => {
 .github-link {
   display: inline-block;
   height: 30px;
+}
+.ai-edit-btn {
+  .icon {
+    font-size: 16px;
+  }
+  
+  &.active {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff;
+    
+    .icon {
+      color: #fff;
+    }
+  }
 }
 </style>

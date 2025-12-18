@@ -1,5 +1,8 @@
 import { Router } from 'express'
 import multer from 'multer'
+import fs from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
 import aiService from '../services/aiService.js'
 import wordService from '../services/wordService.js'
 import slotService from '../services/slotService.js'
@@ -9,6 +12,51 @@ import { buildAIPPTMessages } from '../prompts/aipptPrompt.js'
 import { buildTemplateFillMessages } from '../prompts/templateFillPrompt.js'
 
 const router = Router()
+
+// ============ 本地数据支持 ============
+// 为了逐步摆脱前端静态 mocks，提供一个统一的后端读取能力
+// 所有静态 JSON 数据统一放在 data/ 目录下：
+// - data/slides.json         初始演示文稿
+// - data/AIPPT.json          AI PPT 示例
+// - data/imgs.json           图片示例
+// - data/templates/*.json    模板文件（template_1 ~）
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+const DATA_DIR = path.join(__dirname, '..', '..', 'data')
+const TEMPLATES_DIR = path.join(DATA_DIR, 'templates')
+
+router.get('/mock/:name', (req, res) => {
+  try {
+    const { name } = req.params
+    if (!name) {
+      return res.status(400).json({ success: false, error: '缺少文件名' })
+    }
+    // 按名称映射到 data 目录
+    let filename
+    if (name.startsWith('template_')) {
+      // 模板文件：data/templates/template_x.json
+      filename = path.join(TEMPLATES_DIR, `${name}.json`)
+    } else {
+      // 其它配置：data/name.json 例如 slides.json / AIPPT.json / imgs.json
+      filename = path.join(DATA_DIR, `${name}.json`)
+    }
+    if (!fs.existsSync(filename)) {
+      console.warn(`[Mock] 文件不存在: ${filename}`)
+      return res.status(404).json({ success: false, error: 'Mock 文件不存在' })
+    }
+
+    const content = fs.readFileSync(filename, 'utf-8')
+    if (!content.trim()) {
+      return res.json({ success: true, data: null })
+    }
+
+    const data = JSON.parse(content)
+    res.json({ success: true, data })
+  } catch (error) {
+    console.error('[Mock] 读取失败:', error)
+    res.status(500).json({ success: false, error: '读取 Mock 数据失败' })
+  }
+})
 
 // 配置multer用于文件上传
 const upload = multer({ 

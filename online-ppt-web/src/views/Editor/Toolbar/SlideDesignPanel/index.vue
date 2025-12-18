@@ -56,6 +56,9 @@
           </div>
         </div>
       </FileInput>
+      <Button class="ai-search-btn" @click="openImageLibPanelForBackground()">
+        <IconMagic class="btn-icon" /> AI搜图
+      </Button>
     </div>
 
     <div class="background-gradient-wrapper" v-if="background.type === 'gradient'">
@@ -309,7 +312,7 @@
 <script lang="ts" setup>
 import { computed, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
-import { useSlidesStore } from '@/store'
+import { useSlidesStore, useMainStore } from '@/store'
 import type { 
   Gradient,
   GradientType,
@@ -342,8 +345,10 @@ import SelectCustom from '@/components/SelectCustom.vue'
 import NumberInput from '@/components/NumberInput.vue'
 import Modal from '@/components/Modal.vue'
 import GradientBar from '@/components/GradientBar.vue'
+import message from '@/utils/message'
 
 const slidesStore = useSlidesStore()
+const mainStore = useMainStore()
 const { slides, currentSlide, slideIndex, viewportRatio, viewportSize, theme } = storeToRefs(slidesStore)
 
 const moreThemeConfigsVisible = ref(false)
@@ -443,6 +448,14 @@ const uploadBackgroundImage = (files: FileList) => {
   getImageDataURL(imageFile).then(dataURL => updateImageBackground({ src: dataURL }))
 }
 
+// 打开AI搜图（用于背景图）
+const openImageLibPanelForBackground = () => {
+  mainStore.setImageLibPanelState(true, (imageSrc: string) => {
+    updateImageBackground({ src: imageSrc })
+    message.success('背景图片已设置')
+  })
+}
+
 // 应用当前页背景到全部页面
 const applyBackgroundAllSlide = () => {
   const newSlides = slides.value.map(slide => {
@@ -499,6 +512,19 @@ const toFixed = (num: number) => {
 }
 .background-image-wrapper {
   margin-bottom: 10px;
+  
+  .ai-search-btn {
+    width: 100%;
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    
+    .btn-icon {
+      font-size: 16px;
+    }
+  }
 }
 .background-image {
   height: 0;

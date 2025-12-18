@@ -38,7 +38,10 @@ export interface MainState {
   showSymbolPanel: boolean
   showMarkupPanel: boolean
   showImageLibPanel: boolean
+  imageLibPanelCallback: ((imageSrc: string) => void) | null
   showAIPPTDialog: boolean
+  showAIEditPanel: boolean
+  aiEditPanelCollapsed: boolean
 }
 
 const nanoid = customAlphabet('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz')
@@ -76,7 +79,10 @@ export const useMainStore = defineStore('main', {
     showSymbolPanel: false, // 打开符号面板
     showMarkupPanel: false, // 打开类型标注面板
     showImageLibPanel: false, // 打开图片库面板
+    imageLibPanelCallback: null, // 图片库面板选中图片后的回调
     showAIPPTDialog: false, // 打开AIPPT创建窗口
+    showAIEditPanel: false, // 打开AI编辑面板
+    aiEditPanelCollapsed: false, // AI编辑面板是否折叠
   }),
 
   getters: {
@@ -211,12 +217,25 @@ export const useMainStore = defineStore('main', {
       this.showMarkupPanel = show
     },
 
-    setImageLibPanelState(show: boolean) {
+    setImageLibPanelState(show: boolean, callback?: (imageSrc: string) => void) {
       this.showImageLibPanel = show
+      this.imageLibPanelCallback = callback || null
     },
 
     setAIPPTDialogState(show: boolean) {
       this.showAIPPTDialog = show
+    },
+
+    setAIEditPanelState(show: boolean) {
+      this.showAIEditPanel = show
+    },
+
+    toggleAIEditPanel() {
+      this.showAIEditPanel = !this.showAIEditPanel
+    },
+
+    setAIEditPanelCollapsed(collapsed: boolean) {
+      this.aiEditPanelCollapsed = collapsed
     },
   },
 })

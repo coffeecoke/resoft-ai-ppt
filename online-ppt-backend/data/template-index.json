@@ -1,0 +1,90 @@
+[
+  {
+    "id": "template_1",
+    "name": "山河映红",
+    "cover": "/covers/template_1.webp",
+    "category": "official",
+    "origin": "官方制作",
+    "status": "published",
+    "slideCount": 38,
+    "createdAt": "2025-12-17T08:08:24.281Z",
+    "updatedAt": "2025-12-17T08:08:24.281Z"
+  },
+  {
+    "id": "template_2",
+    "name": "都市蓝调",
+    "cover": "/covers/template_2.webp",
+    "category": "official",
+    "origin": "官方制作",
+    "status": "published",
+    "slideCount": 36,
+    "createdAt": "2025-12-17T08:08:24.281Z",
+    "updatedAt": "2025-12-17T09:36:07.360Z"
+  },
+  {
+    "id": "template_3",
+    "name": "智感几何",
+    "cover": "/covers/template_3.webp",
+    "category": "official",
+    "origin": "官方制作",
+    "status": "published",
+    "slideCount": 36,
+    "createdAt": "2025-12-17T08:08:24.281Z",
+    "updatedAt": "2025-12-18T02:07:21.035Z"
+  },
+  {
+    "id": "template_4",
+    "name": "柔光莫兰迪",
+    "cover": "/covers/template_4.webp",
+    "category": "official",
+    "origin": "官方制作",
+    "status": "published",
+    "slideCount": 36,
+    "createdAt": "2025-12-17T08:08:24.281Z",
+    "updatedAt": "2025-12-17T08:08:24.281Z"
+  },
+  {
+    "id": "template_5",
+    "name": "简约绿意",
+    "cover": "/covers/template_5.webp",
+    "category": "community",
+    "origin": "社区贡献+官方深度完善优化",
+    "status": "published",
+    "slideCount": 27,
+    "createdAt": "2025-12-17T08:08:24.281Z",
+    "updatedAt": "2025-12-17T08:08:24.281Z"
+  },
+  {
+    "id": "template_6",
+    "name": "暖色复古",
+    "cover": "/covers/template_6.webp",
+    "category": "community",
+    "origin": "社区贡献+官方深度完善优化",
+    "status": "published",
+    "slideCount": 28,
+    "createdAt": "2025-12-17T08:08:24.281Z",
+    "updatedAt": "2025-12-17T08:08:24.281Z"
+  },
+  {
+    "id": "template_7",
+    "name": "深邃沉稳",
+    "cover": "/covers/template_7.webp",
+    "category": "community",
+    "origin": "社区贡献+官方深度完善优化",
+    "status": "published",
+    "slideCount": 26,
+    "createdAt": "2025-12-17T08:08:24.281Z",
+    "updatedAt": "2025-12-17T08:08:24.281Z"
+  },
+  {
+    "id": "template_8",
+    "name": "浅蓝小清新",
+    "cover": "/covers/template_8.webp",
+    "category": "community",
+    "origin": "社区贡献+官方深度完善优化",
+    "status": "published",
+    "slideCount": 30,
+    "createdAt": "2025-12-17T08:08:24.281Z",
+    "updatedAt": "2025-12-17T08:08:24.281Z"
+  }
+]

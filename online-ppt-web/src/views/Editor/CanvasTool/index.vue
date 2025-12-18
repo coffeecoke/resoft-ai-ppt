@@ -57,7 +57,7 @@
             <FileInput @change="files => { insertImageElement(files); imageMenuVisible = false }">
               <PopoverMenuItem center><IconUpload class="icon" /> 上传图片</PopoverMenuItem>
             </FileInput>
-            <PopoverMenuItem center @click="openImageLibPanel(); imageMenuVisible = false"><IconPicture class="icon" /> 在线图库</PopoverMenuItem>
+            <PopoverMenuItem center @click="openImageLibPanel(); imageMenuVisible = false"><IconPicture class="icon" /> AI搜图</PopoverMenuItem>
           </template>
           <IconDown class="arrow" />
         </Popover>
@@ -136,6 +136,7 @@
         @update="data => { createLatexElement(data); latexEditorVisible = false }"
       />
     </Modal>
+    
   </div>
 </template>
 
@@ -161,6 +162,7 @@ import Modal from '@/components/Modal.vue'
 import Divider from '@/components/Divider.vue'
 import Popover from '@/components/Popover.vue'
 import PopoverMenuItem from '@/components/PopoverMenuItem.vue'
+import message from '@/utils/message'
 
 const mainStore = useMainStore()
 const { creatingElement, creatingCustomShape, showSelectPanel, showSearchPanel, showNotesPanel, showSymbolPanel } = storeToRefs(mainStore)
@@ -260,7 +262,7 @@ const toggleSymbolPanel = () => {
   mainStore.setSymbolPanelState(!showSymbolPanel.value)
 }
 
-// 打开图库面板
+// 打开图库面板（AI搜图）
 const openImageLibPanel = () => {
   mainStore.setImageLibPanelState(true)
 }

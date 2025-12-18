@@ -13,6 +13,15 @@
       :selectElement="selectElement"
       :contextmenus="contextmenus"
     ></component>
+    
+    <!-- 超链接图标指示器 -->
+    <div 
+      v-if="elementInfo.link" 
+      class="link-indicator"
+      :title="elementInfo.link.type === 'web' ? elementInfo.link.target : '幻灯片链接'"
+    >
+      <IconLinkOne />
+    </div>
   </div>
 </template>
 
@@ -165,3 +174,27 @@ const contextmenus = (): ContextmenuItem[] => {
   ]
 }
 </script>
+
+<style lang="scss" scoped>
+.editable-element {
+  position: relative;
+}
+
+.link-indicator {
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  width: 20px;
+  height: 20px;
+  background: #1890ff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 12px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+  z-index: 10;
+}
+</style>

@@ -3,7 +3,13 @@
     <EditorHeader class="layout-header" />
     <div class="layout-content">
       <Thumbnails class="layout-content-left" />
-      <div class="layout-content-center">
+      <div 
+        class="layout-content-center" 
+        :class="{ 
+          'with-ai-panel': showAIEditPanel && !aiEditPanelCollapsed,
+          'with-ai-panel-collapsed': showAIEditPanel && aiEditPanelCollapsed
+        }"
+      >
         <CanvasTool class="center-top" />
         <Canvas class="center-body" :style="{ height: `calc(100% - ${remarkHeight + 40}px)` }" />
         <Remark
@@ -22,6 +28,9 @@
   <MarkupPanel v-if="showMarkupPanel" />
   <SymbolPanel v-if="showSymbolPanel" />
   <ImageLibPanel v-if="showImageLibPanel" />
+  
+  <!-- AI编辑面板 -->
+  <AIEditPanel v-if="showAIEditPanel" />
 
   <Modal
     :visible="!!dialogForExport" 
@@ -64,6 +73,7 @@ import SymbolPanel from './SymbolPanel.vue'
 import MarkupPanel from './MarkupPanel.vue'
 import ImageLibPanel from './ImageLibPanel.vue'
 import AIPPTDialog from './AIPPTDialog.vue'
+import { AIEditPanel } from './AIEdit'
 import Modal from '@/components/Modal.vue'
 
 const mainStore = useMainStore()
@@ -76,6 +86,8 @@ const {
   showMarkupPanel,
   showImageLibPanel,
   showAIPPTDialog,
+  showAIEditPanel,
+  aiEditPanelCollapsed,
 } = storeToRefs(mainStore)
 
 const closeExportDialog = () => mainStore.setDialogForExport('')
@@ -105,9 +117,20 @@ usePasteEvent()
 }
 .layout-content-center {
   width: calc(100% - 160px - 260px);
+  transition: width 0.3s ease;
 
   .center-top {
     height: 40px;
+  }
+  
+  // AI面板展开时：减去完整面板宽度 380px
+  &.with-ai-panel {
+    width: calc(100% - 160px - 260px - 380px);
+  }
+  
+  // AI面板折叠时：只减去折叠按钮宽度 4px
+  &.with-ai-panel-collapsed {
+    width: calc(100% - 160px - 260px - 4px);
   }
 }
 .layout-content-right {
