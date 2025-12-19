@@ -1,10 +1,10 @@
 <template>
   <div class="editor-header">
     <div class="left">
-      <!-- 模板编辑模式：显示返回按钮 -->
-      <div v-if="isTemplateEditMode" class="back-to-admin" @click="goBackToAdmin" v-tooltip="'返回模板管理'">
+      <!-- 模板/文档编辑模式：显示返回按钮 -->
+      <div v-if="editMode !== 'normal'" class="back-to-admin" @click="goBack" :v-tooltip="editMode === 'template' ? '返回模板管理' : '返回我的文档'">
         <span class="arrow">←</span>
-        <span class="text">模板管理</span>
+        <span class="text">{{ editMode === 'template' ? '模板管理' : '我的文档' }}</span>
       </div>
       <Popover trigger="click" placement="bottom-start" v-model:value="mainMenuVisible">
         <template #content>
@@ -77,13 +77,25 @@
     </div>
 
     <div class="right">
-      <!-- 模板编辑模式：显示保存和发布按钮 -->
-      <template v-if="isTemplateEditMode">
-        <div class="menu-item template-btn" v-tooltip="'保存模板到后端'" @click="handleSaveTemplate" :class="{ disabled: saving }">
+      <!-- 模板/文档编辑模式：显示保存和发布按钮 -->
+      <template v-if="editMode !== 'normal'">
+        <div 
+          class="menu-item template-btn" 
+          :v-tooltip="editMode === 'template' ? '保存模板到后端' : '保存文档到后端'" 
+          @click="handleSave" 
+          :class="{ disabled: saving }"
+        >
           <span class="text">{{ saving ? '保存中...' : '保存' }}</span>
         </div>
-        <div class="menu-item template-btn publish-btn" v-tooltip="'发布模板'" @click="handlePublishTemplate" :class="{ disabled: publishing }">
-          <span class="text">{{ publishing ? '发布中...' : ' 发布' }}</span>
+        <!-- 模板和文档模式都显示发布按钮 -->
+        <div 
+          v-if="editMode === 'template' || editMode === 'document'"
+          class="menu-item template-btn publish-btn" 
+          :v-tooltip="editMode === 'template' ? '发布模板' : '发布文档'" 
+          @click="handlePublish" 
+          :class="{ disabled: publishing }"
+        >
+          <span class="text">{{ publishing ? '发布中...' : '发布' }}</span>
         </div>
       </template>
       
@@ -130,14 +142,14 @@
 </template>
 
 <script lang="ts" setup>
-import { nextTick, ref, useTemplateRef, computed, watch } from 'vue'
+import { nextTick, ref, useTemplateRef, computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useMainStore, useSlidesStore } from '@/store'
 import { useRoute, useRouter } from 'vue-router'
 import useScreening from '@/hooks/useScreening'
 import useImport from '@/hooks/useImport'
 import useSlideHandler from '@/hooks/useSlideHandler'
-import { useAutoSave } from '@/hooks/useAutoSave'
+import { useEditorSave } from '@/hooks/useEditorSave'
 import type { DialogForExportTypes } from '@/types/export'
 
 import HotkeyDoc from './HotkeyDoc.vue'
@@ -157,114 +169,73 @@ const slidesStore = useSlidesStore()
 const { title } = storeToRefs(slidesStore)
 const { showAIEditPanel } = storeToRefs(mainStore)
 
-// 检测是否为模板编辑模式（URL 中有 templateId 参数）
-const isTemplateEditMode = computed(() => {
-  return !!route.query.templateId
-})
-
-// 返回模板管理页面
-const goBackToAdmin = () => {
-  router.push('/admin/templates')
-}
-
-// ===== 自动保存（仅在模板编辑模式下生效） =====
-const currentTemplateId = computed(() => route.query.templateId as string | undefined)
-
-const getTemplateData = () => ({
-  title: slidesStore.title || '未命名模板',
-  width: 1000,
-  height: 562.5,
-  theme: slidesStore.theme,
-  slides: slidesStore.slides,
-})
-
+// ===== 统一保存Hook（支持模板和文档两种模式） =====
 const {
-  saving: autoSaving,
-  lastSaveTime,
-  hasUnsavedChanges,
-  markAsChanged,
-} = useAutoSave(currentTemplateId.value, getTemplateData)
+  editMode,
+  currentId,
+  saving,
+  save,
+} = useEditorSave()
 
-// 监听 slides 变化，标记为“有未保存变更”
-watch(
-  () => slidesStore.slides,
-  () => {
-    if (isTemplateEditMode.value) {
-      markAsChanged()
-    }
-  },
-  { deep: true }
-)
-
-// 保存和发布状态
-const saving = ref(false)
+// 发布状态（仅模板模式使用）
 const publishing = ref(false)
 
-// 保存模板到后端
-const handleSaveTemplate = async () => {
-  const templateId = route.query.templateId as string
-  if (!templateId || saving.value) return
-  
-  try {
-    saving.value = true
-    const { default: axios } = await import('@/services/config')
-    const { SERVER_URL } = await import('@/services')
-    const { default: message } = await import('@/utils/message')
-    
-    const templateData = {
-      title: slidesStore.title || '未命名模板',
-      width: 1000,
-      height: 562.5,
-      theme: slidesStore.theme,
-      slides: slidesStore.slides,
-    }
-
-    const resp = await axios.put(`${SERVER_URL}/templates/${templateId}`, {
-      templateData,
-      autoSave: false,
-    })
-
-    if (!resp?.success) {
-      throw new Error(resp?.error || '保存模板失败')
-    }
-
-    message.success('模板已保存')
-  } catch (error: any) {
-    console.error('[EditorHeader] 保存模板失败:', error)
-    const { default: message } = await import('@/utils/message')
-    message.error(error?.message || '保存模板失败')
-  } finally {
-    saving.value = false
+// 返回按钮逻辑
+const goBack = () => {
+  if (editMode.value === 'template') {
+    router.push('/ppt/admin/templates')
+  } else if (editMode.value === 'document') {
+    router.push('/ppt/docs')
   }
 }
 
-// 发布模板（先保存，再更新状态为 published）
-const handlePublishTemplate = async () => {
-  const templateId = route.query.templateId as string
-  if (!templateId || publishing.value) return
+// 手动保存
+const handleSave = async () => {
+  try {
+    const { default: message } = await import('@/utils/message')
+    await save(false) // 手动保存，autoSave=false
+    const modeName = editMode.value === 'template' ? '模板' : '文档'
+    message.success(`${modeName}已保存`)
+  } catch (error: any) {
+    const { default: message } = await import('@/utils/message')
+    message.error(error?.message || '保存失败')
+  }
+}
+
+// 发布模板/文档（支持两种模式）
+const handlePublish = async () => {
+  if ((editMode.value !== 'template' && editMode.value !== 'document') || !currentId.value || publishing.value) return
   
   try {
     publishing.value = true
-    await handleSaveTemplate()
-
     const { default: axios } = await import('@/services/config')
     const { SERVER_URL } = await import('@/services')
     const { default: message } = await import('@/utils/message')
     
-    const resp = await axios.post(`${SERVER_URL}/templates/${templateId}/publish`)
+    // 先保存
+    await handleSave()
+    
+    // 根据模式调用不同的发布接口
+    const url = editMode.value === 'template'
+      ? `${SERVER_URL}/templates/${currentId.value}/publish`
+      : `${SERVER_URL}/documents/${currentId.value}/publish`
+    
+    const resp = await axios.post(url)
     if (!resp?.success) {
-      throw new Error(resp?.error || '发布模板失败')
+      throw new Error(resp?.error || '发布失败')
     }
 
-    message.success('模板已发布')
+    const modeName = editMode.value === 'template' ? '模板' : '文档'
+    message.success(`${modeName}已发布`)
   } catch (error: any) {
-    console.error('[EditorHeader] 发布模板失败:', error)
+    console.error('[EditorHeader] 发布失败:', error)
     const { default: message } = await import('@/utils/message')
-    message.error(error?.message || '发布模板失败')
+    message.error(error?.message || '发布失败')
   } finally {
     publishing.value = false
   }
 }
+
 const { enterScreening, enterScreeningFromStart } = useScreening()
 const { importSpecificFile, importPPTXFile, importJSON, exporting } = useImport()
 const { resetSlides } = useSlideHandler()
@@ -369,7 +340,9 @@ const toggleAIEditPanel = () => {
   }
   
   .text {
-    font-size: 13px;
+    // 保存 / 发布按钮的文字略小一点，避免太显眼
+    font-size: 12px !important;
+    width: auto !important;
     color: #333;
   }
   

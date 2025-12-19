@@ -318,6 +318,38 @@ router.post('/:id/publish', (req, res) => {
       return res.status(404).json({ success: false, error: '模板不存在' })
     }
 
+    // 读取模板数据，检查是否有页面未标注类型
+    const filename = path.join(TEMPLATES_DIR, `${id}.json`)
+    if (!fs.existsSync(filename)) {
+      return res.status(404).json({ success: false, error: '模板文件不存在' })
+    }
+
+    const content = fs.readFileSync(filename, 'utf-8')
+    const templateData = JSON.parse(content)
+    const slides = templateData.slides || []
+
+    // 检查每个页面是否有类型标注
+    const unmarkedSlides = []
+    slides.forEach((slide, index) => {
+      // 如果slide没有type字段，或者type为空字符串，则认为未标注
+      if (!slide.type || slide.type === '') {
+        unmarkedSlides.push({
+          index: index + 1, // 页面编号从1开始（用户友好）
+          slideId: slide.id || `slide_${index}`,
+        })
+      }
+    })
+
+    // 如果有未标注的页面，不允许发布
+    if (unmarkedSlides.length > 0) {
+      const slideNumbers = unmarkedSlides.map(s => `第${s.index}页`).join('、')
+      return res.status(400).json({
+        success: false,
+        error: `发布失败：以下页面未标注类型，请先完成页面类型标注后再发布：${slideNumbers}`,
+        unmarkedSlides: unmarkedSlides.map(s => s.index),
+      })
+    }
+
     const now = new Date().toISOString()
     indexList[metaIndex] = {
       ...indexList[metaIndex],

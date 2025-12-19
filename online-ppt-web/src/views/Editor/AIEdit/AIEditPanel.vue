@@ -18,6 +18,16 @@
         </div>
       </div>
       
+      <!-- AI模型选择器 -->
+      <div class="model-selector">
+        <label class="model-label">🤖 模型：</label>
+        <Select 
+          v-model:value="selectedModel"
+          :options="modelOptions"
+          class="model-select"
+        />
+      </div>
+      
       <!-- 快捷操作按钮 -->
       <div class="quick-actions">
         <button class="quick-btn" @click="quickAction('change_style')">
@@ -28,10 +38,32 @@
           <span class="btn-icon">✏️</span>
           <span>续写一页</span>
         </button>
-        <button class="quick-btn" @click="quickAction('adjust_content')">
-          <span class="btn-icon">📝</span>
-          <span>增减内容</span>
-        </button>
+        <Popover 
+          v-model:value="adjustContentMenuVisible"
+          trigger="click" 
+          placement="bottom" 
+          class="adjust-content-popover"
+        >
+          <template #content>
+            <PopoverMenuItem 
+              class="adjust-menu-item" 
+              @click="quickAction('adjust_content_increase')"
+            >
+              ➕ 增加内容
+            </PopoverMenuItem>
+            <PopoverMenuItem 
+              class="adjust-menu-item" 
+              @click="quickAction('adjust_content_decrease')"
+            >
+              ➖ 减少内容
+            </PopoverMenuItem>
+          </template>
+          <button class="quick-btn">
+            <span class="btn-icon">📝</span>
+            <span>增减内容</span>
+            <span class="dropdown-arrow">▼</span>
+          </button>
+        </Popover>
       </div>
       
       <!-- 消息列表 -->
@@ -153,6 +185,10 @@ import type { Slide, PPTElement } from '@/types/slides'
 import TemplateSelector from './TemplateSelector.vue'
 import ContinuePreview from './ContinuePreview.vue'
 import ContentAdjust from './ContentAdjust.vue'
+import Popover from '@/components/Popover.vue'
+import PopoverMenuItem from '@/components/PopoverMenuItem.vue'
+import Select from '@/components/Select.vue'
+import { modelOptions } from '@/configs/aiModels'
 
 // 配置 marked
 marked.setOptions({
@@ -192,6 +228,19 @@ const loading = ref(false)
 const messages = ref<ChatMessage[]>([])
 const messageListRef = ref<HTMLElement | null>(null)
 const inputRef = ref<HTMLTextAreaElement | null>(null)
+const adjustContentMenuVisible = ref(false)
+
+// 【新增】AI对话模型选择（从 localStorage 恢复用户上次的选择）
+const CHAT_MODEL_STORAGE_KEY = 'ai_chat_model'
+const selectedModel = ref(
+  localStorage.getItem(CHAT_MODEL_STORAGE_KEY) || 'GLM-4.5-Flash'
+)
+
+// 监听模型变化，保存到 localStorage
+watch(selectedModel, (newModel) => {
+  localStorage.setItem(CHAT_MODEL_STORAGE_KEY, newModel)
+  console.log('💡 AI对话模型已切换:', newModel)
+})
 
 // 当前PPT上下文
 const pptContext = computed(() => ({
@@ -254,10 +303,16 @@ const quickAction = (action: string) => {
     return
   }
   
+  // 关闭增减内容下拉菜单（如果打开）
+  if (action === 'adjust_content_increase' || action === 'adjust_content_decrease') {
+    adjustContentMenuVisible.value = false
+  }
+  
   // 其他操作：直接发送
   const actionTexts: Record<string, string> = {
     change_style: '帮我更换样式',
-    adjust_content: '帮我减少内容项数',
+    adjust_content_increase: '帮我增加内容项数',
+    adjust_content_decrease: '帮我减少内容项数',
   }
   inputText.value = actionTexts[action] || ''
   sendMessage()
@@ -309,7 +364,7 @@ const sendMessage = async () => {
         role: m.role,
         content: m.content,
       })),
-      model: 'deepseek-chat',
+      model: selectedModel.value,  // ✅ 使用用户选择的模型
     })
     
     // 检查是否是SSE流式响应
@@ -1197,6 +1252,43 @@ onMounted(() => {
   }
 }
 
+.model-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--panel-border);
+  
+  .model-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    font-weight: 500;
+  }
+  
+  .model-select {
+    flex: 1;
+    
+    :deep(.select-trigger) {
+      font-size: 12px;
+      height: 28px;
+      padding: 0 8px;
+      border-radius: 6px;
+      background: var(--panel-bg);
+      border: 1px solid var(--input-border);
+      
+      &:hover {
+        border-color: var(--input-border-focus);
+      }
+    }
+    
+    :deep(.select-dropdown) {
+      font-size: 12px;
+    }
+  }
+}
+
 .quick-actions {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -1206,6 +1298,7 @@ onMounted(() => {
   background: var(--bg-secondary);
   
   .quick-btn {
+    width:100%;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -1227,6 +1320,32 @@ onMounted(() => {
     .btn-icon {
       font-size: 18px;
     }
+    
+    .dropdown-arrow {
+      font-size: 8px;
+      margin-top: 2px;
+      opacity: 0.6;
+    }
+  }
+}
+
+.adjust-content-popover {
+  .quick-btn {
+    position: relative;
+  }
+}
+
+.adjust-menu-item {
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.2s;
+  
+  &:hover {
+    background-color: var(--bg-hover);
   }
 }
 

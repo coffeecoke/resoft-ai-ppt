@@ -1,0 +1,26 @@
+[
+  {
+    "id": "document_1",
+    "name": "个人ppt-一表通",
+    "cover": "",
+    "category": "uncategorized",
+    "status": "published",
+    "slideCount": 75,
+    "fileSize": 28418964,
+    "createdAt": "2025-12-18T09:10:42.476Z",
+    "updatedAt": "2025-12-19T01:33:58.423Z",
+    "lastOpenedAt": "2025-12-18T12:11:11.976Z"
+  },
+  {
+    "id": "document_2",
+    "name": "数据质量售前交流",
+    "cover": "",
+    "category": "marketing",
+    "status": "draft",
+    "slideCount": 19,
+    "fileSize": 152899,
+    "createdAt": "2025-12-19T05:48:02.245Z",
+    "updatedAt": "2025-12-19T08:04:36.376Z",
+    "lastOpenedAt": "2025-12-19T06:08:06.215Z"
+  }
+]

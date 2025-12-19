@@ -11,6 +11,7 @@ import aipptChatRouter from './routes/aipptChat.js'
 import imagesRouter from './routes/images.js'
 import translateRouter from './routes/translate.js'
 import templatesRouter from './routes/templates.js'
+import documentsRouter from './routes/documents.js'
 
 const app = express()
 const PORT = process.env.PORT || 5001
@@ -21,9 +22,9 @@ const __dirname = path.dirname(__filename)
 
 // 中间件
 app.use(cors())
-// 增加请求体大小限制到50MB，以支持大Word文档内容传输
-app.use(express.json({ limit: '50mb' }))
-app.use(express.urlencoded({ extended: true, limit: '50mb' }))
+// 增加请求体大小限制到100MB，以支持大文档内容传输（PPT文档可能包含大量图片数据）
+app.use(express.json({ limit: '100mb' }))
+app.use(express.urlencoded({ extended: true, limit: '100mb' }))
 
 // 静态资源：模板封面图（data/covers 下的图片）
 const coversDir = path.join(__dirname, '..', 'data', 'covers')
@@ -35,6 +36,7 @@ app.use('/aippt', aipptChatRouter)  // 对话式PPT编辑
 app.use('/images', imagesRouter)    // 图片推荐
 app.use('/tools/translate', translateRouter)  // 翻译服务
 app.use('/templates', templatesRouter)        // 模板管理
+app.use('/documents', documentsRouter)        // 文档管理
 
 // 健康检查
 app.get('/health', (req, res) => {
@@ -52,6 +54,8 @@ app.listen(PORT, () => {
   console.log(`  - 图片推荐: POST /images/recommend`)
   console.log(`  - 模板列表: GET  /templates`)
   console.log(`  - 新建模板: POST /templates/create`)
+  console.log(`  - 文档列表: GET  /documents`)
+  console.log(`  - 新建文档: POST /documents/create`)
   console.log(`  - 模板封面: GET  /covers/template_1.webp`)
   console.log('=========================================')
 })

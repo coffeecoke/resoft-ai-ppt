@@ -14,15 +14,18 @@ instance.interceptors.response.use(
   },
   error => {
     if (error && error.response) {
+      // 优先使用后端返回的错误消息
+      const errorMessage = error.response.data?.error || error.response.data?.message || error.message
+      
       if (error.response.status >= 400 && error.response.status < 500) {
-        return Promise.reject(error.message)
+        return Promise.reject(new Error(errorMessage))
       }
       else if (error.response.status >= 500) {
-        return Promise.reject(error.message)
+        return Promise.reject(new Error(errorMessage))
       }
       
       message.error('服务器遇到未知错误！')
-      return Promise.reject(error.message)
+      return Promise.reject(new Error(errorMessage))
     }
 
     message.error('连接到服务器失败 或 服务器响应超时！')

@@ -189,7 +189,9 @@ const statusText = (status?: string) => {
 }
 
 const filteredTemplates = computed(() => {
-  let list = templates.value
+  // 先过滤掉无效项（undefined、null 或缺少 id 的项）
+  let list = templates.value.filter(t => t && t.id)
+  
   if (filterStatus.value) {
     list = list.filter(t => (t.status || 'draft') === filterStatus.value)
   }
@@ -257,8 +259,8 @@ const handleCreate = async () => {
     message.success('模板创建成功')
     await loadTemplates()
     showCreate.value = false
-    // 跳转到原有的编辑器页面，通过 URL 参数加载模板
-    router.push(`/?templateId=${resp.data.id}`)
+    // 跳转到PPT编辑器页面，通过 URL 参数加载模板
+    router.push(`/ppt/editor?templateId=${resp.data.id}`)
   } catch (error: any) {
     console.error('[模板管理] 创建模板失败:', error)
     message.error(error?.message || '创建模板失败')
@@ -268,8 +270,8 @@ const handleCreate = async () => {
 }
 
 const openEditor = (id: string) => {
-  // 跳转到原有的编辑器页面，通过 URL 参数加载模板
-  router.push(`/?templateId=${id}`)
+  // 跳转到PPT编辑器页面，通过 URL 参数加载模板
+  router.push(`/ppt/editor?templateId=${id}`)
 }
 
 const handleDelete = async (id: string, name: string) => {

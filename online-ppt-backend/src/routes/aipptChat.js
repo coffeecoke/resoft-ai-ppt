@@ -17,6 +17,11 @@ import { getModelConfig } from '../config/models.js'
 
 const router = express.Router()
 
+// 配置：减少内容时是否使用AI智能选择
+// true: 使用AI分析哪些要点重要，智能选择保留
+// false: 直接删除最后一项（简单、快速、可预期）
+const USE_AI_FOR_DECREASE = false
+
 /**
  * 智能对话接口
  * 
@@ -344,48 +349,108 @@ async function handleAdjustContent(message, context, model, res) {
     // 减少：默认减少1个，最少保留1个
     targetCount = Math.max(1, currentCount - 1)
     
-    // 使用AI选择保留哪些（更智能）
-    if (currentCount > 2) {
-      try {
-        const selectPrompt = `以下是PPT中的${currentCount}个要点，请选择最重要的${targetCount}个保留。
+    if (USE_AI_FOR_DECREASE) {
+      // 【AI模式】使用AI智能选择保留哪些要点（更智能，但需要AI调用）
+      // 使用AI选择保留哪些（更智能）
+      if (currentCount > 2) {
+        try {
+          const selectPrompt = `以下是PPT中的${currentCount}个要点，请选择最重要的${targetCount}个保留。
 
 要点列表：
 ${currentItems.map((item, i) => `${i + 1}. ${item.title || item}: ${item.text || ''}`).join('\n')}
 
 请只返回要保留的编号，用逗号分隔，如：1,2,3`
 
-        const result = await aiService.chat(model, [
-          { role: 'user', content: selectPrompt }
-        ], { temperature: 0.3, maxTokens: 100 })
-        
-        const indices = result.match(/\d+/g)?.map(n => parseInt(n) - 1) || []
-        if (indices.length > 0 && indices.length <= targetCount) {
-          newItems = indices.map(i => currentItems[i]).filter(Boolean)
-          targetCount = newItems.length
-        } else {
-          // 降级：直接取前面的
+          const result = await aiService.chat(model, [
+            { role: 'user', content: selectPrompt }
+          ], { temperature: 0.3, maxTokens: 100 })
+          
+          const indices = result.match(/\d+/g)?.map(n => parseInt(n) - 1) || []
+          if (indices.length > 0 && indices.length <= targetCount) {
+            newItems = indices.map(i => currentItems[i]).filter(Boolean)
+            targetCount = newItems.length
+          } else {
+            // 降级：直接取前面的
+            newItems = currentItems.slice(0, targetCount)
+          }
+        } catch (e) {
+          // AI选择失败，直接取前面的
           newItems = currentItems.slice(0, targetCount)
         }
-      } catch (e) {
-        // AI选择失败，直接取前面的
+      } else {
         newItems = currentItems.slice(0, targetCount)
       }
     } else {
+      // 【简单模式】直接删除最后一项（默认模式）
+      // 理由：1. 用户添加的顺序通常代表优先级，最后添加的往往是最不重要的
+      //       2. 操作可预期，不会"智能"删除用户认为重要的内容
+      //       3. 减少AI调用，提升响应速度
       newItems = currentItems.slice(0, targetCount)
+      
+      console.log(`[减少内容] 从${currentCount}项减少到${targetCount}项，删除最后${currentCount - targetCount}项（简单模式）`)
     }
   } else if (isIncrease) {
     // 增加：默认增加1个
     targetCount = currentCount + 1
     
     try {
-      const addPrompt = `以下是PPT中现有的要点，请补充一个相关的新要点。
+      // 【修复】分析现有内容的风格特征
+      const titleLengths = currentItems.map(item => {
+        const title = item.title || (typeof item === 'string' ? item : '')
+        return title.length
+      })
+      const textLengths = currentItems.map(item => {
+        const text = item.text || ''
+        return text.length
+      })
+      
+      const avgTitleLen = titleLengths.length > 0 
+        ? Math.round(titleLengths.reduce((a, b) => a + b, 0) / titleLengths.length)
+        : 10
+      const avgTextLen = textLengths.length > 0
+        ? Math.round(textLengths.reduce((a, b) => a + b, 0) / textLengths.length)
+        : 15
+      
+      // 检测是否有特殊格式（百分比、数字、序号等）
+      const hasPercentage = currentItems.some(item => {
+        const title = item.title || (typeof item === 'string' ? item : '')
+        return title.includes('%') || title.match(/[+\-]\d+/) || title.match(/^\d+%$/)
+      })
+      const hasNumber = currentItems.some(item => {
+        const title = item.title || (typeof item === 'string' ? item : '')
+        return title.match(/^\d+/) || title.match(/第[一二三四五六七八九十\d]+/)
+      })
+      
+      // 获取第一个项目作为格式示例
+      const firstItem = currentItems[0]
+      const exampleTitle = firstItem?.title || (typeof firstItem === 'string' ? firstItem : '')
+      const exampleText = firstItem?.text || ''
+      
+      const addPrompt = `你是PPT内容生成专家。用户要在PPT页面中增加一个新的内容项。
+
+【重要】新增内容必须严格遵循现有内容的格式和风格！不要修改原有内容，只在末尾追加新项。
 
 页面标题：${currentSlide?.data?.title || currentSlide?.title || '未知'}
-现有要点：
-${currentItems.map((item, i) => `${i + 1}. ${item.title || item}: ${item.text || ''}`).join('\n')}
 
-请返回一个新要点，格式：{"title":"要点标题","text":"要点说明"}
-只返回JSON，不要其他内容。`
+现有内容（共${currentItems.length}项，请保持这些内容不变）：
+${currentItems.map((item, i) => {
+  const title = item.title || (typeof item === 'string' ? item : '')
+  const text = item.text || ''
+  return `${i + 1}. title: "${title}" (${title.length}字)\n   text: "${text}" (${text.length}字)`
+}).join('\n\n')}
+
+【格式要求】：
+1. title字段：约${avgTitleLen}字${hasPercentage ? '，包含数据指标（如百分比、数字，格式与现有项一致）' : hasNumber ? '，保持序号或数字格式' : '，简短精炼'}
+2. text字段：约${avgTextLen}字，${avgTextLen < 15 ? '简短说明' : '详细描述'}
+3. 风格必须与上述${currentItems.length}项完全一致
+4. 内容要与页面主题相关，但不要重复现有要点
+5. 保持与现有项相同的语言风格和表达方式
+
+【格式示例参考】：
+{"title":"${exampleTitle}","text":"${exampleText}"}
+
+请严格按照以下JSON格式返回，不要有其他内容：
+{"title":"[${avgTitleLen}字左右，格式与示例一致]","text":"[${avgTextLen}字左右，风格与示例一致]"}`
 
       const result = await aiService.chat(model, [
         { role: 'user', content: addPrompt }
@@ -394,8 +459,26 @@ ${currentItems.map((item, i) => `${i + 1}. ${item.title || item}: ${item.text ||
       const jsonMatch = result.match(/\{[\s\S]*\}/)
       if (jsonMatch) {
         const newItem = JSON.parse(jsonMatch[0])
+        
+        // 【新增】验证新内容的格式是否与现有一致
+        const newTitleLen = (newItem.title || '').length
+        const newTextLen = (newItem.text || '').length
+        
+        // 如果长度差异过大，记录警告（但不阻止，因为AI可能生成合理的内容）
+        if (Math.abs(newTitleLen - avgTitleLen) > avgTitleLen * 0.8) {
+          console.warn(`[增加内容] 新内容title长度(${newTitleLen})与平均值(${avgTitleLen})差异较大，但已接受`)
+        }
+        if (Math.abs(newTextLen - avgTextLen) > avgTextLen * 0.8) {
+          console.warn(`[增加内容] 新内容text长度(${newTextLen})与平均值(${avgTextLen})差异较大，但已接受`)
+        }
+        
+        // 【修复】保持原有内容不变，只在末尾追加新项
         newItems = [...currentItems, newItem]
         targetCount = newItems.length
+        
+        console.log(`[增加内容] 成功生成新项，保持原有${currentItems.length}项不变，新增1项`)
+      } else {
+        throw new Error('AI返回的JSON格式无效')
       }
     } catch (e) {
       console.error('[增加内容] 错误:', e)

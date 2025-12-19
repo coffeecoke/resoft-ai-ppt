@@ -1,49 +1,64 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHashHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
-    name: 'Editor',
-    component: () => import('@/views/Editor/index.vue'),
-    meta: { title: 'PPT编辑器' }
+    redirect: '/ppt/Admin/templates'
   },
   {
-    path: '/screen',
-    name: 'Screen',
-    component: () => import('@/views/Screen/index.vue'),
-    meta: { title: '演示模式' }
-  },
-  {
-    path: '/mobile',
-    name: 'Mobile',
-    component: () => import('@/views/Mobile/index.vue'),
-    meta: { title: '移动端' }
-  },
-  {
-    path: '/admin',
-    name: 'Admin',
-    redirect: '/admin/templates',
-    component: () => import('@/views/Admin/index.vue'),
+    path: '/ppt',
+    component: () => import('@/views/PPT/Layout.vue'),
     children: [
       {
-        path: 'templates',
-        name: 'TemplateList',
-        component: () => import('@/views/Admin/TemplateList.vue'),
-        meta: { title: '模板管理' }
+        path: 'editor',
+        name: 'Editor',
+        component: () => import('@/views/Editor/index.vue'),
+        meta: { title: 'PPT编辑器' }
       },
       {
-        path: 'template-editor/:id?',
-        name: 'TemplateEditor',
-        component: () => import('@/views/Admin/TemplateEditor.vue'),
-        meta: { title: '模板编辑器' }
+        path: 'screen',
+        name: 'Screen',
+        component: () => import('@/views/Screen/index.vue'),
+        meta: { title: '演示模式' }
+      },
+      {
+        path: 'mobile',
+        name: 'Mobile',
+        component: () => import('@/views/Mobile/index.vue'),
+        meta: { title: '移动端', requireMobile: true }
+      },
+      {
+        path: 'admin',
+        name: 'Admin',
+        component: () => import('@/views/Admin/index.vue'),
+        children: [
+          {
+            path: 'templates',
+            name: 'TemplateList',
+            component: () => import('@/views/Admin/TemplateList.vue'),
+            meta: { title: '模板管理' }
+          },
+          {
+            path: 'template-editor/:id?',
+            name: 'TemplateEditor',
+            component: () => import('@/views/Admin/TemplateEditor.vue'),
+            meta: { title: '模板编辑器' }
+          }
+        ]
+      },
+      {
+        path: 'docs',
+        name: 'DocumentList',
+        component: () => import('@/views/Docs/index.vue'),
+        meta: { title: '我的文档' }
       }
     ]
   }
 ]
 
 const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL),
+  history: createWebHashHistory(import.meta.env.BASE_URL),
   routes
 })
 

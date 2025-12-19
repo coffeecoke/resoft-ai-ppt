@@ -42,34 +42,37 @@ export async function getTemplateList(): Promise<TemplateInfo[]> {
       const json = await resp.json()
       const list = (json.data?.list || []) as any[]
 
-      return list.map(item => {
-        let cover = ''
-        if (item.cover && typeof item.cover === 'string') {
-          const c = item.cover as string
-          // 已经是完整 URL，直接使用
-          if (c.startsWith('http://') || c.startsWith('https://')) {
-            cover = c
-          }
-          // 后端返回的 /covers/xxx.webp，相对路径，需要拼上 SERVER_URL
-          else if (c.startsWith('/covers/')) {
-            cover = `${SERVER_URL}${c}`
+      // 过滤掉无效的项（undefined、null 或缺少 id 的项）
+      return list
+        .filter(item => item && item.id) // 确保 item 存在且有 id
+        .map(item => {
+          let cover = ''
+          if (item.cover && typeof item.cover === 'string') {
+            const c = item.cover as string
+            // 已经是完整 URL，直接使用
+            if (c.startsWith('http://') || c.startsWith('https://')) {
+              cover = c
+            }
+            // 后端返回的 /covers/xxx.webp，相对路径，需要拼上 SERVER_URL
+            else if (c.startsWith('/covers/')) {
+              cover = `${SERVER_URL}${c}`
+            } else {
+              cover = c
+            }
           } else {
-            cover = c
+            // 没有 cover 字段时，根据 id 生成默认封面 URL
+            cover = getTemplateCoverUrl(item.id)
           }
-        } else {
-          // 没有 cover 字段时，根据 id 生成默认封面 URL
-          cover = getTemplateCoverUrl(item.id)
-        }
 
-        return {
-          id: item.id,
-          name: item.name,
-          cover,
-          origin: item.origin,
-          category: item.category,
-          status: item.status,
-        } as TemplateInfo
-      })
+          return {
+            id: item.id,
+            name: item.name || '未命名模板',
+            cover,
+            origin: item.origin,
+            category: item.category,
+            status: item.status,
+          } as TemplateInfo
+        })
     }
   } catch (e) {
     console.warn('[模板服务] 从后端获取模板列表失败，回退到本地模板:', e)

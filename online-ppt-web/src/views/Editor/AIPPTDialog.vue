@@ -308,8 +308,8 @@
 
 <script lang="ts" setup>
 import { ref, onMounted, useTemplateRef } from 'vue'
-import { storeToRefs } from 'pinia'
 import api, { type WordContent, type ExtractSlotsResult, type ContentMap } from '@/services'
+import templateService, { type TemplateInfo } from '@/services/templateService'
 import useAIPPT from '@/hooks/useAIPPT'
 import useSlideHandler from '@/hooks/useSlideHandler'
 import type { AIPPTSlide } from '@/types/AIPPT'
@@ -328,7 +328,9 @@ import { modelOptions } from '@/configs/aiModels'
 
 const mainStore = useMainStore()
 const slidesStore = useSlidesStore()
-const { templates } = storeToRefs(slidesStore)
+
+// 【修复】从后端获取模板列表，不再使用slidesStore.templates（已废弃）
+const templates = ref<TemplateInfo[]>([])
 
 const { resetSlides, isEmptySlide } = useSlideHandler()
 const { AIPPT, presetImgPool, getMdContent } = useAIPPT()
@@ -393,7 +395,16 @@ const recommends = ref([
   // '公司年会策划方案',
 ]) 
 
-onMounted(() => {
+onMounted(async () => {
+  // 【修复】从后端加载模板列表
+  try {
+    templates.value = await templateService.getTemplateList()
+    console.log('✅ 模板列表加载成功:', templates.value.length, '个模板')
+  } catch (error) {
+    console.error('❌ 模板列表加载失败:', error)
+    message.error('模板列表加载失败')
+  }
+  
   setTimeout(() => {
     inputRef.value!.focus()
   }, 500)
@@ -876,7 +887,15 @@ const createPPT = async (template?: { slides: Slide[], theme: SlideTheme }) => {
   }
 
   let templateData = template
-  if (!templateData) templateData = await api.getMockData(selectedTemplate.value)
+  if (!templateData) {
+    // 【修复】使用templateService从后端获取模板数据
+    const templateSlides = await templateService.getTemplateSlides(selectedTemplate.value)
+    const mockData = await api.getMockData(selectedTemplate.value)
+    templateData = {
+      slides: templateSlides.length > 0 ? templateSlides : mockData?.slides || [],
+      theme: mockData?.theme || {}
+    }
+  }
   const templateSlides: Slide[] = templateData!.slides
   const templateTheme: SlideTheme = templateData!.theme
 

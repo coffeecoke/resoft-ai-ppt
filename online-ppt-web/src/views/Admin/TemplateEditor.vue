@@ -53,7 +53,7 @@ const saving = ref(false)
 const publishing = ref(false)
 
 const goBack = () => {
-  router.push('/admin/templates')
+  router.push('/ppt/admin/templates')
 }
 
 // 从后端加载模板数据并写入 slidesStore
