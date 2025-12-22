@@ -4,7 +4,7 @@ import type { RouteRecordRaw } from 'vue-router'
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
-    redirect: '/ppt/Admin/templates'
+    redirect: '/ppt/admin/templates'
   },
   {
     path: '/ppt',
@@ -30,7 +30,7 @@ const routes: RouteRecordRaw[] = [
       },
       {
         path: 'admin',
-        name: 'Admin',
+        name: 'admin',
         component: () => import('@/views/Admin/index.vue'),
         children: [
           {

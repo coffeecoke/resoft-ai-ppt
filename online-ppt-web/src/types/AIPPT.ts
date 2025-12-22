@@ -4,7 +4,9 @@ export interface AIPPTCover {
   type: 'cover'
   data: {
     title: string
-    text: string
+    subtitle?: string
+    text?: string      // 向后兼容字段，等同于content
+    content?: string   // 正文内容（推荐使用此字段名）
   }
 }
 
@@ -20,7 +22,9 @@ export interface AIPPTTransition {
   type: 'transition'
   data: {
     title: string
-    text: string
+    subtitle?: string
+    text?: string      // 向后兼容字段，等同于content
+    content?: string   // 正文内容（推荐使用此字段名）
   }
 }
 
@@ -28,6 +32,8 @@ export interface AIPPTContent {
   type: 'content'
   data: {
     title: string
+    subtitle?: string
+    content?: string   // 页面正文（独立于items的正文内容）
     items: {
       title: string
       text: string
@@ -38,6 +44,11 @@ export interface AIPPTContent {
 
 export interface AIPPTEnd {
   type: 'end'
+  data?: {
+    title?: string
+    subtitle?: string
+    content?: string
+  }
 }
 
 // ===================== 方案A扩展类型 =====================
@@ -50,7 +61,9 @@ export interface AIPPTTextImage {
   type: 'text_image'
   data: {
     title: string           // 页面标题
-    text: string            // 主要文字内容（支持多段）
+    subtitle?: string       // 副标题（可选）
+    text?: string           // 主要文字内容（向后兼容字段，等同于content）
+    content?: string        // 正文内容（推荐使用此字段名）
     imagePosition: 'left' | 'right'  // 图片位置
     imageDesc?: string      // 图片描述（可选，用于AI配图提示）
   }
@@ -64,6 +77,8 @@ export interface AIPPTComparison {
   type: 'comparison'
   data: {
     title: string           // 页面标题
+    subtitle?: string       // 副标题（可选）
+    content?: string        // 对比说明（可选）
     leftTitle: string       // 左侧标题（如"方案A"/"优势"/"Before"）
     leftItems: string[]     // 左侧要点列表
     rightTitle: string      // 右侧标题（如"方案B"/"劣势"/"After"）
@@ -79,6 +94,8 @@ export interface AIPPTTimeline {
   type: 'timeline'
   data: {
     title: string           // 页面标题
+    subtitle?: string       // 副标题（可选）
+    content?: string        // 时间线说明（可选）
     items: {
       time: string          // 时间点（如"2020年"/"第一阶段"/"Step 1"）
       event: string         // 事件/内容描述
@@ -94,6 +111,8 @@ export interface AIPPTStatistics {
   type: 'statistics'
   data: {
     title: string           // 页面标题
+    subtitle?: string       // 副标题（可选）
+    content?: string        // 数据说明（可选）
     items: {
       value: string         // 数值（如"98%"/"1000万"/"50+"）
       label: string         // 数值说明（如"客户满意度"/"用户数量"）
@@ -110,8 +129,10 @@ export interface AIPPTQuote {
   type: 'quote'
   data: {
     quote: string           // 引用内容
-    author?: string         // 作者/来源（可选）
-    title?: string          // 作者头衔/出处（可选）
+    subtitle?: string        // 副标题（可选）
+    content?: string         // 引用说明（可选）
+    author?: string          // 作者/来源（可选）
+    title?: string           // 作者头衔/出处（可选）
   }
 }
 

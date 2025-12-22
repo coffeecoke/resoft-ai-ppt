@@ -1,58 +1,10 @@
----
-name: PPT基座与模板管理规划
-overview: 以当前PPT项目为基座，区分演示PPT和模板PPT两种制作模式，优先实现"保存为模板"和"模板管理后台"功能。
-todos:
-  - id: router-setup
-    content: 基座改造：引入Vue Router，配置多页面路由
-    status: completed
-  - id: indexeddb-setup
-    content: 前端：封装IndexedDB工具类（本地缓存）
-    status: completed
-  - id: node-create-api
-    content: Node后端：POST /api/templates/create - 新建模板接口
-    status: completed
-  - id: node-update-api
-    content: Node后端：PUT /api/templates/:id - 更新模板接口
-    status: completed
-  - id: node-list-api
-    content: Node后端：GET /api/templates - 模板列表接口
-    status: completed
-  - id: node-detail-api
-    content: Node后端：GET /api/templates/:id - 模板详情接口
-    status: completed
-  - id: template-editor-page
-    content: 前端：模板编辑器页面（复用Editor + MarkupPanel）
-    status: completed
-  - id: auto-save-hook
-    content: 前端：自动保存Hook（本地缓存 + 定时保存）
-    status: completed
-  - id: create-template-dialog
-    content: 前端：新建模板对话框
-    status: completed
-  - id: template-list-page
-    content: 前端：模板列表页面
-    status: completed
-  - id: template-preview
-    content: 前端：模板预览功能
-    status: pending
-  - id: template-publish
-    content: 前端+后端：模板发布功能
-    status: completed
-  - id: template-delete
-    content: 前端+后端：模板删除功能（草稿物理删除，已发布软删除）
-    status: completed
-  - id: java-migration
-    content: 后续：迁移到Java后端
-    status: pending
----
-
 # PPT基座项目整合与模板管理规划
 
 ## 一、整体架构设计
 
 ### 1.1 目标架构（Nginx网关分发模式）
 
-```mermaid
+````mermaid
 flowchart TB
     subgraph Frontend["前端 Vue3 + Pinia"]
         Vue["Vue应用<br/>统一访问 /api"]
@@ -928,9 +880,9 @@ flowchart LR
 
 1. **搭建Spring Boot项目**
 
-   - 创建 `online-ppt-java` 项目
-   - 配置MySQL数据源
-   - 实现模板CRUD接口（路径保持 `/api/templates/*`）
+    - 创建 `online-ppt-java` 项目
+    - 配置MySQL数据源
+    - 实现模板CRUD接口（路径保持 `/api/templates/*`）
 
 2. **接口规范保持一致**
 ```java
@@ -960,4 +912,10 @@ location /api/ai {
 }
 ```
 
-4. **前端零改动** —— 因为接口规范一致，前端代码无需修改
+
+
+
+
+
+
+````

@@ -340,8 +340,14 @@ export default () => {
           if (checkTextType(el, 'title') && item.data.title) {
             return getNewTextElement({ el, text: item.data.title, maxLine: 1 })
           }
-          if (checkTextType(el, 'content') && item.data.text) {
-            return getNewTextElement({ el, text: item.data.text, maxLine: 3 })
+          if (checkTextType(el, 'subtitle') && item.data.subtitle) {
+            return getNewTextElement({ el, text: item.data.subtitle, maxLine: 2 })
+          }
+          if (checkTextType(el, 'content')) {
+            const contentText = item.data.content || item.data.text
+            if (contentText) {
+              return getNewTextElement({ el, text: contentText, maxLine: 3 })
+            }
           }
           return el
         })
@@ -441,8 +447,14 @@ export default () => {
           if (checkTextType(el, 'title') && item.data.title) {
             return getNewTextElement({ el, text: item.data.title, maxLine: 1 })
           }
-          if (checkTextType(el, 'content') && item.data.text) {
-            return getNewTextElement({ el, text: item.data.text, maxLine: 3 })
+          if (checkTextType(el, 'subtitle') && item.data.subtitle) {
+            return getNewTextElement({ el, text: item.data.subtitle, maxLine: 2 })
+          }
+          if (checkTextType(el, 'content')) {
+            const contentText = item.data.content || item.data.text
+            if (contentText) {
+              return getNewTextElement({ el, text: contentText, maxLine: 3 })
+            }
           }
           if (checkTextType(el, 'partNumber')) {
             return getNewTextElement({ el, text: transitionIndex.value + '', maxLine: 1, digitPadding: true })
@@ -520,6 +532,17 @@ export default () => {
           if (checkTextType(el, 'title') && item.data.title) {
             return getNewTextElement({ el, text: item.data.title, maxLine: 1 })
           }
+          if (checkTextType(el, 'subtitle') && item.data.subtitle) {
+            return getNewTextElement({ el, text: item.data.subtitle, maxLine: 2 })
+          }
+          // content类型：优先使用独立的content字段，否则在单item时使用item.text
+          if (checkTextType(el, 'content')) {
+            if (item.data.content) {
+              return getNewTextElement({ el, text: item.data.content, maxLine: 6 })
+            } else if (item.data.items.length === 1 && item.data.items[0].text) {
+              return getNewTextElement({ el, text: item.data.items[0].text, maxLine: 6 })
+            }
+          }
           return el
         })
         slides.push({
@@ -541,8 +564,14 @@ export default () => {
           if (checkTextType(el, 'title') && item.data.title) {
             return getNewTextElement({ el, text: item.data.title, maxLine: 1 })
           }
-          if (checkTextType(el, 'content') && item.data.text) {
-            return getNewTextElement({ el, text: item.data.text, maxLine: 6 })
+          if (checkTextType(el, 'subtitle') && item.data.subtitle) {
+            return getNewTextElement({ el, text: item.data.subtitle, maxLine: 2 })
+          }
+          if (checkTextType(el, 'content')) {
+            const contentText = item.data.content || item.data.text
+            if (contentText) {
+              return getNewTextElement({ el, text: contentText, maxLine: 6 })
+            }
           }
           return el
         })
@@ -602,6 +631,16 @@ export default () => {
           // 页面标题
           if (checkTextType(el, 'title') && item.data.title) {
             return getNewTextElement({ el, text: item.data.title, maxLine: 1 })
+          }
+          
+          // 副标题
+          if (checkTextType(el, 'subtitle') && item.data.subtitle) {
+            return getNewTextElement({ el, text: item.data.subtitle, maxLine: 2 })
+          }
+          
+          // 正文
+          if (checkTextType(el, 'content') && item.data.content) {
+            return getNewTextElement({ el, text: item.data.content, maxLine: 4 })
           }
           
           // === 专用类型匹配 ===
@@ -712,6 +751,16 @@ export default () => {
             return getNewTextElement({ el, text: item.data.title, maxLine: 1 })
           }
           
+          // 副标题
+          if (checkTextType(el, 'subtitle') && item.data.subtitle) {
+            return getNewTextElement({ el, text: item.data.subtitle, maxLine: 2 })
+          }
+          
+          // 正文
+          if (checkTextType(el, 'content') && item.data.content) {
+            return getNewTextElement({ el, text: item.data.content, maxLine: 4 })
+          }
+          
           // === 专用类型匹配：timeLabel ===
           if (checkTextType(el, 'timeLabel')) {
             const index = sortedTimeLabelIds.findIndex(id => id === el.id)
@@ -807,6 +856,16 @@ export default () => {
             return getNewTextElement({ el, text: item.data.title, maxLine: 1 })
           }
           
+          // 副标题
+          if (checkTextType(el, 'subtitle') && item.data.subtitle) {
+            return getNewTextElement({ el, text: item.data.subtitle, maxLine: 2 })
+          }
+          
+          // 正文
+          if (checkTextType(el, 'content') && item.data.content) {
+            return getNewTextElement({ el, text: item.data.content, maxLine: 4 })
+          }
+          
           // === 专用类型匹配：statValue ===
           if (checkTextType(el, 'statValue')) {
             const index = sortedStatValueIds.findIndex(id => id === el.id)
@@ -879,16 +938,25 @@ export default () => {
             }
           }
           
+          // 副标题
+          if (checkTextType(el, 'subtitle') && item.data.subtitle) {
+            return getNewTextElement({ el, text: item.data.subtitle, maxLine: 2 })
+          }
+          
           // === 降级匹配 ===
           // quote 内容映射到 title（主要内容）
           if (checkTextType(el, 'title') && item.data.quote) {
             return getNewTextElement({ el, text: `"${item.data.quote}"`, maxLine: 3 })
           }
-          // author + title 映射到 content（次要内容）
+          // content字段优先，否则使用author + title组合
           if (checkTextType(el, 'content')) {
-            const authorText = [item.data.author, item.data.title].filter(Boolean).join(' · ')
-            if (authorText) {
-              return getNewTextElement({ el, text: `—— ${authorText}`, maxLine: 1 })
+            if (item.data.content) {
+              return getNewTextElement({ el, text: item.data.content, maxLine: 3 })
+            } else {
+              const authorText = [item.data.author, item.data.title].filter(Boolean).join(' · ')
+              if (authorText) {
+                return getNewTextElement({ el, text: `—— ${authorText}`, maxLine: 1 })
+              }
             }
           }
           return el
@@ -906,6 +974,18 @@ export default () => {
         const endTemplate = endTemplates[Math.floor(Math.random() * endTemplates.length)]
         const elements = endTemplate.elements.map(el => {
           if (el.type === 'image' && el.imageType && imgPool.value.length) return getNewImgElement(el)
+          if (el.type !== 'text' && el.type !== 'shape') return el
+          if (item.data) {
+            if (checkTextType(el, 'title') && item.data.title) {
+              return getNewTextElement({ el, text: item.data.title, maxLine: 1 })
+            }
+            if (checkTextType(el, 'subtitle') && item.data.subtitle) {
+              return getNewTextElement({ el, text: item.data.subtitle, maxLine: 2 })
+            }
+            if (checkTextType(el, 'content') && item.data.content) {
+              return getNewTextElement({ el, text: item.data.content, maxLine: 3 })
+            }
+          }
           return el
         })
         slides.push({
