@@ -296,6 +296,8 @@ export default {
     context,
     history = [],
     model = 'deepseek-chat',
+    scope,
+    requirement,
   }: {
     message: string
     context?: {
@@ -307,6 +309,8 @@ export default {
     }
     history?: Array<{ role: string; content: string }>
     model?: string
+    scope?: string
+    requirement?: string
   }): Promise<Response> {
     return fetch(`${SERVER_URL}/aippt/chat`, {
       method: 'POST',
@@ -318,6 +322,8 @@ export default {
         context,
         history,
         model,
+        scope,
+        requirement,
       }),
     })
   },

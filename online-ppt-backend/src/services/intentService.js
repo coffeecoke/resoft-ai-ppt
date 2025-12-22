@@ -28,6 +28,28 @@ export function parseContinueTopic(message) {
   return match ? match[2].trim() : null
 }
 
+/**
+ * 【新增】解析润色意图
+ * @param {string} message - 用户输入
+ * @returns {object} {isPolish: boolean, requirement: string}
+ */
+export function parsePolishIntent(message) {
+  if (!message) return { isPolish: false, requirement: '' }
+  
+  // 检测是否是润色要求
+  const polishPattern = /^润色要求[：:]\s*(.*)$/
+  const match = message.trim().match(polishPattern)
+  
+  if (match) {
+    return {
+      isPolish: true,
+      requirement: match[1].trim() || 'default'  // 空则用默认风格
+    }
+  }
+  
+  return { isPolish: false, requirement: '' }
+}
+
 // PPT咨询意图模式
 const PPT_QUERY_PATTERNS = [
   /这页|当前页|这一页/,
@@ -118,5 +140,6 @@ export default {
   getLimitMessage,
   getActionGuide,
   parseContinueTopic,
+  parsePolishIntent,
 }
 

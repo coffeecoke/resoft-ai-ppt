@@ -10,7 +10,7 @@
  */
 
 import express from 'express'
-import { classifyIntent, getLimitMessage, getActionGuide, parseContinueTopic } from '../services/intentService.js'
+import { classifyIntent, getLimitMessage, getActionGuide, parseContinueTopic, parsePolishIntent } from '../services/intentService.js'
 import { imageService } from '../services/imageService.js'
 import aiService from '../services/aiService.js'
 import { getModelConfig } from '../config/models.js'
@@ -43,7 +43,7 @@ const USE_AI_FOR_DECREASE = false
  */
 router.post('/chat', async (req, res) => {
   try {
-    const { message, context = {}, history = [], model = 'deepseek-chat' } = req.body
+    const { message, context = {}, history = [], model = 'deepseek-chat', scope, requirement } = req.body
     
     if (!message) {
       return res.json({
@@ -57,6 +57,13 @@ router.post('/chat', async (req, res) => {
     if (continueTopic) {
       console.log(`[对话] 续写话术识别: ${continueTopic}`)
       return handleContinueWrite({ ...context, topic: continueTopic }, model, res)
+    }
+    
+    // 【新增】0.5. 优先检查润色意图（特殊格式优先处理）
+    const polishIntent = parsePolishIntent(message)
+    if (polishIntent.isPolish && scope) {
+      console.log(`[对话] 润色话术识别: scope=${scope}, requirement=${requirement || 'default'}`)
+      return handleSmartPolish(context, scope, requirement || polishIntent.requirement, model, res)
     }
     
     // 1. 意图识别
@@ -711,6 +718,161 @@ function getItems(slide) {
   
   // 从 elements 中提取
   return extractItemsFromElements(slide)
+}
+
+/**
+ * 【新增】智能润色
+ * @param {object} context PPT上下文
+ * @param {string} scope 润色范围（'all' | 'title' | 'items'）
+ * @param {string} requirement 润色要求
+ * @param {string} model AI模型
+ * @param {object} res Express响应对象
+ */
+async function handleSmartPolish(context, scope, requirement, model, res) {
+  try {
+    const { currentSlide } = context
+    
+    if (!currentSlide) {
+      return res.json({
+        success: false,
+        error: '当前没有选中的页面'
+      })
+    }
+    
+    // 1. 提取要润色的内容
+    const contentToPolish = extractContentByScope(currentSlide, scope)
+    
+    if (!contentToPolish || (Object.keys(contentToPolish).length === 0)) {
+      return res.json({
+        success: false,
+        error: '未找到可润色的内容'
+      })
+    }
+    
+    // 2. 构建润色 prompt
+    const prompt = buildPolishPrompt(contentToPolish, requirement, scope)
+    
+    // 3. AI 润色
+    const result = await aiService.chat(model, [
+      { 
+        role: 'system', 
+        content: `你是PPT内容润色专家。你的任务是优化PPT内容的表达，提升专业性、简洁性和说服力。
+
+要求：
+1. 保持原意不变，只优化表达方式
+2. 根据用户要求调整风格（如未指定，保持原风格微调）
+3. 保持格式和结构不变
+4. 返回JSON格式：{"polished": {...}, "explanation": "说明优化了哪些方面"}`
+      },
+      { role: 'user', content: prompt }
+    ], { 
+      temperature: 0.7, 
+      maxTokens: 1000 
+    })
+    
+    // 4. 解析结果
+    const jsonMatch = result.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) {
+      throw new Error('AI返回格式无效')
+    }
+    
+    const polishResult = JSON.parse(jsonMatch[0])
+    
+    // 5. 返回对比结果
+    return res.json({
+      success: true,
+      type: 'edit',
+      action: 'polish_result',
+      message: '润色完成！',
+      data: {
+        scope,
+        requirement: requirement === 'default' ? '' : requirement,
+        original: contentToPolish,
+        polished: polishResult.polished,
+        explanation: polishResult.explanation || ''
+      }
+    })
+  } catch (error) {
+    console.error('[智能润色] 错误:', error)
+    return res.json({
+      success: false,
+      error: '润色失败：' + error.message
+    })
+  }
+}
+
+/**
+ * 【新增】根据范围提取内容
+ * @param {object} slide 页面数据
+ * @param {string} scope 范围（'all' | 'title' | 'items'）
+ * @returns {object} 提取的内容
+ */
+function extractContentByScope(slide, scope) {
+  const result = {}
+  
+  if (scope === 'all' || scope === 'title') {
+    // 提取标题
+    if (slide.elements && Array.isArray(slide.elements)) {
+      const titleEl = slide.elements.find(el => 
+        (el.type === 'text' && el.textType === 'title') ||
+        (el.type === 'shape' && el.text?.type === 'title')
+      )
+      if (titleEl) {
+        result.title = getElementText(titleEl)
+      }
+    }
+  }
+  
+  if (scope === 'all' || scope === 'items') {
+    // 提取要点
+    const items = extractItemsFromElements(slide)
+    if (items.length > 0) {
+      result.items = items
+    }
+  }
+  
+  return result
+}
+
+/**
+ * 【新增】构建润色 prompt
+ * @param {object} content 要润色的内容
+ * @param {string} requirement 润色要求
+ * @param {string} scope 润色范围
+ * @returns {string} prompt
+ */
+function buildPolishPrompt(content, requirement, scope) {
+  let prompt = `请对以下PPT内容进行润色优化：\n\n`
+  
+  if (content.title) {
+    prompt += `页面标题：${content.title}\n`
+  }
+  
+  if (content.items && content.items.length > 0) {
+    prompt += `\n要点内容：\n`
+    content.items.forEach((item, i) => {
+      const title = item.title || (typeof item === 'string' ? item : '')
+      const text = item.text || ''
+      prompt += `${i + 1}. ${title}${text ? ': ' + text : ''}\n`
+    })
+  }
+  
+  if (requirement && requirement !== 'default') {
+    prompt += `\n润色要求：${requirement}\n`
+  } else {
+    prompt += `\n润色要求：保持原风格，微调优化表达，提升专业性和简洁性\n`
+  }
+  
+  prompt += `\n请返回JSON格式：
+{
+  "polished": {
+    ${content.title ? '"title": "润色后的标题",' : ''}
+    ${content.items ? '"items": [{"title": "...", "text": "..."}, ...]' : ''}
+  },
+  "explanation": "说明优化了哪些方面"
+}`
+  
+  return prompt
 }
 
 export default router
