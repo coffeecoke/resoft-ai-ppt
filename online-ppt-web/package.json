@@ -15,6 +15,7 @@
   "author": "pipipi_pikachu@163.com",
   "homepage": "https://github.com/pipipi-pikachu/PPTist",
   "dependencies": {
+    "@element-plus/icons-vue": "^2.3.2",
     "@icon-park/vue-next": "^1.4.2",
     "animate.css": "^4.1.1",
     "axios": "^1.7.9",
@@ -22,6 +23,7 @@
     "crypto-js": "^4.2.0",
     "dexie": "^4.0.11",
     "echarts": "^6.0.0",
+    "element-plus": "^2.13.0",
     "file-saver": "^2.0.5",
     "hfmath": "^0.0.2",
     "html-to-image": "^1.11.13",
@@ -44,6 +46,7 @@
     "prosemirror-schema-list": "^1.4.1",
     "prosemirror-state": "^1.4.3",
     "prosemirror-view": "^1.33.9",
+    "remixicon": "^4.7.0",
     "svg-arc-to-cubic-bezier": "^3.2.0",
     "svg-pathdata": "^7.1.0",
     "tinycolor2": "^1.6.0",
