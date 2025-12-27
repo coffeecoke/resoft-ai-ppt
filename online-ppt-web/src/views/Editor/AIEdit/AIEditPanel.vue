@@ -371,8 +371,8 @@ const genMsgId = () => `msg_${Date.now()}_${Math.random().toString(36).substr(2,
 // 快捷操作
 // 续写话术前缀
 const CONTINUE_PREFIX = '插入的PPT主要内容是：'
-// 续写意图识别正则
-const CONTINUE_PATTERN = /^插入的PPT主要内容是[：:]\s*(.+)$/
+// 续写意图识别正则（支持多行内容）
+const CONTINUE_PATTERN = /^插入的PPT主要内容是[：:]\s*(.+)$/s
 
 // 【新增】润色话术前缀
 const POLISH_PREFIX = '润色要求：'
@@ -475,7 +475,7 @@ const sendMessage = async () => {
     messages.value.push({
       id: genMsgId(),
       role: 'assistant',
-      content: '请在"插入的PPT主要内容是："后面输入您想要的主题内容，例如：\n\n`插入的PPT主要内容是：年度销售分析`',
+      content: '请在"插入的PPT主要内容是："后面输入您想要的主题内容。\n\n支持两种方式：\n1. **简短主题**：`插入的PPT主要内容是：年度销售分析`\n2. **大段文字**：可以直接粘贴多行内容，AI会自动提取要点',
       type: 'chat',
     })
     scrollToBottom()
@@ -988,12 +988,17 @@ const handleTemplateSelect = (template: Slide) => {
  */
 const handleContinueWrite = async (topic: string) => {
   try {
+    // 判断是简短主题还是大段内容
+    const isLongContent = topic.length > 50 || topic.includes('\n')
+    
     // 1. 显示处理中消息
     const processingMsgId = genMsgId()
     messages.value.push({
       id: processingMsgId,
       role: 'assistant',
-      content: `好的，正在为您生成"${topic}"相关内容...`,
+      content: isLongContent 
+        ? `好的，正在从您提供的内容中提取核心要点...` 
+        : `好的，正在为您生成"${topic}"相关内容...`,
       type: 'chat',
       streaming: true,
     })
@@ -1006,7 +1011,7 @@ const handleContinueWrite = async (topic: string) => {
         ...pptContext.value,
         continueWriteTopic: topic,  // 额外传递主题
       },
-      model: 'deepseek-chat',
+      model: selectedModel.value,  // ✅ 使用用户选择的模型
     })
     
     const result = await response.json()
@@ -1029,9 +1034,11 @@ const handleContinueWrite = async (topic: string) => {
     
     const items = result.data.items as Array<{ title: string; text: string }>
     const itemCount = items.length
+    // 获取 AI 提炼的页面标题，如果没有则使用 topic
+    const pageTitle = result.data.pageTitle || topic
     
     // 3. 显示生成的要点
-    let itemsPreview = `✅ 已生成 ${itemCount} 个要点：\n\n`
+    let itemsPreview = `✅ 页面标题：**${pageTitle}**\n\n已生成 ${itemCount} 个要点：\n\n`
     items.forEach((item, i) => {
       itemsPreview += `**${i + 1}. ${item.title}**\n${item.text || ''}\n\n`
     })
@@ -1071,8 +1078,8 @@ const handleContinueWrite = async (topic: string) => {
       return
     }
     
-    // 5. 创建新页面
-    const newSlide = createSlideFromTemplate(matchedTemplate, items, topic)
+    // 5. 创建新页面（使用 AI 提炼的 pageTitle 作为页面标题）
+    const newSlide = createSlideFromTemplate(matchedTemplate, items, pageTitle)
     
     // 6. 插入到当前页面的下一页
     const insertIndex = slideIndex.value + 1

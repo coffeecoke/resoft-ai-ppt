@@ -12,6 +12,8 @@ import imagesRouter from './routes/images.js'
 import translateRouter from './routes/translate.js'
 import templatesRouter from './routes/templates.js'
 import documentsRouter from './routes/documents.js'
+import salesRouter from './routes/sales.js'
+import thumbnailsRouter from './routes/thumbnails.js'
 
 const app = express()
 const PORT = process.env.PORT || 5001
@@ -30,6 +32,10 @@ app.use(express.urlencoded({ extended: true, limit: '100mb' }))
 const coversDir = path.join(__dirname, '..', 'data', 'covers')
 app.use('/covers', express.static(coversDir))
 
+// 静态资源：预览图快照（data/snapshots 下的图片）
+const snapshotsDir = path.join(__dirname, '..', 'data', 'snapshots')
+app.use('/snapshots', express.static(snapshotsDir))
+
 // 路由
 app.use('/tools', toolsRouter)
 app.use('/aippt', aipptChatRouter)  // 对话式PPT编辑
@@ -37,6 +43,8 @@ app.use('/images', imagesRouter)    // 图片推荐
 app.use('/tools/translate', translateRouter)  // 翻译服务
 app.use('/templates', templatesRouter)        // 模板管理
 app.use('/documents', documentsRouter)        // 文档管理
+app.use('/api/thumbnails', thumbnailsRouter)  // 预览图管理
+app.use('/api', salesRouter)                  // 售前平台接口
 
 // 健康检查
 app.get('/health', (req, res) => {
@@ -48,6 +56,7 @@ app.listen(PORT, () => {
   console.log('=========================================')
   console.log(`  AI PPT Server running on port ${PORT}`)
   console.log('=========================================')
+  console.log(`  PPT 编辑器接口:`)
   console.log(`  - 大纲生成: POST /tools/aippt_outline`)
   console.log(`  - PPT生成:  POST /tools/aippt`)
   console.log(`  - 智能对话: POST /aippt/chat`)
@@ -57,5 +66,12 @@ app.listen(PORT, () => {
   console.log(`  - 文档列表: GET  /documents`)
   console.log(`  - 新建文档: POST /documents/create`)
   console.log(`  - 模板封面: GET  /covers/template_1.webp`)
+  console.log(``)
+  console.log(`  售前平台接口:`)
+  console.log(`  - 产品列表: GET  /api/products`)
+  console.log(`  - 问答列表: GET  /api/qa`)
+  console.log(`  - 推荐内容: GET  /api/recommendations`)
+  console.log(`  - 宣传物料: GET  /api/materials`)
+  console.log(`  - 用户信息: GET  /api/user/profile`)
   console.log('=========================================')
 })

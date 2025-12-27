@@ -174,28 +174,43 @@ async function handleContinueWrite(context, model, res) {
       }
     }
     
-    const systemPrompt = `你是一个PPT内容生成专家。用户要在PPT中插入一页关于"${topic}"的内容。
+    // 判断是简短主题还是大段内容
+    const isLongContent = topic.length > 50 || topic.includes('\n')
+    
+    const systemPrompt = `你是一个PPT内容生成专家。${isLongContent ? '用户提供了一段参考内容，你需要从中提取' : '用户要在PPT中插入一页关于某主题的内容，你需要生成'} 3-4 个核心要点。
 
-请根据主题生成 3-4 个核心要点，每个要点包含标题和简短说明。
+${isLongContent ? '**重要**：不要直接使用原文，而是要提炼、概括、精简成适合PPT展示的要点。' : ''}
+
+你需要生成：
+- pageTitle: 这一页的标题（5-15字，概括本页核心主题）
+- items: 3-4 个核心要点，每个包含：
+  - title: 简洁有力的标题（5-10字）
+  - text: 精炼的说明（15-30字）
 ${contextInfo}
 
 请严格按照以下JSON格式返回，不要有其他内容：
-{"items":[{"title":"要点1标题","text":"要点1简短说明（15-30字）"},{"title":"要点2标题","text":"要点2简短说明"},{"title":"要点3标题","text":"要点3简短说明"}]}
+{"pageTitle":"本页标题","items":[{"title":"要点1标题","text":"要点1简短说明"},{"title":"要点2标题","text":"要点2简短说明"},{"title":"要点3标题","text":"要点3简短说明"}]}
 
 注意：
-1. 生成 3-4 个要点（根据主题复杂度决定）
-2. 标题要简洁有力（5-10字）
-3. 说明要精炼专业（15-30字）
-4. 只返回JSON，不要有markdown代码块或其他文字`
+1. pageTitle 要简洁概括本页主题（5-15字），不要直接使用原文
+2. 生成 3-4 个要点（根据内容复杂度决定）
+3. 要点标题要简洁有力（5-10字）
+4. 要点说明要精炼专业（15-30字）
+5. ${isLongContent ? '必须提炼概括，不要直接复制原文' : '内容要准确专业'}
+6. 只返回JSON，不要有markdown代码块或其他文字`
+
+    const userPrompt = isLongContent 
+      ? `请从以下内容中提取页面标题和 3-4 个核心要点：\n\n${topic}`
+      : `请为"${topic}"生成PPT页面标题和要点内容`
 
     const messages = [
       { role: 'system', content: systemPrompt },
-      { role: 'user', content: `请为"${topic}"生成PPT要点内容` }
+      { role: 'user', content: userPrompt }
     ]
     
     const result = await aiService.chat(model, messages, {
       temperature: 0.7,
-      maxTokens: 1024
+      maxTokens: isLongContent ? 800 : 1024  // 大段内容时限制token，避免AI啰嗦
     })
     
     console.log('[续写] AI返回:', result)
@@ -232,6 +247,9 @@ ${contextInfo}
       })
     }
     
+    // 提取页面标题，如果 AI 没有生成则使用截取的 topic
+    const pageTitle = itemsData.pageTitle || (topic.length > 15 ? topic.slice(0, 15) + '...' : topic)
+    
     return res.json({
       success: true,
       type: 'edit',
@@ -239,6 +257,7 @@ ${contextInfo}
       message: `已为您生成 ${items.length} 个要点`,
       data: {
         topic,
+        pageTitle,  // 新增：AI提炼的页面标题
         items
       }
     })

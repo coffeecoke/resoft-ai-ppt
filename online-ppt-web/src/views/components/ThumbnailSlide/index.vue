@@ -1,5 +1,6 @@
 <template>
   <div class="thumbnail-slide"
+    :data-slide-id="slide.id"
     :style="{
       width: size + 'px',
       height: size * viewportRatio + 'px',

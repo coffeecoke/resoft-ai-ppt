@@ -50,14 +50,22 @@
   >
     <AIPPTDialog />
   </Modal>
+
+  <!-- 预览图生成进度提示 -->
+  <ThumbnailGenerationProgress
+    :visible="generatingThumbnails"
+    :progress="thumbnailProgress"
+    @close="() => {}"
+  />
 </template>
 
 <script lang="ts" setup>
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useMainStore } from '@/store'
 import useGlobalHotkey from '@/hooks/useGlobalHotkey'
 import usePasteEvent from '@/hooks/usePasteEvent'
+import { useEditorSave } from '@/hooks/useEditorSave'
 
 import EditorHeader from './EditorHeader/index.vue'
 import Canvas from './Canvas/index.vue'
@@ -75,6 +83,7 @@ import ImageLibPanel from './ImageLibPanel.vue'
 import AIPPTDialog from './AIPPTDialog.vue'
 import { AIEditPanel } from './AIEdit'
 import Modal from '@/components/Modal.vue'
+import ThumbnailGenerationProgress from '@/components/ThumbnailGenerationProgress.vue'
 
 const mainStore = useMainStore()
 const {
@@ -94,6 +103,18 @@ const closeExportDialog = () => mainStore.setDialogForExport('')
 const closeAIPPTDialog = () => mainStore.setAIPPTDialogState(false)
 
 const remarkHeight = ref(40)
+
+// 获取预览图生成状态
+const { generatingThumbnails, thumbnailProgress } = useEditorSave()
+
+// 调试日志
+watch(generatingThumbnails, (val) => {
+  console.log('[编辑器] generatingThumbnails 变化:', val)
+})
+
+watch(thumbnailProgress, (val) => {
+  console.log('[编辑器] thumbnailProgress 变化:', val)
+}, { deep: true })
 
 useGlobalHotkey()
 usePasteEvent()

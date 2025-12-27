@@ -3,6 +3,8 @@ import { useRoute } from 'vue-router'
 import { useSlidesStore } from '@/store'
 import axios from '@/services/config'
 import { SERVER_URL } from '@/services'
+import useSlideChangeTracker from './useSlideChangeTracker'
+import useThumbnailGenerator from './useThumbnailGenerator'
 
 export type EditMode = 'template' | 'document' | 'normal'
 
@@ -37,6 +39,21 @@ export function useEditorSave() {
   const currentId = computed(() => {
     return (route.query.templateId || route.query.documentId) as string | undefined
   })
+
+  // 幻灯片变更追踪
+  const {
+    getChangedSlides,
+    clearChangedSlides,
+    startTracking,
+    stopTracking,
+  } = useSlideChangeTracker()
+
+  // 预览图生成器
+  const { 
+    generateThumbnailsAsync,
+    generating: generatingThumbnails,
+    progress: thumbnailProgress,
+  } = useThumbnailGenerator()
 
   // 获取当前编辑的数据
   const getEditorData = (): EditorData => {
@@ -136,12 +153,17 @@ export function useEditorSave() {
     }
   }
 
-  // 监听编辑模式变化，启动/停止自动保存
+  // 监听编辑模式变化，启动/停止自动保存和变更追踪
   watch(editMode, (newMode) => {
     if (newMode === 'normal') {
       stopAutoSave()
+      stopTracking()
     } else {
       startAutoSave()
+      // 启动变更追踪（仅文档模式）
+      if (newMode === 'document') {
+        startTracking()
+      }
     }
   }, { immediate: true })
 
@@ -164,7 +186,34 @@ export function useEditorSave() {
   // 清理
   onUnmounted(() => {
     stopAutoSave()
+    stopTracking()
   })
+
+  /**
+   * 生成预览图（用于发布时调用）
+   */
+  const generateThumbnailsForPublish = async () => {
+    const mode = editMode.value
+    const id = currentId.value
+
+    if (mode !== 'document' || !id) {
+      console.warn('[useEditorSave] 只有文档模式才能生成预览图')
+      return
+    }
+
+    const changedSlides = getChangedSlides()
+    if (changedSlides.length > 0) {
+      console.log(`[useEditorSave] 检测到 ${changedSlides.length} 个幻灯片变更，开始生成预览图`)
+      
+      // 异步生成预览图，不阻塞发布流程
+      generateThumbnailsAsync(id, changedSlides)
+      
+      // 清空变更记录
+      clearChangedSlides()
+    } else {
+      console.log('[useEditorSave] 没有检测到幻灯片变更，跳过预览图生成')
+    }
+  }
 
   return {
     editMode,
@@ -174,5 +223,8 @@ export function useEditorSave() {
     hasUnsavedChanges,
     save,
     markAsChanged,
+    generatingThumbnails,
+    thumbnailProgress,
+    generateThumbnailsForPublish,
   }
 }

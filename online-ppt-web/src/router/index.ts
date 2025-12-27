@@ -4,7 +4,37 @@ import type { RouteRecordRaw } from 'vue-router'
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
-    redirect: '/ppt/admin/templates'
+    redirect: '/sales/home'
+  },
+  {
+    path: '/sales',
+    component: () => import('@/views/Sales/Layout.vue'),
+    children: [
+      {
+        path: 'home',
+        name: 'SalesHome',
+        component: () => import('@/views/Sales/Home.vue'),
+        meta: { title: '售前平台 - 首页' }
+      },
+      {
+        path: 'product',
+        name: 'SalesProduct',
+        component: () => import('@/views/Sales/Product.vue'),
+        meta: { title: '产品介绍PPT' }
+      },
+      {
+        path: 'qa',
+        name: 'SalesQA',
+        component: () => import('@/views/Sales/QA.vue'),
+        meta: { title: '客户关心问题' }
+      },
+      {
+        path: 'profile',
+        name: 'SalesProfile',
+        component: () => import('@/views/Sales/Profile.vue'),
+        meta: { title: '个人中心' }
+      }
+    ]
   },
   {
     path: '/ppt',

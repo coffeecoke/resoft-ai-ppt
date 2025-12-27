@@ -175,6 +175,7 @@ const {
   currentId,
   saving,
   save,
+  generateThumbnailsForPublish,
 } = useEditorSave()
 
 // 发布状态（仅模板模式使用）
@@ -214,6 +215,12 @@ const handlePublish = async () => {
     
     // 先保存
     await handleSave()
+    
+    // 如果是文档模式，生成预览图
+    if (editMode.value === 'document') {
+      console.log('[EditorHeader] 发布文档，开始生成预览图')
+      generateThumbnailsForPublish()
+    }
     
     // 根据模式调用不同的发布接口
     const url = editMode.value === 'template'
