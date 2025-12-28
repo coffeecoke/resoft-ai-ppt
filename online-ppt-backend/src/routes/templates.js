@@ -101,6 +101,17 @@ function generateTemplateId(indexList) {
   return `template_${max + 1}`
 }
 
+// 从幻灯片数据中获取封面图（使用第一页的缩略图）
+function getCoverFromSlides(slides) {
+  if (slides && slides.length > 0) {
+    const firstSlide = slides[0]
+    if (firstSlide.thumbnail) {
+      return firstSlide.thumbnail
+    }
+  }
+  return '' // 如果没有缩略图，返回空字符串
+}
+
 // 创建空模板
 router.post('/create', (req, res) => {
   try {
@@ -165,11 +176,14 @@ router.post('/create', (req, res) => {
     fs.writeFileSync(filename, JSON.stringify(templateData, null, 2), 'utf-8')
 
     const now = new Date().toISOString()
+    
+    // 自动从第一页缩略图获取封面
+    const cover = getCoverFromSlides(templateData.slides)
 
     const meta = {
       id,
       name,
-      cover: '',
+      cover, // 封面图URL（自动从第一页缩略图获取）
       category,
       origin: 'user',
       status: 'draft',
@@ -265,7 +279,7 @@ router.get('/:id', (req, res) => {
 router.put('/:id', (req, res) => {
   try {
     const { id } = req.params
-    const { templateData, cover, autoSave = false } = req.body || {}
+    const { templateData, autoSave = false } = req.body || {}
 
     if (!templateData) {
       return res.status(400).json({ success: false, error: '缺少模板数据 templateData' })
@@ -283,12 +297,13 @@ router.put('/:id', (req, res) => {
     const filename = path.join(TEMPLATES_DIR, `${id}.json`)
     fs.writeFileSync(filename, JSON.stringify(templateData, null, 2), 'utf-8')
 
-    // 如果有封面，则保存封面（预留：当前不解析，只支持前端单独上传）
-    // 这里先忽略 cover 的处理，后续可以扩展为 base64 转图片文件
+    // 自动从第一页缩略图更新封面
+    const cover = getCoverFromSlides(templateData.slides)
 
     const now = new Date().toISOString()
     indexList[metaIndex] = {
       ...indexList[metaIndex],
+      cover, // 每次更新都同步封面
       slideCount: Array.isArray(templateData.slides) ? templateData.slides.length : 0,
       updatedAt: now,
     }

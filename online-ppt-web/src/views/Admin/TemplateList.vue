@@ -46,7 +46,19 @@
           @click="openEditor(tpl.id)"
         >
           <div class="cover-wrapper">
-            <img :src="tpl.cover" :alt="tpl.name" class="cover" />
+            <img 
+              v-if="tpl.cover" 
+              :src="tpl.cover" 
+              :alt="tpl.name" 
+              class="cover"
+              @error="(e) => handleCoverError(e, tpl)"
+            />
+            <div v-else class="cover cover-placeholder">
+              <div class="placeholder-content">
+                <div class="placeholder-icon">📋</div>
+                <div class="placeholder-text">{{ tpl.name }}</div>
+              </div>
+            </div>
             <!-- <span class="status-badge" :class="tpl.status || 'draft'">
               {{ statusText(tpl.status) }}
             </span> -->
@@ -168,6 +180,15 @@ const statusOptions = [
 const showCreate = ref(false)
 const creating = ref(false)
 const deleting = ref<string>('') // 正在删除的模板ID
+
+// 封面图加载失败处理
+const handleCoverError = (e: Event, tpl: TemplateInfo) => {
+  const target = e.target as HTMLImageElement
+  // 隐藏失败的图片，让占位符显示
+  target.style.display = 'none'
+  // 清空封面字段，触发占位符显示
+  tpl.cover = ''
+}
 const createForm = ref({
   name: '',
   category: 'business',
@@ -459,6 +480,32 @@ onMounted(() => {
       background: #fff;
       object-fit: cover;
       border: 1px solid rgba(15, 23, 42, 0.06);
+    }
+    
+    .cover-placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, rgba($color: $themeColor, $alpha: 0.08), rgba($color: $themeColor, $alpha: 0.03));
+      
+      .placeholder-content {
+        text-align: center;
+        
+        .placeholder-icon {
+          font-size: 32px;
+          margin-bottom: 8px;
+          opacity: 0.6;
+        }
+        
+        .placeholder-text {
+          font-size: 12px;
+          color: rgba(17, 24, 39, 0.5);
+          max-width: 100px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+      }
     }
 
     .status-badge {

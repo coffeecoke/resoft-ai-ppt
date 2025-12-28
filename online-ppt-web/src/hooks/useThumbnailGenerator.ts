@@ -99,20 +99,29 @@ export default () => {
     const foreignObjectSpans = element.querySelectorAll('foreignObject [xmlns]')
     foreignObjectSpans.forEach(span => span.removeAttribute('xmlns'))
 
-    // 获取幻灯片比例
-    const { viewportRatio } = useSlidesStore()
+    // 获取幻灯片实际渲染尺寸
+    const { viewportRatio, viewportSize } = useSlidesStore()
     
-    // 计算高度（保持幻灯片比例）
+    // 获取元素的实际尺寸
+    const elementRect = element.getBoundingClientRect()
+    const actualWidth = elementRect.width
+    const actualHeight = elementRect.height
+    
+    // 计算目标尺寸（保持幻灯片比例）
     const targetWidth = 800
     const targetHeight = Math.round(targetWidth * viewportRatio)
+    
+    // 计算缩放比例（基于实际尺寸）
+    const scale = targetWidth / actualWidth
 
-    console.log(`[预览图生成] 目标尺寸: ${targetWidth}x${targetHeight}, 比例: ${viewportRatio}`)
+    console.log(`[预览图生成] 元素实际尺寸: ${actualWidth}x${actualHeight}, 目标尺寸: ${targetWidth}x${targetHeight}, 缩放比例: ${scale.toFixed(2)}`)
 
     // 转换为 JPEG 格式（体积更小）
+    // 使用 canvasWidth 和 canvasHeight 而不是 width 和 height
     const dataUrl = await toJpeg(element, {
       quality: 0.8,
-      width: targetWidth,
-      height: targetHeight,
+      canvasWidth: targetWidth,
+      canvasHeight: targetHeight,
       fontEmbedCSS: '', // 忽略 Web 字体，加快生成速度
       pixelRatio: 1,
     })

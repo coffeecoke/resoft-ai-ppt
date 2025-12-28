@@ -16,6 +16,11 @@
           placeholder="搜索文档名称 / 分类"
         />
         <Select
+          class="status-select"
+          v-model:value="filterStatus"
+          :options="statusOptions"
+        />
+        <Select
           class="category-select"
           v-model:value="filterCategory"
           :options="categoryOptions"
@@ -46,7 +51,19 @@
           @click="openEditor(doc.id)"
         >
           <div class="cover-wrapper">
-            <img :src="doc.cover" :alt="doc.name" class="cover" />
+            <img 
+              v-if="doc.cover" 
+              :src="doc.cover" 
+              :alt="doc.name" 
+              class="cover"
+              @error="(e) => handleCoverError(e, doc)"
+            />
+            <div v-else class="cover cover-placeholder">
+              <div class="placeholder-content">
+                <div class="placeholder-icon">📄</div>
+                <div class="placeholder-text">{{ doc.name }}</div>
+              </div>
+            </div>
           </div>
           <div class="info">
             <div class="name" :title="doc.name">{{ doc.name }}</div>
@@ -55,6 +72,12 @@
               <span class="tag">{{ doc.slideCount }} 页</span>
               <span class="tag category" v-if="doc.category">
                 {{ getCategoryName(doc.category) }}
+              </span>
+              <span 
+                class="tag status" 
+                :class="`status-${doc.status || 'draft'}`"
+              >
+                {{ getStatusName(doc.status || 'draft') }}
               </span>
               <!-- 操作按钮组 -->
               <div class="actions" @click.stop>
@@ -209,6 +232,7 @@ const router = useRouter()
 const loading = ref(false)
 const documents = ref<DocumentMetadata[]>([])
 const filterCategory = ref<string>('')
+const filterStatus = ref<string>('published')
 const keyword = ref<string>('')
 const showCreate = ref(false)
 const creating = ref(false)
@@ -217,6 +241,15 @@ const duplicating = ref<string>('')
 const showRename = ref(false)
 const renaming = ref(false)
 const renamingId = ref<string>('')
+
+// 封面图加载失败处理
+const handleCoverError = (e: Event, doc: DocumentMetadata) => {
+  const target = e.target as HTMLImageElement
+  // 隐藏失败的图片，让占位符显示
+  target.style.display = 'none'
+  // 清空封面字段，触发占位符显示
+  doc.cover = ''
+}
 
 const createForm = ref({
   createType: 'blank' as 'blank' | 'fromDocument',
@@ -237,6 +270,13 @@ const categoryOptions = [
   { label: '其他', value: 'uncategorized' },
 ]
 
+const statusOptions = [
+  { label: '全部状态', value: '' },
+  { label: '草稿', value: 'draft' },
+  { label: '已发布', value: 'published' },
+  { label: '已归档', value: 'archived' },
+]
+
 const sourceDocumentOptions = computed(() => {
   return documents.value.map(doc => ({
     label: doc.name,
@@ -249,6 +289,11 @@ const getCategoryName = (category: string) => {
   return option?.label || category
 }
 
+const getStatusName = (status: string) => {
+  const option = statusOptions.find(opt => opt.value === status)
+  return option?.label || status
+}
+
 const formatFileSize = (bytes: number) => {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
@@ -258,10 +303,17 @@ const formatFileSize = (bytes: number) => {
 const filteredDocuments = computed(() => {
   let list = documents.value.filter(d => d && d.id)
   
+  // 状态筛选
+  if (filterStatus.value) {
+    list = list.filter(d => (d.status || 'draft') === filterStatus.value)
+  }
+  
+  // 分类筛选
   if (filterCategory.value) {
     list = list.filter(d => d.category === filterCategory.value)
   }
   
+  // 关键词搜索
   const k = keyword.value.trim().toLowerCase()
   if (k) {
     list = list.filter(d => {
@@ -291,6 +343,7 @@ const canCreate = computed(() => {
 const loadDocuments = async () => {
   try {
     loading.value = true
+    // 不传递任何筛选参数，获取所有文档，由前端计算属性进行筛选
     documents.value = await getDocumentList()
   } catch (error: any) {
     console.error('[文档管理] 加载文档列表失败:', error)
@@ -487,6 +540,10 @@ onMounted(() => {
     justify-content: flex-end;
   }
 
+  .status-select {
+    width: 120px;
+  }
+
   .category-select {
     width: 140px;
   }
@@ -593,6 +650,32 @@ onMounted(() => {
       object-fit: cover;
       border: 1px solid rgba(15, 23, 42, 0.06);
     }
+    
+    .cover-placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, rgba($color: $themeColor, $alpha: 0.08), rgba($color: $themeColor, $alpha: 0.03));
+      
+      .placeholder-content {
+        text-align: center;
+        
+        .placeholder-icon {
+          font-size: 32px;
+          margin-bottom: 8px;
+          opacity: 0.6;
+        }
+        
+        .placeholder-text {
+          font-size: 12px;
+          color: rgba(17, 24, 39, 0.5);
+          max-width: 100px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+      }
+    }
   }
 
   .info {
@@ -629,6 +712,28 @@ onMounted(() => {
           color: $themeColor;
           border-color: rgba($color: $themeColor, $alpha: 0.35);
           background: rgba($color: $themeColor, $alpha: 0.06);
+        }
+
+        &.status {
+          font-size: 11px;
+          
+          &.status-draft {
+            color: #6b7280;
+            border-color: rgba(107, 114, 128, 0.35);
+            background: rgba(107, 114, 128, 0.06);
+          }
+          
+          &.status-published {
+            color: #10b981;
+            border-color: rgba(16, 185, 129, 0.35);
+            background: rgba(16, 185, 129, 0.06);
+          }
+          
+          &.status-archived {
+            color: #ef4444;
+            border-color: rgba(239, 68, 68, 0.35);
+            background: rgba(239, 68, 68, 0.06);
+          }
         }
       }
 

@@ -105,8 +105,11 @@ export async function getDocumentList(options: {
         if (c.startsWith('http://') || c.startsWith('https://')) {
           cover = c
         }
-        // 后端返回的相对路径，需要拼上 SERVER_URL
-        else if (c.startsWith('/covers/')) {
+        // 后端返回的相对路径（封面图或缩略图），需要拼上 SERVER_URL
+        else if (c.startsWith('/covers/') || c.startsWith('/snapshots/')) {
+          cover = `${SERVER_URL}${c}`
+        } else if (c.startsWith('/')) {
+          // 其他以 / 开头的相对路径
           cover = `${SERVER_URL}${c}`
         } else {
           cover = c

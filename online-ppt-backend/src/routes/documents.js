@@ -57,6 +57,17 @@ function generateDocumentId(indexList) {
   return `document_${max + 1}`
 }
 
+// 从幻灯片数据中获取封面图（使用第一页的缩略图）
+function getCoverFromSlides(slides) {
+  if (slides && slides.length > 0) {
+    const firstSlide = slides[0]
+    if (firstSlide.thumbnail) {
+      return firstSlide.thumbnail
+    }
+  }
+  return '' // 如果没有缩略图，返回空字符串
+}
+
 // 计算文件大小（字节）
 function getFileSize(filePath) {
   try {
@@ -155,10 +166,13 @@ router.post('/create', (req, res) => {
       sourceDocumentName = sourceMeta?.name
     }
 
+    // 自动从第一页缩略图获取封面
+    const cover = getCoverFromSlides(documentData.slides)
+
     const meta = {
       id,
       name,
-      cover: '', // 封面图URL（后续可自动生成或用户上传）
+      cover, // 封面图URL（自动从第一页缩略图获取）
       sourceDocumentId: sourceDocumentId || undefined,
       sourceDocumentName: sourceDocumentName || undefined,
       category,
@@ -330,9 +344,13 @@ router.put('/:id', (req, res) => {
     const now = new Date().toISOString()
     const fileSize = getFileSize(filename)
     const slideCount = Array.isArray(docData.slides) ? docData.slides.length : 0
+    
+    // 自动从第一页缩略图更新封面
+    const cover = getCoverFromSlides(docData.slides)
 
     indexList[metaIndex] = {
       ...indexList[metaIndex],
+      cover, // 每次更新都同步封面
       slideCount,
       fileSize,
       updatedAt: now,

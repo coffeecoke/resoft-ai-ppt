@@ -73,7 +73,7 @@ export function useEditorSave() {
   const hasUnsavedChanges = ref(false)
 
   // 统一保存函数
-  const save = async (autoSave = false) => {
+  const save = async (autoSave = false, generateCover = false) => {
     const mode = editMode.value
     const id = currentId.value
 
@@ -111,8 +111,43 @@ export function useEditorSave() {
         throw new Error(resp?.error || '保存失败')
       }
 
+      // 【新增】手动保存时智能生成第一页缩略图作为封面
+      // 注意：必须在 hasUnsavedChanges 设置为 false 之前检查
+      const hadUnsavedChanges = hasUnsavedChanges.value
+      
       lastSaveTime.value = Date.now()
       hasUnsavedChanges.value = false
+      
+      if (generateCover && id) {
+        const slides = slidesStore.slides
+        if (slides.length > 0) {
+          const firstSlide = slides[0]
+          const changedSlides = getChangedSlides()
+          
+          // 智能判断生成条件：
+          // 1. 第一页没有缩略图（首次生成）
+          // 2. 第一页在变更列表中（明确检测到变更）
+          // 3. 有未保存的变更（用户修改了内容，即使变更追踪没检测到）
+          const noThumbnail = !firstSlide.thumbnail
+          const firstSlideChanged = changedSlides.some(s => s.id === firstSlide.id)
+          const hasChanges = hadUnsavedChanges
+          
+          const needGenerate = noThumbnail || firstSlideChanged || hasChanges
+          
+          if (needGenerate) {
+            const modeName = mode === 'template' ? '模板' : '文档'
+            const reason = noThumbnail ? '无缩略图' : firstSlideChanged ? '检测到变更' : '有未保存变更'
+            console.log(`[useEditorSave] 手动保存${modeName}，生成第一页缩略图作为封面 (原因: ${reason})`)
+            // 异步生成，不阻塞保存流程
+            generateThumbnailsAsync(id, [firstSlide])
+          } else {
+            console.log('[useEditorSave] 第一页未变更且已有缩略图，跳过封面生成')
+          }
+        }
+      }
+      
+      // 保存成功后，清空变更记录
+      clearChangedSlides()
       
       return resp
     } catch (error) {
@@ -160,10 +195,8 @@ export function useEditorSave() {
       stopTracking()
     } else {
       startAutoSave()
-      // 启动变更追踪（仅文档模式）
-      if (newMode === 'document') {
-        startTracking()
-      }
+      // 启动变更追踪（文档和模版模式都需要，用于智能生成封面）
+      startTracking()
     }
   }, { immediate: true })
 

@@ -194,7 +194,7 @@ const goBack = () => {
 const handleSave = async () => {
   try {
     const { default: message } = await import('@/utils/message')
-    await save(false) // 手动保存，autoSave=false
+    await save(false, true) // 手动保存：autoSave=false, generateCover=true
     const modeName = editMode.value === 'template' ? '模板' : '文档'
     message.success(`${modeName}已保存`)
   } catch (error: any) {
