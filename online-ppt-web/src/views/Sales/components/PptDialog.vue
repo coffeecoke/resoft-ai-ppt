@@ -34,6 +34,10 @@
                 <i class="ri-list-check-3"></i>
                 {{ isInPendingList ? '已添加待操作' : '待操作' }}
               </el-button>
+              <button class="ai-analyze-btn" type="button" @click="createNewPpt">
+                <i class="ri-file-ppt-2-line"></i>
+                新建PPT
+              </button>
               <button class="ai-analyze-btn" type="button" @click="openAiPanel">
                 <i class="ri-quill-pen-ai-line"></i>
                 AI全文分析
@@ -264,11 +268,10 @@
             <div class="ai-panel-subtitle">试试以下 AI 功能,提升阅读写作效率</div>
             <div class="ai-feature-list">
               <div class="ai-feature-item">
-                <span class="feature-text">参考当前PPT样式生成PPT</span>
-                <i class="ri-arrow-right-s-line feature-arrow"></i>
-              </div>
-              <div class="ai-feature-item">
-                <span class="feature-text">AI辅助生成PPT</span>
+                <span class="feature-text">
+                  使用当前PPT再编辑
+                  <i class="ri-quill-pen-ai-line feature-icon"></i>
+                </span>
                 <i class="ri-arrow-right-s-line feature-arrow"></i>
               </div>
               <div class="ai-feature-item">
@@ -286,29 +289,17 @@
                 rows="4"
               ></textarea>
               <div class="ai-input-actions">
-                <div class="ai-action-btn">
-                  <i class="ri-whale-line"></i>
-                  <span>DeepSeek-R1</span>
-                </div>
-                <div class="ai-action-btn">
-                  <i class="ri-global-line"></i>
-                  <span>联网搜索</span>
-                </div>
-                <i class="ri-upload-cloud-line ai-upload-icon"></i>
-                <i class="ri-send-plane-fill ai-send-icon"></i>
+                <button class="ai-send-btn" type="button" @click="sendAiMessage">
+                  <i class="ri-send-plane-fill"></i>
+                  发送
+                </button>
               </div>
             </div>
           </div>
         </div>
       </aside>
-      <button 
-        v-show="!aiPanelVisible" 
-        class="ai-panel-float-btn" 
-        @click="openAiPanel"
-        title="打开AI助手"
-      >
-        <i class="ri-ai"></i>
-      </button>
+      <!-- 待操作列表抽屉 -->
+      <PendingOperationsDrawer v-model:visible="pendingDrawerVisible" />
     </div>
   </el-dialog>
 </template>
@@ -318,6 +309,7 @@ import { ref, computed, nextTick } from 'vue'
 import { MagicStick, Download } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { usePendingOperationsStore } from '@/store/Sales/pendingOperations'
+import PendingOperationsDrawer from '@/components/Sales/PendingOperationsDrawer.vue'
 
 const props = defineProps({
   visible: {
@@ -368,8 +360,9 @@ const pendingStore = usePendingOperationsStore()
 const activeSlide = ref(0)
 const selectedSlides = ref([])
 const wordTocMode = ref('single') // single | multi
-const aiPanelVisible = ref(true)
+const aiPanelVisible = ref(false) // 默认隐藏AI助手面板，只显示AI图标
 const aiInputText = ref('')
+const pendingDrawerVisible = ref(false) // 待操作列表抽屉显示状态
 
 // 检查当前PPT是否已在待操作列表中
 const isInPendingList = computed(() => {
@@ -396,7 +389,7 @@ const handleClose = (value) => {
     // 重置状态
     activeSlide.value = 0
     selectedSlides.value = []
-    aiPanelVisible.value = true
+    aiPanelVisible.value = false // 重置时也保持隐藏状态
     aiInputText.value = ''
   }
 }
@@ -443,6 +436,25 @@ const closeAiPanel = () => {
   aiPanelVisible.value = false
 }
 
+// 新建PPT
+const createNewPpt = () => {
+  // TODO: 实现新建PPT的逻辑
+  ElMessage.info('新建PPT功能开发中...')
+}
+
+// 发送AI消息
+const sendAiMessage = () => {
+  if (!aiInputText.value.trim()) {
+    ElMessage.warning('请输入消息内容')
+    return
+  }
+  // TODO: 实现发送AI消息的逻辑
+  console.log('发送消息:', aiInputText.value)
+  ElMessage.success('消息已发送')
+  // 清空输入框
+  aiInputText.value = ''
+}
+
 const analyzeSelectedSlide = () => {
   const targetIndex = selectedSlides.value.length ? selectedSlides.value[0] : activeSlide.value
   activeSlide.value = targetIndex
@@ -466,27 +478,43 @@ const addSelectedToPendingList = () => {
     return
   }
   
+  let addedCount = 0
+  
   // 为每个选中的幻灯片创建待操作项
   selectedSlides.value.forEach(slideIndex => {
     const slide = props.slides[slideIndex]
     if (slide) {
       const itemId = `${props.title || Date.now().toString()}-slide-${slideIndex}`
-      pendingStore.addToPending({
-        id: itemId,
-        type: 'ppt',
-        title: `${props.title} - 第${slideIndex + 1}页`,
-        thumbnail: slide.img || '',
-        tag: props.type === 'public' ? '公共版' : '实战版',
-        date: '2025/10/20',
-        slides: [slide] // 只包含选中的单张幻灯片
-      })
+      // 检查是否已存在，避免重复添加
+      const exists = pendingStore.pendingList.find(
+        item => item.id === itemId && item.type === 'ppt'
+      )
+      
+      if (!exists) {
+        pendingStore.addToPending({
+          id: itemId,
+          type: 'ppt',
+          title: `${props.title} - 第${slideIndex + 1}页`,
+          thumbnail: slide.img || '',
+          tag: props.type === 'public' ? '公共版' : '实战版',
+          date: new Date().toISOString().split('T')[0], // 使用当前日期
+          slides: [slide] // 只包含选中的单张幻灯片
+        })
+        addedCount++
+      }
     }
   })
   
-  ElMessage.success(`已将 ${selectedSlides.value.length} 张幻灯片添加到待操作列表`)
+  if (addedCount > 0) {
+    ElMessage.success(`已将 ${addedCount} 张幻灯片添加到待操作列表`)
+    // 添加后打开抽屉，让用户查看添加的结果
+    pendingDrawerVisible.value = true
+  } else {
+    ElMessage.info('选中的幻灯片已在待操作列表中')
+  }
 }
 
-// 切换待操作列表状态
+// 切换待操作列表状态（添加/移除当前PPT）
 const togglePendingList = () => {
   const currentId = props.title || Date.now().toString()
   
@@ -502,10 +530,12 @@ const togglePendingList = () => {
       title: props.title,
       thumbnail: props.slides[0]?.img || '',
       tag: props.type === 'public' ? '公共版' : '实战版',
-      date: '2025/10/20', // 示例日期
+      date: new Date().toISOString().split('T')[0], // 使用当前日期
       slides: props.slides
     })
     ElMessage.success('已添加到待操作列表')
+    // 添加后打开抽屉，让用户看到操作结果
+    pendingDrawerVisible.value = true
   }
 }
 </script>

@@ -42,7 +42,65 @@
 
       <!-- 内容标签页 -->
       <el-tabs v-model="activeTab" class="profile-tabs">
-        <el-tab-pane label="交流会议" name="sessions">
+        <el-tab-pane label="我的产品介绍PPT" name="ppts">
+          <div class="tab-content">
+            <div class="tab-header-actions">
+              <div class="ppt-type-tabs">
+                <div 
+                  class="ppt-type-tab" 
+                  :class="{ active: pptTypeFilter === 'all' }"
+                  @click="pptTypeFilter = 'all'"
+                >
+                  全部
+                </div>
+                <div 
+                  class="ppt-type-tab" 
+                  :class="{ active: pptTypeFilter === 'practical' }"
+                  @click="pptTypeFilter = 'practical'"
+                >
+                  回传
+                </div>
+                <div 
+                  class="ppt-type-tab" 
+                  :class="{ active: pptTypeFilter === 'public' }"
+                  @click="pptTypeFilter = 'public'"
+                >
+                  AI生成
+                </div>
+              </div>
+              <button class="upload-ppt-btn" type="button" @click="handleUploadPpt">
+                <el-icon><Upload /></el-icon>
+                回传PPT
+              </button>
+            </div>
+            <div class="ppt-grid">
+              <div 
+                v-for="ppt in filteredPPTs" 
+                :key="ppt.id" 
+                class="ppt-card" 
+                style="cursor: pointer;"
+              >
+                <div class="thumb" @click="openPpt(ppt)">
+                  <img :src="ppt.thumbnail" :alt="ppt.title" />
+                  <span class="badge" :class="ppt.tag === 'public' ? 'badge-public' : 'badge-practical'">
+                    {{ ppt.tag === 'public' ? 'AI生成' : '回传' }}
+                  </span>
+                </div>
+                <div class="meta">
+                  <div class="title" @click="openPpt(ppt)">{{ ppt.title }}</div>
+                  <div class="sub">{{ ppt.date }} · {{ ppt.author }}</div>
+                  <div class="ppt-actions">
+                    <el-button size="small" type="primary" plain @click.stop="optimizePpt(ppt)">
+                      <el-icon><MagicStick /></el-icon> AI优化
+                    </el-button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </el-tab-pane>
+        
+        <el-tab-pane label="我参与的交流会议" name="sessions">
           <div class="tab-content">
             <div class="session-cards">
               <div 
@@ -120,36 +178,7 @@
           </div>
         </el-tab-pane>
 
-        <el-tab-pane label="产品介绍PPT" name="ppts">
-          <div class="tab-content">
-            <div class="ppt-grid">
-              <div 
-                v-for="ppt in filteredPPTs" 
-                :key="ppt.id" 
-                class="ppt-card" 
-                style="cursor: pointer;"
-              >
-                <div class="thumb" @click="openPpt(ppt)">
-                  <img :src="ppt.thumbnail" :alt="ppt.title" />
-                  <span class="badge" :class="ppt.tag === 'public' ? 'badge-public' : 'badge-practical'">
-                    {{ ppt.tag === 'public' ? 'AI生成' : '回传' }}
-                  </span>
-                </div>
-                <div class="meta">
-                  <div class="title" @click="openPpt(ppt)">{{ ppt.title }}</div>
-                  <div class="sub">{{ ppt.date }} · {{ ppt.author }}</div>
-                  <div class="ppt-actions">
-                    <el-button size="small" type="primary" plain @click.stop="optimizePpt(ppt)">
-                      <el-icon><MagicStick /></el-icon> AI优化
-                    </el-button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </el-tab-pane>
-
-        <el-tab-pane label="招投标" name="tenders">
+        <el-tab-pane label="我的招投标" name="tenders">
           <div class="tab-content">
             <div class="ppt-grid">
               <div class="empty-item" style="text-align:center; padding:40px 0; color:#909399;">
@@ -159,7 +188,7 @@
           </div>
         </el-tab-pane>
 
-        <el-tab-pane label="收藏" name="collections">
+        <el-tab-pane label="我收藏的" name="collections">
           <div class="tab-content">
             <div class="ppt-grid">
               <div 
@@ -216,6 +245,14 @@
         </el-tab-pane>
       </el-tabs>
     </div>
+    
+    <!-- PPT详情对话框 -->
+    <PptDialog
+      v-model:visible="pptDialogVisible"
+      :title="currentPpt.title"
+      :type="currentPpt.tag === 'public' ? 'public' : 'practical'"
+      :slides="currentPptSlides"
+    />
   </div>
 </template>
 
@@ -223,14 +260,23 @@
 
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { VideoPlay, MagicStick } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { VideoPlay, MagicStick, Upload } from '@element-plus/icons-vue'
 import Header from './components/Header.vue'
+import PptDialog from './components/PptDialog.vue'
+import { salesData } from '@/configs/salesData'
 const router = useRouter()
 
-const activeTab = ref('sessions')
+const activeTab = ref('ppts')
 const sessionFilter = ref('all')
 const pptFilter = ref('all')
 const collectionFilter = ref('all')
+const pptTypeFilter = ref('all') // 'all' 全部, 'practical' 回传, 'public' AI生成
+
+// PPT详情对话框状态
+const pptDialogVisible = ref(false)
+const currentPpt = ref({ title: '', tag: 'public', slides: [] })
+const currentPptSlides = ref([])
 
 // 用户信息
 const userInfo = ref({
@@ -500,8 +546,19 @@ const filteredSessions = computed(() => {
 
 // 筛选后的PPT
 const filteredPPTs = computed(() => {
-  if (pptFilter.value === 'all') return ppts.value
-  return ppts.value.filter(p => p.tag === pptFilter.value)
+  let result = ppts.value
+  
+  // 先按类型过滤（全部/回传/AI生成）
+  if (pptTypeFilter.value !== 'all') {
+    result = result.filter(p => p.tag === pptTypeFilter.value)
+  }
+  
+  // 再按其他筛选条件过滤
+  if (pptFilter.value !== 'all') {
+    result = result.filter(p => p.tag === pptFilter.value)
+  }
+  
+  return result
 })
 
 // 筛选后的收藏
@@ -516,8 +573,22 @@ const openSession = (session) => {
 }
 
 const openPpt = (ppt) => {
-  // 跳转到产品页面或打开PPT
-  router.push({ path: '/sales/product', query: { q: ppt.title } })
+  // 打开PPT详情对话框
+  currentPpt.value = {
+    title: ppt.title,
+    tag: ppt.tag || 'public',
+    slides: ppt.slides || []
+  }
+  
+  // 如果没有slides数据，使用默认数据
+  if (!ppt.slides || ppt.slides.length === 0) {
+    // 使用默认的slides数据
+    currentPptSlides.value = [...salesData.slides]
+  } else {
+    currentPptSlides.value = ppt.slides
+  }
+  
+  pptDialogVisible.value = true
 }
 
 const openItem = (item) => {
@@ -532,12 +603,38 @@ const reDownload = (download) => {
   console.log('重新下载:', download)
 }
 
+// 回传PPT
+const handleUploadPpt = () => {
+  // TODO: 实现回传PPT的逻辑
+  ElMessage.info('回传PPT功能开发中...')
+}
+
 const optimizePpt = (ppt) => {
   router.push({ path: '/ppt/editor', query: { source: 'profile', pptId: ppt.id } })
 }
 </script>
 
 <style scoped>
+/* 标签页样式 */
+:deep(.profile-tabs .el-tabs__item) {
+  font-size: 14px !important;
+  color: #606266 !important;
+}
+
+:deep(.profile-tabs .el-tabs__item.is-active) {
+  font-size: 16px !important;
+  font-weight: bold !important;
+}
+
+:deep(.profile-tabs .el-tabs__item.is-active),
+:deep(.profile-tabs .el-tabs__item.is-active span),
+:deep(.profile-tabs .el-tabs__item.is-active *) {
+  color: #006DF9 !important;
+}
+
+:deep(.profile-tabs .el-tabs__active-bar) {
+  background-color: #006DF9 !important;
+}
 .profile-page .main {
   padding: 16px;
 }
@@ -615,6 +712,27 @@ const optimizePpt = (ppt) => {
   background: #fff;
   border-radius: 10px;
   padding: 20px;
+}
+
+/* 标签页样式 */
+:deep(.profile-tabs .el-tabs__item) {
+  font-size: 14px !important;
+  color: #606266 !important;
+}
+
+:deep(.profile-tabs .el-tabs__item.is-active) {
+  font-size: 16px !important;
+  font-weight: bold !important;
+}
+
+:deep(.profile-tabs .el-tabs__item.is-active),
+:deep(.profile-tabs .el-tabs__item.is-active span),
+:deep(.profile-tabs .el-tabs__item.is-active *) {
+  color: #006DF9 !important;
+}
+
+:deep(.profile-tabs .el-tabs__active-bar) {
+  background-color: #006DF9 !important;
 }
 
 .tab-content {
@@ -1473,6 +1591,28 @@ const optimizePpt = (ppt) => {
   color: #4b5563;
   line-height: 1.8;
   margin-bottom: 4px;
+}
+</style>
+
+<style>
+/* 标签页样式 - 非scoped，确保覆盖Element Plus默认样式 */
+.profile-tabs .el-tabs__item {
+  font-size: 14px !important;
+  color: #606266 !important;
+}
+
+.profile-tabs .el-tabs__item.is-active {
+  font-size: 16px !important;
+  font-weight: bold !important;
+  color: #006DF9 !important;
+}
+
+.profile-tabs .el-tabs__item.is-active * {
+  color: #006DF9 !important;
+}
+
+.profile-tabs .el-tabs__active-bar {
+  background-color: #006DF9 !important;
 }
 </style>
 
