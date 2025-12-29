@@ -139,6 +139,14 @@
               />
               <span>基于已有文档创建</span>
             </label>
+            <label class="radio-item">
+              <input
+                type="radio"
+                value="fromPPTX"
+                v-model="createForm.createType"
+              />
+              <span>基于PPT文档创建</span>
+            </label>
           </div>
         </div>
 
@@ -149,6 +157,22 @@
             :options="sourceDocumentOptions"
             placeholder="请选择要基于的文档"
           />
+        </div>
+
+        <div class="form-item" v-if="createForm.createType === 'fromPPTX'">
+          <div class="label">上传PPT文档<span class="required">*</span></div>
+          <FileInput
+            accept="application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            @change="handlePPTXFileChange"
+          >
+            <div class="upload-area">
+              <span v-if="!createForm.pptxFile" class="upload-placeholder">
+                <span class="upload-icon">📄</span>
+                <span>点击上传PPTX文件</span>
+              </span>
+              <span v-else class="upload-filename">{{ createForm.pptxFile.name }}</span>
+            </div>
+          </FileInput>
         </div>
 
         <div class="form-item">
@@ -167,14 +191,66 @@
           />
         </div>
 
+        <div class="form-item">
+          <div class="label">客户名称</div>
+          <Input
+            v-model:value="createForm.customerName"
+            placeholder="请输入客户名称"
+          />
+        </div>
+
+        <div class="form-item">
+          <div class="label">产品解决方案</div>
+          <SelectMultiple
+            v-model:value="createForm.product"
+            :options="productOptions"
+            placeholder="请选择产品（可多选）"
+          />
+        </div>
+
+        <div class="form-item">
+          <div class="label">行业</div>
+          <SelectMultiple
+            v-model:value="createForm.industry"
+            :options="industryOptions"
+            placeholder="请选择行业（可多选）"
+          />
+        </div>
+
+        <div class="form-item">
+          <div class="label">交流对象</div>
+          <SelectMultiple
+            v-model:value="createForm.audience"
+            :options="audienceOptions"
+            placeholder="请选择交流对象（可多选）"
+          />
+        </div>
+
+        <div class="form-item">
+          <div class="label">语言</div>
+          <Select
+            v-model:value="createForm.language"
+            :options="languageOptions"
+            placeholder="请选择语言"
+          />
+        </div>
+
         <div class="dialog-footer">
           <button class="btn" @click="closeCreateModal">取消</button>
           <button
             class="btn btn-primary"
-            :disabled="!canCreate"
+            :disabled="!canCreate || creating || parsing"
             @click="handleCreate"
           >
-            {{ creating ? '创建中...' : '创建并前往编辑' }}
+            <template v-if="parsing">
+              {{ parsingMessage }}
+            </template>
+            <template v-else-if="creating">
+              创建中...
+            </template>
+            <template v-else>
+              创建并前往编辑
+            </template>
           </button>
         </div>
       </div>
@@ -222,10 +298,14 @@ import {
   renameDocument,
   type DocumentMetadata,
 } from '@/services/documentService'
+import { PRODUCTS, INDUSTRIES, AUDIENCES, LANGUAGES } from '@/configs/salesConstants'
+import { parsePPTXToSlides } from '@/utils/pptxParser'
 import message from '@/utils/message'
 import Modal from '@/components/Modal.vue'
 import Input from '@/components/Input.vue'
 import Select from '@/components/Select.vue'
+import SelectMultiple from '@/components/SelectMultiple.vue'
+import FileInput from '@/components/FileInput.vue'
 
 const router = useRouter()
 
@@ -236,6 +316,8 @@ const filterStatus = ref<string>('published')
 const keyword = ref<string>('')
 const showCreate = ref(false)
 const creating = ref(false)
+const parsing = ref(false) // PPTX解析状态
+const parsingMessage = ref('') // 解析进度消息
 const deleting = ref<string>('')
 const duplicating = ref<string>('')
 const showRename = ref(false)
@@ -252,10 +334,18 @@ const handleCoverError = (e: Event, doc: DocumentMetadata) => {
 }
 
 const createForm = ref({
-  createType: 'blank' as 'blank' | 'fromDocument',
+  createType: 'blank' as 'blank' | 'fromDocument' | 'fromPPTX',
   name: '',
   sourceDocumentId: '',
   category: 'uncategorized',
+  // 新增业务字段
+  customerName: '',
+  product: [] as string[],      // 多选
+  industry: [] as string[],     // 多选
+  audience: [] as string[],     // 多选
+  language: '',
+  // PPTX文件
+  pptxFile: null as File | null,
 })
 
 const renameForm = ref({
@@ -283,6 +373,22 @@ const sourceDocumentOptions = computed(() => {
     value: doc.id,
   }))
 })
+
+// 产品选项（从salesConstants导入）
+// 产品选项（多选，不需要"请选择"）
+const productOptions = PRODUCTS
+
+// 行业选项（多选，不需要"请选择"）
+const industryOptions = INDUSTRIES
+
+// 交流对象选项（多选，不需要"请选择"）
+const audienceOptions = AUDIENCES
+
+// 语言选项（单选，保留"请选择"）
+const languageOptions = [
+  { label: '请选择', value: '' },
+  ...LANGUAGES
+]
 
 const getCategoryName = (category: string) => {
   const option = categoryOptions.find(opt => opt.value === category)
@@ -337,6 +443,9 @@ const canCreate = computed(() => {
   if (createForm.value.createType === 'fromDocument' && !createForm.value.sourceDocumentId) {
     return false
   }
+  if (createForm.value.createType === 'fromPPTX' && !createForm.value.pptxFile) {
+    return false
+  }
   return true
 })
 
@@ -360,6 +469,12 @@ const openCreateModal = () => {
     name: '',
     sourceDocumentId: '',
     category: 'uncategorized',
+    customerName: '',
+    product: [],      // 多选数组
+    industry: [],     // 多选数组
+    audience: [],     // 多选数组
+    language: '',
+    pptxFile: null,
   }
 }
 
@@ -376,9 +491,44 @@ const handleCreate = async () => {
 
   try {
     creating.value = true
+    
+    let initialSlides = null
+    let parsedTheme = null
+    
+    // 如果是基于PPTX创建，先解析
+    if (createForm.value.createType === 'fromPPTX' && createForm.value.pptxFile) {
+      try {
+        parsing.value = true
+        parsingMessage.value = '正在解析PPTX文件，请稍候...'
+        
+        const { slides, theme } = await parsePPTXToSlides(createForm.value.pptxFile, { 
+          fixedViewport: true  // 固定viewport为1000
+        })
+        initialSlides = slides
+        parsedTheme = theme
+        
+        parsingMessage.value = '解析完成，正在创建文档...'
+      } catch (error) {
+        message.error('PPTX解析失败，请检查文件格式')
+        creating.value = false
+        parsing.value = false
+        return
+      } finally {
+        parsing.value = false
+      }
+    }
+    
     const params: any = {
       name: createForm.value.name.trim(),
       category: createForm.value.category,
+      // 新增业务字段
+      customerName: createForm.value.customerName,
+      product: createForm.value.product,
+      industry: createForm.value.industry,
+      audience: createForm.value.audience,
+      language: createForm.value.language,
+      // 解析后的slides
+      initialSlides,
     }
     
     if (createForm.value.createType === 'fromDocument') {
@@ -393,13 +543,41 @@ const handleCreate = async () => {
     message.success('文档创建成功')
     await loadDocuments()
     showCreate.value = false
-    // 跳转到PPT编辑器页面，通过 URL 参数加载文档
-    router.push(`/ppt/editor?documentId=${resp.data.id}`)
+    
+    // 准备传递给编辑器的完整数据
+    const documentData = {
+      title: createForm.value.name.trim(),
+      width: 1000,
+      height: 562.5,
+      theme: parsedTheme || {
+        themeColors: ['#5b9bd5', '#ed7d31', '#a5a5a5', '#ffc000', '#4472c4', '#70ad47'],
+        fontColor: '#333',
+        fontName: '',
+        backgroundColor: '#fff',
+      },
+      slides: initialSlides || [{
+        id: `slide_${Date.now()}`,
+        elements: [],
+      }],
+    }
+    
+    // 跳转到PPT编辑器页面，通过Router State传递数据（优化首次加载）
+    router.push({
+      path: '/ppt/editor',
+      query: { documentId: resp.data.id },
+      state: { documentData }
+    })
   } catch (error: any) {
     console.error('[文档管理] 创建文档失败:', error)
     message.error(error?.message || '创建文档失败')
   } finally {
     creating.value = false
+  }
+}
+
+const handlePPTXFileChange = (files: FileList) => {
+  if (files && files.length > 0) {
+    createForm.value.pptxFile = files[0]
   }
 }
 
@@ -778,6 +956,10 @@ onMounted(() => {
 
 .create-form,
 .rename-form {
+  max-height: 70vh;
+  overflow-y: auto;
+  padding-right: 4px;
+
   .dialog-title {
     font-size: 16px;
     font-weight: 700;
@@ -812,6 +994,41 @@ onMounted(() => {
       input {
         accent-color: $themeColor;
       }
+    }
+  }
+
+  .upload-area {
+    border: 2px dashed rgba(15, 23, 42, 0.15);
+    border-radius: $borderRadius;
+    padding: 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: rgba(15, 23, 42, 0.02);
+
+    &:hover {
+      border-color: rgba($color: $themeColor, $alpha: 0.45);
+      background: rgba($color: $themeColor, $alpha: 0.03);
+    }
+
+    .upload-placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      color: rgba(17, 24, 39, 0.55);
+      font-size: 13px;
+
+      .upload-icon {
+        font-size: 32px;
+        opacity: 0.6;
+      }
+    }
+
+    .upload-filename {
+      color: $themeColor;
+      font-size: 13px;
+      font-weight: 500;
     }
   }
 

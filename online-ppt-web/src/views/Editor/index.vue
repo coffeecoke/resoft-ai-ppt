@@ -1,5 +1,12 @@
 <template>
-  <div class="pptist-editor">
+  <!-- 数据加载中的遮罩 -->
+  <div v-if="dataLoading" class="editor-loading">
+    <div class="loading-spinner"></div>
+    <div class="loading-text">{{ loadingMessage }}</div>
+  </div>
+
+  <!-- 编辑器主界面 -->
+  <div v-else class="pptist-editor">
     <EditorHeader class="layout-header" />
     <div class="layout-content">
       <Thumbnails class="layout-content-left" />
@@ -66,6 +73,7 @@ import { useMainStore } from '@/store'
 import useGlobalHotkey from '@/hooks/useGlobalHotkey'
 import usePasteEvent from '@/hooks/usePasteEvent'
 import { useEditorSave } from '@/hooks/useEditorSave'
+import { useEditorDataLoader } from '@/hooks/useEditorDataLoader'
 
 import EditorHeader from './EditorHeader/index.vue'
 import Canvas from './Canvas/index.vue'
@@ -104,6 +112,9 @@ const closeAIPPTDialog = () => mainStore.setAIPPTDialogState(false)
 
 const remarkHeight = ref(40)
 
+// 数据加载
+const { loading: dataLoading, loadingMessage } = useEditorDataLoader()
+
 // 获取预览图生成状态
 const { generatingThumbnails, thumbnailProgress } = useEditorSave()
 
@@ -121,6 +132,36 @@ usePasteEvent()
 </script>
 
 <style lang="scss" scoped>
+.editor-loading {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #f5f5f5;
+  z-index: 9999;
+  gap: 16px;
+
+  .loading-spinner {
+    width: 48px;
+    height: 48px;
+    border: 4px solid rgba(0, 0, 0, 0.1);
+    border-top-color: $themeColor;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  .loading-text {
+    font-size: 14px;
+    color: rgba(0, 0, 0, 0.65);
+  }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 .pptist-editor {
   height: 100%;
 }

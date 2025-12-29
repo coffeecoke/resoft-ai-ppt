@@ -22,9 +22,9 @@ export interface DocumentMetadata {
   lastOpenedAt?: string
   // 业务字段（用于销售管理）
   customerName?: string
-  product?: string
-  industry?: string
-  audience?: string
+  product?: string[]      // 多选
+  industry?: string[]     // 多选
+  audience?: string[]     // 多选
   language?: string
 }
 
@@ -65,9 +65,9 @@ export interface CreateDocumentParams {
   category?: string
   // 业务字段（用于销售管理）
   customerName?: string
-  product?: string
-  industry?: string
-  audience?: string
+  product?: string[]      // 多选
+  industry?: string[]     // 多选
+  audience?: string[]     // 多选
   language?: string
   // 基于PPTX创建时的初始slides
   initialSlides?: any[]

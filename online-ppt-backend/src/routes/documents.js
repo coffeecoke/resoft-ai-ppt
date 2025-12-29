@@ -84,7 +84,19 @@ function getFileSize(filePath) {
 // 创建文档
 router.post('/create', (req, res) => {
   try {
-    const { name, sourceDocumentId, category = 'uncategorized' } = req.body || {}
+    const { 
+      name, 
+      sourceDocumentId, 
+      category = 'uncategorized',
+      // 新增业务字段
+      customerName,
+      product,
+      industry,
+      audience,
+      language,
+      // 基于PPTX创建时的初始slides
+      initialSlides,
+    } = req.body || {}
 
     if (!name || typeof name !== 'string') {
       return res.status(400).json({ success: false, error: '文档名称不能为空' })
@@ -97,8 +109,36 @@ router.post('/create', (req, res) => {
 
     let documentData = null
 
+    // 如果提供了 initialSlides（基于PPTX创建），使用解析后的slides
+    if (initialSlides && Array.isArray(initialSlides) && initialSlides.length > 0) {
+      const defaultTheme = {
+        themeColors: ['#5b9bd5', '#ed7d31', '#a5a5a5', '#ffc000', '#4472c4', '#70ad47'],
+        fontColor: '#333',
+        fontName: '',
+        backgroundColor: '#fff',
+        shadow: {
+          h: 3,
+          v: 3,
+          blur: 2,
+          color: '#808080',
+        },
+        outline: {
+          width: 2,
+          color: '#525252',
+          style: 'solid',
+        },
+      }
+
+      documentData = {
+        title: name,
+        width: 1000,
+        height: 562.5,
+        theme: defaultTheme,
+        slides: initialSlides,
+      }
+    }
     // 如果提供了 sourceDocumentId，从源文档复制数据
-    if (sourceDocumentId) {
+    else if (sourceDocumentId) {
       const sourceFile = path.join(DOCUMENTS_DIR, `${sourceDocumentId}.json`)
       if (fs.existsSync(sourceFile)) {
         try {
@@ -117,7 +157,7 @@ router.post('/create', (req, res) => {
       }
     }
 
-    // 如果没有源文档，创建空白文档（1页空白）
+    // 如果没有源文档和initialSlides，创建空白文档（1页空白）
     if (!documentData) {
       const defaultTheme = {
         themeColors: ['#5b9bd5', '#ed7d31', '#a5a5a5', '#ffc000', '#4472c4', '#70ad47'],
@@ -181,12 +221,19 @@ router.post('/create', (req, res) => {
       fileSize,
       createdAt: now,
       updatedAt: now,
+    // 新增业务字段
+    customerName: customerName || undefined,
+    product: (product && product.length > 0) ? product : undefined,      // 多选数组
+    industry: (industry && industry.length > 0) ? industry : undefined,  // 多选数组
+    audience: (audience && audience.length > 0) ? audience : undefined,  // 多选数组
+    language: language || undefined,
     }
 
     indexList.push(meta)
     writeIndex(indexList)
 
-    console.log(`[文档] 新建文档: ${id} - ${name}${sourceDocumentId ? ` (基于: ${sourceDocumentId})` : ''}`)
+    const creationType = initialSlides ? '基于PPTX' : sourceDocumentId ? `基于: ${sourceDocumentId}` : '空白'
+    console.log(`[文档] 新建文档: ${id} - ${name} (${creationType})`)
 
     res.json({
       success: true,
