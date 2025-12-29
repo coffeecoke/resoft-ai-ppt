@@ -1,0 +1,167 @@
+---
+alwaysApply: true
+---
+
+# Vue3 + TypeScript 前端开发规范
+
+## 核心原则
+
+1. **单文件代码量限制**：单个 Vue 文件不超过 300 行，超过则必须拆分
+2. **数据配置分离**：禁止硬编码数据，所有数据提取到 `configs/` 目录
+3. **业务逻辑封装**：复杂逻辑必须封装成 composable 函数
+4. **组件职责单一**：一个组件只负责一个功能模块
+
+## 文件组织规范
+
+### 配置文件管理
+- 所有 Mock 数据放在 `src/configs/xxxData.ts`
+- 所有常量配置放在 `src/configs/xxxConstants.ts`
+- 使用工厂函数生成重复数据，如 `createPptList(count = 12)`
+- 统一导出为对象：`export const salesData = { ... }`
+
+### Composable 函数规范
+- 路径：`src/composables/useXxx.ts` 或 `src/views/模块/composables/useXxx.ts`
+- 命名：必须以 `use` 开头，如 `useProductContent`, `useFilters`
+- 返回：必须返回对象，包含状态、方法、计算属性
+- 示例结构：
+export function useProductContent() {
+  const state = ref('')
+  const computedValue = computed(() => state.value)
+  const method = () => { /* logic */ }
+  
+  return {
+    state,
+    computedValue,
+    method
+  }
+}### 组件拆分规范
+- 容器组件（如 Home.vue）：只负责组合子组件，使用 provide/inject 传递数据
+- 展示组件：专注于 UI 渲染，通过 props 接收数据，通过 emit 触发事件
+- 对话框组件：独立封装，使用 `v-model:visible` 控制显示
+- 拆分标准：
+  - 超过 200 行考虑拆分
+  - 重复代码 > 3 次必须提取组件
+  - 不同业务模块必须拆分
+
+## 代码规范细则
+
+### 条件渲染优化
+❌ 禁止：复杂条件直接写在 `v-if` 中
+<div v-if="activeNav === 'recommend' && activeDashboardTab === 'products' && !activeProduct && ['ppt', 'video'].includes(activeTab)">✅ 必须：使用计算属性，添加语义化注释
+<div v-if="showContentGrid">
+
+<script setup>
+const showContentGrid = computed(() => {
+  return activeNav.value === 'recommend'           // ① 在推荐页
+    && activeDashboardTab.value === 'products'     // ② 在产品标签
+    && !activeProduct.value                        // ③ 未选中产品
+    && ['ppt', 'video'].includes(activeTab.value)  // ④ 符合的tab
+})
+</script>### 数据管理规范
+❌ 禁止：组件内硬编码数据
+const products = [
+  { id: 1, name: '一表通' },
+  { id: 2, name: '1104' }
+]✅ 必须：提取到配置文件
+// configs/salesData.ts
+export const createProductList = () => [
+  { id: 1, name: '一表通' },
+  { id: 2, name: '1104' }
+]
+
+// 组件中
+import { salesData } from '@/configs/salesData'
+const products = ref(salesData.productList)### 业务逻辑封装
+❌ 禁止：在组件中直接编写复杂业务逻辑（超过 20 行）
+<script setup>
+function selectProduct(name) {
+  // 50+ 行业务逻辑...
+}
+</script>✅ 必须：封装成 composable
+// composables/useProductContent.ts
+export function useProductContent() {
+  const selectProduct = (name: string) => {
+    // 业务逻辑
+  }
+  return { selectProduct }
+}
+
+// 组件中
+const { selectProduct } = useProductContent()### Service 层规范
+- API 调用必须封装在 `src/services/xxxService.ts`
+- 初期可返回 Mock 数据，后续替换为真实 API
+- 命名规范：`getXxx`, `createXxx`, `updateXxx`, `deleteXxx`
+// services/salesService.ts
+export async function getPptList() {
+  // TODO: 替换为真实 API
+  return salesData.pptList
+}## 命名规范
+
+- **组件文件**：大驼峰，如 `ProductDetailView.vue`
+- **Composable**：小驼峰 + use 前缀，如 `useProductContent.ts`
+- **配置文件**：小驼峰 + 后缀，如 `salesData.ts`, `salesConstants.ts`
+- **常量导出**：大写+下划线，如 `export const PRODUCT_OPTIONS = []`
+- **函数导出**：小驼峰，如 `export const createPptList = () => []`
+
+## 性能优化规范
+
+- 列表渲染必须添加唯一 `:key`
+- 大列表使用虚拟滚动或分页
+- 图片必须添加 `loading="lazy"`
+- 计算属性避免复杂计算，必要时使用 `watch` + 缓存
+
+## 类型安全规范
+
+- 所有 props 必须定义类型
+- Composable 函数返回值必须明确类型
+- 避免使用 `any`，使用 `unknown` 或具体类型
+
+## 注释规范
+
+- 配置文件顶部必须添加说明注释
+- Composable 必须有 JSDoc 注释说明用途
+- 复杂业务逻辑必须添加行内注释
+- 条件判断必须添加语义化注释（参考上方示例）
+
+## 重构检查清单
+
+在编写代码时，自动检查：
+1. [ ] 文件是否超过 300 行？
+2. [ ] 是否有硬编码数据？
+3. [ ] 业务逻辑是否可提取为 composable？
+4. [ ] 条件判断是否过于复杂？
+5. [ ] 组件职责是否单一？
+6. [ ] 是否便于后续对接真实 API？
+
+## AI 辅助开发指令
+
+当用户要求重构或新建功能时：
+1. 首先评估代码量，建议拆分方案
+2. 识别硬编码数据，建议提取到配置文件
+3. 识别复杂业务逻辑，建议封装 composable
+4. 优化复杂的 v-if 条件为计算属性
+5. 提供清晰的文件组织建议
+
+当用户要求生成接口文档时：
+1. 严格遵循 `接口文档规范.mdc` 的混合方案标准模板
+2. 按子模块分组，相关接口（10+个）放在同一文件
+3. 自动保存到 `docs/api/[模块名]/[子模块名].md`（如：`docs/api/ppt/document.md`）
+4. 生成完整的 TypeScript 类型定义和测试用例
+5. 同步更新模块的 README.md 索引
+
+当涉及 API 调用的功能开发时：
+- 主动询问用户："是否需要同步生成接口文档？"
+
+## 示例项目结构
+src/
+├── views/
+│   └── Sales/
+│       ├── Home.vue (容器组件，200-300行)
+│       ├── components/ (子组件)
+│       └── composables/ (业务逻辑)
+├── configs/ (全局配置)
+│   ├── salesData.ts
+│   └── salesConstants.ts
+├── services/ (API服务)
+│   └── salesService.ts
+└── composables/ (全局 composables)
