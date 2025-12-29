@@ -246,11 +246,42 @@ export async function duplicateDocument(id: string): Promise<{
  * @param id 文档ID
  * @param name 新名称
  */
+// 修改文档基础信息参数
+export interface UpdateDocumentMetadataParams {
+  name: string
+  customerName?: string
+  product?: string[]
+  industry?: string[]
+  audience?: string[]
+  language?: string
+}
+
+/**
+ * 修改文档基础信息（原重命名接口）
+ * 
+ * ✅ 支持更新文档名称和业务字段
+ * 
+ * @param id 文档ID
+ * @param params 更新参数
+ */
+export async function updateDocumentMetadata(id: string, params: UpdateDocumentMetadataParams): Promise<{
+  success: boolean
+  error?: string
+}> {
+  return axios.patch(`${SERVER_URL}/documents/${id}/metadata`, params)
+}
+
+/**
+ * 重命名文档（兼容旧接口）
+ * 
+ * @param id 文档ID
+ * @param name 新名称
+ */
 export async function renameDocument(id: string, name: string): Promise<{
   success: boolean
   error?: string
 }> {
-  return axios.patch(`${SERVER_URL}/documents/${id}/rename`, { name })
+  return updateDocumentMetadata(id, { name })
 }
 
 /**

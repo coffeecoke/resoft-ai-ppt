@@ -83,10 +83,10 @@
               <div class="actions" @click.stop>
                 <button
                   class="action-btn"
-                  @click.stop="handleRename(doc.id, doc.name)"
-                  title="重命名"
+                  @click.stop="openRenameModal(doc)"
+                  title="编辑基础信息"
                 >
-                  重命名
+                  编辑信息
                 </button>
                 <button
                   class="action-btn"
@@ -256,22 +256,67 @@
       </div>
     </Modal>
 
-    <!-- 重命名对话框 -->
+    <!-- 编辑基础信息对话框 -->
     <Modal
       :visible="showRename"
-      :width="400"
+      :width="500"
       @closed="closeRenameModal"
     >
       <div class="rename-form">
-        <div class="dialog-title">重命名文档</div>
+        <div class="dialog-title">编辑基础信息</div>
+        
         <div class="form-item">
           <div class="label">文档名称<span class="required">*</span></div>
           <Input
             v-model:value="renameForm.name"
-            placeholder="请输入新名称"
-            @keyup.enter="handleRenameConfirm"
+            placeholder="请输入文档名称"
           />
         </div>
+
+        <div class="form-item">
+          <div class="label">客户名称</div>
+          <Input
+            v-model:value="renameForm.customerName"
+            placeholder="请输入客户名称"
+          />
+        </div>
+
+        <div class="form-item">
+          <div class="label">产品解决方案</div>
+          <SelectMultiple
+            v-model:value="renameForm.product"
+            :options="productOptions"
+            placeholder="请选择产品解决方案"
+          />
+        </div>
+
+        <div class="form-item">
+          <div class="label">行业</div>
+          <SelectMultiple
+            v-model:value="renameForm.industry"
+            :options="industryOptions"
+            placeholder="请选择行业"
+          />
+        </div>
+
+        <div class="form-item">
+          <div class="label">交流对象</div>
+          <SelectMultiple
+            v-model:value="renameForm.audience"
+            :options="audienceOptions"
+            placeholder="请选择交流对象"
+          />
+        </div>
+
+        <div class="form-item">
+          <div class="label">语言</div>
+          <Select
+            v-model:value="renameForm.language"
+            :options="languageOptions"
+            placeholder="请选择语言"
+          />
+        </div>
+
         <div class="dialog-footer">
           <button class="btn" @click="closeRenameModal">取消</button>
           <button
@@ -279,7 +324,7 @@
             :disabled="!renameForm.name.trim() || renaming"
             @click="handleRenameConfirm"
           >
-            {{ renaming ? '重命名中...' : '确定' }}
+            {{ renaming ? '保存中...' : '确定' }}
           </button>
         </div>
       </div>
@@ -295,8 +340,9 @@ import {
   createDocument,
   deleteDocument,
   duplicateDocument,
-  renameDocument,
+  updateDocumentMetadata,
   type DocumentMetadata,
+  type UpdateDocumentMetadataParams,
 } from '@/services/documentService'
 import { PRODUCTS, INDUSTRIES, AUDIENCES, LANGUAGES } from '@/configs/salesConstants'
 import { parsePPTXToSlides } from '@/utils/pptxParser'
@@ -350,6 +396,11 @@ const createForm = ref({
 
 const renameForm = ref({
   name: '',
+  customerName: '',
+  product: [] as string[],
+  industry: [] as string[],
+  audience: [] as string[],
+  language: '',
 })
 
 const categoryOptions = [
@@ -623,9 +674,17 @@ const handleDuplicate = async (id: string) => {
   }
 }
 
-const handleRename = (id: string, currentName: string) => {
-  renamingId.value = id
-  renameForm.value.name = currentName
+// 打开编辑基础信息对话框
+const openRenameModal = (doc: DocumentMetadata) => {
+  renamingId.value = doc.id
+  renameForm.value = {
+    name: doc.name,
+    customerName: doc.customerName || '',
+    product: doc.product || [],
+    industry: doc.industry || [],
+    audience: doc.audience || [],
+    language: doc.language || '',
+  }
   showRename.value = true
 }
 
@@ -633,9 +692,17 @@ const closeRenameModal = () => {
   if (renaming.value) return
   showRename.value = false
   renamingId.value = ''
-  renameForm.value.name = ''
+  renameForm.value = {
+    name: '',
+    customerName: '',
+    product: [],
+    industry: [],
+    audience: [],
+    language: '',
+  }
 }
 
+// 确认修改基础信息
 const handleRenameConfirm = async () => {
   if (!renameForm.value.name.trim() || !renamingId.value) {
     message.error('请输入文档名称')
@@ -644,16 +711,25 @@ const handleRenameConfirm = async () => {
 
   try {
     renaming.value = true
-    const resp = await renameDocument(renamingId.value, renameForm.value.name.trim())
-    if (!resp?.success) {
-      throw new Error(resp?.error || '重命名文档失败')
+    const params: UpdateDocumentMetadataParams = {
+      name: renameForm.value.name.trim(),
+      customerName: renameForm.value.customerName,
+      product: renameForm.value.product,
+      industry: renameForm.value.industry,
+      audience: renameForm.value.audience,
+      language: renameForm.value.language,
     }
-    message.success('文档已重命名')
+    
+    const resp = await updateDocumentMetadata(renamingId.value, params)
+    if (!resp?.success) {
+      throw new Error(resp?.error || '修改基础信息失败')
+    }
+    message.success('基础信息已更新')
     await loadDocuments()
     closeRenameModal()
   } catch (error: any) {
-    console.error('[文档管理] 重命名文档失败:', error)
-    message.error(error?.message || '重命名文档失败')
+    console.error('[文档管理] 修改基础信息失败:', error)
+    message.error(error?.message || '修改基础信息失败')
   } finally {
     renaming.value = false
   }

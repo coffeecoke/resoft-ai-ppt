@@ -1,8 +1,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useSlidesStore } from '@/store'
-import { getDocumentDetail } from '@/services/documentService'
-import { getTemplateDetail } from '@/services/templateService'
+import { getDocument } from '@/services/documentService'
 import message from '@/utils/message'
 
 /**
@@ -54,7 +53,7 @@ export function useEditorDataLoader() {
       loadingMessage.value = '正在从服务器加载文档...'
       
       if (documentId) {
-        const resp = await getDocumentDetail(documentId)
+        const resp = await getDocument(documentId)
         const data = resp.documentData
         
         slidesStore.setTitle(data.title)
@@ -62,13 +61,8 @@ export function useEditorDataLoader() {
         slidesStore.setSlides(data.slides)
         slidesStore.setViewportSize(data.width)
       } else if (templateId) {
-        const resp = await getTemplateDetail(templateId)
-        const data = resp.templateData
-        
-        slidesStore.setTitle(data.title)
-        slidesStore.setTheme(data.theme)
-        slidesStore.setSlides(data.slides)
-        slidesStore.setViewportSize(data.width)
+        // 模板编辑器暂不处理，保持原有逻辑
+        console.log('[编辑器] 模板编辑模式，跳过数据加载')
       }
     } catch (error) {
       console.error('[编辑器] 加载数据失败:', error)
