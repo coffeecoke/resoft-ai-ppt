@@ -65,7 +65,7 @@ const handleNav = (key) => {
 }
 
 const goToProfile = () => {
-  router.push('/profile')
+  router.push('/sales/profile')
 }
 
 const openPendingDrawer = () => {
