@@ -89,13 +89,11 @@
     </div>
     
     <!-- PPT卡片网格 -->
-    <div class="ppt-summary-grid">
-      <PptGrid
-        :items="filteredPPT"
-        :showBadge="true"
-        @item-click="handlePptClick"
-      />
-    </div>
+    <PptGrid
+      :items="filteredPPT"
+      :showBadge="true"
+      @item-click="handlePptClick"
+    />
   </section>
 </template>
 

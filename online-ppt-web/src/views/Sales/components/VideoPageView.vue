@@ -34,12 +34,10 @@
     </div>
     
     <!-- 视频卡片网格 -->
-    <div class="ppt-summary-grid">
-      <VideoGrid
-        :items="filteredVideos"
-        @video-click="handleVideoClick"
-      />
-    </div>
+    <VideoGrid
+      :items="filteredVideos"
+      @video-click="handleVideoClick"
+    />
   </section>
 </template>
 

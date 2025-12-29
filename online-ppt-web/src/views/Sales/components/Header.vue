@@ -58,7 +58,7 @@ const activeNav = computed(() => {
 
 const handleNav = (key) => {
   if (key === 'qa') {
-    router.push('/qa')
+    router.push('/sales/qa')
   } else if (key === 'ppt' || key === 'video' || key === 'materials' || key === 'recommend' || key === 'tender') {
     router.push({ path: '/', query: { nav: key } })
   }
