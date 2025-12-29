@@ -586,10 +586,11 @@ router.post('/:id/duplicate', (req, res) => {
 })
 
 // 重命名文档
-router.patch('/:id/rename', (req, res) => {
+// 修改文档基础信息（原重命名接口）
+router.patch('/:id/metadata', (req, res) => {
   try {
     const { id } = req.params
-    const { name } = req.body || {}
+    const { name, customerName, product, industry, audience, language } = req.body || {}
 
     if (!name || typeof name !== 'string') {
       return res.status(400).json({ success: false, error: '文档名称不能为空' })
@@ -614,16 +615,34 @@ router.patch('/:id/rename', (req, res) => {
       }
     }
 
-    // 更新索引中的名称
+    // 更新索引中的元数据
     const now = new Date().toISOString()
     indexList[metaIndex] = {
       ...indexList[metaIndex],
       name,
       updatedAt: now,
     }
+
+    // 更新业务字段（只有传了才更新，支持清空）
+    if (customerName !== undefined) {
+      indexList[metaIndex].customerName = customerName || undefined
+    }
+    if (product !== undefined) {
+      indexList[metaIndex].product = (Array.isArray(product) && product.length > 0) ? product : undefined
+    }
+    if (industry !== undefined) {
+      indexList[metaIndex].industry = (Array.isArray(industry) && industry.length > 0) ? industry : undefined
+    }
+    if (audience !== undefined) {
+      indexList[metaIndex].audience = (Array.isArray(audience) && audience.length > 0) ? audience : undefined
+    }
+    if (language !== undefined) {
+      indexList[metaIndex].language = language || undefined
+    }
+
     writeIndex(indexList)
 
-    console.log(`[文档] 重命名文档: ${id} -> ${name}`)
+    console.log(`[文档] 修改基础信息: ${id} -> ${name}`)
 
     res.json({
       success: true,
@@ -634,9 +653,19 @@ router.patch('/:id/rename', (req, res) => {
       },
     })
   } catch (error) {
-    console.error('[文档] 重命名文档失败:', error)
-    res.status(500).json({ success: false, error: '重命名文档失败' })
+    console.error('[文档] 修改基础信息失败:', error)
+    res.status(500).json({ success: false, error: '修改基础信息失败' })
   }
+})
+
+// 保留旧接口以兼容（重定向到新接口）
+router.patch('/:id/rename', (req, res) => {
+  const { id } = req.params
+  const { name } = req.body || {}
+  
+  // 重定向到新的 metadata 接口
+  req.body = { name }
+  return router.handle({ ...req, url: `/${id}/metadata`, method: 'PATCH' }, res)
 })
 
 export default router
