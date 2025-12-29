@@ -29,9 +29,9 @@ const handleSearch = () => {
   if (!q) return
   
   if (t === '产品') {
-    router.push({ path: '/sales/product', query: { q } })
+    router.push({ path: '/product', query: { q } })
   } else {
-    router.push({ path: '/sales/home', query: { type: t, q } })
+    router.push({ path: '/search', query: { type: t, q } })
   }
 }
 
@@ -43,7 +43,4 @@ defineExpose({
 
 <style scoped>
 </style>
-
-
-
 

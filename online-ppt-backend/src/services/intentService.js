@@ -4,8 +4,8 @@
  * 用于分析用户输入，判断是PPT编辑操作还是普通对话
  */
 
-// 续写话术识别正则（优先级最高）
-const CONTINUE_WRITE_PATTERN = /^(续写一页[：:]|插入的PPT主要内容是[：:])\s*(.+)$/
+// 续写话术识别正则（优先级最高，支持多行内容）
+const CONTINUE_WRITE_PATTERN = /^(续写一页[：:]|插入的PPT主要内容是[：:])\s*(.+)$/s
 
 // PPT编辑意图模式
 const PPT_EDIT_PATTERNS = [

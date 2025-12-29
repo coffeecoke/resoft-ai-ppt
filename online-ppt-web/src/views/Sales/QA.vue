@@ -48,8 +48,8 @@
 
 <script setup>
 import { ref, reactive } from 'vue'
-import Header from '@/components/Sales/Header.vue'
-import SearchBar from '@/components/Sales/SearchBar.vue'
+import Header from './components/Header.vue'
+import SearchBar from './components/SearchBar.vue'
 const counts = reactive({ all: 46, product: 15, biz: 19, data: 21 })
 
 const list = reactive([

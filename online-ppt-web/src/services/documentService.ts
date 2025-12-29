@@ -20,6 +20,12 @@ export interface DocumentMetadata {
   createdAt: string
   updatedAt: string
   lastOpenedAt?: string
+  // 业务字段（用于销售管理）
+  customerName?: string
+  product?: string
+  industry?: string
+  audience?: string
+  language?: string
 }
 
 // 文档完整数据接口
@@ -57,6 +63,14 @@ export interface CreateDocumentParams {
   name: string
   sourceDocumentId?: string
   category?: string
+  // 业务字段（用于销售管理）
+  customerName?: string
+  product?: string
+  industry?: string
+  audience?: string
+  language?: string
+  // 基于PPTX创建时的初始slides
+  initialSlides?: any[]
 }
 
 // 更新文档参数
@@ -173,6 +187,14 @@ export async function createDocument(params: CreateDocumentParams): Promise<{
     name: params.name,
     sourceDocumentId: params.sourceDocumentId,
     category: params.category || 'uncategorized',
+    // 业务字段
+    customerName: params.customerName,
+    product: params.product,
+    industry: params.industry,
+    audience: params.audience,
+    language: params.language,
+    // 基于PPTX创建时的初始slides
+    initialSlides: params.initialSlides,
   })
 }
 

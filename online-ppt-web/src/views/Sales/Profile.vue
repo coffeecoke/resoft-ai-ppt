@@ -224,7 +224,7 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { VideoPlay, MagicStick } from '@element-plus/icons-vue'
-import Header from '@/components/Sales/Header.vue'
+import Header from './components/Header.vue'
 const router = useRouter()
 
 const activeTab = ref('sessions')

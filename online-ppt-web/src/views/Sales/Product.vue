@@ -485,8 +485,8 @@
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { VideoPlay, Filter, MagicStick, Download } from '@element-plus/icons-vue'
-import Header from '@/components/Sales/Header.vue'
-import SearchBar from '@/components/Sales/SearchBar.vue'
+import Header from './components/Header.vue'
+import SearchBar from './components/SearchBar.vue'
 const route = useRoute()
 const router = useRouter()
 
