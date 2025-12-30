@@ -12,6 +12,7 @@ const __dirname = path.dirname(__filename)
 const DATA_DIR = path.join(__dirname, '..', '..', 'data')
 const DOCUMENTS_DIR = path.join(DATA_DIR, 'documents')
 const COVERS_DIR = path.join(DATA_DIR, 'covers')
+const THUMBNAILS_DIR = path.join(DATA_DIR, 'thumbnails')
 const INDEX_FILE = path.join(DATA_DIR, 'document-index.json')
 
 function ensureDirs() {
@@ -224,6 +225,10 @@ router.post('/create', (req, res) => {
       fileSize,
       createdAt: now,
       updatedAt: now,
+      // 缩略图管理字段
+      thumbnailIndexPath: `thumbnails/${id}.json`,
+      thumbnailCount: 0,
+      thumbnailsLastUpdated: null,
     // 新增业务字段
     customerName: customerName || undefined,
     product: (product && product.length > 0) ? product : undefined,      // 多选数组
@@ -476,6 +481,13 @@ router.delete('/:id', (req, res) => {
       const documentFile = path.join(DOCUMENTS_DIR, `${id}.json`)
       if (fs.existsSync(documentFile)) {
         fs.unlinkSync(documentFile)
+      }
+
+      // 删除缩略图索引文件
+      const thumbnailIndexFile = path.join(THUMBNAILS_DIR, `${id}.json`)
+      if (fs.existsSync(thumbnailIndexFile)) {
+        fs.unlinkSync(thumbnailIndexFile)
+        console.log(`[文档] 删除缩略图索引: ${id}`)
       }
 
       // 从索引中移除

@@ -13,7 +13,7 @@ const DATA_DIR = path.join(__dirname, '..', '..', 'data')
 const DOCUMENTS_DIR = path.join(DATA_DIR, 'documents')
 const SNAPSHOTS_DIR = path.join(DATA_DIR, 'snapshots')
 const THUMBNAILS_DIR = path.join(DATA_DIR, 'thumbnails')
-const THUMBNAILS_INDEX_FILE = path.join(THUMBNAILS_DIR, 'index.json')
+const INDEX_FILE = path.join(DATA_DIR, 'document-index.json')
 
 // 确保目录存在
 function ensureDirs() {
@@ -21,32 +21,74 @@ function ensureDirs() {
   if (!fs.existsSync(THUMBNAILS_DIR)) fs.mkdirSync(THUMBNAILS_DIR, { recursive: true })
 }
 
-// 读取预览图索引
-function readThumbnailIndex() {
+// 读取文档的预览图索引
+function readDocumentThumbnailIndex(documentId) {
   try {
     ensureDirs()
     
-    if (!fs.existsSync(THUMBNAILS_INDEX_FILE)) {
+    const indexPath = path.join(THUMBNAILS_DIR, `${documentId}.json`)
+    
+    if (!fs.existsSync(indexPath)) {
       const emptyIndex = {
+        documentId,
+        documentTitle: '',
         lastUpdated: new Date().toISOString(),
         thumbnails: []
       }
-      fs.writeFileSync(THUMBNAILS_INDEX_FILE, JSON.stringify(emptyIndex, null, 2), 'utf-8')
+      fs.writeFileSync(indexPath, JSON.stringify(emptyIndex, null, 2), 'utf-8')
       return emptyIndex
     }
 
-    const content = fs.readFileSync(THUMBNAILS_INDEX_FILE, 'utf-8')
+    const content = fs.readFileSync(indexPath, 'utf-8')
     return JSON.parse(content)
   } catch (error) {
-    console.error('[预览图] 读取索引失败:', error)
-    return { lastUpdated: new Date().toISOString(), thumbnails: [] }
+    console.error(`[预览图] 读取文档 ${documentId} 索引失败:`, error)
+    return { 
+      documentId,
+      documentTitle: '',
+      lastUpdated: new Date().toISOString(), 
+      thumbnails: [] 
+    }
   }
 }
 
-// 写入预览图索引
-function writeThumbnailIndex(indexData) {
+// 写入文档的预览图索引
+function writeDocumentThumbnailIndex(documentId, indexData) {
   ensureDirs()
-  fs.writeFileSync(THUMBNAILS_INDEX_FILE, JSON.stringify(indexData, null, 2), 'utf-8')
+  const indexPath = path.join(THUMBNAILS_DIR, `${documentId}.json`)
+  fs.writeFileSync(indexPath, JSON.stringify(indexData, null, 2), 'utf-8')
+}
+
+// 读取主表索引
+function readMainIndex() {
+  try {
+    if (!fs.existsSync(INDEX_FILE)) {
+      return []
+    }
+    const content = fs.readFileSync(INDEX_FILE, 'utf-8')
+    return JSON.parse(content)
+  } catch (error) {
+    console.error('[预览图] 读取主表失败:', error)
+    return []
+  }
+}
+
+// 写入主表索引
+function writeMainIndex(indexList) {
+  fs.writeFileSync(INDEX_FILE, JSON.stringify(indexList, null, 2), 'utf-8')
+}
+
+// 更新主表中的缩略图信息
+function updateMainIndexThumbnailInfo(documentId, thumbnailCount) {
+  const mainIndex = readMainIndex()
+  const docIndex = mainIndex.find(d => d.id === documentId)
+  
+  if (docIndex) {
+    docIndex.thumbnailIndexPath = `thumbnails/${documentId}.json`
+    docIndex.thumbnailCount = thumbnailCount
+    docIndex.thumbnailsLastUpdated = new Date().toISOString()
+    writeMainIndex(mainIndex)
+  }
 }
 
 // 配置 multer 文件上传
@@ -128,8 +170,10 @@ router.post('/upload', upload.single('thumbnail'), async (req, res) => {
           fs.writeFileSync(docPath, JSON.stringify(docData, null, 2), 'utf-8')
         }
 
-        // 更新预览图索引
-        const indexData = readThumbnailIndex()
+        // 更新文档的预览图索引
+        const indexData = readDocumentThumbnailIndex(documentId)
+        indexData.documentTitle = docData.title || '未命名文档'
+        
         const thumbnailId = `thumb_${documentId}_${slideId}`
         
         // 查找是否已存在
@@ -137,8 +181,6 @@ router.post('/upload', upload.single('thumbnail'), async (req, res) => {
         
         const thumbnailMeta = {
           id: thumbnailId,
-          documentId,
-          documentTitle: docData.title || '未命名文档',
           slideId,
           slideIndex: docData.slides.findIndex(s => s.id === slideId),
           url: thumbnailUrl,
@@ -163,7 +205,10 @@ router.post('/upload', upload.single('thumbnail'), async (req, res) => {
         }
 
         indexData.lastUpdated = new Date().toISOString()
-        writeThumbnailIndex(indexData)
+        writeDocumentThumbnailIndex(documentId, indexData)
+        
+        // 更新主表中的缩略图信息
+        updateMainIndexThumbnailInfo(documentId, indexData.thumbnails.length)
 
         console.log(`[预览图] 上传成功: ${documentId}/${slideId}`)
 
@@ -194,17 +239,44 @@ router.get('/', async (req, res) => {
   try {
     const { documentId, limit = 100, offset = 0 } = req.query
     
-    const indexData = readThumbnailIndex()
-    let thumbnails = indexData.thumbnails || []
+    let allThumbnails = []
+    let lastUpdated = null
     
-    // 按文档 ID 筛选
     if (documentId) {
-      thumbnails = thumbnails.filter(t => t.documentId === documentId)
+      // 查询特定文档的缩略图
+      const indexData = readDocumentThumbnailIndex(documentId)
+      allThumbnails = indexData.thumbnails.map(t => ({
+        ...t,
+        documentId: indexData.documentId,
+        documentTitle: indexData.documentTitle
+      }))
+      lastUpdated = indexData.lastUpdated
+    } else {
+      // 查询所有文档的缩略图
+      const files = fs.readdirSync(THUMBNAILS_DIR)
+      for (const file of files) {
+        if (!file.endsWith('.json')) continue
+        
+        const filePath = path.join(THUMBNAILS_DIR, file)
+        const content = fs.readFileSync(filePath, 'utf-8')
+        const indexData = JSON.parse(content)
+        
+        const thumbnails = indexData.thumbnails.map(t => ({
+          ...t,
+          documentId: indexData.documentId,
+          documentTitle: indexData.documentTitle
+        }))
+        allThumbnails.push(...thumbnails)
+        
+        if (!lastUpdated || indexData.lastUpdated > lastUpdated) {
+          lastUpdated = indexData.lastUpdated
+        }
+      }
     }
     
     // 分页
-    const total = thumbnails.length
-    const paginatedThumbnails = thumbnails.slice(
+    const total = allThumbnails.length
+    const paginatedThumbnails = allThumbnails.slice(
       parseInt(offset), 
       parseInt(offset) + parseInt(limit)
     )
@@ -216,7 +288,7 @@ router.get('/', async (req, res) => {
         limit: parseInt(limit),
         offset: parseInt(offset),
         thumbnails: paginatedThumbnails,
-        lastUpdated: indexData.lastUpdated
+        lastUpdated
       }
     })
   } catch (error) {
@@ -233,7 +305,14 @@ router.get('/:thumbnailId', async (req, res) => {
   try {
     const { thumbnailId } = req.params
     
-    const indexData = readThumbnailIndex()
+    // 从 thumbnailId 中提取 documentId (格式: thumb_document_X_slideId)
+    const match = thumbnailId.match(/^thumb_(document_\d+)_/)
+    if (!match) {
+      return res.status(400).json({ success: false, error: '无效的预览图ID格式' })
+    }
+    
+    const documentId = match[1]
+    const indexData = readDocumentThumbnailIndex(documentId)
     const thumbnail = indexData.thumbnails.find(t => t.id === thumbnailId)
     
     if (!thumbnail) {
@@ -241,7 +320,7 @@ router.get('/:thumbnailId', async (req, res) => {
     }
     
     // 获取原始文档信息（溯源）
-    const docPath = path.join(DOCUMENTS_DIR, `${thumbnail.documentId}.json`)
+    const docPath = path.join(DOCUMENTS_DIR, `${documentId}.json`)
     if (!fs.existsSync(docPath)) {
       return res.status(404).json({ success: false, error: '原始文档不存在' })
     }
@@ -255,10 +334,14 @@ router.get('/:thumbnailId', async (req, res) => {
     res.json({
       success: true,
       data: {
-        thumbnail,
+        thumbnail: {
+          ...thumbnail,
+          documentId: indexData.documentId,
+          documentTitle: indexData.documentTitle
+        },
         source: {
           document: {
-            id: thumbnail.documentId,
+            id: documentId,
             title: docData.title,
             width: docData.width,
             height: docData.height,
@@ -289,17 +372,23 @@ router.get('/document/:documentId', async (req, res) => {
   try {
     const { documentId } = req.params
     
-    const indexData = readThumbnailIndex()
+    const indexData = readDocumentThumbnailIndex(documentId)
     const thumbnails = indexData.thumbnails
-      .filter(t => t.documentId === documentId)
+      .map(t => ({
+        ...t,
+        documentId: indexData.documentId,
+        documentTitle: indexData.documentTitle
+      }))
       .sort((a, b) => a.slideIndex - b.slideIndex)
     
     res.json({
       success: true,
       data: {
         documentId,
+        documentTitle: indexData.documentTitle,
         total: thumbnails.length,
-        thumbnails
+        thumbnails,
+        lastUpdated: indexData.lastUpdated
       }
     })
   } catch (error) {
@@ -309,13 +398,14 @@ router.get('/document/:documentId', async (req, res) => {
 })
 
 /**
- * 重建预览图索引
+ * 重建预览图索引（为每个文档创建独立索引）
  * POST /api/thumbnails/rebuild-index
  */
 router.post('/rebuild-index', async (req, res) => {
   try {
     const files = fs.readdirSync(DOCUMENTS_DIR)
-    const thumbnails = []
+    let totalThumbnails = 0
+    const documentStats = []
     
     // 遍历所有文档
     for (const file of files) {
@@ -326,6 +416,8 @@ router.post('/rebuild-index', async (req, res) => {
       const content = fs.readFileSync(docPath, 'utf-8')
       const docData = JSON.parse(content)
       
+      const thumbnails = []
+      
       // 遍历文档中的所有幻灯片
       docData.slides.forEach((slide, index) => {
         if (slide.thumbnail) {
@@ -335,8 +427,6 @@ router.post('/rebuild-index', async (req, res) => {
           
           thumbnails.push({
             id: `thumb_${documentId}_${slide.id}`,
-            documentId,
-            documentTitle: docData.title,
             slideId: slide.id,
             slideIndex: index,
             url: thumbUrl,
@@ -353,22 +443,38 @@ router.post('/rebuild-index', async (req, res) => {
           })
         }
       })
+      
+      // 保存该文档的索引文件
+      if (thumbnails.length > 0) {
+        const indexData = {
+          documentId,
+          documentTitle: docData.title || '未命名文档',
+          lastUpdated: new Date().toISOString(),
+          thumbnails
+        }
+        
+        writeDocumentThumbnailIndex(documentId, indexData)
+        
+        // 更新主表
+        updateMainIndexThumbnailInfo(documentId, thumbnails.length)
+        
+        totalThumbnails += thumbnails.length
+        documentStats.push({
+          documentId,
+          documentTitle: docData.title,
+          thumbnailCount: thumbnails.length
+        })
+      }
     }
     
-    // 保存索引文件
-    const indexData = {
-      lastUpdated: new Date().toISOString(),
-      thumbnails
-    }
-    
-    writeThumbnailIndex(indexData)
-    
-    console.log(`[预览图] 索引重建成功，共 ${thumbnails.length} 个预览图`)
+    console.log(`[预览图] 索引重建成功，共 ${totalThumbnails} 个预览图，涉及 ${documentStats.length} 个文档`)
     
     res.json({
       success: true,
       data: {
-        total: thumbnails.length,
+        total: totalThumbnails,
+        documentCount: documentStats.length,
+        documents: documentStats,
         message: '索引重建成功'
       }
     })
