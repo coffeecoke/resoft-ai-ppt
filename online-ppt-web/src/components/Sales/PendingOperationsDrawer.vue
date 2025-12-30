@@ -157,6 +157,12 @@ const handleBatchDownload = () => {
 </script>
 
 <style scoped>
+:deep(.el-drawer__header) {
+  margin-bottom: 5px;
+}
+:deep(.el-drawer__body) {
+  padding: 0;
+}
 .drawer-header {
   display: flex;
   align-items: center;
@@ -205,6 +211,32 @@ const handleBatchDownload = () => {
 }
 .batch-actions .el-button {
   flex: 1;
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 12px;
+  line-height: 1.25rem;
+  font-weight: 700;
+  box-shadow: 0 8px 16px rgba(59, 130, 246, 0.3);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.batch-actions .el-button:not(.el-button--primary):not(.el-button--success) {
+  background: #ffffff;
+  color: #666;
+  box-shadow: 0 8px 16px rgba(102, 102, 102, 0.2);
+}
+.batch-actions .el-button--primary {
+  background: #2563eb;
+  color: #fff;
+}
+.batch-actions .el-button--success {
+  background: #10b981;
+  color: #fff;
+  box-shadow: 0 8px 16px rgba(16, 185, 129, 0.3);
 }
 .pending-list {
   padding: 12px;
@@ -216,14 +248,13 @@ const handleBatchDownload = () => {
   gap: 12px;
   padding: 12px;
   background: #fff;
-  border: 1px solid #e5e7eb;
+  border: 0;
   border-radius: 8px;
   margin-bottom: 12px;
   align-items: center;
   transition: all 0.2s;
 }
 .pending-item:hover {
-  border-color: #2563eb;
   box-shadow: 0 2px 8px rgba(37, 99, 235, 0.1);
 }
 .pending-item:last-child {
