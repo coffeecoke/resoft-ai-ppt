@@ -580,6 +580,8 @@ const handleCreate = async () => {
       language: createForm.value.language,
       // 解析后的slides
       initialSlides,
+      // 明确标记为公版
+      tag: 'public',
     }
     
     if (createForm.value.createType === 'fromDocument') {

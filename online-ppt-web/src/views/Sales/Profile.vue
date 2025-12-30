@@ -253,18 +253,157 @@
       :type="currentPpt.tag === 'public' ? 'public' : 'practical'"
       :slides="currentPptSlides"
     />
+    
+    <!-- PPT回传对话框 -->
+    <el-dialog
+      v-model="uploadDialogVisible"
+      title="回传PPT"
+      width="600px"
+      :close-on-click-modal="false"
+    >
+      <el-form
+        ref="uploadFormRef"
+        :model="uploadForm"
+        :rules="uploadRules"
+        label-width="120px"
+        label-position="right"
+      >
+        <el-form-item label="PPT标题" prop="name">
+          <el-input
+            v-model="uploadForm.name"
+            placeholder="请输入PPT标题"
+            clearable
+          />
+        </el-form-item>
+
+        <el-form-item label="上传文件" required>
+          <el-upload
+            ref="uploadRef"
+            :auto-upload="false"
+            :limit="1"
+            :on-change="handleFileChange"
+            :on-remove="handleFileRemove"
+            accept=".pptx"
+            drag
+          >
+            <el-icon class="el-icon--upload"><Upload /></el-icon>
+            <div class="el-upload__text">
+              将PPTX文件拖到此处，或<em>点击上传</em>
+            </div>
+            <template #tip>
+              <div class="el-upload__tip">
+                仅支持 .pptx 格式文件
+              </div>
+            </template>
+          </el-upload>
+        </el-form-item>
+
+        <el-form-item label="客户名称">
+          <el-input
+            v-model="uploadForm.customerName"
+            placeholder="请输入客户名称"
+            clearable
+          />
+        </el-form-item>
+
+        <el-form-item label="产品解决方案">
+          <el-select
+            v-model="uploadForm.product"
+            multiple
+            placeholder="请选择产品"
+            style="width: 100%"
+            clearable
+          >
+            <el-option
+              v-for="item in productOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
+            />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="行业">
+          <el-select
+            v-model="uploadForm.industry"
+            multiple
+            placeholder="请选择行业"
+            style="width: 100%"
+            clearable
+          >
+            <el-option
+              v-for="item in industryOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
+            />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="交流对象">
+          <el-select
+            v-model="uploadForm.audience"
+            multiple
+            placeholder="请选择交流对象"
+            style="width: 100%"
+            clearable
+          >
+            <el-option
+              v-for="item in audienceOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
+            />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="语言">
+          <el-select
+            v-model="uploadForm.language"
+            placeholder="请选择语言"
+            style="width: 100%"
+            clearable
+          >
+            <el-option
+              v-for="item in languageOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="closeUploadDialog">取消</el-button>
+          <el-button
+            type="primary"
+            :loading="uploading"
+            :disabled="!uploadForm.file"
+            @click="handleUploadConfirm"
+          >
+            {{ uploading ? (parsingMessage || '上传中...') : '确定' }}
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 
-import { ref, computed } from 'vue'
+import { ref, computed, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { VideoPlay, MagicStick, Upload } from '@element-plus/icons-vue'
+import { VideoPlay, MagicStick, Upload, UploadFilled } from '@element-plus/icons-vue'
 import Header from './components/Header.vue'
 import PptDialog from './components/PptDialog.vue'
 import { salesData } from '@/configs/salesData'
+import { uploadSalesPpt } from '@/services/salesService'
+import type { UploadSalesPptParams } from '@/services/salesService'
+import { parsePPTXToSlides } from '@/utils/pptxParser'
+import { PRODUCTS, INDUSTRIES, AUDIENCES, LANGUAGES } from '@/configs/salesConstants'
 const router = useRouter()
 
 const activeTab = ref('ppts')
@@ -603,10 +742,116 @@ const reDownload = (download) => {
   console.log('重新下载:', download)
 }
 
+// ========== PPT回传功能 ==========
+
+// 对话框状态
+const uploadDialogVisible = ref(false)
+const uploading = ref(false)
+const parsingMessage = ref('')
+const uploadFormRef = ref()
+const uploadRef = ref()
+
+// 表单数据
+const uploadForm = reactive({
+  name: '',
+  file: null as File | null,
+  customerName: '',
+  product: [] as string[],
+  industry: [] as string[],
+  audience: [] as string[],
+  language: ''
+})
+
+// 表单验证规则
+const uploadRules = {
+  name: [
+    { required: true, message: '请输入PPT标题', trigger: 'blur' }
+  ]
+}
+
+// 选项数据
+const productOptions = PRODUCTS
+const industryOptions = INDUSTRIES
+const audienceOptions = AUDIENCES
+const languageOptions = LANGUAGES
+
+// 文件变化处理
+const handleFileChange = (file: any) => {
+  if (file.raw) {
+    uploadForm.file = file.raw
+    // 自动填充标题（去掉.pptx后缀）
+    if (!uploadForm.name) {
+      uploadForm.name = file.name.replace(/\.pptx$/i, '')
+    }
+  }
+}
+
+// 文件移除处理
+const handleFileRemove = () => {
+  uploadForm.file = null
+}
+
+// 关闭对话框
+const closeUploadDialog = () => {
+  uploadDialogVisible.value = false
+  uploadFormRef.value?.resetFields()
+  uploadRef.value?.clearFiles()
+  uploadForm.file = null
+  parsingMessage.value = ''
+}
+
+// 确认上传
+const handleUploadConfirm = async () => {
+  if (!uploadForm.file) {
+    ElMessage.error('请先上传PPTX文件')
+    return
+  }
+
+  // 表单验证
+  const valid = await uploadFormRef.value?.validate().catch(() => false)
+  if (!valid) return
+
+  try {
+    uploading.value = true
+
+    // 解析PPTX
+    parsingMessage.value = '正在解析PPTX文件...'
+    const { slides } = await parsePPTXToSlides(uploadForm.file, {
+      fixedViewport: true
+    })
+
+    parsingMessage.value = '解析完成，正在保存...'
+
+    // 调用Sales专用的上传接口
+    const params: UploadSalesPptParams = {
+      name: uploadForm.name.trim(),
+      customerName: uploadForm.customerName,
+      product: uploadForm.product,
+      industry: uploadForm.industry,
+      audience: uploadForm.audience,
+      language: uploadForm.language,
+      slides
+    }
+
+    const resp = await uploadSalesPpt(params)
+    if (!resp?.success) {
+      throw new Error(resp?.error || '上传失败')
+    }
+
+    ElMessage.success('PPT回传成功，文档已保存为草稿状态，可在"我的文档"页面查看和发布')
+    closeUploadDialog()
+  } catch (error: any) {
+    console.error('PPT回传失败:', error)
+    ElMessage.error(error?.message || 'PPT回传失败')
+  } finally {
+    uploading.value = false
+    parsingMessage.value = ''
+  }
+}
+
 // 回传PPT
 const handleUploadPpt = () => {
-  // TODO: 实现回传PPT的逻辑
-  ElMessage.info('回传PPT功能开发中...')
+  uploadDialogVisible.value = true
 }
 
 const optimizePpt = (ppt) => {
@@ -1591,6 +1836,21 @@ const optimizePpt = (ppt) => {
   color: #4b5563;
   line-height: 1.8;
   margin-bottom: 4px;
+}
+
+/* PPT回传对话框样式 */
+:deep(.el-dialog__body) {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+:deep(.el-upload-dragger) {
+  padding: 20px;
+}
+
+:deep(.el-form-item__label) {
+  font-weight: 500;
+  color: #606266;
 }
 </style>
 

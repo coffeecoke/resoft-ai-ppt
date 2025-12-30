@@ -96,6 +96,8 @@ router.post('/create', (req, res) => {
       language,
       // 基于PPTX创建时的初始slides
       initialSlides,
+      // 文档标签：public=公版, practical=实战
+      tag = 'public',
     } = req.body || {}
 
     if (!name || typeof name !== 'string') {
@@ -217,6 +219,7 @@ router.post('/create', (req, res) => {
       sourceDocumentName: sourceDocumentName || undefined,
       category,
       status: 'draft',
+      tag,  // 保存tag字段（默认为public）
       slideCount,
       fileSize,
       createdAt: now,
