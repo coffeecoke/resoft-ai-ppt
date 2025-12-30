@@ -39,7 +39,7 @@ export async function uploadSalesPpt(params: UploadSalesPptParams): Promise<{
   data?: { id: string }
   error?: string
 }> {
-  return axios.post(`${SERVER_URL}/sales/ppt/upload`, params)
+  return axios.post(`${SERVER_URL}/sales/profile/ppt/upload`, params)
 }
 
 /**
@@ -61,5 +61,5 @@ export async function getSalesPptList(options: {
     params.status = options.status
   }
   
-  return axios.get(`${SERVER_URL}/sales/ppt/list`, { params })
+  return axios.get(`${SERVER_URL}/sales/profile/ppt/list`, { params })
 }

@@ -36,15 +36,15 @@ app.use('/covers', express.static(coversDir))
 const snapshotsDir = path.join(__dirname, '..', 'data', 'snapshots')
 app.use('/snapshots', express.static(snapshotsDir))
 
-// 路由
-app.use('/tools', toolsRouter)
-app.use('/aippt', aipptChatRouter)  // 对话式PPT编辑
-app.use('/images', imagesRouter)    // 图片推荐
-app.use('/tools/translate', translateRouter)  // 翻译服务
-app.use('/templates', templatesRouter)        // 模板管理
-app.use('/documents', documentsRouter)        // 文档管理
-app.use('/api/thumbnails', thumbnailsRouter)  // 预览图管理
-app.use('/api', salesRouter)                  // 售前平台接口
+// 路由 - 按业务模块区分
+app.use('/tools', toolsRouter)              // 工具相关接口
+app.use('/aippt', aipptChatRouter)          // 对话式PPT编辑
+app.use('/images', imagesRouter)            // 图片相关接口
+app.use('/translate', translateRouter)      // 翻译服务
+app.use('/templates', templatesRouter)      // 模板管理
+app.use('/documents', documentsRouter)      // 文档管理
+app.use('/thumbnails', thumbnailsRouter)    // 预览图管理
+app.use('/sales', salesRouter)              // 售前平台接口
 
 // 健康检查
 app.get('/health', (req, res) => {

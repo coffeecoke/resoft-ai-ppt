@@ -31,41 +31,41 @@
 
   <!-- 只在数据加载完成后显示这些面板 -->
   <template v-if="!dataLoading">
-    <SelectPanel v-if="showSelectPanel" />
-    <SearchPanel v-if="showSearchPanel" />
-    <NotesPanel v-if="showNotesPanel" />
-    <MarkupPanel v-if="showMarkupPanel" />
-    <SymbolPanel v-if="showSymbolPanel" />
-    <ImageLibPanel v-if="showImageLibPanel" />
-    
-    <!-- AI编辑面板 -->
-    <AIEditPanel v-if="showAIEditPanel" />
+  <SelectPanel v-if="showSelectPanel" />
+  <SearchPanel v-if="showSearchPanel" />
+  <NotesPanel v-if="showNotesPanel" />
+  <MarkupPanel v-if="showMarkupPanel" />
+  <SymbolPanel v-if="showSymbolPanel" />
+  <ImageLibPanel v-if="showImageLibPanel" />
+  
+  <!-- AI编辑面板 -->
+  <AIEditPanel v-if="showAIEditPanel" />
 
-    <Modal
-      :visible="!!dialogForExport" 
-      :width="680"
-      @closed="closeExportDialog()"
-    >
-      <ExportDialog />
-    </Modal>
+  <Modal
+    :visible="!!dialogForExport" 
+    :width="680"
+    @closed="closeExportDialog()"
+  >
+    <ExportDialog />
+  </Modal>
 
-    <Modal
-      :visible="showAIPPTDialog" 
-      :width="720"
-      :closeOnClickMask="false"
-      :closeOnEsc="false"
-      closeButton
-      @closed="closeAIPPTDialog()"
-    >
-      <AIPPTDialog />
-    </Modal>
+  <Modal
+    :visible="showAIPPTDialog" 
+    :width="720"
+    :closeOnClickMask="false"
+    :closeOnEsc="false"
+    closeButton
+    @closed="closeAIPPTDialog()"
+  >
+    <AIPPTDialog />
+  </Modal>
 
-    <!-- 预览图生成进度提示 -->
-    <ThumbnailGenerationProgress
-      :visible="generatingThumbnails"
-      :progress="thumbnailProgress"
-      @close="() => {}"
-    />
+  <!-- 预览图生成进度提示 -->
+  <ThumbnailGenerationProgress
+    :visible="generatingThumbnails"
+    :progress="thumbnailProgress"
+    @close="() => {}"
+  />
   </template>
 </template>
 

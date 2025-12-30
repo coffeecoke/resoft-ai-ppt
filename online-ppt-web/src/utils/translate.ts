@@ -17,7 +17,7 @@ export function hasChinese(text: string): boolean {
 export async function translateToEnglish(chineseText: string): Promise<string> {
   try {
     // 使用 fetch 调用后端 AI 翻译
-    const response = await fetch('/api/tools/translate', {
+    const response = await fetch('/api/translate', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

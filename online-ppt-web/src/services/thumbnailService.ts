@@ -1,6 +1,5 @@
-import axios from 'axios'
-
-const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:5001'
+import axios from './config'
+import { SERVER_URL } from './index'
 
 export interface Thumbnail {
   id: string
@@ -52,7 +51,7 @@ export async function uploadThumbnail(
     formData.append('slideId', slideId)
     formData.append('thumbnail', file, `${slideId}.jpg`)
 
-    const response = await axios.post(`${SERVER_URL}/api/thumbnails/upload`, formData, {
+    const response = await axios.post(`${SERVER_URL}/thumbnails/upload`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data'
       }
@@ -90,7 +89,7 @@ export async function getThumbnails(params?: {
     if (params?.limit) query.append('limit', params.limit.toString())
     if (params?.offset) query.append('offset', params.offset.toString())
 
-    const url = `${SERVER_URL}/api/thumbnails${query.toString() ? `?${query.toString()}` : ''}`
+    const url = `${SERVER_URL}/thumbnails${query.toString() ? `?${query.toString()}` : ''}`
     const response = await axios.get(url)
     return response.data
   } catch (error: any) {
@@ -113,7 +112,7 @@ export async function getThumbnailDetail(
   error?: string
 }> {
   try {
-    const response = await axios.get(`${SERVER_URL}/api/thumbnails/${thumbnailId}`)
+    const response = await axios.get(`${SERVER_URL}/thumbnails/${thumbnailId}`)
     return response.data
   } catch (error: any) {
     console.error('[预览图服务] 获取详情失败:', error)
@@ -139,7 +138,7 @@ export async function getDocumentThumbnails(
   error?: string
 }> {
   try {
-    const response = await axios.get(`${SERVER_URL}/api/thumbnails/document/${documentId}`)
+    const response = await axios.get(`${SERVER_URL}/thumbnails/document/${documentId}`)
     return response.data
   } catch (error: any) {
     console.error('[预览图服务] 获取文档预览图失败:', error)
@@ -159,7 +158,7 @@ export async function rebuildIndex(): Promise<{
   error?: string
 }> {
   try {
-    const response = await axios.post(`${SERVER_URL}/api/thumbnails/rebuild-index`)
+    const response = await axios.post(`${SERVER_URL}/thumbnails/rebuild-index`)
     return response.data
   } catch (error: any) {
     console.error('[预览图服务] 重建索引失败:', error)
@@ -169,6 +168,7 @@ export async function rebuildIndex(): Promise<{
     }
   }
 }
+
 
 
 
