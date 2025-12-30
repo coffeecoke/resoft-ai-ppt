@@ -128,6 +128,27 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
     return list
   })
   
+  // 客户关心问题列表（支持按产品筛选）
+  const filteredQuestions = computed(() => {
+    let list = dataSource.questions
+    
+    // 如果选择了产品，按产品筛选
+    if (activeProduct.value) {
+      list = list.filter((x: any) => x.product === activeProduct.value)
+    }
+    
+    // 应用qaFilters
+    if (qaFilters.customerName) {
+      const q = qaFilters.customerName.trim().toLowerCase()
+      list = list.filter((x: any) => 
+        x.question.toLowerCase().includes(q) || 
+        x.answer.toLowerCase().includes(q)
+      )
+    }
+    
+    return list
+  })
+  
   // 重置筛选条件
   const resetFilters = (type: string) => {
     switch (type) {
@@ -200,6 +221,7 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
     filteredVideosPage,
     tenderFiles,
     responseFiles,
+    filteredQuestions,
     
     // 方法
     resetFilters,

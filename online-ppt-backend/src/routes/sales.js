@@ -401,9 +401,9 @@ router.post('/ppt/upload', async (req, res) => {
     }
     
     // 确保目录存在
-    const fsSync = await import('fs')
-    if (!fsSync.default.existsSync(DOCUMENTS_DIR)) {
-      fsSync.default.mkdirSync(DOCUMENTS_DIR, { recursive: true })
+    const fsSync = (await import('fs')).default
+    if (!fsSync.existsSync(DOCUMENTS_DIR)) {
+      fsSync.mkdirSync(DOCUMENTS_DIR, { recursive: true })
     }
     
     // 读取现有索引
@@ -432,10 +432,10 @@ router.post('/ppt/upload', async (req, res) => {
     
     // 保存文档JSON
     const filename = path.join(DOCUMENTS_DIR, `${id}.json`)
-    fsSync.default.writeFileSync(filename, JSON.stringify(documentData, null, 2), 'utf-8')
+    fsSync.writeFileSync(filename, JSON.stringify(documentData, null, 2), 'utf-8')
     
     // 计算文件大小
-    const stats = fsSync.default.statSync(filename)
+    const stats = fsSync.statSync(filename)
     const fileSize = stats.size
     
     // 创建元数据

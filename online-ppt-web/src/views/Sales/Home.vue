@@ -36,7 +36,7 @@
         @update:filters="handleFiltersUpdate"
       />
       
-      <!-- 🆕 新组件：选中产品后的详情视图 -->
+      <!-- 🆕 新组件：选中产品后的详情视图（仅PPT tab） -->
       <ProductDetailView
         v-if="showProductDetail"
         :activeProduct="productContent.activeProduct.value"
@@ -49,7 +49,17 @@
         :getMergedSlidesForGroup="productContent.getMergedSlidesForGroup"
       />
       
-      <!-- 🆕 新组件：未选产品时的内容网格 (PPT/视频/招标/响应) -->
+      <!-- 🆕 新组件：PPT tab 未选产品时显示PPT网格 -->
+      <ContentGridSection
+        v-if="showPptGrid"
+        :activeTab="activeTab"
+        :filteredPPT="filters.filteredPPT.value"
+        :filteredVideos="filters.filteredVideos.value"
+        :tenderFiles="filters.tenderFiles.value"
+        :responseFiles="filters.responseFiles.value"
+      />
+      
+      <!-- 🆕 新组件：视频/招标/响应 tab 始终显示内容网格 -->
       <ContentGridSection
         v-if="showContentGrid"
         :activeTab="activeTab"
@@ -62,7 +72,7 @@
       <!-- ✅ 已有组件：QA区域（内部处理点赞/点踩） -->
       <QASection
         v-if="showQASection"
-        :questions="questions"
+        :questions="filters.filteredQuestions.value"
       />
       
       <!-- 🆕 新组件：独立PPT页面 -->
@@ -202,11 +212,10 @@ const { pptFilters, videoFilters, qaFilters, tenderFilters, responseFilters } = 
 const showContentGrid = computed(() => {
   return activeNav.value === 'recommend'           // ① 在推荐页
     && activeDashboardTab.value === 'products'     // ② 在产品标签
-    && !productContent.activeProduct.value         // ③ 未选中产品
-    && ['ppt', 'video', 'tender', 'response'].includes(activeTab.value)  // ④ 这4个tab之一
+    && ['video', 'tender', 'response'].includes(activeTab.value)  // ③ 这3个tab（不包括ppt和qa）
 })
 
-// 是否显示产品详情
+// 是否显示产品详情（仅PPT tab且已选产品时显示）
 const showProductDetail = computed(() => {
   return activeNav.value === 'recommend'           // ① 在推荐页
     && activeDashboardTab.value === 'products'     // ② 在产品标签
@@ -214,12 +223,20 @@ const showProductDetail = computed(() => {
     && !!productContent.activeProduct.value        // ④ 已选中产品
 })
 
+// 是否显示PPT网格（PPT tab且未选产品时显示）
+const showPptGrid = computed(() => {
+  return activeNav.value === 'recommend'           // ① 在推荐页
+    && activeDashboardTab.value === 'products'     // ② 在产品标签
+    && activeTab.value === 'ppt'                   // ③ 在PPT tab
+    && !productContent.activeProduct.value         // ④ 未选中产品
+})
+
 // 是否显示QA区域
 const showQASection = computed(() => {
   return activeNav.value === 'recommend'           // ① 在推荐页
     && activeDashboardTab.value === 'products'     // ② 在产品标签
     && activeTab.value === 'qa'                    // ③ 在QA tab
-    && !productContent.activeProduct.value         // ④ 未选中产品
+    // ④ 无论是否选择产品都显示（通过filters自动过滤）
 })
 
 // ============================================
