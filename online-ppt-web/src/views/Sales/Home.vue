@@ -23,6 +23,7 @@
         v-if="activeNav === 'recommend' && activeDashboardTab === 'products'"
         v-model:activeTab="activeTab"
         v-model:showAdvancedFilter="showAdvancedFilter"
+        @create-ppt="handleCreatePpt"
       />
       
       <!-- ✅ 已有组件：高级筛选面板 -->
@@ -117,6 +118,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, provide } from 'vue'
 import { useRoute } from 'vue-router'
+import { ElMessage } from 'element-plus'
 
 // ============================================
 // ✅ 已有组件导入
@@ -242,6 +244,11 @@ const showQASection = computed(() => {
 // ============================================
 // 5. 事件处理（仅状态同步，无业务逻辑）
 // ============================================
+const handleCreatePpt = () => {
+  // TODO: 实现新建PPT的逻辑
+  ElMessage.info('新建PPT功能开发中...')
+}
+
 const handleFiltersUpdate = (newFilters: any) => {
   // AdvancedFilterPanel内部已经直接修改了filters
   // 这里可以添加额外的处理逻辑（如果需要）

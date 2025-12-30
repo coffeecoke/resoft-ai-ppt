@@ -34,10 +34,6 @@
                 <i class="ri-list-check-3"></i>
                 {{ isInPendingList ? '已添加待操作' : '待操作' }}
               </el-button>
-              <button class="ai-analyze-btn" type="button" @click="createNewPpt">
-                <i class="ri-file-ppt-2-line"></i>
-                新建PPT
-              </button>
               <button class="ai-analyze-btn" type="button" @click="openAiPanel">
                 <i class="ri-quill-pen-ai-line"></i>
                 AI全文分析
@@ -143,18 +139,27 @@
             <div class="sidebar-section">
               <div class="sidebar-title">售前交流信息</div>
               <div class="communication-info" v-if="communicationInfo">
-                <div class="comm-video-thumb">
-                  <div class="video-placeholder">
-                    <span class="video-label">视频</span>
+                <div class="comm-video-item">
+                  <div class="comm-video-thumb">
+                    <img 
+                      v-if="communicationInfo.thumbnail" 
+                      :src="communicationInfo.thumbnail" 
+                      :alt="communicationInfo.title"
+                    />
+                    <div v-else class="video-placeholder">
+                      <span class="video-label">视频</span>
+                    </div>
+                    <div class="video-duration" v-if="communicationInfo.duration">
+                      {{ communicationInfo.duration }}
+                    </div>
                   </div>
-                </div>
-                <div class="comm-content">
-                  <div class="comm-title">{{ communicationInfo.title }}</div>
-                  <div class="comm-meta">{{ communicationInfo.creator }} {{ communicationInfo.date }}</div>
-                  <div class="comm-stats">
-                    <span><i class="ri-play-line"></i>{{ communicationInfo.views }}</span>
-                    <span><i class="ri-heart-line"></i>{{ communicationInfo.likes }}</span>
-                    <span><i class="ri-thumb-up-line"></i>{{ communicationInfo.comments }}</span>
+                  <div class="comm-content">
+                    <div class="comm-title">{{ communicationInfo.title }}</div>
+                    <div class="comm-meta">创建者:{{ communicationInfo.creator }} {{ communicationInfo.date }}</div>
+                    <div class="comm-stats">
+                      <span>观看{{ communicationInfo.views }}</span>
+                      <span>点赞 {{ communicationInfo.likes }}</span>
+                    </div>
                   </div>
                 </div>
                 <div class="comm-details">
@@ -243,22 +248,8 @@
       <aside class="ppt-ai-panel" v-show="aiPanelVisible">
         <div class="ai-panel-content">
           <div class="ai-panel-header">
-            <div class="ai-panel-title">AI助手</div>
-            <div class="ai-panel-header-right">
-              <div class="ai-panel-nav">
-                <span class="nav-item active">
-                  <i class="ri-fullscreen-line"></i>
-                  全屏
-                </span>
-                <span class="nav-item">
-                  <i class="ri-file-ppt-2-line"></i>
-                  新建
-                </span>
-                <span class="nav-item">
-                  <i class="ri-history-line"></i>
-                  历史
-                </span>
-              </div>
+            <div class="ai-panel-title">
+              AI助手
               <button class="ai-panel-close-btn" @click="closeAiPanel" title="关闭AI助手">
                 关闭助手
               </button>
@@ -305,10 +296,11 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed, nextTick, watch, onMounted, onBeforeUnmount } from 'vue'
 import { MagicStick, Download } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { usePendingOperationsStore } from '@/store/Sales/pendingOperations'
+import { usePptDialogAiStore } from '@/store/Sales/pptDialogAi'
 import PendingOperationsDrawer from '@/components/Sales/PendingOperationsDrawer.vue'
 
 const props = defineProps({
@@ -355,6 +347,8 @@ const emit = defineEmits(['update:visible', 'close'])
 
 // 使用待操作列表store
 const pendingStore = usePendingOperationsStore()
+// 使用PPT对话框AI面板store
+const pptDialogAiStore = usePptDialogAiStore()
 
 // 内部状态
 const activeSlide = ref(0)
@@ -436,11 +430,35 @@ const closeAiPanel = () => {
   aiPanelVisible.value = false
 }
 
-// 新建PPT
-const createNewPpt = () => {
-  // TODO: 实现新建PPT的逻辑
-  ElMessage.info('新建PPT功能开发中...')
-}
+// 监听对话框打开/关闭状态，同步到store
+watch(() => props.visible, (newVal) => {
+  if (newVal) {
+    // 对话框打开时，注册打开和关闭AI面板的回调并设置状态
+    pptDialogAiStore.setPptDialogOpen(true)
+    pptDialogAiStore.registerOpenAiPanel(openAiPanel)
+    pptDialogAiStore.registerCloseAiPanel(closeAiPanel)
+  } else {
+    // 对话框关闭时，注销回调并关闭AI面板
+    pptDialogAiStore.setPptDialogOpen(false)
+    pptDialogAiStore.unregisterOpenAiPanel()
+    pptDialogAiStore.unregisterCloseAiPanel()
+    aiPanelVisible.value = false
+    pptDialogAiStore.setAiPanelOpen(false)
+  }
+}, { immediate: true })
+
+// 监听AI面板的显示状态，同步到store
+watch(() => aiPanelVisible.value, (newVal) => {
+  pptDialogAiStore.setAiPanelOpen(newVal)
+})
+
+// 组件卸载时清理
+onBeforeUnmount(() => {
+  pptDialogAiStore.unregisterOpenAiPanel()
+  pptDialogAiStore.unregisterCloseAiPanel()
+  pptDialogAiStore.setPptDialogOpen(false)
+  pptDialogAiStore.setAiPanelOpen(false)
+})
 
 // 发送AI消息
 const sendAiMessage = () => {

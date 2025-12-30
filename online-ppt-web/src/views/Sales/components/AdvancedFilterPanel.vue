@@ -15,25 +15,6 @@
             />
           </div>
         </div>
-        <div class="filter-section filter-section-inline">
-          <h4 class="filter-section-title">产品解决方案</h4>
-          <div class="filter-options">
-            <el-select 
-              :model-value="filters.ppt?.productSolution" 
-              @update:model-value="updateFilter('ppt', 'productSolution', $event)"
-              placeholder="请选择" 
-              clearable 
-              style="width: 200px;"
-            >
-              <el-option 
-                v-for="option in productSolutionOptions" 
-                :key="option.value" 
-                :label="option.label" 
-                :value="option.value" 
-              />
-            </el-select>
-          </div>
-        </div>
         <div v-if="!activeProduct" class="filter-section filter-section-inline">
           <h4 class="filter-section-title">PPT目录</h4>
           <div class="filter-options">

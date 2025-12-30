@@ -40,7 +40,7 @@
   
   <!-- 全局浮动按钮 -->
   <button 
-    v-show="!drawerVisible" 
+    v-show="shouldShowFloatBtn" 
     class="global-ai-float-btn" 
     @click="openDrawer"
     title="打开AI助手"
@@ -52,6 +52,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
+import { usePptDialogAiStore } from '@/store/Sales/pptDialogAi'
 
 const props = defineProps({
   visible: {
@@ -69,8 +70,26 @@ const drawerVisible = computed({
 
 const aiInputText = ref('')
 
+// 使用PPT对话框AI面板store
+const pptDialogAiStore = usePptDialogAiStore()
+
+// 计算是否应该显示浮动按钮
+const shouldShowFloatBtn = computed(() => {
+  // 如果全局抽屉打开，不显示
+  if (drawerVisible.value) return false
+  // 如果PPT对话框的AI面板打开，不显示
+  if (pptDialogAiStore.isAiPanelOpen) return false
+  return true
+})
+
 const openDrawer = () => {
-  drawerVisible.value = true
+  // 如果PPT对话框打开且注册了打开AI面板的回调，则打开PPT对话框的AI面板
+  if (pptDialogAiStore.isPptDialogOpen && pptDialogAiStore.openAiPanelCallback) {
+    pptDialogAiStore.openAiPanel()
+  } else {
+    // 否则打开全局抽屉
+    drawerVisible.value = true
+  }
 }
 
 const handleClose = () => {
