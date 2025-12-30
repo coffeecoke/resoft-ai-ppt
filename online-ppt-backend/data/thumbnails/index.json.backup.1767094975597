@@ -39,6 +39,7 @@
     },
     {
       "id": "thumb_document_4_AyLhq8SSNC",
+
       "documentId": "document_4",
       "documentTitle": "测试",
       "slideId": "AyLhq8SSNC",
@@ -76,6 +77,7 @@
     {
       "id": "thumb_document_4_OwlstC7zZO",
       "documentId": "document_4",
+      "typeCode":"js",
       "documentTitle": "测试",
       "slideId": "OwlstC7zZO",
       "slideIndex": 5,
@@ -94,6 +96,7 @@
     {
       "id": "thumb_document_4_t49AOCbkdN",
       "documentId": "document_4",
+      "typeCode":"js",
       "documentTitle": "测试",
       "slideId": "t49AOCbkdN",
       "slideIndex": 6,

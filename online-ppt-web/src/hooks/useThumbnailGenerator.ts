@@ -148,6 +148,16 @@ export default () => {
       // 上传到后端
       const result = await uploadThumbnail(documentId, slideId, blob)
       
+      // 确保 result 存在且有 success 字段
+      if (!result || typeof result !== 'object') {
+        console.error(`[预览图生成] 上传返回数据格式错误: ${slideId}`, result)
+        return {
+          slideId,
+          success: false,
+          error: '上传返回数据格式错误'
+        }
+      }
+      
       if (result.success) {
         return {
           slideId,

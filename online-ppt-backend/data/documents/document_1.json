@@ -9080,7 +9080,9 @@
         "type": "solid",
         "color": "#F2F8FF"
       },
-      "remark": ""
+      "remark": "",
+      "thumbnail": "/snapshots/document_1/4FfYLlDxnd.jpg",
+      "thumbnailUpdatedAt": "2025-12-30T11:45:33.814Z"
     },
     {
       "id": "TxlvJe3vS7",
@@ -9274,7 +9276,9 @@
         "type": "solid",
         "color": "#F2F8FF"
       },
-      "remark": "基础配置平台-报送配置-机构对照关系，选择金融基础数据页卡，可对金数进行法人报送所需的统一社会信用代码对照的配置。本次为响应金数后续属地二级规则的扩展需要，增机制属地配置功能。可对法人归属属地的特殊规则要求进行启停操作。"
+      "remark": "基础配置平台-报送配置-机构对照关系，选择金融基础数据页卡，可对金数进行法人报送所需的统一社会信用代码对照的配置。本次为响应金数后续属地二级规则的扩展需要，增机制属地配置功能。可对法人归属属地的特殊规则要求进行启停操作。",
+      "thumbnail": "/snapshots/document_1/TxlvJe3vS7.jpg",
+      "thumbnailUpdatedAt": "2025-12-30T11:45:35.051Z"
     },
     {
       "id": "xNrxdkB8CO",
@@ -9409,7 +9413,9 @@
         "type": "solid",
         "color": "#F2F8FF"
       },
-      "remark": "数据管理平台-业务规则-表单维护，选择表单名称输入绿色贷款，基于本次金数本地化校验要求，可按制度方式进行报文报送格式的配置。在原有的常规报文基础上，可以配置是否包含校验结果。"
+      "remark": "数据管理平台-业务规则-表单维护，选择表单名称输入绿色贷款，基于本次金数本地化校验要求，可按制度方式进行报文报送格式的配置。在原有的常规报文基础上，可以配置是否包含校验结果。",
+      "thumbnail": "/snapshots/document_1/xNrxdkB8CO.jpg",
+      "thumbnailUpdatedAt": "2025-12-30T11:45:35.873Z"
     },
     {
       "id": "f9UPCJqfE2",
@@ -9557,7 +9563,9 @@
         "type": "solid",
         "color": "#F2F8FF"
       },
-      "remark": "监管报送平台-数据处理-数据填报，数据填报过程中，可以进行校验结果的导出。导出时，可以提供三种导出方式。用户可维护excel的错误结果的原因列。通过导入excel的方式，实现错误原因的维护。"
+      "remark": "监管报送平台-数据处理-数据填报，数据填报过程中，可以进行校验结果的导出。导出时，可以提供三种导出方式。用户可维护excel的错误结果的原因列。通过导入excel的方式，实现错误原因的维护。",
+      "thumbnail": "/snapshots/document_1/f9UPCJqfE2.jpg",
+      "thumbnailUpdatedAt": "2025-12-30T11:45:37.157Z"
     },
     {
       "id": "j1CaWIkibQ",
@@ -9705,7 +9713,9 @@
         "type": "solid",
         "color": "#F2F8FF"
       },
-      "remark": "监管报送平台-数据处理-金数重报申请管理，可进行重报申请的新增和审批。并可导入人行申请单，对重报范围进行一致性核对。"
+      "remark": "监管报送平台-数据处理-金数重报申请管理，可进行重报申请的新增和审批。并可导入人行申请单，对重报范围进行一致性核对。",
+      "thumbnail": "/snapshots/document_1/j1CaWIkibQ.jpg",
+      "thumbnailUpdatedAt": "2025-12-30T11:45:37.942Z"
     },
     {
       "id": "SyYbn8pkrn",
@@ -11695,7 +11705,9 @@
         "type": "solid",
         "color": "#F2F8FF"
       },
-      "remark": "监管报送平台-数据处理，其中数据填报和数据审核，均选择2024-12-31，绿色贷款主题。测试数据中，重报以2024-12-31的存量绿色贷款为示例。"
+      "remark": "监管报送平台-数据处理，其中数据填报和数据审核，均选择2024-12-31，绿色贷款主题。测试数据中，重报以2024-12-31的存量绿色贷款为示例。",
+      "thumbnail": "/snapshots/document_1/SyYbn8pkrn.jpg",
+      "thumbnailUpdatedAt": "2025-12-30T11:45:39.401Z"
     },
     {
       "id": "dmyEbJqsW0",
@@ -11961,7 +11973,9 @@
         "type": "solid",
         "color": "#F2F8FF"
       },
-      "remark": "监管报送平台-报文处理-数据打包，选择2024-12-31，绿色贷款主题。可切换报文类型查看到常规报文和重报报文。可对不同类型报文进行打包，下载报文和下载校验结果。"
+      "remark": "监管报送平台-报文处理-数据打包，选择2024-12-31，绿色贷款主题。可切换报文类型查看到常规报文和重报报文。可对不同类型报文进行打包，下载报文和下载校验结果。",
+      "thumbnail": "/snapshots/document_1/dmyEbJqsW0.jpg",
+      "thumbnailUpdatedAt": "2025-12-30T11:45:40.147Z"
     },
     {
       "id": "mO_h0x9WvS",
@@ -12079,7 +12093,9 @@
         "type": "solid",
         "color": "#F2F8FF"
       },
-      "remark": ""
+      "remark": "",
+      "thumbnail": "/snapshots/document_1/mO_h0x9WvS.jpg",
+      "thumbnailUpdatedAt": "2025-12-30T11:45:41.077Z"
     },
     {
       "id": "MDn6nKAw_A",
@@ -12809,7 +12825,9 @@
         "type": "solid",
         "color": "#F2F8FF"
       },
-      "remark": ""
+      "remark": "",
+      "thumbnail": "/snapshots/document_1/MDn6nKAw_A.jpg",
+      "thumbnailUpdatedAt": "2025-12-30T11:45:42.160Z"
     },
     {
       "id": "hvo5qmwmGn",
@@ -13013,7 +13031,9 @@
         "type": "solid",
         "color": "#F2F8FF"
       },
-      "remark": "以上就是我们关于金融基础数据智能化治理解决方案的全部内容，感谢大家的观看。"
+      "remark": "以上就是我们关于金融基础数据智能化治理解决方案的全部内容，感谢大家的观看。",
+      "thumbnail": "/snapshots/document_1/hvo5qmwmGn.jpg",
+      "thumbnailUpdatedAt": "2025-12-30T11:45:43.595Z"
     }
   ]
 }

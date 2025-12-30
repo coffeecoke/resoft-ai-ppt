@@ -30,10 +30,13 @@
     "category": "uncategorized",
     "status": "published",
     "slideCount": 32,
-    "fileSize": 10840928,
+    "fileSize": 10842078,
     "createdAt": "2025-12-18T09:10:42.476Z",
-    "updatedAt": "2025-12-30T08:28:00.045Z",
-    "lastOpenedAt": "2025-12-30T08:25:27.993Z"
+    "updatedAt": "2025-12-30T11:48:49.483Z",
+    "lastOpenedAt": "2025-12-30T11:48:17.953Z",
+    "thumbnailIndexPath": "thumbnails/document_1.json",
+    "thumbnailCount": 27,
+    "thumbnailsLastUpdated": "2025-12-30T11:48:24.700Z"
   },
   {
     "id": "document_4",
@@ -45,7 +48,10 @@
     "fileSize": 277715,
     "createdAt": "2025-12-25T02:23:27.474Z",
     "updatedAt": "2025-12-28T08:39:10.970Z",
-    "lastOpenedAt": "2025-12-28T08:25:11.909Z"
+    "lastOpenedAt": "2025-12-28T08:25:11.909Z",
+    "thumbnailIndexPath": "thumbnails/document_4.json",
+    "thumbnailCount": 26,
+    "thumbnailsLastUpdated": "2025-12-30T11:42:55.596Z"
   },
   {
     "id": "document_7",
@@ -58,8 +64,11 @@
     "slideCount": 27,
     "fileSize": 279922,
     "createdAt": "2025-12-28T07:02:58.268Z",
-    "updatedAt": "2025-12-28T08:24:18.374Z",
-    "lastOpenedAt": "2025-12-29T07:28:26.850Z"
+    "updatedAt": "2025-12-30T10:51:37.876Z",
+    "lastOpenedAt": "2025-12-30T10:51:07.484Z",
+    "thumbnailIndexPath": "thumbnails/document_7.json",
+    "thumbnailCount": 19,
+    "thumbnailsLastUpdated": "2025-12-30T11:42:55.596Z"
   },
   {
     "id": "document_8",

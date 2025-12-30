@@ -57,7 +57,20 @@ export async function uploadThumbnail(
       }
     })
 
-    return response.data
+    // 确保返回的数据包含 success 字段
+    if (response && typeof response === 'object') {
+      return {
+        success: response.success ?? true,
+        thumbnailUrl: response.thumbnailUrl,
+        error: response.error
+      }
+    }
+
+    // 如果响应格式不正确,返回成功(因为没有抛出异常)
+    return {
+      success: true,
+      thumbnailUrl: undefined
+    }
   } catch (error: any) {
     console.error('[预览图服务] 上传失败:', error)
     return {
