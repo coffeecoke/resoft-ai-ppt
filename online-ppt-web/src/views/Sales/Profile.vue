@@ -252,6 +252,7 @@
       :title="currentPpt.title"
       :type="currentPpt.tag === 'public' ? 'public' : 'practical'"
       :slides="currentPptSlides"
+      :communication-info="currentCommunicationInfo"
     />
     
     <!-- PPT回传对话框 -->
@@ -416,6 +417,7 @@ const pptTypeFilter = ref('all') // 'all' 全部, 'practical' 回传, 'public' A
 const pptDialogVisible = ref(false)
 const currentPpt = ref({ title: '', tag: 'public', slides: [] })
 const currentPptSlides = ref([])
+const currentCommunicationInfo = ref(null)
 
 // 用户信息
 const userInfo = ref({
@@ -725,6 +727,28 @@ const openPpt = (ppt) => {
     currentPptSlides.value = [...salesData.slides]
   } else {
     currentPptSlides.value = ppt.slides
+  }
+  
+  // 如果是实战版，设置售前交流信息
+  if (ppt.tag === 'practical') {
+    currentCommunicationInfo.value = {
+      title: '中信信托s金数及数据质量产品方案介绍',
+      creator: '郑相宜',
+      date: '25/09/01',
+      views: 100,
+      likes: 30,
+      comments: 10,
+      duration: '01:05:51',
+      thumbnail: 'https://picsum.photos/seed/video1/400/225',
+      ourParticipants: '李鹏超、郑相宜',
+      clientParticipants: '政策研究处处长 张海英,科长 王洪博',
+      leadName: '廊坊银行金数系统建设',
+      mainContent: '沟通客户需求,了解项目申报进度',
+      systemName: '金融基础数据系统',
+      reportNotes: '腾讯会议,本项目第10次'
+    }
+  } else {
+    currentCommunicationInfo.value = null
   }
   
   pptDialogVisible.value = true

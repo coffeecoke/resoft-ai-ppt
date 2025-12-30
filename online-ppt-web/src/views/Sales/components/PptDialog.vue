@@ -138,54 +138,26 @@
             <!-- 售前交流信息 -->
             <div class="sidebar-section">
               <div class="sidebar-title">售前交流信息</div>
-              <div class="communication-info" v-if="communicationInfo">
-                <div class="comm-video-item">
+              <div class="communication-info">
+                <div class="comm-video-wrapper">
                   <div class="comm-video-thumb">
                     <img 
-                      v-if="communicationInfo.thumbnail" 
+                      v-if="communicationInfo?.thumbnail" 
                       :src="communicationInfo.thumbnail" 
-                      :alt="communicationInfo.title"
+                      :alt="communicationInfo?.title || '视频'"
                     />
                     <div v-else class="video-placeholder">
                       <span class="video-label">视频</span>
                     </div>
-                    <div class="video-duration" v-if="communicationInfo.duration">
-                      {{ communicationInfo.duration }}
-                    </div>
+                    <span v-if="communicationInfo?.duration" class="video-duration">{{ communicationInfo.duration }}</span>
                   </div>
                   <div class="comm-content">
-                    <div class="comm-title">{{ communicationInfo.title }}</div>
-                    <div class="comm-meta">创建者:{{ communicationInfo.creator }} {{ communicationInfo.date }}</div>
+                    <div class="comm-title">{{ communicationInfo?.title || '中信信托s金数及数据质量产品方案介绍' }}</div>
+                    <div class="comm-meta">{{ communicationInfo?.creator || '郑相宜' }} {{ communicationInfo?.date || '25/09/01' }}</div>
                     <div class="comm-stats">
-                      <span>观看{{ communicationInfo.views }}</span>
-                      <span>点赞 {{ communicationInfo.likes }}</span>
+                      <span>观看 {{ communicationInfo?.views || 100 }}</span>
+                      <span>收藏 {{ communicationInfo?.likes || 30 }}</span>
                     </div>
-                  </div>
-                </div>
-                <div class="comm-details">
-                  <div class="comm-detail-item">
-                    <span class="detail-label">我方其他参会人:</span>
-                    <span class="detail-value">{{ communicationInfo.ourParticipants }}</span>
-                  </div>
-                  <div class="comm-detail-item">
-                    <span class="detail-label">客户方参会人:</span>
-                    <span class="detail-value">{{ communicationInfo.clientParticipants }}</span>
-                  </div>
-                  <div class="comm-detail-item">
-                    <span class="detail-label">线索名称:</span>
-                    <span class="detail-value">{{ communicationInfo.leadName }}</span>
-                  </div>
-                  <div class="comm-detail-item">
-                    <span class="detail-label">主讲内容:</span>
-                    <span class="detail-value">{{ communicationInfo.mainContent }}</span>
-                  </div>
-                  <div class="comm-detail-item">
-                    <span class="detail-label">系统名称:</span>
-                    <span class="detail-value">{{ communicationInfo.systemName }}</span>
-                  </div>
-                  <div class="comm-detail-item">
-                    <span class="detail-label">报备说明:</span>
-                    <span class="detail-value">{{ communicationInfo.reportNotes }}</span>
                   </div>
                 </div>
               </div>
@@ -200,15 +172,23 @@
                   :key="doc.id" 
                   class="similar-doc-item"
                 >
-                  <i class="ri-file-ppt-2-line doc-icon"></i>
+                  <div class="doc-thumb">
+                    <img 
+                      v-if="doc.thumbnail" 
+                      :src="doc.thumbnail" 
+                      :alt="doc.title || 'PPT'"
+                    />
+                    <div v-else class="doc-thumb-placeholder">
+                      <span class="doc-thumb-text">PPT</span>
+                    </div>
+                  </div>
                   <div class="doc-info">
                     <div class="doc-title">{{ doc.title }}</div>
-                    <div class="doc-meta">创建者:{{ doc.creator }} {{ doc.date }}</div>
+                    <div class="doc-meta">{{ doc.creator }} {{ doc.date }}</div>
                     <div class="doc-stats">
-                      <span><i class="ri-file-line"></i>{{ doc.views }}</span>
-                      <span><i class="ri-heart-line"></i>{{ doc.likes }}</span>
-                      <span><i class="ri-thumb-up-line"></i>{{ doc.comments }}</span>
-                      <span><i class="ri-download-line"></i>{{ doc.downloads }}</span>
+                      <span><i class="ri-eye-line"></i>{{ doc.views || 23 }}</span>
+                      <span><i class="ri-download-line"></i>{{ doc.downloads || 12 }}</span>
+                      <span><i class="ri-thumb-up-line"></i>{{ doc.likes || 1 }}</span>
                     </div>
                   </div>
                 </div>
@@ -222,21 +202,27 @@
                 <div 
                   v-for="comm in similarCommunications" 
                   :key="comm.id" 
-                  class="similar-comm-item"
+                  class="communication-info"
                 >
-                  <div class="comm-video-thumb-small">
-                    <div class="video-placeholder-small">
-                      <span class="video-label">视频</span>
+                  <div class="comm-video-wrapper">
+                    <div class="comm-video-thumb">
+                      <img 
+                        v-if="comm.thumbnail" 
+                        :src="comm.thumbnail" 
+                        :alt="comm.title || '视频'"
+                      />
+                      <div v-else class="video-placeholder">
+                        <span class="video-label">视频</span>
+                      </div>
+                      <span v-if="comm.duration" class="video-duration">{{ comm.duration }}</span>
                     </div>
-                  </div>
-                  <div class="comm-info">
-                    <div class="comm-title-small">{{ comm.title }}</div>
-                    <div class="comm-meta-small">{{ comm.creator }} {{ comm.date }}</div>
-                    <div class="comm-stats-small">
-                      <span><i class="ri-play-line"></i>{{ comm.views }}</span>
-                      <span><i class="ri-heart-line"></i>{{ comm.likes }}</span>
-                      <span><i class="ri-thumb-up-line"></i>{{ comm.comments }}</span>
-                      <span v-if="comm.downloads"><i class="ri-download-line"></i>{{ comm.downloads }}</span>
+                    <div class="comm-content">
+                      <div class="comm-title">{{ comm.title || '产品方案介绍' }}</div>
+                      <div class="comm-meta">{{ comm.creator || '张明' }} {{ comm.date || '25/09/01' }}</div>
+                      <div class="comm-stats">
+                        <span>观看 {{ comm.views || 100 }}</span>
+                        <span>收藏 {{ comm.likes || 30 }}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -331,15 +317,55 @@ const props = defineProps({
   },
   communicationInfo: {
     type: Object,
-    default: null
+    default: () => ({
+      title: '中信信托s金数及数据质量产品方案介绍',
+      creator: '郑相宜',
+      date: '25/09/01',
+      views: 100,
+      likes: 30,
+      duration: '01:05:51',
+      thumbnail: 'https://picsum.photos/seed/video1/400/225'
+    })
   },
   similarDocuments: {
     type: Array,
-    default: () => []
+    default: () => [
+      {
+        id: 'doc1',
+        title: '金融基础数据报送系统(PBOCD)',
+        creator: '郑相宜',
+        date: '25/09/01',
+        views: 23,
+        downloads: 12,
+        likes: 1,
+        thumbnail: 'https://picsum.photos/seed/doc1/110/62'
+      }
+    ]
   },
   similarCommunications: {
     type: Array,
-    default: () => []
+    default: () => [
+      {
+        id: 'comm1',
+        title: '北京银行一表通建设售前交流方案',
+        creator: '李华',
+        date: '25/09/15',
+        views: 85,
+        likes: 25,
+        duration: '01:20:30',
+        thumbnail: 'https://picsum.photos/seed/comm1/400/225'
+      },
+      {
+        id: 'comm2',
+        title: '天津农发行一表通建设售前交流方案',
+        creator: '王强',
+        date: '25/09/20',
+        views: 92,
+        likes: 28,
+        duration: '01:15:45',
+        thumbnail: 'https://picsum.photos/seed/comm2/400/225'
+      }
+    ]
   }
 })
 

@@ -7,6 +7,10 @@
         @update:model-value="handleTabChange"
       />
       <div class="filters-inline">
+        <button class="new-ppt-btn" type="button" @click="handleCreatePpt">
+          <i class="ri-file-ppt-2-line"></i>
+          新建PPT
+        </button>
         <el-button @click="handleToggleFilter" type="primary" plain>
           <el-icon><Filter /></el-icon> 高级筛选
         </el-button>
@@ -30,7 +34,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['update:activeTab', 'update:showAdvancedFilter'])
+const emit = defineEmits(['update:activeTab', 'update:showAdvancedFilter', 'create-ppt'])
 
 // Tab选项
 const tabOptions = [
@@ -47,6 +51,10 @@ const handleTabChange = (value: string) => {
 
 const handleToggleFilter = () => {
   emit('update:showAdvancedFilter', !props.showAdvancedFilter)
+}
+
+const handleCreatePpt = () => {
+  emit('create-ppt')
 }
 </script>
 
