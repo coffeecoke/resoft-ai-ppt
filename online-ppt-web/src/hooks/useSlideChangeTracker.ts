@@ -90,12 +90,17 @@ export default () => {
    * 检查并标记没有预览图的幻灯片
    */
   const markSlidesWithoutThumbnail = () => {
+    let count = 0
     slides.value.forEach(slide => {
       // 如果幻灯片没有 thumbnail 字段，标记为需要生成
       if (!slide.thumbnail) {
         markSlideChanged(slide.id)
+        count++
       }
     })
+    if (count > 0) {
+      console.log(`[变更追踪] 标记了 ${count} 个没有缩略图的幻灯片`)
+    }
   }
 
   /**
@@ -111,10 +116,12 @@ export default () => {
       (newSlides, oldSlides) => {
         // 首次加载数据时（从空数组变为有数据）
         if ((!oldSlides || oldSlides.length === 0) && newSlides.length > 0) {
+          console.log(`[变更追踪] 首次加载 ${newSlides.length} 个幻灯片`)
           // 检查缺失的预览图（只检查一次）
           if (checkMissingThumbnails && !hasCheckedMissing) {
             markSlidesWithoutThumbnail()
             hasCheckedMissing = true
+            console.log(`[变更追踪] 当前变更列表:`, Array.from(changedSlideIds.value))
           }
           createSnapshot()
           return

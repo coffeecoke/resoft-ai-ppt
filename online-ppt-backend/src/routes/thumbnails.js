@@ -71,6 +71,8 @@ router.post('/upload', upload.single('thumbnail'), async (req, res) => {
     const { documentId, slideId } = req.body
     const file = req.file
     
+    console.log(`[预览图] 收到上传请求: documentId=${documentId}, slideId=${slideId}`)
+    
     if (!file) {
       return res.status(400).json({ success: false, error: '没有上传文件' })
     }
@@ -81,16 +83,19 @@ router.post('/upload', upload.single('thumbnail'), async (req, res) => {
 
     // 生成访问 URL
     const thumbnailUrl = `/snapshots/${documentId}/${file.filename}`
+    console.log(`[预览图] 文件已保存: ${file.path}, URL: ${thumbnailUrl}`)
     
     // 获取文档信息
     const doc = await documentModel.findById(documentId)
     if (!doc) {
+      console.error(`[预览图] 文档不存在: ${documentId}`)
       return res.status(404).json({ success: false, error: '文档不存在' })
     }
 
     // 找到对应的 slide
     const slide = doc.slides?.find(s => s.id === slideId)
     if (!slide) {
+      console.error(`[预览图] 幻灯片不存在: ${slideId}`)
       return res.status(404).json({ success: false, error: '幻灯片不存在' })
     }
 
@@ -105,6 +110,7 @@ router.post('/upload', upload.single('thumbnail'), async (req, res) => {
           docData.slides[slideIndex].thumbnail = thumbnailUrl
           docData.slides[slideIndex].thumbnailUpdatedAt = new Date().toISOString()
           fs.writeFileSync(docPath, JSON.stringify(docData, null, 2), 'utf-8')
+          console.log(`[预览图] 已更新文档JSON文件: slideIndex=${slideIndex}`)
         }
       } catch (error) {
         console.warn('[预览图] 更新文档文件失败:', error)
@@ -115,7 +121,9 @@ router.post('/upload', upload.single('thumbnail'), async (req, res) => {
     const thumbnailId = `thumb_${documentId}_${slideId}`
     const slideIndex = doc.slides.findIndex(s => s.id === slideId)
     
-    await thumbnailService.upsert({
+    console.log(`[预览图] 准备写入数据库: thumbnailId=${thumbnailId}, slideIndex=${slideIndex}`)
+    
+    const dbResult = await thumbnailService.upsert({
       id: thumbnailId,
       documentId,
       slideId,
@@ -132,7 +140,7 @@ router.post('/upload', upload.single('thumbnail'), async (req, res) => {
       }
     })
 
-    console.log(`[预览图] 上传成功: ${documentId}/${slideId}`)
+    console.log(`[预览图] 数据库写入成功: ${documentId}/${slideId}, dbResult:`, dbResult ? '成功' : '失败')
 
     res.json({ 
       success: true, 
@@ -141,6 +149,7 @@ router.post('/upload', upload.single('thumbnail'), async (req, res) => {
     })
   } catch (error) {
     console.error('[预览图] 上传失败:', error)
+    console.error('[预览图] 错误堆栈:', error.stack)
     res.status(500).json({ success: false, error: '上传失败: ' + error.message })
   }
 })

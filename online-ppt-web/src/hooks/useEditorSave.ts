@@ -135,11 +135,16 @@ export function useEditorSave() {
           const needGenerate = noThumbnail || firstSlideChanged || hasChanges
           
           if (needGenerate) {
-            const modeName = mode === 'template' ? '模板' : '文档'
-            const reason = noThumbnail ? '无缩略图' : firstSlideChanged ? '检测到变更' : '有未保存变更'
-            console.log(`[useEditorSave] 手动保存${modeName}，生成第一页缩略图作为封面 (原因: ${reason})`)
-            // 异步生成，不阻塞保存流程
-            generateThumbnailsAsync(id, [firstSlide])
+            // 检查是否已有生成任务在进行中（避免与发布时的生成任务冲突）
+            if (generatingThumbnails.value) {
+              console.log('[useEditorSave] 已有缩略图生成任务在进行中，跳过保存时的封面生成')
+            } else {
+              const modeName = mode === 'template' ? '模板' : '文档'
+              const reason = noThumbnail ? '无缩略图' : firstSlideChanged ? '检测到变更' : '有未保存变更'
+              console.log(`[useEditorSave] 手动保存${modeName}，生成第一页缩略图作为封面 (原因: ${reason})`)
+              // 异步生成，不阻塞保存流程
+              generateThumbnailsAsync(id, [firstSlide])
+            }
           } else {
             console.log('[useEditorSave] 第一页未变更且已有缩略图，跳过封面生成')
           }

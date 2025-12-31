@@ -193,15 +193,23 @@ export default () => {
       return []
     }
 
-    console.log('[预览图生成] 开始生成，总数:', slides.length)
+    // 防止重复调用：如果已经在生成中，跳过本次调用
+    if (generating.value) {
+      console.warn(`[预览图生成] 已有生成任务在进行中，跳过本次调用 (请求生成 ${slides.length} 个)`)
+      return []
+    }
+
+    console.log(`[预览图生成] 开始生成，总数: ${slides.length}`)
+    console.log(`[预览图生成] 幻灯片ID列表:`, slides.map(s => s.id))
     generating.value = true
-    console.log('[预览图生成] generating 设置为 true:', generating.value)
     const results: ThumbnailGenerationResult[] = []
     const total = slides.length
 
     try {
       for (let i = 0; i < slides.length; i++) {
         const slide = slides[i]
+        
+        console.log(`[预览图生成] 处理第 ${i + 1}/${total} 个幻灯片: ${slide.id}`)
         
         // 更新进度
         progress.value = {
@@ -236,6 +244,8 @@ export default () => {
 
         const result = await generateAndUploadThumbnail(documentId, slide.id, slideElement)
         results.push(result)
+        
+        console.log(`[预览图生成] 第 ${i + 1}/${total} 个完成，结果:`, result.success ? '成功' : `失败 - ${result.error}`)
 
         // 添加小延迟，避免过快请求
         if (i < slides.length - 1) {
@@ -254,6 +264,9 @@ export default () => {
       if (onProgress) {
         onProgress(progress.value)
       }
+
+      const successCount = results.filter(r => r.success).length
+      console.log(`[预览图生成] 全部完成，成功: ${successCount}/${total}`)
 
       return results
     } catch (error: any) {
@@ -285,7 +298,14 @@ export default () => {
     onProgress?: (progress: ThumbnailGenerationProgress) => void,
     onComplete?: (results: ThumbnailGenerationResult[]) => void
   ) => {
+    // 防止重复调用：如果已经在生成中，直接返回
+    if (generating.value) {
+      console.warn(`[预览图生成] 已有生成任务在进行中，跳过异步调用`)
+      return
+    }
+
     // 使用 setTimeout 将任务放到下一个事件循环
+    // generateThumbnails 内部会管理 generating 标志
     setTimeout(async () => {
       try {
         const results = await generateThumbnails(documentId, slides, onProgress)

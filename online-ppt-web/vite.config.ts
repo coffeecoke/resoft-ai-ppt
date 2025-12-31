@@ -12,6 +12,9 @@ export default defineConfig({
   server: {
     host: '127.0.0.1',
     port: 5173,
+    allowedHosts: [
+      '20792bg6wh17.vicp.fun', // 允许内网穿透域名访问
+    ],
     proxy: {
       '/api': {
         target: 'http://localhost:5001',

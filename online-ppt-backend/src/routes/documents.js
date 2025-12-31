@@ -104,8 +104,21 @@ router.post('/create', async (req, res) => {
       tag = 'public',
     } = req.body || {}
 
+    console.log(`[文档] 收到创建文档请求: ${name}`)
+    
     if (!name || typeof name !== 'string') {
       return res.status(400).json({ success: false, error: '文档名称不能为空' })
+    }
+
+    // 检查initialSlides数据大小
+    if (initialSlides) {
+      const slidesSize = JSON.stringify(initialSlides).length
+      const sizeInMB = (slidesSize / (1024 * 1024)).toFixed(2)
+      console.log(`[文档] initialSlides数据大小: ${sizeInMB}MB, 页数: ${initialSlides.length}`)
+      
+      if (slidesSize > 50 * 1024 * 1024) { // 50MB
+        console.warn(`[文档] 警告：initialSlides数据过大 (${sizeInMB}MB)`)
+      }
     }
 
     // 查找源文档名称（如果存在）
@@ -119,6 +132,7 @@ router.post('/create', async (req, res) => {
       }
     }
 
+    console.log(`[文档] 调用documentService.create...`)
     const meta = await documentService.create({
       name,
       sourceDocumentId,
@@ -133,8 +147,8 @@ router.post('/create', async (req, res) => {
       tag
     })
 
-    const creationType = initialSlides ? '基于PPTX' : sourceDocumentId ? `基于: ${sourceDocumentId}` : '空白'
-    console.log(`[文档] 新建文档: ${meta.id} - ${name} (${creationType})`)
+    const creationType = initialSlides ? `基于PPTX(${initialSlides.length}页)` : sourceDocumentId ? `基于: ${sourceDocumentId}` : '空白'
+    console.log(`[文档] 新建文档成功: ${meta.id} - ${name} (${creationType})`)
 
     res.json({
       success: true,
@@ -142,6 +156,7 @@ router.post('/create', async (req, res) => {
     })
   } catch (error) {
     console.error('[文档] 新建文档失败:', error)
+    console.error('[文档] 错误堆栈:', error.stack)
     res.status(500).json({ success: false, error: error.message || '新建文档失败' })
   }
 })
@@ -195,6 +210,29 @@ router.get('/', async (req, res) => {
     const start = (p - 1) * ps
     const end = start + ps
     const pageList = filtered.slice(start, end)
+
+    // 检查并修复封面：如果cover为空或地址不正确，从缩略图获取第一张
+    for (const doc of pageList) {
+      // 如果cover为空、不存在或格式不正确，尝试从缩略图获取
+      if (!doc.cover || doc.cover.trim() === '' || !doc.cover.startsWith('/snapshots/')) {
+        try {
+          const thumbnailResult = await thumbnailService.getByDocumentId(doc.id)
+          if (thumbnailResult.thumbnails && thumbnailResult.thumbnails.length > 0) {
+            // 按 slideIndex 排序，取第一张（slideIndex = 0）
+            const firstThumbnail = thumbnailResult.thumbnails.find(t => t.slideIndex === 0) || thumbnailResult.thumbnails[0]
+            if (firstThumbnail && firstThumbnail.url) {
+              doc.cover = firstThumbnail.url
+              // 同时更新数据库中的cover字段（异步，不阻塞响应）
+              documentService.update(doc.id, { cover: firstThumbnail.url }).catch(err => {
+                console.warn(`[文档] 更新封面失败: ${doc.id}`, err.message)
+              })
+            }
+          }
+        } catch (error) {
+          console.warn(`[文档] 获取缩略图失败: ${doc.id}`, error.message)
+        }
+      }
+    }
 
     res.json({
       success: true,

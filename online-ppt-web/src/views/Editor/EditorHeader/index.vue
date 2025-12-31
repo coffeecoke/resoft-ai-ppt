@@ -174,7 +174,7 @@ const {
   editMode,
   currentId,
   saving,
-  save,
+  save: saveDocument,
   generateThumbnailsForPublish,
 } = useEditorSave()
 
@@ -194,7 +194,7 @@ const goBack = () => {
 const handleSave = async () => {
   try {
     const { default: message } = await import('@/utils/message')
-    await save(false, true) // 手动保存：autoSave=false, generateCover=true
+    await saveDocument(false, true) // 手动保存：autoSave=false, generateCover=true
     const modeName = editMode.value === 'template' ? '模板' : '文档'
     message.success(`${modeName}已保存`)
   } catch (error: any) {
@@ -213,8 +213,17 @@ const handlePublish = async () => {
     const { SERVER_URL } = await import('@/services')
     const { default: message } = await import('@/utils/message')
     
-    // 先保存
-    await handleSave()
+    // 先保存（发布时不需要生成封面，因为发布时会统一生成所有缩略图）
+    try {
+      const { default: message } = await import('@/utils/message')
+      await saveDocument(false, false) // 发布时：autoSave=false, generateCover=false
+      const modeName = editMode.value === 'template' ? '模板' : '文档'
+      message.success(`${modeName}已保存`)
+    } catch (error: any) {
+      const { default: message } = await import('@/utils/message')
+      message.error(error?.message || '保存失败')
+      throw error
+    }
     
     // 如果是文档模式，生成预览图
     if (editMode.value === 'document') {
