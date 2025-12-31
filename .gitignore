@@ -144,7 +144,7 @@ vite.config.ts.timestamp-*
 .cursor
 
 .cursorrules
-
+.env
 # 数据文件
 online-ppt-backend/data/documents
 online-ppt-backend/data/templates

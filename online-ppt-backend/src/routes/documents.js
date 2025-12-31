@@ -2,6 +2,7 @@ import { Router } from 'express'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { documentService } from '../services/documentService.js'
 
 const router = Router()
 
@@ -12,7 +13,6 @@ const __dirname = path.dirname(__filename)
 const DATA_DIR = path.join(__dirname, '..', '..', 'data')
 const DOCUMENTS_DIR = path.join(DATA_DIR, 'documents')
 const COVERS_DIR = path.join(DATA_DIR, 'covers')
-const THUMBNAILS_DIR = path.join(DATA_DIR, 'thumbnails')
 const INDEX_FILE = path.join(DATA_DIR, 'document-index.json')
 
 function ensureDirs() {
@@ -83,7 +83,7 @@ function getFileSize(filePath) {
 }
 
 // 创建文档
-router.post('/create', (req, res) => {
+router.post('/create', async (req, res) => {
   try {
     const { 
       name, 
@@ -105,143 +105,33 @@ router.post('/create', (req, res) => {
       return res.status(400).json({ success: false, error: '文档名称不能为空' })
     }
 
-    ensureDirs()
-
-    const indexList = readIndex()
-    const id = generateDocumentId(indexList)
-
-    let documentData = null
-
-    // 如果提供了 initialSlides（基于PPTX创建），使用解析后的slides
-    if (initialSlides && Array.isArray(initialSlides) && initialSlides.length > 0) {
-      const defaultTheme = {
-        themeColors: ['#5b9bd5', '#ed7d31', '#a5a5a5', '#ffc000', '#4472c4', '#70ad47'],
-        fontColor: '#333',
-        fontName: '',
-        backgroundColor: '#fff',
-        shadow: {
-          h: 3,
-          v: 3,
-          blur: 2,
-          color: '#808080',
-        },
-        outline: {
-          width: 2,
-          color: '#525252',
-          style: 'solid',
-        },
-      }
-
-      documentData = {
-        title: name,
-        width: 1000,
-        height: 562.5,
-        theme: defaultTheme,
-        slides: initialSlides,
-      }
-    }
-    // 如果提供了 sourceDocumentId，从源文档复制数据
-    else if (sourceDocumentId) {
-      const sourceFile = path.join(DOCUMENTS_DIR, `${sourceDocumentId}.json`)
-      if (fs.existsSync(sourceFile)) {
-        try {
-          const sourceContent = fs.readFileSync(sourceFile, 'utf-8')
-          documentData = JSON.parse(sourceContent)
-          // 修改标题为新文档名称
-          if (documentData.title) {
-            documentData.title = name
-          }
-        } catch (error) {
-          console.error(`[文档] 读取源文档失败: ${sourceDocumentId}`, error)
-          return res.status(400).json({ success: false, error: '源文档不存在或格式错误' })
-        }
-      } else {
-        return res.status(404).json({ success: false, error: '源文档不存在' })
-      }
-    }
-
-    // 如果没有源文档和initialSlides，创建空白文档（1页空白）
-    if (!documentData) {
-      const defaultTheme = {
-        themeColors: ['#5b9bd5', '#ed7d31', '#a5a5a5', '#ffc000', '#4472c4', '#70ad47'],
-        fontColor: '#333',
-        fontName: '',
-        backgroundColor: '#fff',
-        shadow: {
-          h: 3,
-          v: 3,
-          blur: 2,
-          color: '#808080',
-        },
-        outline: {
-          width: 2,
-          color: '#525252',
-          style: 'solid',
-        },
-      }
-
-      const baseSlide = {
-        id: `slide_${Date.now()}`,
-        elements: [],
-      }
-
-      documentData = {
-        title: name,
-        width: 1000,
-        height: 562.5,
-        theme: defaultTheme,
-        slides: [baseSlide],
-      }
-    }
-
-    // 写入文档文件
-    const filename = path.join(DOCUMENTS_DIR, `${id}.json`)
-    fs.writeFileSync(filename, JSON.stringify(documentData, null, 2), 'utf-8')
-
-    const now = new Date().toISOString()
-    const fileSize = getFileSize(filename)
-    const slideCount = Array.isArray(documentData.slides) ? documentData.slides.length : 0
-
     // 查找源文档名称（如果存在）
     let sourceDocumentName = undefined
     if (sourceDocumentId) {
-      const sourceMeta = indexList.find(item => item.id === sourceDocumentId)
-      sourceDocumentName = sourceMeta?.name
+      try {
+        const sourceDoc = await documentService.getById(sourceDocumentId)
+        sourceDocumentName = sourceDoc?.name
+      } catch (error) {
+        console.warn(`[文档] 查找源文档失败: ${sourceDocumentId}`, error)
+      }
     }
 
-    // 自动从第一页缩略图获取封面
-    const cover = getCoverFromSlides(documentData.slides)
-
-    const meta = {
-      id,
+    const meta = await documentService.create({
       name,
-      cover, // 封面图URL（自动从第一页缩略图获取）
-      sourceDocumentId: sourceDocumentId || undefined,
-      sourceDocumentName: sourceDocumentName || undefined,
+      sourceDocumentId,
+      sourceDocumentName,
       category,
-      status: 'draft',
-      tag,  // 保存tag字段（默认为public）
-      slideCount,
-      fileSize,
-      createdAt: now,
-      updatedAt: now,
-      // 缩略图管理字段
-      thumbnailIndexPath: `thumbnails/${id}.json`,
-      thumbnailCount: 0,
-      thumbnailsLastUpdated: null,
-    // 新增业务字段
-    customerName: customerName || undefined,
-    product: (product && product.length > 0) ? product : undefined,      // 多选数组
-    industry: (industry && industry.length > 0) ? industry : undefined,  // 多选数组
-    audience: (audience && audience.length > 0) ? audience : undefined,  // 多选数组
-    language: language || undefined,
-    }
-
-    indexList.push(meta)
-    writeIndex(indexList)
+      customerName,
+      product,
+      industry,
+      audience,
+      language,
+      initialSlides,
+      tag
+    })
 
     const creationType = initialSlides ? '基于PPTX' : sourceDocumentId ? `基于: ${sourceDocumentId}` : '空白'
-    console.log(`[文档] 新建文档: ${id} - ${name} (${creationType})`)
+    console.log(`[文档] 新建文档: ${meta.id} - ${name} (${creationType})`)
 
     res.json({
       success: true,
@@ -249,12 +139,12 @@ router.post('/create', (req, res) => {
     })
   } catch (error) {
     console.error('[文档] 新建文档失败:', error)
-    res.status(500).json({ success: false, error: '新建文档失败' })
+    res.status(500).json({ success: false, error: error.message || '新建文档失败' })
   }
 })
 
 // 获取文档列表
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const {
       page = 1,
@@ -267,21 +157,10 @@ router.get('/', (req, res) => {
       keyword,
     } = req.query
 
-    let list = readIndex()
-
-    // 筛选
-    let filtered = list
-    if (category && typeof category === 'string') {
-      filtered = filtered.filter(item => item.category === category)
-    }
-    if (status && typeof status === 'string') {
-      filtered = filtered.filter(item => (item.status || 'draft') === status)
-    }
-    if (sourceDocumentId && typeof sourceDocumentId === 'string') {
-      filtered = filtered.filter(item => item.sourceDocumentId === sourceDocumentId)
-    }
+    let list = await documentService.getAll({ category, status, sourceDocumentId })
 
     // 搜索（关键词匹配名称）
+    let filtered = list
     if (keyword && typeof keyword === 'string') {
       const k = keyword.toLowerCase()
       filtered = filtered.filter(item => {
@@ -325,55 +204,43 @@ router.get('/', (req, res) => {
     })
   } catch (error) {
     console.error('[文档] 获取列表失败:', error)
-    res.status(500).json({ success: false, error: '获取文档列表失败' })
+    res.status(500).json({ success: false, error: error.message || '获取文档列表失败' })
   }
 })
 
 // 获取文档详情（包含完整JSON）
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params
-    const indexList = readIndex()
-    const meta = indexList.find(item => item.id === id)
-    if (!meta) {
+    const doc = await documentService.getById(id)
+    
+    if (!doc) {
       return res.status(404).json({ success: false, error: '文档不存在' })
     }
 
-    const filename = path.join(DOCUMENTS_DIR, `${id}.json`)
-    if (!fs.existsSync(filename)) {
-      return res.status(404).json({ success: false, error: '文档文件不存在' })
-    }
-
-    const content = fs.readFileSync(filename, 'utf-8')
-    const documentData = JSON.parse(content)
-
     // 更新最后打开时间
-    const now = new Date().toISOString()
-    const metaIndex = indexList.findIndex(item => item.id === id)
-    if (metaIndex !== -1) {
-      indexList[metaIndex] = {
-        ...indexList[metaIndex],
-        lastOpenedAt: now,
-      }
-      writeIndex(indexList)
-    }
+    await documentService.updateLastOpenedAt(id)
+
+    // 分离元信息和内容数据
+    const { title, width, height, theme, slides, ...meta } = doc
+    const documentData = { title, width, height, theme, slides }
 
     res.json({
       success: true,
       data: {
         ...meta,
         documentData,
-        lastOpenedAt: now,
+        lastOpenedAt: new Date().toISOString(),
       },
     })
   } catch (error) {
     console.error('[文档] 获取详情失败:', error)
-    res.status(500).json({ success: false, error: '获取文档详情失败' })
+    res.status(500).json({ success: false, error: error.message || '获取文档详情失败' })
   }
 })
 
 // 更新文档内容
-router.put('/:id', (req, res) => {
+router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params
     // 兼容两种字段名：documentData 或 data
@@ -384,33 +251,21 @@ router.put('/:id', (req, res) => {
       return res.status(400).json({ success: false, error: '缺少文档数据 documentData 或 data' })
     }
 
-    ensureDirs()
-
-    const indexList = readIndex()
-    const metaIndex = indexList.findIndex(item => item.id === id)
-    if (metaIndex === -1) {
-      return res.status(404).json({ success: false, error: '文档不存在' })
-    }
-
-    // 写入文档文件
-    const filename = path.join(DOCUMENTS_DIR, `${id}.json`)
-    fs.writeFileSync(filename, JSON.stringify(docData, null, 2), 'utf-8')
-
-    const now = new Date().toISOString()
-    const fileSize = getFileSize(filename)
-    const slideCount = Array.isArray(docData.slides) ? docData.slides.length : 0
-    
     // 自动从第一页缩略图更新封面
     const cover = getCoverFromSlides(docData.slides)
 
-    indexList[metaIndex] = {
-      ...indexList[metaIndex],
-      cover, // 每次更新都同步封面
-      slideCount,
-      fileSize,
-      updatedAt: now,
-    }
-    writeIndex(indexList)
+    // 更新文档
+    await documentService.update(id, {
+      cover,
+      slides: docData.slides,
+      theme: docData.theme,
+      title: docData.title,
+      width: docData.width,
+      height: docData.height
+    })
+
+    const updated = await documentService.getById(id)
+    const now = updated.updatedAt || new Date().toISOString()
 
     console.log(`[文档] 更新文档: ${id} (autoSave=${autoSave})`)
 
@@ -422,28 +277,16 @@ router.put('/:id', (req, res) => {
     })
   } catch (error) {
     console.error('[文档] 更新文档失败:', error)
-    res.status(500).json({ success: false, error: '更新文档失败' })
+    res.status(500).json({ success: false, error: error.message || '更新文档失败' })
   }
 })
 
 // 发布文档（draft -> published）
 // 注意：文档发布不需要检查页面类型标注（与模板发布不同）
-router.post('/:id/publish', (req, res) => {
+router.post('/:id/publish', async (req, res) => {
   try {
     const { id } = req.params
-    const indexList = readIndex()
-    const metaIndex = indexList.findIndex(item => item.id === id)
-    if (metaIndex === -1) {
-      return res.status(404).json({ success: false, error: '文档不存在' })
-    }
-
-    const now = new Date().toISOString()
-    indexList[metaIndex] = {
-      ...indexList[metaIndex],
-      status: 'published',
-      updatedAt: now,
-    }
-    writeIndex(indexList)
+    const updated = await documentService.updateStatus(id, 'published')
 
     console.log(`[文档] 发布文档: ${id}`)
 
@@ -452,47 +295,34 @@ router.post('/:id/publish', (req, res) => {
       data: {
         id,
         status: 'published',
-        updatedAt: now,
+        updatedAt: updated.updatedAt || new Date().toISOString(),
       },
     })
   } catch (error) {
     console.error('[文档] 发布文档失败:', error)
-    res.status(500).json({ success: false, error: '发布文档失败' })
+    res.status(500).json({ success: false, error: error.message || '发布文档失败' })
   }
 })
 
 // 删除文档
 // draft -> 物理删除
 // published -> 软删除（改为 archived）
-router.delete('/:id', (req, res) => {
+router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params
-    const indexList = readIndex()
-    const metaIndex = indexList.findIndex(item => item.id === id)
-    if (metaIndex === -1) {
+    
+    // 先获取文档信息
+    const doc = await documentService.getById(id)
+    if (!doc) {
       return res.status(404).json({ success: false, error: '文档不存在' })
     }
 
-    const meta = indexList[metaIndex]
-    const status = meta.status || 'draft'
+    const status = doc.status || 'draft'
 
     // 草稿（draft）：物理删除
     if (status === 'draft') {
-      const documentFile = path.join(DOCUMENTS_DIR, `${id}.json`)
-      if (fs.existsSync(documentFile)) {
-        fs.unlinkSync(documentFile)
-      }
-
-      // 删除缩略图索引文件
-      const thumbnailIndexFile = path.join(THUMBNAILS_DIR, `${id}.json`)
-      if (fs.existsSync(thumbnailIndexFile)) {
-        fs.unlinkSync(thumbnailIndexFile)
-        console.log(`[文档] 删除缩略图索引: ${id}`)
-      }
-
-      // 从索引中移除
-      indexList.splice(metaIndex, 1)
-      writeIndex(indexList)
+      // 注意：缩略图会通过数据库级联删除自动删除，无需手动处理
+      await documentService.delete(id)
 
       console.log(`[文档] 物理删除文档: ${id}`)
 
@@ -505,13 +335,7 @@ router.delete('/:id', (req, res) => {
       })
     } else {
       // 已发布（published）：软删除（改为 archived）
-      const now = new Date().toISOString()
-      indexList[metaIndex] = {
-        ...indexList[metaIndex],
-        status: 'archived',
-        updatedAt: now,
-      }
-      writeIndex(indexList)
+      const updated = await documentService.updateStatus(id, 'archived')
 
       console.log(`[文档] 软删除文档(归档): ${id}`)
 
@@ -520,89 +344,70 @@ router.delete('/:id', (req, res) => {
         data: {
           id,
           status: 'archived',
-          updatedAt: now,
+          updatedAt: updated.updatedAt || new Date().toISOString(),
         },
       })
     }
   } catch (error) {
     console.error('[文档] 删除文档失败:', error)
-    res.status(500).json({ success: false, error: '删除文档失败' })
+    res.status(500).json({ success: false, error: error.message || '删除文档失败' })
   }
 })
 
 // 复制文档
-router.post('/:id/duplicate', (req, res) => {
+router.post('/:id/duplicate', async (req, res) => {
   try {
     const { id } = req.params
-    const indexList = readIndex()
-    const sourceMeta = indexList.find(item => item.id === id)
+    const sourceDoc = await documentService.getById(id)
     
-    if (!sourceMeta) {
+    if (!sourceDoc) {
       return res.status(404).json({ success: false, error: '源文档不存在' })
     }
 
-    // 读取源文档数据
-    const sourceFile = path.join(DOCUMENTS_DIR, `${id}.json`)
-    if (!fs.existsSync(sourceFile)) {
-      return res.status(404).json({ success: false, error: '源文档文件不存在' })
-    }
-
-    const sourceContent = fs.readFileSync(sourceFile, 'utf-8')
-    const sourceData = JSON.parse(sourceContent)
-
-    // 生成新文档ID
-    const newId = generateDocumentId(indexList)
-
-    // 复制文档数据，修改标题
+    // 准备复制数据
+    const newName = `${sourceDoc.name} - 副本`
     const newDocumentData = {
-      ...sourceData,
-      title: `${sourceMeta.name} - 副本`,
+      ...sourceDoc,
+      title: newName
     }
 
-    // 写入新文档文件
-    const newFilename = path.join(DOCUMENTS_DIR, `${newId}.json`)
-    fs.writeFileSync(newFilename, JSON.stringify(newDocumentData, null, 2), 'utf-8')
-
-    const now = new Date().toISOString()
-    const fileSize = getFileSize(newFilename)
-    const slideCount = Array.isArray(newDocumentData.slides) ? newDocumentData.slides.length : 0
-
-    const newMeta = {
-      id: newId,
-      name: `${sourceMeta.name} - 副本`,
-      cover: '',
+    // 创建新文档
+    const newMeta = await documentService.create({
+      name: newName,
       sourceDocumentId: id,
-      sourceDocumentName: sourceMeta.name,
-      category: sourceMeta.category,
-      status: 'draft',
-      slideCount,
-      fileSize,
-      createdAt: now,
-      updatedAt: now,
-    }
+      sourceDocumentName: sourceDoc.name,
+      category: sourceDoc.category || 'uncategorized',
+      customerName: sourceDoc.customerName,
+      product: sourceDoc.product,
+      industry: sourceDoc.industry,
+      audience: sourceDoc.audience,
+      language: sourceDoc.language,
+      tag: sourceDoc.tag || 'public',
+      initialSlides: newDocumentData.slides,
+      theme: newDocumentData.theme,
+      width: newDocumentData.width,
+      height: newDocumentData.height
+    })
 
-    indexList.push(newMeta)
-    writeIndex(indexList)
-
-    console.log(`[文档] 复制文档: ${id} -> ${newId}`)
+    console.log(`[文档] 复制文档: ${id} -> ${newMeta.id}`)
 
     res.json({
       success: true,
       data: {
-        id: newId,
+        id: newMeta.id,
         name: newMeta.name,
         sourceId: id,
       },
     })
   } catch (error) {
     console.error('[文档] 复制文档失败:', error)
-    res.status(500).json({ success: false, error: '复制文档失败' })
+    res.status(500).json({ success: false, error: error.message || '复制文档失败' })
   }
 })
 
 // 重命名文档
 // 修改文档基础信息（原重命名接口）
-router.patch('/:id/metadata', (req, res) => {
+router.patch('/:id/metadata', async (req, res) => {
   try {
     const { id } = req.params
     const { name, customerName, product, industry, audience, language } = req.body || {}
@@ -611,51 +416,27 @@ router.patch('/:id/metadata', (req, res) => {
       return res.status(400).json({ success: false, error: '文档名称不能为空' })
     }
 
-    const indexList = readIndex()
-    const metaIndex = indexList.findIndex(item => item.id === id)
-    if (metaIndex === -1) {
-      return res.status(404).json({ success: false, error: '文档不存在' })
-    }
-
-    // 更新文档数据中的标题
-    const filename = path.join(DOCUMENTS_DIR, `${id}.json`)
-    if (fs.existsSync(filename)) {
-      try {
-        const content = fs.readFileSync(filename, 'utf-8')
-        const documentData = JSON.parse(content)
-        documentData.title = name
-        fs.writeFileSync(filename, JSON.stringify(documentData, null, 2), 'utf-8')
-      } catch (error) {
-        console.warn(`[文档] 更新文档文件标题失败: ${id}`, error)
-      }
-    }
-
-    // 更新索引中的元数据
-    const now = new Date().toISOString()
-    indexList[metaIndex] = {
-      ...indexList[metaIndex],
-      name,
-      updatedAt: now,
-    }
-
+    // 准备更新数据
+    const updateData = { name, title: name }
+    
     // 更新业务字段（只有传了才更新，支持清空）
     if (customerName !== undefined) {
-      indexList[metaIndex].customerName = customerName || undefined
+      updateData.customerName = customerName || undefined
     }
     if (product !== undefined) {
-      indexList[metaIndex].product = (Array.isArray(product) && product.length > 0) ? product : undefined
+      updateData.product = (Array.isArray(product) && product.length > 0) ? product : undefined
     }
     if (industry !== undefined) {
-      indexList[metaIndex].industry = (Array.isArray(industry) && industry.length > 0) ? industry : undefined
+      updateData.industry = (Array.isArray(industry) && industry.length > 0) ? industry : undefined
     }
     if (audience !== undefined) {
-      indexList[metaIndex].audience = (Array.isArray(audience) && audience.length > 0) ? audience : undefined
+      updateData.audience = (Array.isArray(audience) && audience.length > 0) ? audience : undefined
     }
     if (language !== undefined) {
-      indexList[metaIndex].language = language || undefined
+      updateData.language = language || undefined
     }
 
-    writeIndex(indexList)
+    const updated = await documentService.update(id, updateData)
 
     console.log(`[文档] 修改基础信息: ${id} -> ${name}`)
 
@@ -664,23 +445,40 @@ router.patch('/:id/metadata', (req, res) => {
       data: {
         id,
         name,
-        updatedAt: now,
+        updatedAt: updated.updatedAt || new Date().toISOString(),
       },
     })
   } catch (error) {
     console.error('[文档] 修改基础信息失败:', error)
-    res.status(500).json({ success: false, error: '修改基础信息失败' })
+    res.status(500).json({ success: false, error: error.message || '修改基础信息失败' })
   }
 })
 
 // 保留旧接口以兼容（重定向到新接口）
-router.patch('/:id/rename', (req, res) => {
+router.patch('/:id/rename', async (req, res) => {
   const { id } = req.params
   const { name } = req.body || {}
   
-  // 重定向到新的 metadata 接口
-  req.body = { name }
-  return router.handle({ ...req, url: `/${id}/metadata`, method: 'PATCH' }, res)
+  // 直接调用 metadata 接口逻辑
+  try {
+    if (!name || typeof name !== 'string') {
+      return res.status(400).json({ success: false, error: '文档名称不能为空' })
+    }
+
+    const updated = await documentService.update(id, { name, title: name })
+
+    res.json({
+      success: true,
+      data: {
+        id,
+        name,
+        updatedAt: updated.updatedAt || new Date().toISOString(),
+      },
+    })
+  } catch (error) {
+    console.error('[文档] 重命名失败:', error)
+    res.status(500).json({ success: false, error: error.message || '重命名失败' })
+  }
 })
 
 export default router
