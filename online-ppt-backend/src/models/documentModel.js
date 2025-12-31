@@ -73,49 +73,69 @@ export const documentModel = {
   
   // 创建文档
   async create(data) {
-    const id = data.id || `document_${Date.now()}`
-    const contentFilePath = `documents/${id}.json`
-    
-    // 写入内容文件
-    const contentData = {
-      title: data.name,
-      width: data.width || 1000,
-      height: data.height || 562.5,
-      theme: data.theme,
-      slides: data.slides || []
-    }
-    
-    const contentPath = path.join(DATA_DIR, contentFilePath)
-    // 确保目录存在
-    const contentDir = path.dirname(contentPath)
-    if (!fs.existsSync(contentDir)) {
-      fs.mkdirSync(contentDir, { recursive: true })
-    }
-    
-    fs.writeFileSync(contentPath, JSON.stringify(contentData, null, 2))
-    
-    // 写入数据库
-    const created = await prisma.document.create({
-      data: {
-        id,
-        name: data.name,
-        contentFilePath,
-        slideCount: contentData.slides.length,
-        fileSize: BigInt(fs.statSync(contentPath).size),
-        category: data.category || 'uncategorized',
-        status: data.status || 'draft',
-        tag: data.tag || 'public',
-        customerName: data.customerName,
-        product: data.product,
-        industry: data.industry,
-        audience: data.audience,
-        language: data.language,
-        sourceDocumentId: data.sourceDocumentId,
-        sourceDocumentName: data.sourceDocumentName
+    try {
+      const id = data.id || `document_${Date.now()}`
+      const contentFilePath = `documents/${id}.json`
+      
+      // 写入内容文件
+      const contentData = {
+        title: data.name,
+        width: data.width || 1000,
+        height: data.height || 562.5,
+        theme: data.theme,
+        slides: data.slides || []
       }
-    })
-    // 转换 BigInt 字段
-    return serializeBigInt(created)
+      
+      console.log(`[文档模型] 创建文档 ${id}, slides数量: ${contentData.slides.length}`)
+      
+      const contentPath = path.join(DATA_DIR, contentFilePath)
+      // 确保目录存在
+      const contentDir = path.dirname(contentPath)
+      if (!fs.existsSync(contentDir)) {
+        fs.mkdirSync(contentDir, { recursive: true })
+      }
+      
+      // 写入文件前检查数据大小
+      const jsonStr = JSON.stringify(contentData, null, 2)
+      const sizeInMB = (jsonStr.length / (1024 * 1024)).toFixed(2)
+      console.log(`[文档模型] 内容文件大小: ${sizeInMB}MB`)
+      
+      if (jsonStr.length > 50 * 1024 * 1024) { // 50MB
+        console.warn(`[文档模型] 警告：内容文件过大 (${sizeInMB}MB)，可能导致性能问题`)
+      }
+      
+      fs.writeFileSync(contentPath, jsonStr)
+      
+      // 写入数据库
+      console.log(`[文档模型] 写入数据库记录...`)
+      const created = await prisma.document.create({
+        data: {
+          id,
+          name: data.name,
+          cover: data.cover || undefined,
+          contentFilePath,
+          slideCount: contentData.slides.length,
+          fileSize: BigInt(fs.statSync(contentPath).size),
+          category: data.category || 'uncategorized',
+          status: data.status || 'draft',
+          tag: data.tag || 'public',
+          customerName: data.customerName,
+          product: data.product,
+          industry: data.industry,
+          audience: data.audience,
+          language: data.language,
+          sourceDocumentId: data.sourceDocumentId,
+          sourceDocumentName: data.sourceDocumentName
+        }
+      })
+      
+      console.log(`[文档模型] 文档创建成功: ${id}`)
+      // 转换 BigInt 字段
+      return serializeBigInt(created)
+    } catch (error) {
+      console.error('[文档模型] 创建文档失败:', error)
+      throw error
+    }
   },
   
   // 更新文档

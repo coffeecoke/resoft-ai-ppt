@@ -234,17 +234,31 @@ export function useEditorSave() {
       return
     }
 
+    // 获取变更的幻灯片
     const changedSlides = getChangedSlides()
-    if (changedSlides.length > 0) {
-      console.log(`[useEditorSave] 检测到 ${changedSlides.length} 个幻灯片变更，开始生成预览图`)
+    
+    // 获取所有没有缩略图的幻灯片
+    const slidesWithoutThumbnail = slidesStore.slides.filter(slide => !slide.thumbnail)
+    
+    // 合并两个列表（去重）
+    const slidesToGenerate = new Map<string, any>()
+    changedSlides.forEach(slide => slidesToGenerate.set(slide.id, slide))
+    slidesWithoutThumbnail.forEach(slide => slidesToGenerate.set(slide.id, slide))
+    
+    const finalSlides = Array.from(slidesToGenerate.values())
+    
+    if (finalSlides.length > 0) {
+      console.log(`[useEditorSave] 发布文档，需要生成 ${finalSlides.length} 个幻灯片的预览图`)
+      console.log(`  - 变更的幻灯片: ${changedSlides.length} 个`)
+      console.log(`  - 缺少缩略图的幻灯片: ${slidesWithoutThumbnail.length} 个`)
       
       // 异步生成预览图，不阻塞发布流程
-      generateThumbnailsAsync(id, changedSlides)
+      generateThumbnailsAsync(id, finalSlides)
       
       // 清空变更记录
       clearChangedSlides()
     } else {
-      console.log('[useEditorSave] 没有检测到幻灯片变更，跳过预览图生成')
+      console.log('[useEditorSave] 所有幻灯片都有预览图且无变更，跳过预览图生成')
     }
   }
 

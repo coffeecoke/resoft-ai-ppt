@@ -552,14 +552,26 @@ const handleCreate = async () => {
         parsing.value = true
         parsingMessage.value = '正在解析PPTX文件，请稍候...'
         
+        console.log('[文档管理] 开始解析PPTX文件:', createForm.value.pptxFile.name)
         const { slides, theme } = await parsePPTXToSlides(createForm.value.pptxFile, { 
           fixedViewport: true  // 固定viewport为1000
         })
         initialSlides = slides
         parsedTheme = theme
         
+        console.log('[文档管理] PPTX解析完成, slides数量:', slides.length)
+        // 计算数据大小
+        const dataSize = JSON.stringify(slides).length
+        const sizeInMB = (dataSize / (1024 * 1024)).toFixed(2)
+        console.log('[文档管理] Slides数据大小:', sizeInMB, 'MB')
+        
+        if (dataSize > 10 * 1024 * 1024) { // 10MB
+          console.warn('[文档管理] 警告：Slides数据较大，可能影响传输性能')
+        }
+        
         parsingMessage.value = '解析完成，正在创建文档...'
       } catch (error) {
+        console.error('[文档管理] PPTX解析失败:', error)
         message.error('PPTX解析失败，请检查文件格式')
         creating.value = false
         parsing.value = false
@@ -588,7 +600,10 @@ const handleCreate = async () => {
       params.sourceDocumentId = createForm.value.sourceDocumentId
     }
     
+    console.log('[文档管理] 发送创建文档请求...')
     const resp = await createDocument(params)
+    console.log('[文档管理] 创建文档响应:', resp)
+    
     if (!resp?.success || !resp.data?.id) {
       throw new Error(resp?.error || '创建文档失败')
     }
