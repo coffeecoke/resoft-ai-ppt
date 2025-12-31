@@ -3,6 +3,7 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { documentService } from '../services/documentService.js'
+import { thumbnailService } from '../services/thumbnailService.js'
 
 const router = Router()
 
@@ -63,7 +64,9 @@ function getCoverFromSlides(slides) {
   if (slides && slides.length > 0) {
     const firstSlide = slides[0]
     if (firstSlide.thumbnail) {
-      return firstSlide.thumbnail
+      return typeof firstSlide.thumbnail === 'string' 
+        ? firstSlide.thumbnail 
+        : firstSlide.thumbnail.url
     }
   }
   return '' // 如果没有缩略图，返回空字符串
@@ -286,15 +289,46 @@ router.put('/:id', async (req, res) => {
 router.post('/:id/publish', async (req, res) => {
   try {
     const { id } = req.params
-    const updated = await documentService.updateStatus(id, 'published')
+    
+    // 获取文档的第一张缩略图作为封面
+    let cover = ''
+    try {
+      const thumbnailResult = await thumbnailService.getByDocumentId(id)
+      if (thumbnailResult.thumbnails && thumbnailResult.thumbnails.length > 0) {
+        // 按 slideIndex 排序，取第一张（slideIndex = 0）
+        const firstThumbnail = thumbnailResult.thumbnails.find(t => t.slideIndex === 0) || thumbnailResult.thumbnails[0]
+        if (firstThumbnail && firstThumbnail.url) {
+          cover = firstThumbnail.url
+        }
+      }
+    } catch (thumbError) {
+      console.warn(`[文档] 获取缩略图失败: ${id}`, thumbError.message)
+      // 如果从数据库获取缩略图失败，尝试从文档内容中获取
+      try {
+        const doc = await documentService.getById(id)
+        if (doc && doc.slides && doc.slides.length > 0) {
+          cover = getCoverFromSlides(doc.slides)
+        }
+      } catch (docError) {
+        console.warn(`[文档] 从文档内容获取封面失败: ${id}`, docError.message)
+      }
+    }
+    
+    // 更新状态和封面
+    const updateData = { status: 'published' }
+    if (cover) {
+      updateData.cover = cover
+    }
+    const updated = await documentService.update(id, updateData)
 
-    console.log(`[文档] 发布文档: ${id}`)
+    console.log(`[文档] 发布文档: ${id}${cover ? ` (封面: ${cover})` : ''}`)
 
     res.json({
       success: true,
       data: {
         id,
         status: 'published',
+        cover: cover || updated.cover,
         updatedAt: updated.updatedAt || new Date().toISOString(),
       },
     })
