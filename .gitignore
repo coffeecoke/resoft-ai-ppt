@@ -66,8 +66,8 @@ web_modules/
 .yarn-integrity
 
 # dotenv environment variable files
-#.env
-#.env.*
+.env
+.env.*
 !.env.example
 
 # parcel-bundler cache (https://parceljs.org/)
@@ -141,3 +141,12 @@ vite.config.ts.timestamp-*
 # macos
 .DS_Store
 
+.cursor
+
+.cursorrules
+
+# 数据文件
+online-ppt-backend/data/documents
+online-ppt-backend/data/templates
+online-ppt-backend/data/covers
+online-ppt-backend/data/snapshots

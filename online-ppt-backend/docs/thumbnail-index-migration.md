@@ -157,3 +157,5 @@ data/thumbnails/index.json.backup.1767094975597
 - 定期校验主表和索引文件的一致性
 - 缩略图的批量操作接口
 
+
+

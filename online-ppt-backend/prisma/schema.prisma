@@ -1,0 +1,83 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model Document {
+  // 基础信息
+  id                    String   @id @db.VarChar(50)
+  name                  String   @db.VarChar(255)
+  cover                 String?  @db.VarChar(500)
+  category              String   @default("uncategorized") @db.VarChar(50)
+  status                String   @default("draft") @db.VarChar(20)
+  tag                   String   @default("public") @db.VarChar(20)
+  
+  // 文件信息
+  contentFilePath       String   @map("content_file_path") @db.VarChar(500)
+  slideCount            Int      @default(0) @map("slide_count")
+  fileSize              BigInt   @default(0) @map("file_size")
+  
+  // 业务字段
+  customerName          String?  @map("customer_name") @db.VarChar(255)
+  product               Json?
+  industry              Json?
+  audience              Json?
+  language              String?  @db.VarChar(50)
+  
+  // 溯源字段
+  sourceDocumentId      String?  @map("source_document_id") @db.VarChar(50)
+  sourceDocumentName    String?  @map("source_document_name") @db.VarChar(255)
+  
+  // 时间戳
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+  lastOpenedAt          DateTime? @map("last_opened_at")
+  
+  // 关联
+  thumbnails            Thumbnail[]
+  
+  @@index([status], map: "idx_status")
+  @@index([category], map: "idx_category")
+  @@index([createdAt], map: "idx_created_at")
+  @@index([customerName], map: "idx_customer")
+  @@map("documents")
+}
+
+model Thumbnail {
+  // 主键
+  id                String   @id @db.VarChar(100)
+  
+  // 关联字段
+  documentId        String   @map("document_id") @db.VarChar(50)
+  slideId           String   @map("slide_id") @db.VarChar(50)
+  slideIndex        Int      @map("slide_index")
+  
+  // 缩略图信息
+  url               String   @db.VarChar(500)
+  width             Int      @default(800)
+  height            Int      @default(450)
+  size              Int?
+  format            String   @default("jpeg") @db.VarChar(20)
+  
+  // 元数据
+  hasText           Boolean  @default(false) @map("has_text")
+  hasImage          Boolean  @default(false) @map("has_image")
+  elementCount      Int      @default(0) @map("element_count")
+  
+  // 时间戳
+  generatedAt       DateTime @default(now()) @map("generated_at")
+  
+  // 关联
+  document          Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  
+  @@unique([documentId, slideId], map: "uk_document_slide")
+  @@index([documentId], map: "idx_document_id")
+  @@index([slideId], map: "idx_slide_id")
+  @@index([slideIndex], map: "idx_slide_index")
+  @@map("thumbnails")
+}
