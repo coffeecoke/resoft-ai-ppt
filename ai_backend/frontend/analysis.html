@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PPT AI 内容分析管理</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/analysis.css">
+    <!-- Vue 3 CDN -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- Axios CDN -->
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <div id="app">
+        <!-- 头部导航 -->
+        <header class="header">
+            <div class="logo">
+                <svg width="40" height="40" viewBox="0 0 40 40">
+                    <rect x="5" y="5" width="30" height="30" rx="5" fill="#4F46E5"/>
+                    <text x="20" y="27" font-size="20" fill="white" text-anchor="middle" font-weight="bold">AI</text>
+                </svg>
+                <h1>PPT AI 内容分析</h1>
+            </div>
+            <nav class="nav-tabs">
+                <button 
+                    v-for="tab in tabs" 
+                    :key="tab.id"
+                    :class="['nav-tab', {active: activeTab === tab.id}]"
+                    @click="activeTab = tab.id"
+                >
+                    {{ tab.icon }} {{ tab.name }}
+                </button>
+            </nav>
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <a href="index.html" style="color: #4F46E5; text-decoration: none; font-weight: 500;">📄 文档提取</a>
+                <a href="documents.html" style="color: #4F46E5; text-decoration: none; font-weight: 500;">📋 文档管理</a>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <!-- Tab 0: 提示词管理 -->
+            <div v-show="activeTab === 'prompts'" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>📝 提示词模板管理</h2>
+                        <button @click="openPromptModal()" class="btn btn-primary">➕ 新建提示词</button>
+                    </div>
+                    <div class="card-body">
+                        <div v-if="prompts.length === 0" class="empty-state">
+                            <p>暂无提示词模板，请创建一个</p>
+                        </div>
+                        <div v-else class="prompts-list">
+                            <div 
+                                v-for="prompt in prompts" 
+                                :key="prompt.id"
+                                class="prompt-item"
+                            >
+                                <div class="prompt-header">
+                                    <div class="prompt-info">
+                                        <h3>{{ prompt.name }}</h3>
+                                        <span :class="['prompt-status', {active: prompt.is_active}]">
+                                            {{ prompt.is_active ? '✅ 激活' : '⏸️ 停用' }}
+                                        </span>
+                                    </div>
+                                    <div class="prompt-actions">
+                                        <button 
+                                            @click="viewPrompt(prompt)" 
+                                            class="btn btn-sm btn-secondary"
+                                            title="查看详情"
+                                        >
+                                            👁️ 查看
+                                        </button>
+                                        <button 
+                                            @click="openPromptModal(prompt)" 
+                                            class="btn btn-sm btn-primary"
+                                            title="编辑"
+                                        >
+                                            ✏️ 编辑
+                                        </button>
+                                        <button 
+                                            @click="togglePromptStatus(prompt.id)" 
+                                            class="btn btn-sm btn-secondary"
+                                            :title="prompt.is_active ? '停用' : '激活'"
+                                        >
+                                            {{ prompt.is_active ? '⏸️' : '▶️' }}
+                                        </button>
+                                        <button 
+                                            @click="deletePrompt(prompt.id)" 
+                                            class="btn btn-sm btn-danger"
+                                            title="删除"
+                                        >
+                                            🗑️
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="prompt-meta">
+                                    <span class="prompt-code">代码: {{ prompt.code }}</span>
+                                    <span class="prompt-type">类型: {{ prompt.type }}</span>
+                                    <span class="prompt-date">更新: {{ formatDate(prompt.updated_at) }}</span>
+                                </div>
+                                <div v-if="prompt.description" class="prompt-description">
+                                    {{ prompt.description }}
+                                </div>
+                                
+                                <!-- 查看详情展开 -->
+                                <div v-if="selectedPrompt && selectedPrompt.id === prompt.id" class="prompt-detail">
+                                    <h4>📋 提示词内容</h4>
+                                    <pre class="prompt-content">{{ prompt.prompt }}</pre>
+                                    <button @click="selectedPrompt = null" class="btn btn-sm btn-secondary">收起</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 1: 分析测试 -->
+            <div v-show="activeTab === 'test'" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>🧪 单页内容分析测试</h2>
+                        <p class="card-description">输入PPT页面文本内容，AI将自动分析并返回分类结果</p>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-group">
+                            <label>选择提示词模板</label>
+                            <select v-model="testData.promptId" class="form-select">
+                                <option value="">-- 使用默认提示词 --</option>
+                                <option v-for="prompt in prompts.filter(p => p.is_active)" :key="prompt.id" :value="prompt.id">
+                                    {{ prompt.name }}
+                                </option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>测试文本内容</label>
+                            <textarea 
+                                v-model="testData.slideText"
+                                placeholder="请输入PPT页面的文本内容，例如：XX公司成立于2010年，是一家专注于金融监管科技的高新技术企业..."
+                                rows="8"
+                                class="form-textarea"
+                            ></textarea>
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>AI模型</label>
+                                <select v-model="testData.modelName" class="form-select">
+                                    <optgroup label="🔥 推荐模型">
+                                        <option value="gpt-4o-mini">GPT-4o Mini (快速，推荐)</option>
+                                        <option value="gpt-4o">GPT-4o (高质量)</option>
+                                        <option value="deepseek-chat">DeepSeek Chat (国产，性价比高)</option>
+                                    </optgroup>
+                                    <optgroup label="🚀 GPT 系列">
+                                        <option value="gpt-4.1">GPT-4.1</option>
+                                        <option value="gpt-4.1-mini">GPT-4.1 Mini</option>
+                                        <option value="gpt-4.1-nano">GPT-4.1 Nano (超快)</option>
+                                    </optgroup>
+                                    <optgroup label="🧠 DeepSeek 系列">
+                                        <option value="deepseek-reasoner">DeepSeek Reasoner (推理增强)</option>
+                                        <option value="deepseek-v3">DeepSeek V3</option>
+                                        <option value="deepseek-v3.1">DeepSeek V3.1</option>
+                                        <option value="deepseek-r1">DeepSeek R1</option>
+                                        <option value="deepseek-r1:32b">DeepSeek R1 (32B参数)</option>
+                                    </optgroup>
+                                    <optgroup label="🇨🇳 通义千问系列">
+                                        <option value="qwen-plus">通义千问 Plus</option>
+                                        <option value="qwen3-max">通义千问3 Max</option>
+                                        <option value="qwen3-coder-flash">通义千问3 Coder Flash</option>
+                                        <option value="qwen3-coder-plus">通义千问3 Coder Plus</option>
+                                    </optgroup>
+                                    <optgroup label="🔬 高级模型">
+                                        <option value="o1">OpenAI O1 (深度推理)</option>
+                                        <option value="o1-preview">OpenAI O1 Preview</option>
+                                        <option value="o1-mini">OpenAI O1 Mini</option>
+                                        <option value="resoft-llm">Resoft LLM (定制)</option>
+                                    </optgroup>
+                                    <optgroup label="⚙️ 其他">
+                                        <option value="custom-openai">动态模型 (根据环境变量)</option>
+                                    </optgroup>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="action-buttons">
+                            <button 
+                                @click="analyzeSingle" 
+                                :disabled="testLoading || !testData.slideText"
+                                class="btn btn-primary"
+                            >
+                                <span v-if="!testLoading">🔍 开始分析</span>
+                                <span v-else>⏳ 分析中...</span>
+                            </button>
+                            <button 
+                                @click="clearTest" 
+                                class="btn btn-secondary"
+                            >
+                                🗑️ 清空
+                            </button>
+                        </div>
+
+                        <!-- 分析结果 -->
+                        <div v-if="testResult" class="result-card">
+                            <h3>📊 分析结果</h3>
+                            <div class="result-grid">
+                                <div class="result-item">
+                                    <span class="result-label">分类代码</span>
+                                    <span class="result-value code">{{ testResult.category_code }}</span>
+                                </div>
+                                <div class="result-item">
+                                    <span class="result-label">分类名称</span>
+                                    <span class="result-value">{{ testResult.categoryName }}</span>
+                                </div>
+                                <div class="result-item">
+                                    <span class="result-label">置信度</span>
+                                    <span class="result-value">
+                                        <div class="confidence-bar">
+                                            <div class="confidence-fill" :style="{width: (testResult.confidence * 100) + '%'}"></div>
+                                            <span class="confidence-text">{{ (testResult.confidence * 100).toFixed(1) }}%</span>
+                                        </div>
+                                    </span>
+                                </div>
+                                <div class="result-item full-width">
+                                    <span class="result-label">分类理由</span>
+                                    <span class="result-value">{{ testResult.reason }}</span>
+                                </div>
+                                <div class="result-item full-width">
+                                    <span class="result-label">判断标准</span>
+                                    <span class="result-value description">{{ testResult.categoryDescription }}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div v-if="testError" class="error-card">
+                            <h3>❌ 分析失败</h3>
+                            <p>{{ testError }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 2: 文档批量分析 -->
+            <div v-show="activeTab === 'batch'" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>📚 文档批量分析</h2>
+                        <p class="card-description">选择已提取文本的文档进行完整的AI分类分析</p>
+                    </div>
+                    <div class="card-body">
+                        <!-- 文档选择 -->
+                        <div class="form-group">
+                            <label>选择文档</label>
+                            <button @click="loadDocuments" class="btn btn-secondary" style="margin-bottom: 10px;">
+                                🔄 刷新文档列表
+                            </button>
+                            <select v-model="selectedDocumentId" class="form-select" @change="onDocumentChange">
+                                <option value="">-- 请选择文档 --</option>
+                                <option v-for="doc in documents" :key="doc.id" :value="doc.id">
+                                    {{ doc.name }} ({{ doc.slideCount }} 页)
+                                </option>
+                            </select>
+                        </div>
+
+                        <div v-if="selectedDocument" class="document-info">
+                            <h3>📄 文档信息</h3>
+                            <div class="info-grid">
+                                <div class="info-item">
+                                    <span class="info-label">文档名称</span>
+                                    <span class="info-value">{{ selectedDocument.name }}</span>
+                                </div>
+                                <div class="info-item">
+                                    <span class="info-label">总页数</span>
+                                    <span class="info-value">{{ selectedDocument.slideCount }}</span>
+                                </div>
+                                <div class="info-item">
+                                    <span class="info-label">已提取文本</span>
+                                    <span class="info-value">{{ selectedDocument.extractedCount }} 页</span>
+                                </div>
+                                <div class="info-item">
+                                    <span class="info-label">文档ID</span>
+                                    <span class="info-value code">{{ selectedDocument.id }}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div v-if="selectedDocumentId" class="form-group">
+                            <label>AI模型</label>
+                            <select v-model="batchData.modelName" class="form-select">
+                                <optgroup label="🔥 推荐模型">
+                                    <option value="gpt-4o-mini">GPT-4o Mini (快速，推荐)</option>
+                                    <option value="gpt-4o">GPT-4o (高质量)</option>
+                                    <option value="deepseek-chat">DeepSeek Chat (国产，性价比高)</option>
+                                </optgroup>
+                                <optgroup label="🚀 GPT 系列">
+                                    <option value="gpt-4.1">GPT-4.1</option>
+                                    <option value="gpt-4.1-mini">GPT-4.1 Mini</option>
+                                    <option value="gpt-4.1-nano">GPT-4.1 Nano (超快)</option>
+                                </optgroup>
+                                <optgroup label="🧠 DeepSeek 系列">
+                                    <option value="deepseek-reasoner">DeepSeek Reasoner (推理增强)</option>
+                                    <option value="deepseek-v3">DeepSeek V3</option>
+                                    <option value="deepseek-v3.1">DeepSeek V3.1</option>
+                                    <option value="deepseek-r1">DeepSeek R1</option>
+                                    <option value="deepseek-r1:32b">DeepSeek R1 (32B参数)</option>
+                                </optgroup>
+                                <optgroup label="🇨🇳 通义千问系列">
+                                    <option value="qwen-plus">通义千问 Plus</option>
+                                    <option value="qwen3-max">通义千问3 Max</option>
+                                    <option value="qwen3-coder-flash">通义千问3 Coder Flash</option>
+                                    <option value="qwen3-coder-plus">通义千问3 Coder Plus</option>
+                                </optgroup>
+                                <optgroup label="🔬 高级模型">
+                                    <option value="o1">OpenAI O1 (深度推理)</option>
+                                    <option value="o1-preview">OpenAI O1 Preview</option>
+                                    <option value="o1-mini">OpenAI O1 Mini</option>
+                                    <option value="resoft-llm">Resoft LLM (定制)</option>
+                                </optgroup>
+                                <optgroup label="⚙️ 其他">
+                                    <option value="custom-openai">动态模型 (根据环境变量)</option>
+                                </optgroup>
+                            </select>
+                        </div>
+
+                        <div class="action-buttons">
+                            <button 
+                                @click="startBatchAnalysis" 
+                                :disabled="batchLoading || !selectedDocumentId"
+                                class="btn btn-primary"
+                            >
+                                <span v-if="!batchLoading">🚀 开始分析</span>
+                                <span v-else>⏳ 分析中...</span>
+                            </button>
+                            <button 
+                                @click="viewResults" 
+                                :disabled="!selectedDocumentId"
+                                class="btn btn-secondary"
+                            >
+                                📊 查看结果
+                            </button>
+                            <button 
+                                @click="viewStatistics" 
+                                :disabled="!selectedDocumentId"
+                                class="btn btn-secondary"
+                            >
+                                📈 查看统计
+                            </button>
+                        </div>
+
+                        <!-- 分析进度 -->
+                        <div v-if="batchProgress.show" class="progress-section">
+                            <h3>📊 分析进度</h3>
+                            <div class="progress-bar">
+                                <div class="progress-fill" :style="{width: batchProgress.percent + '%'}"></div>
+                                <span class="progress-text">{{ batchProgress.percent }}%</span>
+                            </div>
+                            <div class="progress-details">
+                                <p>正在分析：{{ batchProgress.current }} / {{ batchProgress.total }}</p>
+                                <p v-if="batchProgress.currentSlideId">当前页面：{{ batchProgress.currentSlideId }}</p>
+                            </div>
+                        </div>
+
+                        <!-- 分析完成结果 -->
+                        <div v-if="batchResult" class="result-card">
+                            <h3>✅ 分析完成</h3>
+                            <div class="result-grid">
+                                <div class="result-item">
+                                    <span class="result-label">总页数</span>
+                                    <span class="result-value">{{ batchResult.total }}</span>
+                                </div>
+                                <div class="result-item">
+                                    <span class="result-label">成功</span>
+                                    <span class="result-value success">{{ batchResult.success }}</span>
+                                </div>
+                                <div class="result-item">
+                                    <span class="result-label">失败</span>
+                                    <span class="result-value error">{{ batchResult.failed }}</span>
+                                </div>
+                                <div class="result-item">
+                                    <span class="result-label">跳过</span>
+                                    <span class="result-value">{{ batchResult.skipped }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 3: 分析结果查看 -->
+            <div v-show="activeTab === 'results'" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>📊 分析结果</h2>
+                        <button @click="refreshResults" class="btn btn-secondary">🔄 刷新</button>
+                    </div>
+                    <div class="card-body">
+                        <div v-if="results.length === 0" class="empty-state">
+                            <p>暂无分析结果</p>
+                        </div>
+                        <div v-else class="results-table">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>页面索引</th>
+                                        <th>页面ID</th>
+                                        <th>分类名称</th>
+                                        <th>分类代码</th>
+                                        <th>置信度</th>
+                                        <th>分析时间</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="result in results" :key="result.slideId">
+                                        <td>{{ result.slideIndex + 1 }}</td>
+                                        <td class="code">{{ result.slideId }}</td>
+                                        <td><strong>{{ result.categoryName }}</strong></td>
+                                        <td class="code">{{ result.categoryCode }}</td>
+                                        <td>
+                                            <div class="confidence-bar small">
+                                                <div class="confidence-fill" :style="{width: (result.confidence * 100) + '%'}"></div>
+                                                <span class="confidence-text">{{ (result.confidence * 100).toFixed(0) }}%</span>
+                                            </div>
+                                        </td>
+                                        <td>{{ formatDate(result.analyzedAt) }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 4: 统计报表 -->
+            <div v-show="activeTab === 'statistics'" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>📈 统计报表</h2>
+                        <button @click="refreshStatistics" class="btn btn-secondary">🔄 刷新</button>
+                    </div>
+                    <div class="card-body">
+                        <div v-if="statistics" class="statistics-section">
+                            <!-- 概览卡片 -->
+                            <div class="stats-overview">
+                                <div class="stat-card">
+                                    <div class="stat-icon">📄</div>
+                                    <div class="stat-content">
+                                        <div class="stat-value">{{ statistics.summary.totalSlides }}</div>
+                                        <div class="stat-label">总页数</div>
+                                    </div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-icon">✅</div>
+                                    <div class="stat-content">
+                                        <div class="stat-value">{{ statistics.summary.analyzedSlides }}</div>
+                                        <div class="stat-label">已分析</div>
+                                    </div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-icon">⏳</div>
+                                    <div class="stat-content">
+                                        <div class="stat-value">{{ statistics.summary.unanalyzedSlides }}</div>
+                                        <div class="stat-label">未分析</div>
+                                    </div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-icon">🎯</div>
+                                    <div class="stat-content">
+                                        <div class="stat-value">{{ (statistics.summary.avgConfidence * 100).toFixed(1) }}%</div>
+                                        <div class="stat-label">平均置信度</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 分类分布 -->
+                            <h3>📊 分类分布</h3>
+                            <div class="category-stats">
+                                <div 
+                                    v-for="cat in statistics.categoryStats" 
+                                    :key="cat.categoryCode"
+                                    class="category-item"
+                                >
+                                    <div class="category-header">
+                                        <span class="category-name">{{ cat.categoryName }}</span>
+                                        <span class="category-count">{{ cat.count }} 页 ({{ cat.percentage }}%)</span>
+                                    </div>
+                                    <div class="category-bar">
+                                        <div 
+                                            class="category-fill" 
+                                            :style="{width: cat.percentage + '%'}"
+                                        ></div>
+                                    </div>
+                                    <div class="category-footer">
+                                        <span class="category-code">{{ cat.categoryCode }}</span>
+                                        <span class="category-confidence">
+                                            平均置信度: {{ (cat.avgConfidence * 100).toFixed(1) }}%
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div v-else class="empty-state">
+                            <p>请先选择文档并进行分析</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 5: 分类标准 -->
+            <div v-show="activeTab === 'categories'" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>🏷️ 分类标准</h2>
+                        <button @click="loadCategories" class="btn btn-secondary">🔄 刷新</button>
+                    </div>
+                    <div class="card-body">
+                        <div v-if="categories.length === 0" class="empty-state">
+                            <p>加载中...</p>
+                        </div>
+                        <div v-else class="categories-tree">
+                            <div 
+                                v-for="cat in categories" 
+                                :key="cat.id"
+                                class="category-level1"
+                            >
+                                <div class="category-header-l1">
+                                    <h3>{{ cat.name }}</h3>
+                                    <span class="category-code">{{ cat.code }}</span>
+                                </div>
+                                <p class="category-desc">{{ cat.description }}</p>
+                                
+                                <div class="category-children">
+                                    <div 
+                                        v-for="child in cat.children" 
+                                        :key="child.id"
+                                        class="category-level2"
+                                    >
+                                        <div class="category-header-l2">
+                                            <h4>{{ child.name }}</h4>
+                                            <span class="category-code">{{ child.code }}</span>
+                                        </div>
+                                        <p class="category-desc">{{ child.description }}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Toast 提示 -->
+        <div class="toast-container">
+            <div 
+                v-for="toast in toasts" 
+                :key="toast.id"
+                :class="['toast', toast.type]"
+            >
+                {{ toast.message }}
+            </div>
+        </div>
+
+        <!-- 提示词编辑模态框 -->
+        <div v-if="showPromptModal" class="modal-overlay" @click="closePromptModal">
+            <div class="modal-content" @click.stop>
+                <div class="modal-header">
+                    <h2>{{ isEditMode ? '✏️ 编辑提示词' : '➕ 新建提示词' }}</h2>
+                    <button @click="closePromptModal" class="modal-close">✕</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>模板名称 <span class="required">*</span></label>
+                        <input 
+                            v-model="promptForm.name" 
+                            type="text" 
+                            class="form-input"
+                            placeholder="例如：PPT内容分析"
+                        >
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>代码标识 <span class="required">*</span></label>
+                            <input 
+                                v-model="promptForm.code" 
+                                type="text" 
+                                class="form-input"
+                                placeholder="例如：ppt_content_analysis"
+                                :disabled="isEditMode"
+                            >
+                        </div>
+                        <div class="form-group">
+                            <label>类型</label>
+                            <select v-model="promptForm.type" class="form-select">
+                                <option value="ppt_analysis">PPT分析</option>
+                                <option value="document_analysis">文档分析</option>
+                                <option value="text_analysis">文本分析</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>排序</label>
+                            <input 
+                                v-model.number="promptForm.sortOrder" 
+                                type="number" 
+                                class="form-input"
+                                min="0"
+                            >
+                        </div>
+                        <div class="form-group">
+                            <label style="display: flex; align-items: center; gap: 10px;">
+                                <input 
+                                    v-model="promptForm.isActive" 
+                                    type="checkbox"
+                                    style="width: auto; margin: 0;"
+                                >
+                                <span>激活状态</span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>描述说明</label>
+                        <textarea 
+                            v-model="promptForm.description" 
+                            class="form-textarea"
+                            rows="3"
+                            placeholder="简要描述这个提示词的用途"
+                        ></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>提示词内容 <span class="required">*</span></label>
+                        <textarea 
+                            v-model="promptForm.prompt" 
+                            class="form-textarea"
+                            rows="10"
+                            placeholder="请输入给AI的提示词内容..."
+                        ></textarea>
+                        <small style="color: #666; display: block; margin-top: 5px;">
+                            提示：可以使用 {categories} 占位符，系统会自动替换为分类列表
+                        </small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button @click="closePromptModal" class="btn btn-secondary">取消</button>
+                    <button 
+                        @click="savePrompt" 
+                        :disabled="promptLoading"
+                        class="btn btn-primary"
+                    >
+                        {{ promptLoading ? '保存中...' : '保存' }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/analysis.js"></script>
+</body>
+</html>
+
