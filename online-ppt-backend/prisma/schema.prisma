@@ -8,58 +8,44 @@ datasource db {
   shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
-model concerns {
-  id                String              @id @db.VarChar(50)
-  question          String              @db.Text
-  category          String?             @db.VarChar(100)
-  priority          String?             @db.VarChar(20)
-  answer            String?             @db.Text
-  status            String              @default("pending") @db.VarChar(20)
-  created_at        DateTime            @default(now())
-  updated_at        DateTime
-  document_concerns document_concerns[]
-  session_concerns  session_concerns[]
+// ==================== PPT文档相关表 ====================
 
-  @@index([category], map: "idx_category")
-  @@index([status], map: "idx_status")
-}
-
-model document_concerns {
-  id          String    @id @db.VarChar(50)
-  document_id String    @db.VarChar(50)
-  concern_id  String    @db.VarChar(50)
-  sort_order  Int       @default(0)
-  created_at  DateTime  @default(now())
-  concerns    concerns  @relation(fields: [concern_id], references: [id], onDelete: Cascade)
-  documents   documents @relation(fields: [document_id], references: [id], onDelete: Cascade)
-
-  @@unique([document_id, concern_id], map: "uk_document_concern")
-  @@index([concern_id], map: "idx_concern_id")
-  @@index([document_id], map: "idx_document_id")
-}
-
+/// PPT文档表
 model documents {
-  id                   String              @id @db.VarChar(50)
-  name                 String              @db.VarChar(255)
-  cover                String?             @db.VarChar(500)
-  category             String              @default("uncategorized") @db.VarChar(50)
-  status               String              @default("draft") @db.VarChar(20)
-  tag                  String              @default("public") @db.VarChar(20)
-  content_file_path    String              @db.VarChar(500)
-  slide_count          Int                 @default(0)
-  file_size            BigInt              @default(0)
-  customer_name        String?             @db.VarChar(255)
-  product              Json?
-  industry             Json?
-  audience             Json?
-  language             String?             @db.VarChar(50)
-  product_id           String?             @db.VarChar(50)
-  session_id           String?             @db.VarChar(50)
-  source_document_id   String?             @db.VarChar(50)
-  source_document_name String?             @db.VarChar(255)
-  created_at           DateTime            @default(now())
-  updated_at           DateTime
-  last_opened_at       DateTime?
+  // 基础信息
+  id                   String              @id @db.VarChar(50)                      /// 文档ID
+  name                 String              @db.VarChar(255)                           /// 文档名称
+  cover                String?             @db.VarChar(500)                         /// 封面图URL
+  category             String              @default("uncategorized") @db.VarChar(50)  /// 分类
+  status               String              @default("draft") @db.VarChar(20)          /// 状态：draft=草稿，published=已发布
+  tag                  String              @default("public") @db.VarChar(20)         /// 标签：public=公共版，practical=实战版
+  
+  // 文件信息
+  content_file_path    String              @db.VarChar(500)                         /// 内容文件路径
+  slide_count          Int                 @default(0)                               /// 幻灯片数量
+  file_size            BigInt              @default(0)                                /// 文件大小（字节）
+  
+  // 业务字段
+  customer_name        String?             @db.VarChar(255)                           /// 客户名称
+  product              Json?                                                          /// 产品（数组，兼容旧数据）
+  industry             Json?                                                          /// 行业（数组）
+  audience             Json?                                                          /// 受众（数组）
+  language             String?             @db.VarChar(50)                           /// 语言
+  
+  // 🆕 回传PPT相关字段
+  product_id           String?             @db.VarChar(50)                          /// 关联产品ID（回传时选择）
+  session_id           String?             @db.VarChar(50)                          /// 关联交流场次ID
+  
+  // 溯源字段
+  source_document_id   String?             @db.VarChar(50)                          /// 源文档ID
+  source_document_name String?             @db.VarChar(255)                          /// 源文档名称
+  
+  // 时间戳
+  created_at           DateTime            @default(now())                           /// 创建时间
+  updated_at           DateTime                                                      /// 更新时间
+  last_opened_at       DateTime?                                                   /// 最后打开时间
+  
+  // 关联
   document_concerns    document_concerns[]
   products             products?           @relation(fields: [product_id], references: [id])
   sessions             sessions?           @relation(fields: [session_id], references: [id])
@@ -74,80 +60,97 @@ model documents {
   @@index([status], map: "idx_status")
 }
 
-model page_type_catalog_mappings {
-  id               String           @id @db.VarChar(50)
-  product_id       String           @db.VarChar(50)
-  catalog_id       String           @db.VarChar(50)
-  page_type        String           @db.VarChar(100)
-  is_active        Boolean          @default(true)
-  created_at       DateTime         @default(now())
-  updated_at       DateTime
-  product_catalogs product_catalogs @relation(fields: [catalog_id], references: [id], onDelete: Cascade)
-  products         products         @relation(fields: [product_id], references: [id], onDelete: Cascade)
+/// 缩略图表
+model thumbnails {
+  // 主键
+  id                   String    @id @db.VarChar(100)                                 /// 缩略图ID
+  
+  // 关联字段
+  document_id          String    @db.VarChar(50)                                      /// 文档ID
+  slide_id             String    @db.VarChar(50)                                      /// 幻灯片ID
+  slide_index          Int                                                           /// 幻灯片索引（从0开始）
+  
+  // 缩略图信息
+  url                  String    @db.VarChar(500)                                    /// 缩略图URL
+  width                Int       @default(800)                                        /// 宽度（像素）
+  height               Int       @default(450)                                       /// 高度（像素）
+  size                 Int?                                                           /// 文件大小（字节）
+  format               String    @default("jpeg") @db.VarChar(20)                     /// 图片格式
+  
+  // 元数据
+  has_text             Boolean   @default(false)                                       /// 是否包含文本
+  has_image            Boolean   @default(false)                                      /// 是否包含图片
+  element_count        Int       @default(0)                                           /// 元素数量
+  
+  // 🆕 AI分析的页面类型标签
+  page_type            String?   @db.VarChar(100)                                      /// AI分析的页面类型（如"产品简介"）
+  page_type_confidence Float?                                                          /// AI分析置信度（0-1）
+  analyzed_at          DateTime?                                                      /// AI分析时间
+  
+  // 时间戳
+  generated_at         DateTime  @default(now())                                     /// 生成时间
+  
+  // 关联
+  documents            documents @relation(fields: [document_id], references: [id], onDelete: Cascade)
 
-  @@unique([product_id, catalog_id, page_type], map: "uk_product_catalog_page_type")
-  @@index([catalog_id], map: "idx_catalog_id")
-  @@index([page_type], map: "idx_page_type")
-  @@index([product_id], map: "idx_product_id")
-}
-
-model product_catalogs {
-  id                         String                       @id @db.VarChar(50)
-  product_id                 String                       @db.VarChar(50)
-  parent_id                  String?                      @db.VarChar(50)
-  name                       String                       @db.VarChar(255)
-  code                       String?                      @db.VarChar(100)
-  description                String?                      @db.Text
-  sort_order                 Int                          @default(0)
-  level                      Int                          @default(1)
-  is_active                  Boolean                      @default(true)
-  created_at                 DateTime                     @default(now())
-  updated_at                 DateTime
-  page_type_catalog_mappings page_type_catalog_mappings[]
-  product_catalogs           product_catalogs?            @relation("product_catalogsToproduct_catalogs", fields: [parent_id], references: [id], onDelete: Cascade)
-  other_product_catalogs     product_catalogs[]           @relation("product_catalogsToproduct_catalogs")
-  products                   products                     @relation(fields: [product_id], references: [id], onDelete: Cascade)
-  product_documents          product_documents[]
-
-  @@index([level], map: "idx_level")
-  @@index([parent_id], map: "idx_parent_id")
-  @@index([product_id], map: "idx_product_id")
-}
-
-model product_documents {
-  id               String            @id @db.VarChar(50)
-  product_id       String            @db.VarChar(50)
-  document_id      String            @db.VarChar(50)
-  catalog_id       String?           @db.VarChar(50)
-  version          String            @default("public") @db.VarChar(20)
-  slide_pages      Json?
-  sort_order       Int               @default(0)
-  created_at       DateTime          @default(now())
-  updated_at       DateTime
-  product_catalogs product_catalogs? @relation(fields: [catalog_id], references: [id])
-  documents        documents         @relation(fields: [document_id], references: [id], onDelete: Cascade)
-  products         products          @relation(fields: [product_id], references: [id], onDelete: Cascade)
-
-  @@unique([product_id, document_id, catalog_id], map: "uk_product_document_catalog")
-  @@index([catalog_id], map: "idx_catalog_id")
+  @@unique([document_id, slide_id], map: "uk_document_slide")
   @@index([document_id], map: "idx_document_id")
-  @@index([product_id], map: "idx_product_id")
-  @@index([version], map: "idx_version")
+  @@index([page_type], map: "idx_page_type")
+  @@index([slide_id], map: "idx_slide_id")
+  @@index([slide_index], map: "idx_slide_index")
 }
 
+/// 幻灯片合并内容表（用于存储提取的幻灯片文本内容）
+model slide_merged_contents {
+  id             String   @id @db.VarChar(50)                                         /// 内容ID
+  document_id    String   @db.VarChar(50)                                             /// 文档ID
+  slide_id       String   @db.VarChar(50)                                             /// 幻灯片ID
+  merged_content String   @db.Text                                                    /// 合并后的文本内容
+  content_length Int      @default(0)                                                 /// 内容长度
+  slide_order    Int                                                                  /// 幻灯片顺序
+  file_name      String   @db.VarChar(255)                                            /// 文件名
+  extract_method String   @default("auto") @db.VarChar(20)                           /// 提取方法：auto=自动，manual=手动
+  created_at     DateTime @default(now())                                             /// 创建时间
+  updated_at     DateTime                                                             /// 更新时间
+
+  @@unique([document_id, slide_id], map: "uk_document_slide")
+  @@index([document_id], map: "idx_document_id")
+  @@index([slide_id], map: "idx_slide_id")
+  @@index([slide_order], map: "idx_slide_order")
+  @@fulltext([merged_content], map: "ft_merged_content")
+}
+
+/// 文档-关心问题关联表
+model document_concerns {
+  id          String    @id @db.VarChar(50)                                         /// 关联ID
+  document_id String    @db.VarChar(50)                                             /// 文档ID
+  concern_id  String    @db.VarChar(50)                                             /// 问题ID
+  sort_order  Int       @default(0)                                                 /// 排序字段
+  created_at  DateTime  @default(now())                                            /// 创建时间
+  concerns    concerns  @relation(fields: [concern_id], references: [id], onDelete: Cascade)
+  documents   documents @relation(fields: [document_id], references: [id], onDelete: Cascade)
+
+  @@unique([document_id, concern_id], map: "uk_document_concern")
+  @@index([concern_id], map: "idx_concern_id")
+  @@index([document_id], map: "idx_document_id")
+}
+
+// ==================== 产品管理相关表 ====================
+
+/// 产品表
 model products {
-  id                         String                       @id @db.VarChar(50)
-  name                       String                       @db.VarChar(255)
-  code                       String?                      @unique @db.VarChar(100)
-  description                String?                      @db.Text
-  category                   String?                      @db.VarChar(50)
-  tags                       Json?
-  icon                       String?                      @db.VarChar(500)
-  cover                      String?                      @db.VarChar(500)
-  sort_order                 Int                          @default(0)
-  is_active                  Boolean                      @default(true)
-  created_at                 DateTime                     @default(now())
-  updated_at                 DateTime
+  id                         String                       @id @db.VarChar(50)         /// 产品ID
+  name                       String                       @db.VarChar(255)           /// 产品名称
+  code                       String?                      @unique @db.VarChar(100)   /// 产品代码（唯一，用于回传时选择）
+  description                String?                      @db.Text                   /// 产品描述
+  category                   String?                      @db.VarChar(50)            /// 产品分类
+  tags                       Json?                                                      /// 产品标签（数组）
+  icon                       String?                      @db.VarChar(500)            /// 产品图标URL
+  cover                      String?                      @db.VarChar(500)            /// 产品封面图URL
+  sort_order                 Int                          @default(0)                 /// 排序字段
+  is_active                  Boolean                      @default(true)              /// 是否启用
+  created_at                 DateTime                     @default(now())             /// 创建时间
+  updated_at                 DateTime                                                      /// 更新时间
   documents                  documents[]
   page_type_catalog_mappings page_type_catalog_mappings[]
   product_catalogs           product_catalogs[]
@@ -159,12 +162,79 @@ model products {
   @@index([sort_order], map: "idx_sort_order")
 }
 
+/// 产品目录表（固定的标准目录结构）
+model product_catalogs {
+  id                         String                       @id @db.VarChar(50)        /// 目录ID
+  product_id                 String                       @db.VarChar(50)           /// 关联产品ID
+  parent_id                  String?                      @db.VarChar(50)            /// 父目录ID（支持层级）
+  name                       String                       @db.VarChar(255)           /// 目录名称
+  code                       String?                      @db.VarChar(100)           /// 目录代码（如"1.1"、"1.2"）
+  description                String?                      @db.Text                   /// 目录描述
+  sort_order                 Int                          @default(0)                /// 排序字段
+  level                      Int                          @default(1)                 /// 层级（1=一级，2=二级）
+  is_active                  Boolean                      @default(true)              /// 是否启用
+  created_at                 DateTime                     @default(now())             /// 创建时间
+  updated_at                 DateTime                                                      /// 更新时间
+  page_type_catalog_mappings page_type_catalog_mappings[]
+  product_catalogs           product_catalogs?            @relation("product_catalogsToproduct_catalogs", fields: [parent_id], references: [id], onDelete: Cascade)
+  other_product_catalogs     product_catalogs[]           @relation("product_catalogsToproduct_catalogs")
+  products                   products                     @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  product_documents          product_documents[]
+
+  @@index([level], map: "idx_level")
+  @@index([parent_id], map: "idx_parent_id")
+  @@index([product_id], map: "idx_product_id")
+}
+
+/// 产品文档关联表（用于产品介绍PPT的目录展示）
+model product_documents {
+  id               String            @id @db.VarChar(50)                             /// 关联ID
+  product_id       String            @db.VarChar(50)                                 /// 产品ID
+  document_id      String            @db.VarChar(50)                                 /// 文档ID
+  catalog_id       String?           @db.VarChar(50)                                 /// 目录ID（二级目录）
+  version          String            @default("public") @db.VarChar(20)               /// 版本：public=公共版，practical=实战版
+  slide_pages      Json?                                                              /// 页码数组 [1,3,5,7] 或 null=未指定
+  sort_order       Int               @default(0)                                       /// 排序字段
+  created_at       DateTime          @default(now())                                  /// 创建时间
+  updated_at       DateTime                                                           /// 更新时间
+  product_catalogs product_catalogs? @relation(fields: [catalog_id], references: [id])
+  documents        documents         @relation(fields: [document_id], references: [id], onDelete: Cascade)
+  products         products          @relation(fields: [product_id], references: [id], onDelete: Cascade)
+
+  @@unique([product_id, document_id, catalog_id], map: "uk_product_document_catalog")
+  @@index([catalog_id], map: "idx_catalog_id")
+  @@index([document_id], map: "idx_document_id")
+  @@index([product_id], map: "idx_product_id")
+  @@index([version], map: "idx_version")
+}
+
+/// 页面类型与目录映射表（AI页面类型到产品目录的映射）
+model page_type_catalog_mappings {
+  id               String           @id @db.VarChar(50)                             /// 映射ID
+  product_id       String           @db.VarChar(50)                                 /// 产品ID
+  catalog_id       String           @db.VarChar(50)                                 /// 目录ID
+  page_type        String           @db.VarChar(100)                                 /// AI分析的页面类型（如"产品简介"）
+  is_active        Boolean          @default(true)                                   /// 是否启用
+  created_at       DateTime         @default(now())                                  /// 创建时间
+  updated_at       DateTime                                                          /// 更新时间
+  product_catalogs product_catalogs @relation(fields: [catalog_id], references: [id], onDelete: Cascade)
+  products         products         @relation(fields: [product_id], references: [id], onDelete: Cascade)
+
+  @@unique([product_id, catalog_id, page_type], map: "uk_product_catalog_page_type")
+  @@index([catalog_id], map: "idx_catalog_id")
+  @@index([page_type], map: "idx_page_type")
+  @@index([product_id], map: "idx_product_id")
+}
+
+// ==================== 交流场次相关表 ====================
+
+/// 交流场次-关心问题关联表
 model session_concerns {
-  id         String   @id @db.VarChar(50)
-  session_id String   @db.VarChar(50)
-  concern_id String   @db.VarChar(50)
-  sort_order Int      @default(0)
-  created_at DateTime @default(now())
+  id         String   @id @db.VarChar(50)                                             /// 关联ID
+  session_id String   @db.VarChar(50)                                                 /// 场次ID
+  concern_id String   @db.VarChar(50)                                                 /// 问题ID
+  sort_order Int      @default(0)                                                      /// 排序字段
+  created_at DateTime @default(now())                                                  /// 创建时间
   concerns   concerns @relation(fields: [concern_id], references: [id], onDelete: Cascade)
   sessions   sessions @relation(fields: [session_id], references: [id], onDelete: Cascade)
 
@@ -173,36 +243,40 @@ model session_concerns {
   @@index([session_id], map: "idx_session_id")
 }
 
+/// 潜在需求表
 model session_needs {
-  id         String   @id @db.VarChar(50)
-  session_id String   @db.VarChar(50)
-  need       String   @db.Text
-  priority   String?  @db.VarChar(20)
-  status     String   @default("pending") @db.VarChar(20)
-  sort_order Int      @default(0)
-  created_at DateTime @default(now())
-  updated_at DateTime
+  id         String   @id @db.VarChar(50)                                             /// 需求ID
+  session_id String   @db.VarChar(50)                                                 /// 场次ID
+  need       String   @db.Text                                                        /// 需求内容
+  priority   String?  @db.VarChar(20)                                                 /// 优先级：high=高，medium=中，low=低
+  status     String   @default("pending") @db.VarChar(20)                            /// 状态：pending=待确认，confirmed=已确认
+  sort_order Int      @default(0)                                                      /// 排序字段
+  created_at DateTime @default(now())                                                  /// 创建时间
+  updated_at DateTime                                                                  /// 更新时间
   sessions   sessions @relation(fields: [session_id], references: [id], onDelete: Cascade)
 
   @@index([session_id], map: "idx_session_id")
 }
 
+// ==================== 交流场次相关表 ====================
+
+/// 交流场次表（客户交流会议信息）
 model sessions {
-  id               String             @id @db.VarChar(50)
-  title            String             @db.VarChar(255)
-  customer_name    String             @db.VarChar(255)
-  session_date     DateTime
-  duration         Int?
-  location         String?            @db.VarChar(255)
-  video_url        String?            @db.VarChar(500)
-  thumbnail        String?            @db.VarChar(500)
-  participants     Json?
-  product_id       String?            @db.VarChar(50)
-  industry         Json?
-  status           String             @default("draft") @db.VarChar(20)
-  created_at       DateTime           @default(now())
-  updated_at       DateTime
-  created_by       String?            @db.VarChar(50)
+  id               String             @id @db.VarChar(50)                             /// 场次ID
+  title            String             @db.VarChar(255)                                /// 会议主题
+  customer_name    String             @db.VarChar(255)                                /// 客户名称
+  session_date     DateTime                                                           /// 会议时间
+  duration         Int?                                                               /// 会议时长（分钟）
+  location         String?            @db.VarChar(255)                                 /// 会议地点
+  video_url        String?            @db.VarChar(500)                                /// 视频录像URL
+  thumbnail        String?            @db.VarChar(500)                                /// 视频缩略图URL
+  participants     Json?                                                              /// 参与人员（数组）
+  product_id       String?            @db.VarChar(50)                                 /// 主要讨论的产品ID
+  industry         Json?                                                              /// 行业（数组）
+  status           String             @default("draft") @db.VarChar(20)               /// 状态：draft=草稿，completed=已完成
+  created_at       DateTime           @default(now())                                  /// 创建时间
+  updated_at       DateTime                                                           /// 更新时间
+  created_by       String?            @db.VarChar(50)                                /// 创建人ID
   documents        documents[]
   session_concerns session_concerns[]
   session_needs    session_needs[]
@@ -214,47 +288,61 @@ model sessions {
   @@index([session_date], map: "idx_session_date")
 }
 
-model slide_merged_contents {
-  id             String   @id @db.VarChar(50)
-  document_id    String   @db.VarChar(50)
-  slide_id       String   @db.VarChar(50)
-  merged_content String   @db.Text
-  content_length Int      @default(0)
-  slide_order    Int
-  file_name      String   @db.VarChar(255)
-  extract_method String   @default("auto") @db.VarChar(20)
-  created_at     DateTime @default(now())
-  updated_at     DateTime
+/// 关心的问题表
+model concerns {
+  id                String              @id @db.VarChar(50)                        /// 问题ID
+  question          String              @db.Text                                     /// 问题内容
+  category          String?             @db.VarChar(100)                            /// 问题分类
+  priority          String?             @db.VarChar(20)                              /// 优先级：high=高，medium=中，low=低
+  answer            String?             @db.Text                                     /// 回答内容
+  status            String              @default("pending") @db.VarChar(20)          /// 状态：pending=待回答，answered=已回答
+  created_at        DateTime            @default(now())                              /// 创建时间
+  updated_at        DateTime                                                          /// 更新时间
+  document_concerns document_concerns[]
+  session_concerns  session_concerns[]
 
-  @@unique([document_id, slide_id], map: "uk_document_slide")
-  @@index([document_id], map: "idx_document_id")
-  @@index([slide_id], map: "idx_slide_id")
-  @@index([slide_order], map: "idx_slide_order")
-  @@fulltext([merged_content], map: "ft_merged_content")
+  @@index([category], map: "idx_category")
+  @@index([status], map: "idx_status")
 }
 
-model thumbnails {
-  id                   String    @id @db.VarChar(100)
-  document_id          String    @db.VarChar(50)
-  slide_id             String    @db.VarChar(50)
-  slide_index          Int
-  url                  String    @db.VarChar(500)
-  width                Int       @default(800)
-  height               Int       @default(450)
-  size                 Int?
-  format               String    @default("jpeg") @db.VarChar(20)
-  has_text             Boolean   @default(false)
-  has_image            Boolean   @default(false)
-  element_count        Int       @default(0)
-  page_type            String?   @db.VarChar(100)
-  page_type_confidence Float?
-  analyzed_at          DateTime?
-  generated_at         DateTime  @default(now())
-  documents            documents @relation(fields: [document_id], references: [id], onDelete: Cascade)
+/// PPT内容分类表（层级结构）
+model content_categories_ppt {
+  id          String                   @id @db.VarChar(50)                           /// 分类ID
+  parent_id   String?                  @db.VarChar(50)                                /// 父分类ID
+  name        String                   @db.VarChar(100)                               /// 分类名称
+  code        String                   @unique @db.VarChar(100)                      /// 分类代码（唯一）
+  level       Int                      @default(1)                                    /// 层级（1=一级，2=二级）
+  description String?                  @db.Text                                       /// 分类描述
+  sort_order  Int                      @default(0)                                    /// 排序字段
+  is_active   Boolean                  @default(true)                                 /// 是否启用
+  created_at  DateTime                 @default(now())                                 /// 创建时间
+  updated_at  DateTime                 @updatedAt                                     /// 更新时间
+  parent      content_categories_ppt?  @relation("CategoryHierarchy", fields: [parent_id], references: [id], onDelete: Cascade)
+  children    content_categories_ppt[] @relation("CategoryHierarchy")
 
-  @@unique([document_id, slide_id], map: "uk_document_slide")
-  @@index([document_id], map: "idx_document_id")
-  @@index([page_type], map: "idx_page_type")
-  @@index([slide_id], map: "idx_slide_id")
-  @@index([slide_index], map: "idx_slide_index")
+  @@index([parent_id], map: "idx_parent_id")
+  @@index([level], map: "idx_level")
+  @@index([sort_order], map: "idx_sort_order")
+  @@index([is_active], map: "idx_is_active")
+  @@index([code], map: "idx_code")
+}
+
+// ==================== 系统配置相关表 ====================
+
+/// 提示词模板表
+model prompt_templates {
+  id          String   @id @db.VarChar(50)                                             /// 模板ID
+  name        String   @db.VarChar(100)                                               /// 模板名称
+  code        String   @unique @db.VarChar(100)                                       /// 模板代码（唯一）
+  type        String   @db.VarChar(50)                                                /// 模板类型
+  description String?  @db.Text                                                       /// 模板描述
+  prompt      String   @db.Text                                                       /// 提示词内容
+  is_active   Boolean  @default(true)                                                 /// 是否启用
+  sort_order  Int      @default(0)                                                     /// 排序字段
+  created_at  DateTime @default(now())                                                 /// 创建时间
+  updated_at  DateTime @updatedAt                                                      /// 更新时间
+
+  @@index([type], map: "idx_type")
+  @@index([code], map: "idx_code")
+  @@index([is_active], map: "idx_is_active")
 }
