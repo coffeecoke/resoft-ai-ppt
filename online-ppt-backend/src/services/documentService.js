@@ -110,7 +110,7 @@ export const documentService = {
       const filter = {}
       if (query.category) filter.category = query.category
       if (query.status) filter.status = query.status
-      if (query.sourceDocumentId) filter.sourceDocumentId = query.sourceDocumentId
+      if (query.sourceDocumentId) filter.source_document_id = query.sourceDocumentId
       
       return await documentModel.findAll(filter)
     } else {
@@ -366,7 +366,7 @@ export const documentService = {
 
   // 更新最后打开时间
   async updateLastOpenedAt(id) {
-    return await this.update(id, { lastOpenedAt: new Date().toISOString() })
+    return await this.update(id, { last_opened_at: new Date().toISOString() })
   }
 }
 

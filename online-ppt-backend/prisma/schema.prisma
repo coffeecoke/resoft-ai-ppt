@@ -119,7 +119,6 @@ model slide_merged_contents {
   @@index([slide_order], map: "idx_slide_order")
   @@fulltext([merged_content], map: "ft_merged_content")
 }
-
 /// 文档-关心问题关联表
 model document_concerns {
   id          String    @id @db.VarChar(50) /// 关联ID
@@ -139,24 +138,23 @@ model document_concerns {
 
 /// 产品表
 model products {
-  id                         String                       @id @db.VarChar(50) /// 产品ID
-  name                       String                       @db.VarChar(255) /// 产品名称
-  code                       String?                      @unique @db.VarChar(100) /// 产品代码（唯一，用于回传时选择）
-  description                String?                      @db.Text /// 产品描述
-  category                   String?                      @db.VarChar(50) /// 产品分类
-  tags                       Json? /// 产品标签（数组）
-  icon                       String?                      @db.VarChar(500) /// 产品图标URL
-  cover                      String?                      @db.VarChar(500) /// 产品封面图URL
-  sort_order                 Int                          @default(0) /// 排序字段
-  is_active                  Boolean                      @default(true) /// 是否启用
-  created_at                 DateTime                     @default(now()) /// 创建时间
-  updated_at                 DateTime /// 更新时间
-  documents                  documents[]
-  page_type_catalog_mappings page_type_catalog_mappings[]
-  product_catalogs           product_catalogs[]
-  product_documents          product_documents[]
-  sessions                   sessions[]
-  transcriptions             transcriptions[]
+  id                String              @id @db.VarChar(50) /// 产品ID
+  name              String              @db.VarChar(255) /// 产品名称
+  code              String?             @unique @db.VarChar(100) /// 产品代码（唯一，用于回传时选择）
+  description       String?             @db.Text /// 产品描述
+  category          String?             @db.VarChar(50) /// 产品分类
+  tags              Json? /// 产品标签（数组）
+  icon              String?             @db.VarChar(500) /// 产品图标URL
+  cover             String?             @db.VarChar(500) /// 产品封面图URL
+  sort_order        Int                 @default(0) /// 排序字段
+  is_active         Boolean             @default(true) /// 是否启用
+  created_at        DateTime            @default(now()) /// 创建时间
+  updated_at        DateTime /// 更新时间
+  documents         documents[]
+  product_catalogs  product_catalogs[]
+  product_documents product_documents[]
+  sessions          sessions[]
+  transcriptions    transcriptions[]
 
   @@index([category], map: "idx_category")
   @@index([is_active], map: "idx_is_active")
@@ -165,22 +163,21 @@ model products {
 
 /// 产品目录表（固定的标准目录结构）
 model product_catalogs {
-  id                         String                       @id @db.VarChar(50) /// 目录ID
-  product_id                 String                       @db.VarChar(50) /// 关联产品ID
-  parent_id                  String?                      @db.VarChar(50) /// 父目录ID（支持层级）
-  name                       String                       @db.VarChar(255) /// 目录名称
-  code                       String?                      @db.VarChar(100) /// 目录代码（如"1.1"、"1.2"）
-  description                String?                      @db.Text /// 目录描述
-  sort_order                 Int                          @default(0) /// 排序字段
-  level                      Int                          @default(1) /// 层级（1=一级，2=二级）
-  is_active                  Boolean                      @default(true) /// 是否启用
-  created_at                 DateTime                     @default(now()) /// 创建时间
-  updated_at                 DateTime /// 更新时间
-  page_type_catalog_mappings page_type_catalog_mappings[]
-  product_catalogs           product_catalogs?            @relation("product_catalogsToproduct_catalogs", fields: [parent_id], references: [id], onDelete: Cascade)
-  other_product_catalogs     product_catalogs[]           @relation("product_catalogsToproduct_catalogs")
-  products                   products                     @relation(fields: [product_id], references: [id], onDelete: Cascade)
-  product_documents          product_documents[]
+  id                     String              @id @db.VarChar(50) /// 目录ID
+  product_id             String?             @db.VarChar(50) /// 关联产品ID（可选，所有产品共用目录时为 null）
+  parent_id              String?             @db.VarChar(50) /// 父目录ID（支持层级）
+  name                   String              @db.VarChar(255) /// 目录名称
+  code                   String?             @db.VarChar(100) /// 目录代码（如"1.1"、"1.2"），对应 Thumbnail.pageType
+  description            String?             @db.Text /// 目录描述
+  sort_order             Int                 @default(0) /// 排序字段
+  level                  Int                 @default(1) /// 层级（1=一级，2=二级）
+  is_active              Boolean             @default(true) /// 是否启用
+  created_at             DateTime            @default(now()) /// 创建时间
+  updated_at             DateTime /// 更新时间
+  product_catalogs       product_catalogs?   @relation("product_catalogsToproduct_catalogs", fields: [parent_id], references: [id], onDelete: Cascade)
+  other_product_catalogs product_catalogs[]  @relation("product_catalogsToproduct_catalogs")
+  products               products?           @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  product_documents      product_documents[]
 
   @@index([level], map: "idx_level")
   @@index([parent_id], map: "idx_parent_id")
@@ -207,24 +204,6 @@ model product_documents {
   @@index([document_id], map: "idx_document_id")
   @@index([product_id], map: "idx_product_id")
   @@index([version], map: "idx_version")
-}
-
-/// 页面类型与目录映射表（AI页面类型到产品目录的映射）
-model page_type_catalog_mappings {
-  id               String           @id @db.VarChar(50) /// 映射ID
-  product_id       String           @db.VarChar(50) /// 产品ID
-  catalog_id       String           @db.VarChar(50) /// 目录ID
-  page_type        String           @db.VarChar(100) /// AI分析的页面类型（如"产品简介"）
-  is_active        Boolean          @default(true) /// 是否启用
-  created_at       DateTime         @default(now()) /// 创建时间
-  updated_at       DateTime /// 更新时间
-  product_catalogs product_catalogs @relation(fields: [catalog_id], references: [id], onDelete: Cascade)
-  products         products         @relation(fields: [product_id], references: [id], onDelete: Cascade)
-
-  @@unique([product_id, catalog_id, page_type], map: "uk_product_catalog_page_type")
-  @@index([catalog_id], map: "idx_catalog_id")
-  @@index([page_type], map: "idx_page_type")
-  @@index([product_id], map: "idx_product_id")
 }
 
 // ==================== 交流场次相关表 ====================
@@ -305,28 +284,6 @@ model concerns {
 
   @@index([category], map: "idx_category")
   @@index([status], map: "idx_status")
-}
-
-/// PPT内容分类表（层级结构）
-model content_categories_ppt {
-  id          String                   @id @db.VarChar(50) /// 分类ID
-  parent_id   String?                  @db.VarChar(50) /// 父分类ID
-  name        String                   @db.VarChar(100) /// 分类名称
-  code        String                   @unique @db.VarChar(100) /// 分类代码（唯一）
-  level       Int                      @default(1) /// 层级（1=一级，2=二级）
-  description String?                  @db.Text /// 分类描述
-  sort_order  Int                      @default(0) /// 排序字段
-  is_active   Boolean                  @default(true) /// 是否启用
-  created_at  DateTime                 @default(now()) /// 创建时间
-  updated_at  DateTime                 @updatedAt /// 更新时间
-  parent      content_categories_ppt?  @relation("CategoryHierarchy", fields: [parent_id], references: [id], onDelete: Cascade)
-  children    content_categories_ppt[] @relation("CategoryHierarchy")
-
-  @@index([parent_id], map: "idx_parent_id")
-  @@index([level], map: "idx_level")
-  @@index([sort_order], map: "idx_sort_order")
-  @@index([is_active], map: "idx_is_active")
-  @@index([code], map: "idx_code")
 }
 
 // ==================== 系统配置相关表 ====================

@@ -17,8 +17,9 @@ import { randomUUID } from 'crypto'
 const prisma = new PrismaClient()
 
 /**
- * PPT内容分类标签初始化数据
+ * 产品目录初始化数据（原 content_categories_ppt 数据）
  * 根据 1226产品拆分标准.xlsx 生成
+ * 所有产品共用同一套目录结构，product_id 设为 null
  */
 const categoriesData = [
   // ========== 一级分类：企业信息 ==========
@@ -222,11 +223,11 @@ const categoriesData = [
 ]
 
 async function main() {
-  console.log('🌱 开始初始化 PPT 内容分类标签数据...')
+  console.log('🌱 开始初始化产品目录数据...')
 
   try {
     // 清空现有数据（可选，根据需求决定）
-    // await prisma.content_categories_ppt.deleteMany({})
+    // await prisma.product_catalogs.deleteMany({})
 
     // 遍历所有分类数据
     for (const categoryGroup of categoriesData) {
@@ -234,43 +235,47 @@ async function main() {
       
       // 创建一级分类
       const parentId = randomUUID()
-      const parentCategory = await prisma.content_categories_ppt.create({
+      const parentCategory = await prisma.product_catalogs.create({
         data: {
           id: parentId,
+          product_id: null, // 所有产品共用目录，设为 null
           parent_id: null,
           name: level1.name,
           code: level1.code,
           level: 1,
           description: level1.description,
           sort_order: level1.sortOrder,
-          is_active: true
+          is_active: true,
+          updated_at: new Date()
         }
       })
       
-      console.log(`✅ 创建一级分类: ${level1.name} (${level1.code})`)
+      console.log(`✅ 创建一级目录: ${level1.name} (${level1.code})`)
 
       // 创建二级分类
       for (const child of level1.children) {
         const childId = randomUUID()
-        await prisma.content_categories_ppt.create({
+        await prisma.product_catalogs.create({
           data: {
             id: childId,
+            product_id: null, // 所有产品共用目录，设为 null
             parent_id: parentId,
             name: child.name,
             code: child.code,
             level: 2,
             description: child.description,
             sort_order: child.sortOrder,
-            is_active: true
+            is_active: true,
+            updated_at: new Date()
           }
         })
         
-        console.log(`  ✅ 创建二级分类: ${child.name} (${child.code})`)
+        console.log(`  ✅ 创建二级目录: ${child.name} (${child.code})`)
       }
     }
 
-    console.log('\n🎉 PPT 内容分类标签数据初始化完成！')
-    console.log(`📊 统计: ${categoriesData.length} 个一级分类, ${categoriesData.reduce((sum, item) => sum + item.level1.children.length, 0)} 个二级分类`)
+    console.log('\n🎉 产品目录数据初始化完成！')
+    console.log(`📊 统计: ${categoriesData.length} 个一级目录, ${categoriesData.reduce((sum, item) => sum + item.level1.children.length, 0)} 个二级目录`)
 
   } catch (error) {
     console.error('❌ 初始化失败:', error)

@@ -1,4 +1,4 @@
-// 验证 PPT 内容分类标签数据
+// 验证产品目录数据（原 content_categories_ppt 验证脚本）
 import dotenv from 'dotenv'
 import { fileURLToPath } from 'url'
 import path from 'path'
@@ -16,23 +16,23 @@ const { PrismaClient } = pkg
 const prisma = new PrismaClient()
 
 async function verify() {
-  console.log('🔍 开始验证 PPT 内容分类标签数据...\n')
+  console.log('🔍 开始验证产品目录数据...\n')
 
   try {
-    // 1. 统计一级分类数量
-    const level1Count = await prisma.content_categories_ppt.count({
+    // 1. 统计一级目录数量
+    const level1Count = await prisma.product_catalogs.count({
       where: { level: 1 }
     })
-    console.log(`✅ 一级分类数量: ${level1Count} 个`)
+    console.log(`✅ 一级目录数量: ${level1Count} 个`)
 
-    // 2. 统计二级分类数量
-    const level2Count = await prisma.content_categories_ppt.count({
+    // 2. 统计二级目录数量
+    const level2Count = await prisma.product_catalogs.count({
       where: { level: 2 }
     })
-    console.log(`✅ 二级分类数量: ${level2Count} 个`)
+    console.log(`✅ 二级目录数量: ${level2Count} 个`)
 
-    // 3. 检查是否有孤立的二级分类（parent_id 无效）
-    const orphaned = await prisma.content_categories_ppt.findMany({
+    // 3. 检查是否有孤立的二级目录（parent_id 无效）
+    const orphaned = await prisma.product_catalogs.findMany({
       where: {
         level: 2,
         parent_id: {
@@ -48,21 +48,21 @@ async function verify() {
 
     let orphanedCount = 0
     for (const item of orphaned) {
-      const parent = await prisma.content_categories_ppt.findUnique({
+      const parent = await prisma.product_catalogs.findUnique({
         where: { id: item.parent_id }
       })
       if (!parent) {
         orphanedCount++
-        console.log(`⚠️  发现孤立的二级分类: ${item.name} (parent_id: ${item.parent_id})`)
+        console.log(`⚠️  发现孤立的二级目录: ${item.name} (parent_id: ${item.parent_id})`)
       }
     }
 
     if (orphanedCount === 0) {
-      console.log(`✅ 所有二级分类都有有效的父分类`)
+      console.log(`✅ 所有二级目录都有有效的父目录`)
     }
 
     // 4. 检查是否有重复的 code
-    const allCategories = await prisma.content_categories_ppt.findMany({
+    const allCategories = await prisma.product_catalogs.findMany({
       select: { code: true, name: true }
     })
 
@@ -78,47 +78,50 @@ async function verify() {
     }
 
     if (duplicateCount === 0) {
-      console.log(`✅ 所有分类编码都是唯一的`)
+      console.log(`✅ 所有目录编码都是唯一的`)
     }
 
-    // 5. 显示完整的分类树
-    console.log(`\n📊 分类树结构:`)
-    const level1Categories = await prisma.content_categories_ppt.findMany({
+    // 5. 显示完整的目录树
+    console.log(`\n📊 目录树结构:`)
+    const level1Categories = await prisma.product_catalogs.findMany({
       where: { level: 1 },
-      orderBy: { sort_order: 'asc' },
-      include: {
-        children: {
-          orderBy: { sort_order: 'asc' }
-        }
-      }
+      orderBy: { sort_order: 'asc' }
     })
 
     for (const level1 of level1Categories) {
+      const level2Categories = await prisma.product_catalogs.findMany({
+        where: {
+          level: 2,
+          parent_id: level1.id
+        },
+        orderBy: { sort_order: 'asc' }
+      })
+      
       console.log(`\n  📁 ${level1.name} (${level1.code})`)
-      for (const level2 of level1.children) {
+      for (const level2 of level2Categories) {
         console.log(`    └─ ${level2.name} (${level2.code})`)
       }
     }
 
     // 6. 检查判断标准是否完整
-    const categoriesWithoutDescription = await prisma.content_categories_ppt.count({
+    const categoriesWithoutDescription = await prisma.product_catalogs.count({
       where: {
         description: null
       }
     })
 
     if (categoriesWithoutDescription === 0) {
-      console.log(`\n✅ 所有分类都有判断标准`)
+      console.log(`\n✅ 所有目录都有判断标准`)
     } else {
-      console.log(`\n⚠️  有 ${categoriesWithoutDescription} 个分类缺少判断标准`)
+      console.log(`\n⚠️  有 ${categoriesWithoutDescription} 个目录缺少判断标准`)
     }
 
     // 7. 统计总结
     console.log(`\n📈 数据统计总结:`)
-    console.log(`   - 一级分类: ${level1Count} 个`)
-    console.log(`   - 二级分类: ${level2Count} 个`)
-    console.log(`   - 总分类数: ${level1Count + level2Count} 个`)
-    console.log(`   - 孤立分类: ${orphanedCount} 个`)
+    console.log(`   - 一级目录: ${level1Count} 个`)
+    console.log(`   - 二级目录: ${level2Count} 个`)
+    console.log(`   - 总目录数: ${level1Count + level2Count} 个`)
+    console.log(`   - 孤立目录: ${orphanedCount} 个`)
     console.log(`   - 重复编码: ${duplicateCount} 个`)
     console.log(`   - 缺少描述: ${categoriesWithoutDescription} 个`)
 

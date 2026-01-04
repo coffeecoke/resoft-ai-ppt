@@ -18,6 +18,7 @@ const prisma = new PrismaClient()
 const DATA_DIR = path.join(__dirname, '..', '..', 'data')
 
 // 将 BigInt 转换为 Number（用于 JSON 序列化）
+// 同时将数据库字段（下划线）转换为前端字段（驼峰）
 function serializeBigInt(obj) {
   if (obj === null || obj === undefined) return obj
   
@@ -32,7 +33,21 @@ function serializeBigInt(obj) {
   if (typeof obj === 'object') {
     const result = {}
     for (const [key, value] of Object.entries(obj)) {
-      result[key] = serializeBigInt(value)
+      // 转换字段名：下划线 -> 驼峰
+      let newKey = key
+      if (key === 'customer_name') newKey = 'customerName'
+      else if (key === 'product_id') newKey = 'productId'
+      else if (key === 'session_id') newKey = 'sessionId'
+      else if (key === 'source_document_id') newKey = 'sourceDocumentId'
+      else if (key === 'source_document_name') newKey = 'sourceDocumentName'
+      else if (key === 'content_file_path') newKey = 'contentFilePath'
+      else if (key === 'slide_count') newKey = 'slideCount'
+      else if (key === 'file_size') newKey = 'fileSize'
+      else if (key === 'created_at') newKey = 'createdAt'
+      else if (key === 'updated_at') newKey = 'updatedAt'
+      else if (key === 'last_opened_at') newKey = 'lastOpenedAt'
+      
+      result[newKey] = serializeBigInt(value)
     }
     return result
   }
@@ -43,9 +58,9 @@ function serializeBigInt(obj) {
 export const documentModel = {
   // 获取所有文档(只查元信息)
   async findAll(filter = {}) {
-    const docs = await prisma.document.findMany({
+    const docs = await prisma.documents.findMany({
       where: filter,
-      orderBy: { createdAt: 'desc' }
+      orderBy: { created_at: 'desc' }
     })
     // 转换 BigInt 字段
     return serializeBigInt(docs)
@@ -53,14 +68,14 @@ export const documentModel = {
   
   // 获取文档详情(元信息 + 内容)
   async findById(id) {
-    const doc = await prisma.document.findUnique({ where: { id } })
+    const doc = await prisma.documents.findUnique({ where: { id } })
     if (!doc) return null
     
     // 转换 BigInt 字段
     const serializedDoc = serializeBigInt(doc)
     
     // 读取内容文件
-    const contentPath = path.join(DATA_DIR, doc.contentFilePath)
+    const contentPath = path.join(DATA_DIR, doc.content_file_path)
     if (!fs.existsSync(contentPath)) {
       console.warn(`[文档模型] 内容文件不存在: ${contentPath}`)
       return serializedDoc
@@ -108,24 +123,24 @@ export const documentModel = {
       
       // 写入数据库
       console.log(`[文档模型] 写入数据库记录...`)
-      const created = await prisma.document.create({
+      const created = await prisma.documents.create({
         data: {
           id,
           name: data.name,
           cover: data.cover || undefined,
-          contentFilePath,
-          slideCount: contentData.slides.length,
-          fileSize: BigInt(fs.statSync(contentPath).size),
+          content_file_path: contentFilePath,
+          slide_count: contentData.slides.length,
+          file_size: BigInt(fs.statSync(contentPath).size),
           category: data.category || 'uncategorized',
           status: data.status || 'draft',
           tag: data.tag || 'public',
-          customerName: data.customerName,
+          customer_name: data.customerName,
           product: data.product,
           industry: data.industry,
           audience: data.audience,
           language: data.language,
-          sourceDocumentId: data.sourceDocumentId,
-          sourceDocumentName: data.sourceDocumentName
+          source_document_id: data.sourceDocumentId,
+          source_document_name: data.sourceDocumentName
         }
       })
       
@@ -140,26 +155,35 @@ export const documentModel = {
   
   // 更新文档
   async update(id, data) {
-    const doc = await prisma.document.findUnique({ where: { id } })
+    const doc = await prisma.documents.findUnique({ where: { id } })
     if (!doc) throw new Error('文档不存在')
     
-    // 更新数据库
-    const updateData = { ...data }
-    // 移除不应该直接更新的字段
-    delete updateData.slides
-    delete updateData.theme
-    delete updateData.title
-    delete updateData.width
-    delete updateData.height
+    // 字段名映射：驼峰 -> 下划线
+    const updateData = {}
+    if (data.name !== undefined) updateData.name = data.name
+    if (data.cover !== undefined) updateData.cover = data.cover
+    if (data.category !== undefined) updateData.category = data.category
+    if (data.status !== undefined) updateData.status = data.status
+    if (data.tag !== undefined) updateData.tag = data.tag
+    if (data.customerName !== undefined) updateData.customer_name = data.customerName
+    if (data.product !== undefined) updateData.product = data.product
+    if (data.industry !== undefined) updateData.industry = data.industry
+    if (data.audience !== undefined) updateData.audience = data.audience
+    if (data.language !== undefined) updateData.language = data.language
+    if (data.productId !== undefined) updateData.product_id = data.productId
+    if (data.sessionId !== undefined) updateData.session_id = data.sessionId
+    if (data.sourceDocumentId !== undefined) updateData.source_document_id = data.sourceDocumentId
+    if (data.sourceDocumentName !== undefined) updateData.source_document_name = data.sourceDocumentName
+    if (data.last_opened_at !== undefined) updateData.last_opened_at = data.last_opened_at
     
-    const updated = await prisma.document.update({
+    const updated = await prisma.documents.update({
       where: { id },
       data: updateData
     })
     
     // 如果有内容更新,更新文件
     if (data.slides || data.theme || data.title || data.width || data.height) {
-      const contentPath = path.join(DATA_DIR, doc.contentFilePath)
+      const contentPath = path.join(DATA_DIR, doc.content_file_path)
       if (fs.existsSync(contentPath)) {
         const content = JSON.parse(fs.readFileSync(contentPath, 'utf-8'))
         
@@ -172,11 +196,11 @@ export const documentModel = {
         fs.writeFileSync(contentPath, JSON.stringify(content, null, 2))
         
         // 更新文件大小和幻灯片数量
-        await prisma.document.update({
+        await prisma.documents.update({
           where: { id },
           data: {
-            fileSize: BigInt(fs.statSync(contentPath).size),
-            slideCount: content.slides ? content.slides.length : doc.slideCount
+            file_size: BigInt(fs.statSync(contentPath).size),
+            slide_count: content.slides ? content.slides.length : doc.slide_count
           }
         })
       }
@@ -188,17 +212,17 @@ export const documentModel = {
   
   // 删除文档
   async delete(id) {
-    const doc = await prisma.document.findUnique({ where: { id } })
+    const doc = await prisma.documents.findUnique({ where: { id } })
     if (!doc) throw new Error('文档不存在')
     
     // 删除内容文件
-    const contentPath = path.join(DATA_DIR, doc.contentFilePath)
+    const contentPath = path.join(DATA_DIR, doc.content_file_path)
     if (fs.existsSync(contentPath)) {
       fs.unlinkSync(contentPath)
     }
     
     // 删除数据库记录(会自动级联删除 thumbnails)
-    return await prisma.document.delete({ where: { id } })
+    return await prisma.documents.delete({ where: { id } })
   },
   
   // 关闭 Prisma 连接(应用退出时调用)
