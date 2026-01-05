@@ -300,10 +300,17 @@ model prompt_templates {
   sort_order  Int      @default(0) /// 排序字段
   created_at  DateTime @default(now()) /// 创建时间
   updated_at  DateTime @updatedAt /// 更新时间
+  
+  // 🆕 AI后台管理扩展字段
+  variables   Json?                                 /// 动态变量定义（JSON数组）
+  version     String   @default("1.0") @db.VarChar(20) /// 版本号
+  scene_type  String?  @db.VarChar(50)              /// 关联场景类型（transcription, ppt_analysis等）
 
   @@index([type], map: "idx_type")
   @@index([code], map: "idx_code")
   @@index([is_active], map: "idx_is_active")
+  @@index([scene_type], map: "idx_scene_type")
+  @@index([version], map: "idx_version")
 }
 
 // ==================== 语音转录相关表 ====================
@@ -356,4 +363,68 @@ model transcriptions {
   @@index([customer_name], map: "idx_customer_name")
   @@index([created_at], map: "idx_created_at")
   @@fulltext([full_text], map: "ft_full_text")
+}
+
+// ==================== AI后台管理相关表 ====================
+
+/// AI模型配置表（统一管理所有AI功能使用的模型）
+model ai_model_configs {
+  // 基础信息
+  id           String   @id @db.VarChar(50)         /// 配置ID
+  name         String   @db.VarChar(100)            /// 模型显示名称（如"讯飞星火V3.5"）
+  code         String   @unique @db.VarChar(100)    /// 模型代码（唯一标识）
+  
+  // 模型提供商信息
+  provider     String   @db.VarChar(50)             /// 提供商代码（xfyun, openai, qwen等）
+  model_name   String   @db.VarChar(100)            /// 实际调用的模型名称
+  
+  // API配置
+  api_url      String   @db.VarChar(500)            /// API地址
+  api_key      String   @db.VarChar(500)            /// API密钥
+  api_secret   String?  @db.VarChar(500)            /// API密钥2（部分厂商需要）
+  
+  // 模型参数
+  max_tokens   Int      @default(2000)              /// 最大Token数
+  temperature  Float    @default(0.7)               /// 温度参数（0-2）
+  top_p        Float?   @default(0.9)               /// 核采样参数
+  
+  // 功能场景配置
+  scene_type   String   @db.VarChar(50)             /// 使用场景（transcription, ppt_analysis等）
+  is_default   Boolean  @default(false)             /// 是否为该场景的默认模型
+  
+  // 扩展配置
+  extra_config Json?                                /// 额外配置（JSON格式）
+  
+  // 能力标记
+  supports_stream    Boolean  @default(true)        /// 是否支持流式输出
+  supports_functions Boolean  @default(false)       /// 是否支持函数调用
+  supports_vision    Boolean  @default(false)       /// 是否支持图像识别
+  
+  // 成本统计
+  cost_per_1k_tokens Decimal? @db.Decimal(10, 6)   /// 每1K tokens的成本（元）
+  total_calls        Int      @default(0)           /// 累计调用次数
+  total_tokens       BigInt   @default(0)           /// 累计消耗tokens
+  
+  // 状态管理
+  is_active    Boolean  @default(true)              /// 是否启用
+  is_available Boolean  @default(true)              /// 是否可用
+  last_check_at DateTime?                           /// 最后检测时间
+  error_count   Int      @default(0)                /// 连续错误次数
+  
+  // 显示排序
+  sort_order   Int      @default(0)                 /// 排序字段
+  
+  // 审计字段
+  created_at   DateTime @default(now())             /// 创建时间
+  updated_at   DateTime @updatedAt                  /// 更新时间
+  created_by   String?  @db.VarChar(50)             /// 创建人ID
+  
+  // 备注
+  remark       String?  @db.Text                    /// 备注说明
+  
+  @@index([scene_type], map: "idx_scene_type")
+  @@index([is_default, scene_type], map: "idx_default_scene")
+  @@index([is_active], map: "idx_is_active")
+  @@index([provider], map: "idx_provider")
+  @@index([sort_order], map: "idx_sort_order")
 }
