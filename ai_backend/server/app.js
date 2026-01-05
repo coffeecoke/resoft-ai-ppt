@@ -13,6 +13,9 @@ const fs = require('fs').promises
 const { DocumentTextExtractor } = require('../core/extractors/DocumentTextExtractor')
 const documentRoutes = require('./routes/documentRoutes')
 const pptAnalysisRoutes = require('./routes/pptAnalysisRoutes')
+const transcriptionRoutes = require('./routes/transcriptionRoutes')
+const productsRoutes = require('./routes/productsRoutes')
+const sessionsRoutes = require('./routes/sessionsRoutes')
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -57,6 +60,15 @@ app.use('/api/documents', documentRoutes)
 
 // 路由：PPT内容分析（新增）
 app.use('/api/ppt-analysis', pptAnalysisRoutes)
+
+// 路由：语音转录（新增）
+app.use('/api/transcription', transcriptionRoutes)
+
+// 路由：产品管理（新增）
+app.use('/api/products', productsRoutes)
+
+// 路由：交流场次管理（新增）
+app.use('/api/sessions', sessionsRoutes)
 
 // 路由：文件提取接口
 app.post('/api/extract', upload.single('file'), async (req, res) => {
@@ -256,6 +268,30 @@ app.listen(PORT, () => {
   console.log('  - 更新提示词: PUT    /api/ppt-analysis/prompts/:id')
   console.log('  - 删除提示词: DELETE /api/ppt-analysis/prompts/:id')
   console.log('  - 切换状态:   PATCH  /api/ppt-analysis/prompts/:id/toggle')
+  console.log('')
+  console.log('  [语音转录 - 新增]')
+  console.log('  - 上传转录: POST   /api/transcription/upload')
+  console.log('  - 转录列表: GET    /api/transcription')
+  console.log('  - 转录详情: GET    /api/transcription/:id')
+  console.log('  - 更新转录: PUT    /api/transcription/:id')
+  console.log('  - 删除转录: DELETE /api/transcription/:id')
+  console.log('')
+  console.log('  [产品管理 - 新增]')
+  console.log('  - 产品列表: GET    /api/products')
+  console.log('  - 产品详情: GET    /api/products/:id')
+  console.log('  - 创建产品: POST   /api/products')
+  console.log('  - 更新产品: PUT    /api/products/:id')
+  console.log('  - 删除产品: DELETE /api/products/:id')
+  console.log('  - 产品统计: GET    /api/products/statistics')
+  console.log('')
+  console.log('  [交流场次管理 - 新增]')
+  console.log('  - 场次列表: GET    /api/sessions')
+  console.log('  - 场次详情: GET    /api/sessions/:id')
+  console.log('  - 创建场次: POST   /api/sessions')
+  console.log('  - 更新场次: PUT    /api/sessions/:id')
+  console.log('  - 删除场次: DELETE /api/sessions/:id')
+  console.log('  - 场次统计: GET    /api/sessions/statistics')
+  console.log('  - 最近场次: GET    /api/sessions/recent')
   console.log('')
   console.log('🤖 支持的AI模型 (20+):')
   console.log('  🔥 推荐: gpt-4o-mini, gpt-4o, deepseek-chat')

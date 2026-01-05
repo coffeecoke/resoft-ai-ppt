@@ -11,14 +11,16 @@
  * @returns {string} 系统提示词
  */
 function buildPPTAnalysisSystemPrompt(categories) {
+  // 🔄 只提取二级分类（level === 2）
+  const level2Categories = categories.filter(cat => cat.level === 2)
+  
   // 构建分类标准文本
-  const categoryDescriptions = categories.map((cat, index) => {
-    if (cat.level === 1) {
-      return `\n## ${index + 1}. ${cat.name} (${cat.code})\n${cat.description || ''}`
-    } else {
-      return `### ${cat.name} (${cat.code})\n${cat.description || ''}`
-    }
+  const categoryDescriptions = level2Categories.map((cat, index) => {
+    return `### ${index + 1}. ${cat.name} (${cat.code})\n${cat.description || ''}`
   }).join('\n\n')
+  
+  // 🆕 生成有效的分类代码列表（用于约束）
+  const validCodes = level2Categories.map(c => c.code).join('、')
 
   return `你是一位专业的PPT内容分析专家。你的任务是分析PPT页面的文本内容,并根据预定义的分类标准,为其分配最合适的分类标签。
 
@@ -26,11 +28,27 @@ function buildPPTAnalysisSystemPrompt(categories) {
 
 ${categoryDescriptions}
 
+## ⚠️ 重要约束
+
+**你必须从以下列表中选择一个分类代码，不得使用其他代码：**
+
+${validCodes}
+
+**严禁使用以下代码（这些是一级分类，不能直接使用）：**
+- enterprise_info（企业信息）
+- cooperation_cases（合作案例）
+- regulatory_policy_industry（监管政策与行业背景）
+- product_solutions（产品解决方案）
+- deployment_after_sales（部署实施及售后保障）
+- other（其他）
+
+**如果你不确定，请选择最接近的二级分类或使用 "other_content"。**
+
 ## 分析要求
 
 1. **仔细阅读文本内容**:理解页面的核心主题和信息
 2. **对比分类标准**:将内容与各分类的判断标准进行匹配
-3. **选择最佳分类**:选择最贴合内容特征的分类(必须选择二级分类code)
+3. **选择最佳分类**:选择最贴合内容特征的二级分类code（必须从上述列表中选择）
 4. **给出置信度**:评估分类的准确性(0-1之间的数值)
 5. **提供理由**:简要说明为什么选择该分类
 
@@ -40,7 +58,7 @@ ${categoryDescriptions}
 
 \`\`\`json
 {
-  "category_code": "二级分类的code",
+  "category_code": "二级分类的code（必须从上述有效列表中选择）",
   "confidence": 0.95,
   "reason": "简要说明分类理由"
 }
@@ -48,11 +66,12 @@ ${categoryDescriptions}
 
 ## 注意事项
 
-1. **category_code** 必须是二级分类的code(如 enterprise_basic_info)
-2. **confidence** 取值范围0-1,表示分类的置信度
-3. **reason** 用中文简要说明分类依据,不超过100字
-4. 如果内容无法明确分类,选择 "other_content" 并在reason中说明原因
-5. 只输出JSON,不要有其他内容
+1. **category_code** 必须是二级分类的code（如 enterprise_basic_info, product_function_details 等）
+2. **category_code** 必须从上述有效代码列表中选择，不得自行创造或使用一级分类代码
+3. **confidence** 取值范围0-1,表示分类的置信度
+4. **reason** 用中文简要说明分类依据,不超过100字
+5. 如果内容无法明确分类,选择 "other_content" 并在reason中说明原因
+6. 只输出JSON,不要有其他内容
 
 ## 示例
 

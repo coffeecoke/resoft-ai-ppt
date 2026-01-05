@@ -324,7 +324,7 @@ const modelConfigs = {
 6. **其他** - 无法归类的内容
 
 ### 二级分类 (23个)
-每个一级分类下包含多个具体的二级分类，详见数据库 `content_categories_ppt` 表。
+每个一级分类下包含多个具体的二级分类，详见数据库 `product_catalogs` 表（通用产品：`general_ppt_categories`）。
 
 ## 🐛 常见问题
 
@@ -360,12 +360,16 @@ node prisma/seed-content-categories-ppt.js
 
 ### 添加新的分类标准
 
-1. 在数据库中添加分类：
+1. 在数据库中添加分类（使用通用产品ID）：
 ```sql
-INSERT INTO content_categories_ppt 
-  (id, parent_id, name, code, level, description, sort_order) 
+-- 先获取通用产品ID
+SELECT id FROM products WHERE code = 'general_ppt_categories';
+
+-- 添加新分类
+INSERT INTO product_catalogs 
+  (id, product_id, parent_id, name, code, level, description, sort_order) 
 VALUES 
-  (UUID(), 'parent_id', '新分类', 'new_category', 2, '判断标准...', 10);
+  (UUID(), '通用产品ID', 'parent_id', '新分类', 'new_category', 2, '判断标准...', 10);
 ```
 
 2. AI会自动使用新分类标准

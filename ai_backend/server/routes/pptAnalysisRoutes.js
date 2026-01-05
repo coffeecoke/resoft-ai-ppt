@@ -272,9 +272,21 @@ router.post('/analyze-single', async (req, res) => {
       promptId || null
     )
     
-    // 查询分类信息
-    const category = await prisma.content_categories_ppt.findFirst({
-      where: { code: result.category_code }
+    // 查询分类信息 (🔄 已更新：从 product_catalogs 表读取)
+    const GENERAL_PRODUCT_CODE = 'general_ppt_categories'
+    const generalProduct = await prisma.products.findFirst({
+      where: { code: GENERAL_PRODUCT_CODE }
+    })
+    
+    if (!generalProduct) {
+      throw new Error('未找到通用PPT分类产品')
+    }
+    
+    const category = await prisma.product_catalogs.findFirst({
+      where: { 
+        product_id: generalProduct.id,
+        code: result.category_code 
+      }
     })
     
     res.json({
@@ -348,11 +360,23 @@ router.get('/statistics/:documentId', async (req, res) => {
       }
     }
     
-    // 查询分类名称
+    // 查询分类名称 (🔄 已更新：从 product_catalogs 表读取)
+    const GENERAL_PRODUCT_CODE = 'general_ppt_categories'
+    const generalProduct = await prisma.products.findFirst({
+      where: { code: GENERAL_PRODUCT_CODE }
+    })
+    
+    if (!generalProduct) {
+      throw new Error('未找到通用PPT分类产品')
+    }
+    
     const categoryStats = []
     for (const [code, data] of Object.entries(stats)) {
-      const category = await prisma.content_categories_ppt.findFirst({
-        where: { code }
+      const category = await prisma.product_catalogs.findFirst({
+        where: { 
+          product_id: generalProduct.id,
+          code 
+        }
       })
       
       categoryStats.push({
