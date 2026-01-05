@@ -19,14 +19,14 @@
               {{ type === 'public' ? '公共版' : '实战版' }}
             </span>
             <span class="ppt-title-text">{{ title }}</span>
-            <span class="ppt-title-meta">创建人：用户名 · 2025/10/20 · 阅读 123</span>
+            <span class="ppt-title-meta">创建人：融鑫小R · {{ formattedCreatedAt }} · 阅读 {{ viewCount }}</span>
           </div>
           <div class="ppt-actions">
               <el-button size="small">
                 <i class="ri-heart-2-line"></i>
                 收藏 12
               </el-button>
-              <el-button size="small" type="primary">
+              <el-button size="small" type="primary" :loading="exporting" @click="handleDownloadAll">
                 <i class="ri-folder-download-line"></i>
                 下载
               </el-button>
@@ -281,13 +281,14 @@
   </el-dialog>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, nextTick, watch, onMounted, onBeforeUnmount } from 'vue'
 import { MagicStick, Download } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { usePendingOperationsStore } from '@/store/Sales/pendingOperations'
 import { usePptDialogAiStore } from '@/store/Sales/pptDialogAi'
 import PendingOperationsDrawer from '@/components/Sales/PendingOperationsDrawer.vue'
+import { useExportPPT } from '../composables/useExportPPT'
 
 const props = defineProps({
   visible: {
@@ -314,6 +315,18 @@ const props = defineProps({
   responseTocSections: {
     type: Array,
     default: () => []
+  },
+  createdAt: {
+    type: String,
+    default: ''
+  },
+  viewCount: {
+    type: Number,
+    default: 0
+  },
+  documentId: {
+    type: String,
+    required: true
   },
   communicationInfo: {
     type: Object,
@@ -371,6 +384,24 @@ const props = defineProps({
 
 const emit = defineEmits(['update:visible', 'close'])
 
+// 格式化创建时间
+const formattedCreatedAt = computed(() => {
+  if (!props.createdAt) return '未知'
+  
+  // 如果是完整ISO格式（包含T），先提取日期部分
+  if (props.createdAt.includes('T')) {
+    const date = props.createdAt.split('T')[0]
+    return date.replace(/-/g, '/')
+  }
+  
+  // 如果是YYYY-MM-DD格式，转换为YYYY/MM/DD
+  if (props.createdAt.includes('-')) {
+    return props.createdAt.replace(/-/g, '/')
+  }
+  
+  return props.createdAt
+})
+
 // 使用待操作列表store
 const pendingStore = usePendingOperationsStore()
 // 使用PPT对话框AI面板store
@@ -383,6 +414,7 @@ const wordTocMode = ref('single') // single | multi
 const aiPanelVisible = ref(false) // 默认隐藏AI助手面板，只显示AI图标
 const aiInputText = ref('')
 const pendingDrawerVisible = ref(false) // 待操作列表抽屉显示状态
+const exporting = ref(false) // 导出状态
 
 // 检查当前PPT是否已在待操作列表中
 const isInPendingList = computed(() => {
@@ -505,14 +537,57 @@ const analyzeSelectedSlide = () => {
   aiPanelVisible.value = true
 }
 
+// 头部下载按钮：如果有选中，下载选中的；否则下载全部
+const handleDownloadAll = async () => {
+  console.log('[PPT弹框] 下载 - documentId:', props.documentId)
+  
+  if (!props.documentId) {
+    ElMessage.error('文档ID不存在，无法下载')
+    return
+  }
+  
+  const indexes = selectedSlides.value.length > 0 ? selectedSlides.value : []
+  
+  exporting.value = true
+  try {
+    const { exportPPTX } = useExportPPT(props.documentId)
+    await exportPPTX(indexes)
+    ElMessage.success(
+      indexes.length > 0 
+        ? `已导出 ${indexes.length} 张幻灯片` 
+        : '已导出全部幻灯片'
+    )
+  } catch (error: any) {
+    console.error('[PPT弹框] 下载失败:', error)
+    ElMessage.error('导出失败：' + (error.message || '未知错误'))
+  } finally {
+    exporting.value = false
+  }
+}
+
 // 下载选中的幻灯片
-const downloadSelectedSlides = () => {
+const downloadSelectedSlides = async () => {
   if (selectedSlides.value.length === 0) {
     ElMessage.warning('请先选择要下载的幻灯片')
     return
   }
-  // TODO: 实现下载逻辑
-  ElMessage.success(`已选择 ${selectedSlides.value.length} 张幻灯片进行下载`)
+  
+  if (!props.documentId) {
+    ElMessage.error('文档ID不存在，无法下载')
+    return
+  }
+  
+  exporting.value = true
+  try {
+    const { exportPPTX } = useExportPPT(props.documentId)
+    await exportPPTX(selectedSlides.value)
+    ElMessage.success(`已导出 ${selectedSlides.value.length} 张幻灯片`)
+  } catch (error: any) {
+    console.error('[PPT弹框] 下载失败:', error)
+    ElMessage.error('导出失败：' + (error.message || '未知错误'))
+  } finally {
+    exporting.value = false
+  }
 }
 
 // 将选中的幻灯片添加到待操作列表

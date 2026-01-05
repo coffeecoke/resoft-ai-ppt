@@ -110,6 +110,7 @@ export const documentService = {
       const filter = {}
       if (query.category) filter.category = query.category
       if (query.status) filter.status = query.status
+      if (query.tag) filter.tag = query.tag
       if (query.sourceDocumentId) filter.source_document_id = query.sourceDocumentId
       
       return await documentModel.findAll(filter)

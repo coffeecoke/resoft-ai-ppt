@@ -344,7 +344,8 @@ import {
   type DocumentMetadata,
   type UpdateDocumentMetadataParams,
 } from '@/services/documentService'
-import { PRODUCTS, INDUSTRIES, AUDIENCES, LANGUAGES } from '@/configs/salesConstants'
+import { INDUSTRIES, AUDIENCES, LANGUAGES } from '@/configs/salesConstants'
+import { useProductOptions } from '@/composables/useProductOptions'
 import { parsePPTXToSlides } from '@/utils/pptxParser'
 import message from '@/utils/message'
 import Modal from '@/components/Modal.vue'
@@ -425,9 +426,8 @@ const sourceDocumentOptions = computed(() => {
   }))
 })
 
-// 产品选项（从salesConstants导入）
-// 产品选项（多选，不需要"请选择"）
-const productOptions = PRODUCTS
+// 产品选项（从API获取）
+const { productOptions } = useProductOptions()
 
 // 行业选项（多选，不需要"请选择"）
 const industryOptions = INDUSTRIES

@@ -3,10 +3,80 @@
  * 管理所有筛选逻辑和筛选结果计算
  */
 
-import { reactive, computed, ref } from 'vue'
+import { reactive, computed, ref, watch } from 'vue'
 import type { Ref } from 'vue'
+import { getSalesDocumentList, type DocumentMetadata, getDocumentCoverUrl } from '@/services/documentService'
+import { SERVER_URL } from '@/services'
 
 export function useFilters(dataSource: any, activeProduct: Ref<string>) {
+  // 🆕 从API加载的文档列表
+  const documentsFromAPI = ref<DocumentMetadata[]>([])
+  const isLoadingDocuments = ref(false)
+
+  // 🆕 加载文档列表
+  const loadDocuments = async () => {
+    try {
+      isLoadingDocuments.value = true
+      const result = await getSalesDocumentList({
+        status: 'published',
+        pageSize: 100, // 暂时一次性加载所有数据
+      })
+      documentsFromAPI.value = result.documents
+      console.log('[Sales首页] 📦 从API加载文档数量:', result.documents.length)
+      console.log('[Sales首页] 📦 加载的文档:', result.documents)
+    } catch (error) {
+      console.error('[Sales首页] 加载文档失败:', error)
+      documentsFromAPI.value = []
+    } finally {
+      isLoadingDocuments.value = false
+    }
+  }
+
+  // 🆕 页面加载时获取数据
+  loadDocuments()
+
+  // 🆕 将 DocumentMetadata 转换为旧的 PPT 列表格式（保持兼容）
+  const pptListFromAPI = computed(() => {
+    const result = documentsFromAPI.value.map(doc => {
+      // 封面URL处理：后端返回的cover已经是完整路径（如：/snapshots/xxx），
+      // 在开发环境中需要加上/api前缀以便Vite代理
+      // 在生产环境中，Nginx会处理路由，不需要前缀
+      let coverUrl = ''
+      if (doc.cover) {
+        // 如果cover已经包含完整路径，直接使用
+        if (doc.cover.startsWith('http://') || doc.cover.startsWith('https://') || doc.cover.startsWith('/snapshots/')) {
+          coverUrl = doc.cover.startsWith('/snapshots/') ? `${SERVER_URL}${doc.cover}` : doc.cover
+        } else {
+          // 兼容旧格式
+          coverUrl = `${SERVER_URL}${doc.cover}`
+        }
+        console.log('[Sales首页] 📷 封面URL:', doc.id, coverUrl)
+      } else {
+        console.warn('[Sales首页] ⚠️ 文档缺少封面:', doc.id, doc.name)
+      }
+      
+      return {
+        id: doc.id,
+        title: doc.name,
+        tag: doc.tag === 'public' ? '公共版' : doc.tag === 'practical' ? '实战版' : '公共版',
+        product: doc.product?.[0] || '', // 取第一个产品
+        customerName: doc.customerName || '',
+        industry: doc.industry || [],
+        audience: doc.audience || [],
+        language: doc.language || '',
+        cover: coverUrl,
+        thumbnail: coverUrl,  // ← 🆕 添加thumbnail字段，PptGrid组件使用此字段
+        date: doc.updatedAt ? doc.updatedAt.split('T')[0] : '', // 从 ISO 字符串提取 YYYY-MM-DD
+        slideCount: doc.slideCount,
+        createdAt: doc.createdAt,
+        updatedAt: doc.updatedAt,
+      }
+    })
+    console.log('[Sales首页] 🔄 转换后的PPT列表数量:', result.length)
+    console.log('[Sales首页] 📦 转换后的PPT列表:', result)
+    return result
+  })
+
   // PPT筛选条件
   const pptFilters = reactive({
     customerName: '',
@@ -16,6 +86,7 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
     audience: [] as string[],
     language: [] as string[],
   })
+  
   
   // 视频筛选条件
   const videoFilters = reactive({
@@ -60,19 +131,65 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
   // 独立页面筛选条件
   const filterVersion = ref<string | null>(null)
   
-  // 推荐页面 - 筛选PPT
+  // 推荐页面 - 筛选PPT（从API获取）
   const filteredPPT = computed(() => {
-    let list = dataSource.pptList
+    // 🔍 调试信息
+    console.log('[Sales首页] 🎯 filteredPPT 计算:')
+    console.log('  - pptListFromAPI 数量:', pptListFromAPI.value.length)
+    console.log('  - dataSource.pptList 数量:', dataSource.pptList?.length || 0)
+    
+    // 优先使用API数据，如果没有则使用dataSource
+    let list = pptListFromAPI.value.length > 0 ? pptListFromAPI.value : dataSource.pptList
+    console.log('  - 使用数据源:', pptListFromAPI.value.length > 0 ? 'API' : 'Mock')
+    console.log('  - 初始列表数量:', list.length)
+    
+    // 基础筛选：版本和产品
     if (filterVersion.value === 'public') list = list.filter((x: any) => x.tag === '公共版')
     if (filterVersion.value === 'practical') list = list.filter((x: any) => x.tag === '实战版')
     if (activeProduct.value) list = list.filter((x: any) => x.product === activeProduct.value)
     
-    // 应用pptFilters
+    // 应用高级筛选条件
+    // 1. 客户名称（搜索标题和客户名称）
     if (pptFilters.customerName) {
       const q = pptFilters.customerName.trim().toLowerCase()
-      list = list.filter((x: any) => x.title.toLowerCase().includes(q))
+      list = list.filter((x: any) => 
+        x.title.toLowerCase().includes(q) || 
+        (x.customerName && x.customerName.toLowerCase().includes(q))
+      )
     }
     
+    // 2. 行业筛选（多选，满足任一即可）
+    if (pptFilters.industry && pptFilters.industry.length > 0) {
+      list = list.filter((x: any) => {
+        if (!x.industry || !Array.isArray(x.industry)) return false
+        return pptFilters.industry.some(filterIndustry => 
+          x.industry.includes(filterIndustry)
+        )
+      })
+    }
+    
+    // 3. 交流对象筛选（多选，满足任一即可）
+    if (pptFilters.audience && pptFilters.audience.length > 0) {
+      list = list.filter((x: any) => {
+        if (!x.audience || !Array.isArray(x.audience)) return false
+        return pptFilters.audience.some(filterAudience => 
+          x.audience.includes(filterAudience)
+        )
+      })
+    }
+    
+    // 4. 语言筛选（多选，满足任一即可）
+    if (pptFilters.language && pptFilters.language.length > 0) {
+      list = list.filter((x: any) => {
+        if (!x.language) return false
+        return pptFilters.language.includes(x.language)
+      })
+    }
+    
+    // 5. PPT目录筛选（productIntro）- 暂时保留，等待后续实现
+    // TODO: 需要后端支持目录筛选或者通过其他方式实现
+    
+    console.log('  - 筛选后数量:', list.length)
     return list
   })
   
@@ -92,9 +209,9 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
     return list
   })
   
-  // 独立PPT页面 - 筛选结果
+  // 独立PPT页面 - 筛选结果（从API获取）
   const filteredPPTPage = computed(() => {
-    return dataSource.pptList
+    return pptListFromAPI.value.length > 0 ? pptListFromAPI.value : dataSource.pptList
   })
   
   // 独立视频页面 - 筛选结果
@@ -222,6 +339,11 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
     tenderFiles,
     responseFiles,
     filteredQuestions,
+    
+    // 🆕 API数据状态
+    documentsFromAPI,
+    isLoadingDocuments,
+    loadDocuments,
     
     // 方法
     resetFilters,

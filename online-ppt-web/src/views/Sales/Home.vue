@@ -33,7 +33,7 @@
         :activeTab="activeTab"
         :activeProduct="productContent.activeProduct.value"
         :companyStructure="companyStructure"
-        :filters="{ pptFilters, videoFilters, qaFilters, tenderFilters, responseFilters }"
+        :filters="{ ppt: pptFilters, video: videoFilters, qa: qaFilters, tender: tenderFilters, response: responseFilters }"
         @update:filters="handleFiltersUpdate"
       />
       
@@ -105,6 +105,9 @@
       :title="dialogs.dialogTitle.value"
       :slides="dialogs.slides.value"
       :isResponseDialog="dialogs.isResponseDialog.value"
+      :createdAt="dialogs.dialogCreatedAt.value"
+      :viewCount="dialogs.dialogViewCount.value"
+      :document-id="dialogs.dialogDocumentId.value"
     />
     
     <!-- ✅ 已有组件：视频对话框（替换掉内联的el-dialog） -->
@@ -144,6 +147,11 @@ import VideoPageView from './components/VideoPageView.vue'
 // 📦 数据配置导入
 // ============================================
 import { salesData } from '@/configs/salesData'
+
+// ============================================
+// 📡 API 服务导入
+// ============================================
+import { getProductList } from '@/services/salesService'
 
 // ============================================
 // 🔧 Composable函数导入（所有业务逻辑都在这里）
@@ -195,13 +203,42 @@ const customerName = ref('')
 const sort = ref('综合排序')
 
 // ============================================
-// 4. 从配置获取数据（Mock数据，后续改为API）
+// 4. 数据定义（从API获取或配置）
 // ============================================
-const productStats = ref(salesData.productStats)
+const productStats = ref([]) // 从 API 获取
 const brandData = ref(salesData.brandData)
 const questions = ref(salesData.questions)
 const productCatalog = ref(salesData.productCatalog)
 const companyStructure = ref(salesData.companyStructure)
+
+// ============================================
+// 4.1 加载产品数据
+// ============================================
+const loadProductStats = async () => {
+  try {
+    const res = await getProductList({ isActive: true })
+    if (res.success) {
+      // 转换API数据为前端需要的格式
+      productStats.value = res.data.map(product => ({
+        name: product.name,
+        sessions: product.stats.sessions,
+        ppts: product.stats.ppts,
+        questions: product.stats.questions
+      }))
+    }
+  } catch (error) {
+    console.error('加载产品数据失败:', error)
+    // 失败时使用Mock数据
+    productStats.value = salesData.productStats
+  }
+}
+
+// ============================================
+// 4.2 组件挂载时加载数据
+// ============================================
+onMounted(() => {
+  loadProductStats()
+})
 
 // 筛选条件（从filters composable中解构）
 const { pptFilters, videoFilters, qaFilters, tenderFilters, responseFilters } = filters
@@ -250,8 +287,13 @@ const handleCreatePpt = () => {
 }
 
 const handleFiltersUpdate = (newFilters: any) => {
-  // AdvancedFilterPanel内部已经直接修改了filters
-  // 这里可以添加额外的处理逻辑（如果需要）
+  // 将 AdvancedFilterPanel 返回的 { ppt: {...}, video: {...} } 格式
+  // 映射回 { pptFilters, videoFilters, ... } 对象
+  if (newFilters.ppt) Object.assign(pptFilters, newFilters.ppt)
+  if (newFilters.video) Object.assign(videoFilters, newFilters.video)
+  if (newFilters.qa) Object.assign(qaFilters, newFilters.qa)
+  if (newFilters.tender) Object.assign(tenderFilters, newFilters.tender)
+  if (newFilters.response) Object.assign(responseFilters, newFilters.response)
 }
 
 // ============================================

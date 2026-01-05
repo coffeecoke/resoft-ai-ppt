@@ -553,4 +553,35 @@ router.patch('/:id/rename', async (req, res) => {
   }
 })
 
+/**
+ * 记录文档阅读
+ * POST /api/documents/:id/view
+ */
+router.post('/:id/view', async (req, res) => {
+  try {
+    const { id } = req.params
+    
+    // 使用Prisma直接更新view_count
+    const { PrismaClient } = await import('@prisma/client')
+    const prisma = new PrismaClient()
+    
+    await prisma.documents.update({
+      where: { id },
+      data: {
+        view_count: {
+          increment: 1
+        },
+        last_opened_at: new Date()
+      }
+    })
+    
+    await prisma.$disconnect()
+    
+    res.json({ success: true, message: '阅读记录成功' })
+  } catch (error) {
+    console.error('[文档] 记录阅读失败:', error)
+    res.status(500).json({ success: false, error: error.message || '记录阅读失败' })
+  }
+})
+
 export default router

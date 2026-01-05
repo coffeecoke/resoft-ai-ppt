@@ -6,6 +6,7 @@ import materialsRouter from './sales/materials.js'
 import mediaRouter from './sales/media.js'
 import userRouter from './sales/user.js'
 import profileRouter from './sales/profile.js'
+import documentsRouter from './sales/documents.js'
 
 const router = express.Router()
 
@@ -17,5 +18,6 @@ router.use('/materials', materialsRouter)
 router.use('/media', mediaRouter)
 router.use('/user', userRouter)
 router.use('/profile', profileRouter)
+router.use('/documents', documentsRouter)
 
 export default router

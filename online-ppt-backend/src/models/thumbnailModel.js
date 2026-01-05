@@ -18,29 +18,29 @@ const prisma = new PrismaClient()
 export const thumbnailModel = {
   // 获取文档的所有缩略图
   async findByDocumentId(documentId) {
-    return await prisma.thumbnail.findMany({
-      where: { documentId },
-      orderBy: { slideIndex: 'asc' }
+    return await prisma.thumbnails.findMany({
+      where: { document_id: documentId }, // 数据库字段是 document_id
+      orderBy: { slide_index: 'asc' } // 数据库字段是 slide_index
     })
   },
   
   // 获取所有缩略图（用于查询所有）
   async findAll() {
-    return await prisma.thumbnail.findMany({
-      orderBy: { generatedAt: 'desc' }
+    return await prisma.thumbnails.findMany({
+      orderBy: { generated_at: 'desc' } // 数据库字段是 generated_at
     })
   },
   
   // 获取单个缩略图
   async findById(id) {
-    return await prisma.thumbnail.findUnique({
+    return await prisma.thumbnails.findUnique({
       where: { id }
     })
   },
   
   // 创建或更新缩略图
   async upsert(data) {
-    return await prisma.thumbnail.upsert({
+    return await prisma.thumbnails.upsert({
       where: { id: data.id },
       update: {
         url: data.url,
@@ -48,33 +48,47 @@ export const thumbnailModel = {
         height: data.height,
         size: data.size,
         format: data.format,
-        hasText: data.hasText,
-        hasImage: data.hasImage,
-        elementCount: data.elementCount,
-        generatedAt: data.generatedAt || new Date()
+        has_text: data.hasText, // 驼峰 -> 下划线
+        has_image: data.hasImage,
+        element_count: data.elementCount,
+        generated_at: data.generatedAt || new Date()
       },
-      create: data
+      create: {
+        id: data.id,
+        document_id: data.documentId, // 驼峰 -> 下划线
+        slide_id: data.slideId,
+        slide_index: data.slideIndex,
+        url: data.url,
+        width: data.width,
+        height: data.height,
+        size: data.size,
+        format: data.format,
+        has_text: data.hasText,
+        has_image: data.hasImage,
+        element_count: data.elementCount,
+        generated_at: data.generatedAt || new Date()
+      }
     })
   },
   
   // 删除缩略图
   async delete(id) {
-    return await prisma.thumbnail.delete({
+    return await prisma.thumbnails.delete({
       where: { id }
     })
   },
   
   // 删除文档的所有缩略图
   async deleteByDocumentId(documentId) {
-    return await prisma.thumbnail.deleteMany({
-      where: { documentId }
+    return await prisma.thumbnails.deleteMany({
+      where: { document_id: documentId } // 数据库字段是 document_id
     })
   },
   
   // 统计文档的缩略图数量
   async countByDocumentId(documentId) {
-    return await prisma.thumbnail.count({
-      where: { documentId }
+    return await prisma.thumbnails.count({
+      where: { document_id: documentId } // 数据库字段是 document_id
     })
   },
   

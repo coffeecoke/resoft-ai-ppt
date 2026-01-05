@@ -20,11 +20,13 @@ export interface DocumentMetadata {
   createdAt: string
   updatedAt: string
   lastOpenedAt?: string
+  viewCount?: number // 🆕 阅读次数
   // 业务字段（用于销售管理）
   customerName?: string
   product?: string[]      // 多选
   industry?: string[]     // 多选
   audience?: string[]     // 多选
+  audienceNames?: string  // 🆕 交流对象人员姓名
   language?: string
 }
 
@@ -68,6 +70,7 @@ export interface CreateDocumentParams {
   product?: string[]      // 多选
   industry?: string[]     // 多选
   audience?: string[]     // 多选
+  audienceNames?: string  // 🆕 交流对象人员姓名
   language?: string
   // 基于PPTX创建时的初始slides
   initialSlides?: any[]
@@ -192,6 +195,7 @@ export async function createDocument(params: CreateDocumentParams): Promise<{
     product: params.product,
     industry: params.industry,
     audience: params.audience,
+    audienceNames: params.audienceNames, // 🆕 交流对象人员姓名
     language: params.language,
     // 基于PPTX创建时的初始slides
     initialSlides: params.initialSlides,
@@ -253,6 +257,7 @@ export interface UpdateDocumentMetadataParams {
   product?: string[]
   industry?: string[]
   audience?: string[]
+  audienceNames?: string  // 🆕 交流对象人员姓名
   language?: string
 }
 
@@ -304,6 +309,87 @@ export function getDocumentCoverUrl(documentId: string): string {
   return `${SERVER_URL}/covers/${documentId}.webp`
 }
 
+/**
+ * 获取 Sales 模块的文档列表（默认PPT列表）
+ * 
+ * @param options 查询选项
+ */
+export async function getSalesDocumentList(options: {
+  page?: number
+  pageSize?: number
+  status?: 'draft' | 'published' | 'archived'
+  tag?: 'public' | 'practical'
+  keyword?: string
+  sortBy?: string
+  order?: 'asc' | 'desc'
+} = {}): Promise<{
+  documents: DocumentMetadata[]
+  pagination: {
+    total: number
+    page: number
+    pageSize: number
+    totalPages: number
+  }
+}> {
+  const params: any = {
+    page: options.page || 1,
+    pageSize: options.pageSize || 20,
+    status: options.status || 'published',
+  }
+  
+  if (options.tag) params.tag = options.tag
+  if (options.keyword) params.keyword = options.keyword
+  if (options.sortBy) params.sortBy = options.sortBy
+  if (options.order) params.order = options.order
+
+  console.log('[getSalesDocumentList] 请求参数:', params)
+  console.log('[getSalesDocumentList] 请求URL:', `${SERVER_URL}/sales/documents`)
+  
+  try {
+    const response = await axios.get(`${SERVER_URL}/sales/documents`, { params })
+    
+    console.log('[getSalesDocumentList] 响应数据:', response)
+    console.log('[getSalesDocumentList] response.success:', response.success)
+    console.log('[getSalesDocumentList] response.data:', response.data)
+    
+    // axios拦截器已经返回了response.data，所以这里的response就是{success: true, data: {...}}
+    if (!response || !response.success) {
+      console.error('[getSalesDocumentList] success=false:', response?.error)
+      throw new Error(response?.error || '获取文档列表失败')
+    }
+    
+    return response.data
+  } catch (error: any) {
+    console.error('[getSalesDocumentList] 请求失败:', error)
+    console.error('[getSalesDocumentList] 错误详情:', {
+      message: error.message,
+      response: error.response,
+      request: error.request
+    })
+    throw error
+  }
+}
+
+/**
+ * 记录文档阅读
+ */
+export async function recordDocumentView(documentId: string): Promise<{
+  success: boolean
+  message?: string
+  error?: string
+}> {
+  try {
+    const response: any = await axios.post(`${SERVER_URL}/documents/${documentId}/view`)
+    return response
+  } catch (error: any) {
+    console.error('[文档服务] 记录阅读失败:', error)
+    return {
+      success: false,
+      error: error.response?.data?.error || error.message || '记录阅读失败'
+    }
+  }
+}
+
 export default {
   getDocumentList,
   getDocument,
@@ -314,4 +400,5 @@ export default {
   renameDocument,
   publishDocument,
   getDocumentCoverUrl,
+  getSalesDocumentList,
 }

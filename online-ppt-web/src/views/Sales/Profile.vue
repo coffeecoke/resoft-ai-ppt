@@ -358,6 +358,14 @@
           </el-select>
         </el-form-item>
 
+        <el-form-item label="交流对象人员姓名">
+          <el-input
+            v-model="uploadForm.audienceNames"
+            placeholder="请输入交流对象人员姓名，多人用逗号分隔（如：张三，李四）"
+            clearable
+          />
+        </el-form-item>
+
         <el-form-item label="语言">
           <el-select
             v-model="uploadForm.language"
@@ -404,7 +412,8 @@ import { salesData } from '@/configs/salesData'
 import { uploadSalesPpt } from '@/services/salesService'
 import type { UploadSalesPptParams } from '@/services/salesService'
 import { parsePPTXToSlides } from '@/utils/pptxParser'
-import { PRODUCTS, INDUSTRIES, AUDIENCES, LANGUAGES } from '@/configs/salesConstants'
+import { INDUSTRIES, AUDIENCES, LANGUAGES } from '@/configs/salesConstants'
+import { useProductOptions } from '@/composables/useProductOptions'
 const router = useRouter()
 
 const activeTab = ref('ppts')
@@ -783,6 +792,7 @@ const uploadForm = reactive({
   product: [] as string[],
   industry: [] as string[],
   audience: [] as string[],
+  audienceNames: '', // 🆕 交流对象人员姓名
   language: ''
 })
 
@@ -793,8 +803,8 @@ const uploadRules = {
   ]
 }
 
-// 选项数据
-const productOptions = PRODUCTS
+// 选项数据（产品从API获取）
+const { productOptions } = useProductOptions()
 const industryOptions = INDUSTRIES
 const audienceOptions = AUDIENCES
 const languageOptions = LANGUAGES
@@ -853,6 +863,7 @@ const handleUploadConfirm = async () => {
       product: uploadForm.product,
       industry: uploadForm.industry,
       audience: uploadForm.audience,
+      audienceNames: uploadForm.audienceNames, // 🆕 交流对象人员姓名
       language: uploadForm.language,
       slides
     }

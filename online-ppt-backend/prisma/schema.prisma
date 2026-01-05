@@ -26,11 +26,12 @@ model documents {
   file_size         BigInt @default(0) /// 文件大小（字节）
 
   // 业务字段
-  customer_name String? @db.VarChar(255) /// 客户名称
-  product       Json? /// 产品（数组，兼容旧数据）
-  industry      Json? /// 行业（数组）
-  audience      Json? /// 受众（数组）
-  language      String? @db.VarChar(50) /// 语言
+  customer_name  String? @db.VarChar(255) /// 客户名称
+  product        Json? /// 产品（数组，兼容旧数据）
+  industry       Json? /// 行业（数组）
+  audience       Json? /// 受众（数组，如：技术、业务等）
+  audience_names String? @db.Text /// 交流对象人员姓名（多个用逗号分隔）
+  language       String? @db.VarChar(50) /// 语言
 
   // 🆕 回传PPT相关字段
   product_id String? @db.VarChar(50) /// 关联产品ID（回传时选择）
@@ -44,6 +45,7 @@ model documents {
   created_at     DateTime  @default(now()) /// 创建时间
   updated_at     DateTime /// 更新时间
   last_opened_at DateTime? /// 最后打开时间
+  view_count     Int       @default(0) /// 阅读次数
 
   // 关联
   document_concerns document_concerns[]

@@ -86,7 +86,7 @@ export default () => {
 
     try {
       // 调用独立的解析函数
-      const { slides, theme, viewportSize } = await parsePPTXToSlides(file, {
+      const { slides, theme: parsedTheme, viewportSize } = await parsePPTXToSlides(file, {
         fixedViewport,
         defaultTheme: {
           fontName: theme.value.fontName,
@@ -97,7 +97,11 @@ export default () => {
 
       // 应用到编辑器store（原有逻辑）
       if (viewportSize) slidesStore.setViewportSize(viewportSize)
-      slidesStore.setTheme(theme)
+      slidesStore.setTheme(parsedTheme)
+      
+      // 🆕 设置文档标题（从文件名提取，去除.pptx后缀）
+      const fileName = file.name.replace(/\.pptx$/i, '')
+      slidesStore.setTitle(fileName)
 
       // 应用到编辑器（根据不同的cover选项）
       if (cover) {
