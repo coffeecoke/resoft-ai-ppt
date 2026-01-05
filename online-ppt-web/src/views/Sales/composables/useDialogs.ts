@@ -5,6 +5,8 @@
 
 import { ref } from 'vue'
 import { salesData } from '@/configs/salesData'
+import { getDocumentThumbnails } from '@/services/thumbnailService'
+import { recordDocumentView } from '@/services/documentService'
 
 export function useDialogs() {
   // PPT对话框状态
@@ -13,6 +15,10 @@ export function useDialogs() {
   const dialogTitle = ref('')
   const isResponseDialog = ref(false)
   const slides = ref<any[]>([...salesData.slides])
+  const isLoadingSlides = ref(false) // 🆕 加载状态
+  const dialogCreatedAt = ref('') // 🆕 文档创建时间
+  const dialogViewCount = ref(0) // 🆕 阅读次数
+  const dialogDocumentId = ref('') // 🆕 文档ID（用于下载）
   
   // 视频对话框状态
   const videoDialogVisible = ref(false)
@@ -23,10 +29,18 @@ export function useDialogs() {
   const pdfDetail = ref<any>(null)
   
   // 打开PPT对话框
-  const openPpt = (item: any) => {
+  const openPpt = async (item: any) => {
+    console.log('[PPT弹框] 点击的卡片数据:', item)
+    
     dialogTitle.value = item.title
     dialogType.value = item.tag === '公共版' ? 'public' : 'practical'
     isResponseDialog.value = item.type === 'response'
+    dialogCreatedAt.value = item.createdAt || item.updatedAt || '' // 🆕 设置创建时间
+    dialogViewCount.value = item.viewCount || 0 // 🆕 设置阅读次数（暂时为0）
+    dialogDocumentId.value = item.id || '' // 🆕 设置文档ID
+    
+    // ✅ 先清空slides，避免显示上次的数据
+    slides.value = []
     
     // 如果是响应文件，生成特殊的slides
     if (item.type === 'response') {
@@ -39,12 +53,69 @@ export function useDialogs() {
         img: `https://dummyimage.com/900x1200/f8fafc/6b7280&text=${encodeURIComponent(t.title)}`
       }))
       slides.value = pages
+      dialogVisible.value = true // 响应文件直接打开
     } else {
-      // 普通PPT使用默认slides
-      slides.value = [...salesData.slides]
+      // 🆕 从API加载真实的缩略图数据
+      if (item.id) {
+        try {
+          isLoadingSlides.value = true
+          // ✅ 先打开弹框，显示loading状态
+          dialogVisible.value = true
+          
+          // 🆕 记录阅读次数
+          console.log('[PPT弹框] 记录阅读:', item.id)
+          try {
+            await recordDocumentView(item.id)
+            console.log('[PPT弹框] 阅读次数已记录')
+          } catch (err) {
+            console.warn('[PPT弹框] 记录阅读失败:', err)
+          }
+          
+          console.log('[PPT弹框] 开始加载缩略图:', item.id)
+          
+          const result: any = await getDocumentThumbnails(item.id)
+          
+          console.log('[PPT弹框] API返回结果:', result)
+          
+          // 🔍 从缩略图接口获取 viewCount
+          if (result && result.viewCount !== undefined) {
+            dialogViewCount.value = result.viewCount
+            console.log('[PPT弹框] 从缩略图接口获取到阅读次数:', result.viewCount)
+          }
+          
+          // axios拦截器已经提取了response.data，所以result就是后端返回的data部分
+          if (result && result.thumbnails && result.thumbnails.length > 0) {
+            // 转换为弹框需要的格式
+            slides.value = result.thumbnails
+              .sort((a, b) => a.slideIndex - b.slideIndex) // 按slideIndex排序
+              .map(thumbnail => ({
+                id: thumbnail.slideId,
+                title: `幻灯片 ${thumbnail.slideIndex + 1}`, // 页码从1开始显示
+                img: thumbnail.url, // 缩略图URL
+                slideIndex: thumbnail.slideIndex,
+                metadata: thumbnail.metadata
+              }))
+            
+            console.log('[PPT弹框] 缩略图加载成功，数量:', slides.value.length)
+            console.log('[PPT弹框] 转换后的slides数据:', slides.value)
+          } else {
+            console.warn('[PPT弹框] 加载缩略图失败，使用默认数据:', result)
+            // 加载失败时使用默认slides
+            slides.value = [...salesData.slides]
+          }
+        } catch (error) {
+          console.error('[PPT弹框] 加载缩略图异常:', error)
+          // 异常时使用默认slides
+          slides.value = [...salesData.slides]
+        } finally {
+          isLoadingSlides.value = false
+        }
+      } else {
+        console.warn('[PPT弹框] 文档ID不存在，使用默认数据')
+        slides.value = [...salesData.slides]
+        dialogVisible.value = true
+      }
     }
-    
-    dialogVisible.value = true
   }
   
   // 打开视频对话框
@@ -91,6 +162,10 @@ export function useDialogs() {
     dialogTitle,
     isResponseDialog,
     slides,
+    isLoadingSlides, // 🆕 导出加载状态
+    dialogCreatedAt, // 🆕 导出创建时间
+    dialogViewCount, // 🆕 导出阅读次数
+    dialogDocumentId, // 🆕 导出文档ID
     openPpt,
     closeDialog,
     

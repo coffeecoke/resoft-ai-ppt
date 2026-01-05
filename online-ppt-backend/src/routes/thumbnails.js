@@ -230,6 +230,7 @@ router.get('/document/:documentId', async (req, res) => {
       data: {
         documentId: result.documentId,
         documentTitle: result.documentTitle,
+        viewCount: result.viewCount, // 🆕 添加阅读次数
         total: result.thumbnails.length,
         thumbnails: result.thumbnails,
         lastUpdated: result.lastUpdated

@@ -22,24 +22,27 @@ export const thumbnailService = {
     return {
       documentId,
       documentTitle: doc?.name || '',
+      viewCount: doc?.viewCount || 0, // 🆕 返回阅读次数
       thumbnails: thumbnails.map(t => ({
         id: t.id,
-        slideId: t.slideId,
-        slideIndex: t.slideIndex,
+        slideId: t.slide_id, // 数据库字段转换
+        slideIndex: t.slide_index,
         url: t.url,
         width: t.width,
         height: t.height,
         size: t.size,
         format: t.format,
-        generatedAt: t.generatedAt instanceof Date ? t.generatedAt.toISOString() : t.generatedAt,
+        generatedAt: t.generated_at instanceof Date ? t.generated_at.toISOString() : t.generated_at,
         metadata: {
-          hasText: t.hasText,
-          hasImage: t.hasImage,
-          elementCount: t.elementCount
+          hasText: t.has_text, // 数据库字段转换
+          hasImage: t.has_image,
+          elementCount: t.element_count
         }
       })),
       lastUpdated: thumbnails.length > 0 
-        ? thumbnails[thumbnails.length - 1].generatedAt.toISOString()
+        ? (thumbnails[thumbnails.length - 1].generated_at instanceof Date 
+          ? thumbnails[thumbnails.length - 1].generated_at.toISOString()
+          : thumbnails[thumbnails.length - 1].generated_at)
         : new Date().toISOString()
     }
   },
@@ -60,7 +63,6 @@ export const thumbnailService = {
     }
     
     // 查询所有文档的缩略图（需要从数据库查询）
-    // 这里简化处理，实际应该使用 Prisma 的复杂查询
     const allThumbnails = await thumbnailModel.findAll()
     
     return {
@@ -68,13 +70,24 @@ export const thumbnailService = {
       limit: parseInt(limit),
       offset: parseInt(offset),
       thumbnails: allThumbnails.slice(parseInt(offset), parseInt(offset) + parseInt(limit)).map(t => ({
-        ...t,
-        generatedAt: t.generatedAt instanceof Date ? t.generatedAt.toISOString() : t.generatedAt
+        id: t.id,
+        documentId: t.document_id, // 数据库字段转换
+        slideId: t.slide_id,
+        slideIndex: t.slide_index,
+        url: t.url,
+        width: t.width,
+        height: t.height,
+        size: t.size,
+        format: t.format,
+        generatedAt: t.generated_at instanceof Date ? t.generated_at.toISOString() : t.generated_at,
+        hasText: t.has_text, // 数据库字段转换
+        hasImage: t.has_image,
+        elementCount: t.element_count
       })),
       lastUpdated: allThumbnails.length > 0 
-        ? (allThumbnails[allThumbnails.length - 1].generatedAt instanceof Date 
-          ? allThumbnails[allThumbnails.length - 1].generatedAt.toISOString()
-          : allThumbnails[allThumbnails.length - 1].generatedAt)
+        ? (allThumbnails[allThumbnails.length - 1].generated_at instanceof Date 
+          ? allThumbnails[allThumbnails.length - 1].generated_at.toISOString()
+          : allThumbnails[allThumbnails.length - 1].generated_at)
         : new Date().toISOString()
     }
   },
@@ -86,7 +99,7 @@ export const thumbnailService = {
       return null
     }
 
-    const doc = await documentModel.findById(thumbnail.documentId)
+    const doc = await documentModel.findById(thumbnail.document_id) // 数据库字段
     if (!doc) {
       return null
     }
@@ -94,15 +107,15 @@ export const thumbnailService = {
     return {
       thumbnail: {
         id: thumbnail.id,
-        slideId: thumbnail.slideId,
-        slideIndex: thumbnail.slideIndex,
+        slideId: thumbnail.slide_id, // 数据库字段转换
+        slideIndex: thumbnail.slide_index,
         url: thumbnail.url,
         width: thumbnail.width,
         height: thumbnail.height,
         size: thumbnail.size,
         format: thumbnail.format,
-        generatedAt: thumbnail.generatedAt instanceof Date ? thumbnail.generatedAt.toISOString() : thumbnail.generatedAt,
-        documentId: thumbnail.documentId,
+        generatedAt: thumbnail.generated_at instanceof Date ? thumbnail.generated_at.toISOString() : thumbnail.generated_at,
+        documentId: thumbnail.document_id,
         documentTitle: doc.name
       },
       source: {

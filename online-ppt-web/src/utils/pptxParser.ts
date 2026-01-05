@@ -37,6 +37,30 @@ const convertFontSizePtToPx = (html: string, ratio: number) => {
 }
 
 /**
+ * 修复文本内容中的样式问题
+ * 1. 移除导致文字透明的 color: transparent
+ * 2. 修复不完整的文字渐变效果（将 background: linear-gradient 转换为可见的纯色）
+ */
+const fixTextContentStyles = (html: string): string => {
+  if (!html) return html
+  
+  // 移除 color: transparent（这会导致文字完全不可见）
+  html = html.replace(/color:\s*transparent;?/gi, '')
+  
+  // 修复文字渐变：如果有 background: linear-gradient 但没有 background-clip
+  // 说明这是 pptxtojson 解析错误，应该提取渐变的主色作为文字颜色
+  html = html.replace(
+    /background:\s*linear-gradient\([^)]+#([0-9a-f]{6})[^)]*\)/gi,
+    (match, firstColor) => {
+      // 提取渐变中的第一个颜色作为文字颜色
+      return `color: #${firstColor}`
+    }
+  )
+  
+  return html
+}
+
+/**
  * 旋转线条元素
  */
 const rotateLine = (line: PPTLineElement, angleDeg: number) => {
@@ -325,7 +349,7 @@ export async function parsePPTXToSlides(
                 rotate: el.rotate,
                 defaultFontName: theme.fontName,
                 defaultColor: theme.fontColor,
-                content: convertFontSizePtToPx(el.content, ratio),
+                content: fixTextContentStyles(convertFontSizePtToPx(el.content, ratio)), // 🆕 修复样式问题
                 lineHeight: 1,
                 outline: {
                   color: el.borderColor,
@@ -334,7 +358,32 @@ export async function parsePPTXToSlides(
                 },
                 fill: el.fill.type === 'color' ? el.fill.value : '',
                 vertical: el.isVertical,
+                name: el.name, // 🆕 保留占位符名称
               }
+              
+              // 🆕 根据 name 推断 textType（识别标题、副标题等）
+              // 支持中英文标题识别
+              if (el.name) {
+                const nameLower = el.name.toLowerCase()
+                // 英文标题：Title 1, Title 2, etc.
+                // 中文标题：标题 1, 标题 2, etc.
+                if ((nameLower.includes('title') || el.name.includes('标题')) && 
+                    !nameLower.includes('subtitle') && !el.name.includes('副标题')) {
+                  textEl.textType = 'title'
+                } 
+                // 英文副标题：Subtitle
+                // 中文副标题：副标题
+                else if (nameLower.includes('subtitle') || el.name.includes('副标题')) {
+                  textEl.textType = 'subtitle'
+                } 
+                // 英文正文：Content Placeholder, Text Placeholder
+                // 中文正文：内容占位符, 文本占位符
+                else if (nameLower.includes('content') || nameLower.includes('text') || 
+                         el.name.includes('内容') || el.name.includes('文本')) {
+                  textEl.textType = 'content'
+                }
+              }
+              
               if (el.shadow) {
                 textEl.shadow = {
                   h: el.shadow.h * ratio,
@@ -479,13 +528,14 @@ export async function parsePPTXToSlides(
                     style: el.borderType,
                   },
                   text: {
-                    content: convertFontSizePtToPx(el.content, ratio),
+                    content: fixTextContentStyles(convertFontSizePtToPx(el.content, ratio)), // 🆕 修复样式问题
                     defaultFontName: theme.fontName,
                     defaultColor: theme.fontColor,
                     align: vAlignMap[el.vAlign] || 'middle',
                   },
                   flipH: el.isFlipH,
                   flipV: el.isFlipV,
+                  name: el.name, // 🆕 保留占位符名称
                 }
                 if (el.shadow) {
                   element.shadow = {

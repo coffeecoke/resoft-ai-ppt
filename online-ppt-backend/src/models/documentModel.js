@@ -26,6 +26,11 @@ function serializeBigInt(obj) {
     return Number(obj)
   }
   
+  // ✅ Date 对象会被 JSON.stringify 自动转为 ISO 字符串，无需特殊处理
+  if (obj instanceof Date) {
+    return obj
+  }
+  
   if (Array.isArray(obj)) {
     return obj.map(serializeBigInt)
   }
@@ -46,6 +51,7 @@ function serializeBigInt(obj) {
       else if (key === 'created_at') newKey = 'createdAt'
       else if (key === 'updated_at') newKey = 'updatedAt'
       else if (key === 'last_opened_at') newKey = 'lastOpenedAt'
+      else if (key === 'view_count') newKey = 'viewCount'
       
       result[newKey] = serializeBigInt(value)
     }
@@ -138,9 +144,12 @@ export const documentModel = {
           product: data.product,
           industry: data.industry,
           audience: data.audience,
+          audience_names: data.audienceNames, // 🆕 交流对象人员姓名
           language: data.language,
           source_document_id: data.sourceDocumentId,
-          source_document_name: data.sourceDocumentName
+          source_document_name: data.sourceDocumentName,
+          created_at: new Date(),
+          updated_at: new Date()
         }
       })
       
@@ -169,12 +178,16 @@ export const documentModel = {
     if (data.product !== undefined) updateData.product = data.product
     if (data.industry !== undefined) updateData.industry = data.industry
     if (data.audience !== undefined) updateData.audience = data.audience
+    if (data.audienceNames !== undefined) updateData.audience_names = data.audienceNames // 🆕 交流对象人员姓名
     if (data.language !== undefined) updateData.language = data.language
     if (data.productId !== undefined) updateData.product_id = data.productId
     if (data.sessionId !== undefined) updateData.session_id = data.sessionId
     if (data.sourceDocumentId !== undefined) updateData.source_document_id = data.sourceDocumentId
     if (data.sourceDocumentName !== undefined) updateData.source_document_name = data.sourceDocumentName
     if (data.last_opened_at !== undefined) updateData.last_opened_at = data.last_opened_at
+    
+    // 更新时间戳
+    updateData.updated_at = new Date()
     
     const updated = await prisma.documents.update({
       where: { id },
