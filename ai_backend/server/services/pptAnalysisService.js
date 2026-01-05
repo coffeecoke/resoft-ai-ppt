@@ -16,11 +16,25 @@ class PPTAnalysisService {
   /**
    * 获取所有分类标准(用于AI分析)
    * 
+   * 🔄 已更新：从 product_catalogs 表读取通用分类标准
+   * 
    * @returns {Promise<Array>} 分类标准数组
    */
   async getAllCategories() {
-    const categories = await prisma.content_categories_ppt.findMany({
+    // 先获取通用产品ID
+    const GENERAL_PRODUCT_CODE = 'general_ppt_categories'
+    const generalProduct = await prisma.products.findFirst({
+      where: { code: GENERAL_PRODUCT_CODE }
+    })
+    
+    if (!generalProduct) {
+      throw new Error('未找到通用PPT分类产品，请先运行数据迁移脚本')
+    }
+    
+    // 从 product_catalogs 表读取分类
+    const categories = await prisma.product_catalogs.findMany({
       where: {
+        product_id: generalProduct.id,
         is_active: true
       },
       orderBy: [
@@ -67,16 +81,33 @@ class PPTAnalysisService {
           throw new Error('该提示词模板未激活')
         }
         
+        // 🔄 只提取二级分类（level === 2）
+        const level2Categories = categories.filter(cat => cat.level === 2)
+        
         // 替换 {categories} 占位符
-        const categoryDescriptions = categories.map((cat, index) => {
-          if (cat.level === 1) {
-            return `\n## ${index + 1}. ${cat.name} (${cat.code})\n${cat.description || ''}`
-          } else {
-            return `### ${cat.name} (${cat.code})\n${cat.description || ''}`
-          }
+        const categoryDescriptions = level2Categories.map((cat, index) => {
+          return `### ${index + 1}. ${cat.name} (${cat.code})\n${cat.description || ''}`
         }).join('\n\n')
         
-        const systemPrompt = promptTemplate.prompt.replace('{categories}', categoryDescriptions)
+        // 🆕 生成有效的分类代码列表（用于约束）
+        const validCodes = level2Categories.map(c => c.code).join('、')
+        const invalidCodes = `
+**严禁使用以下代码（这些是一级分类，不能直接使用）：**
+- enterprise_info（企业信息）
+- cooperation_cases（合作案例）
+- regulatory_policy_industry（监管政策与行业背景）
+- product_solutions（产品解决方案）
+- deployment_after_sales（部署实施及售后保障）
+- other（其他）
+
+**你必须从以下二级分类中选择：**
+${validCodes}
+`
+        
+        const systemPrompt = promptTemplate.prompt
+          .replace('{categories}', categoryDescriptions)
+          .replace('{valid_codes}', validCodes)
+          .replace('{constraints}', invalidCodes)
         const userPrompt = `请分析以下PPT页面内容并进行分类:
 
 【页面信息】
@@ -118,6 +149,25 @@ ${slideText}
       // 验证结果格式
       if (!result.category_code || typeof result.confidence !== 'number') {
         throw new Error('AI返回的JSON格式不完整')
+      }
+      
+      // 🆕 验证分类代码必须是二级分类
+      const level2Codes = categories
+        .filter(cat => cat.level === 2)
+        .map(cat => cat.code)
+      
+      if (!level2Codes.includes(result.category_code)) {
+        const category = categories.find(c => c.code === result.category_code)
+        if (category && category.level === 1) {
+          // AI返回了一级分类代码，这是错误的
+          console.error(`[PPT分析] ❌ AI返回了一级分类代码: ${result.category_code} (${category.name})`)
+          console.error(`[PPT分析] 这是不允许的！AI应该只返回二级分类代码`)
+          throw new Error(`AI返回了一级分类代码 "${result.category_code}"，这是不允许的。请检查提示词设置或重新分析。`)
+        } else {
+          // 未知的分类代码
+          console.error(`[PPT分析] ❌ AI返回了未知的分类代码: ${result.category_code}`)
+          throw new Error(`AI返回了未知的分类代码 "${result.category_code}"`)
+        }
       }
       
       console.log(`[PPT分析] 页面 ${slideIndex + 1} 分析完成: ${result.category_code} (置信度: ${result.confidence})`)
@@ -303,11 +353,23 @@ ${slideText}
       }
     })
     
-    // 关联分类信息
+    // 关联分类信息 (🔄 已更新：从 product_catalogs 表读取)
     const results = []
+    
+    // 获取通用产品ID
+    const GENERAL_PRODUCT_CODE = 'general_ppt_categories'
+    const generalProduct = await prisma.products.findFirst({
+      where: { code: GENERAL_PRODUCT_CODE }
+    })
+    
+    if (!generalProduct) {
+      throw new Error('未找到通用PPT分类产品')
+    }
+    
     for (const thumb of thumbnails) {
-      const category = await prisma.content_categories_ppt.findFirst({
+      const category = await prisma.product_catalogs.findFirst({
         where: {
+          product_id: generalProduct.id,
           code: thumb.page_type
         }
       })

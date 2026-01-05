@@ -6,7 +6,7 @@
 
 #### 📊 Prisma Schema更新
 - ✅ 添加 `prompt_templates` 表（提示词模板管理）
-- ✅ 保留现有的 `content_categories_ppt` 表（分类标准）
+- ✅ 使用 `product_catalogs` 表（分类标准，通用产品：`general_ppt_categories`）
 - ✅ 保留现有的 `slide_merged_contents` 表（提取的文本）
 - ✅ 保留现有的 `thumbnails` 表（存储分类结果）
 
@@ -118,7 +118,7 @@ graph LR
               │
 ┌─────────────▼───────────────────────┐
 │   MySQL 数据库 (Prisma)              │
-│   - content_categories_ppt          │
+│   - product_catalogs (通用产品：general_ppt_categories) │
 │   - slide_merged_contents           │
 │   - thumbnails                      │
 └─────────────────────────────────────┘
@@ -259,7 +259,7 @@ PORT=3000
 
 3. AI分析
    读取：slide_merged_contents (文本)
-   读取：content_categories_ppt (分类标准)
+   读取：product_catalogs (分类标准，通用产品：general_ppt_categories)
    调用：OpenAI API
    
 4. 存储结果
@@ -273,7 +273,7 @@ PORT=3000
 
 ## ⚠️ 注意事项
 
-1. **数据库初始化必须**：先执行 `seed-content-categories-ppt.js` 初始化分类数据
+1. **数据库初始化必须**：先执行数据迁移脚本 `migrate-content-categories-to-product-catalogs.js`
 2. **文本提取必须先执行**：分析前必须先提取PPT文本内容
 3. **API密钥有效性**：确保OpenAI API密钥有效且有额度
 4. **并发控制**：批量分析时有500ms延迟避免API限流

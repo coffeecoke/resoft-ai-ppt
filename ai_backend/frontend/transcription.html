@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🎤 语音转文本 - AI Backend</title>
+  <link rel="stylesheet" href="css/transcription.css">
+</head>
+<body>
+  <div class="container">
+    <!-- 头部 -->
+    <header class="header">
+      <h1>🎤 语音转文本</h1>
+      <p class="subtitle">基于讯飞语音识别，支持多说话人角色分离</p>
+    </header>
+
+    <!-- 导航 -->
+    <nav class="nav">
+      <a href="index.html">首页</a>
+      <a href="documents.html">文档管理</a>
+      <a href="analysis.html">PPT分析</a>
+      <a href="transcription.html" class="active">语音转文本</a>
+    </nav>
+
+    <!-- 上传区域 -->
+    <section class="upload-section">
+      <div class="upload-card">
+        <h2>📤 上传音频文件</h2>
+        <div class="upload-area" id="uploadArea">
+          <div class="upload-icon">🎙️</div>
+          <p class="upload-text">点击或拖拽音频文件到此处</p>
+          <p class="upload-hint">支持格式: MP3, WAV, M4A, FLAC, AAC, WMA, OGG</p>
+          <p class="upload-hint">最大文件: 500MB | 最长时长: 5小时</p>
+          <input type="file" id="audioInput" accept=".mp3,.wav,.m4a,.flac,.aac,.wma,.ogg" hidden>
+          <button class="btn-primary" id="selectFileBtn">选择文件</button>
+        </div>
+
+        <!-- 文件信息 -->
+        <div class="file-info" id="fileInfo" style="display: none;">
+          <div class="file-icon">📁</div>
+          <div class="file-details">
+            <p class="file-name" id="fileName"></p>
+            <p class="file-size" id="fileSize"></p>
+          </div>
+          <button class="btn-remove" id="removeFileBtn">✖</button>
+        </div>
+
+        <!-- 可选信息 -->
+        <div class="optional-fields" id="optionalFields" style="display: none;">
+          <h3>📝 可选信息</h3>
+          
+          <div class="form-group">
+            <label>音频名称</label>
+            <input type="text" id="audioName" placeholder="留空则使用原文件名">
+          </div>
+
+          <div class="form-group">
+            <label>客户名称</label>
+            <input type="text" id="customerName" placeholder="请输入客户名称（可选）">
+          </div>
+
+          <div class="form-group">
+            <label>关联产品</label>
+            <div class="select-with-action">
+              <select id="productSelect">
+                <option value="">-- 无关联（可选）--</option>
+                <!-- 动态加载产品列表 -->
+              </select>
+              <button class="btn-icon" id="addProductBtn" title="快速新增产品">➕</button>
+              <button class="btn-icon" id="refreshProductsBtn" title="刷新产品列表">🔄</button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>关联场次</label>
+            <div class="select-with-action">
+              <select id="sessionSelect">
+                <option value="">-- 无关联（可选）--</option>
+                <!-- 动态加载场次列表 -->
+              </select>
+              <button class="btn-icon" id="addSessionBtn" title="快速新增场次">➕</button>
+              <button class="btn-icon" id="refreshSessionsBtn" title="刷新场次列表">🔄</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 上传按钮 -->
+        <button class="btn-upload" id="uploadBtn" disabled>
+          <span>🚀 开始转录</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- 进度区域 -->
+    <section class="progress-section" id="progressSection" style="display: none;">
+      <div class="progress-card">
+        <div class="progress-status">
+          <div class="spinner"></div>
+          <div class="progress-text">
+            <h3 id="progressTitle">⏳ 正在上传...</h3>
+            <p id="progressDesc">请稍候，正在处理您的音频文件</p>
+          </div>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" id="progressFill" style="width: 0%;"></div>
+        </div>
+        <p class="progress-percentage" id="progressPercentage">0%</p>
+      </div>
+    </section>
+
+    <!-- 结果区域 -->
+    <section class="result-section" id="resultSection" style="display: none;">
+      <div class="result-header">
+        <h2>✅ 转录完成</h2>
+        <div class="result-actions">
+          <button class="btn-secondary" id="copyAllBtn">📋 复制全部</button>
+          <button class="btn-secondary" id="downloadBtn">💾 下载结果</button>
+          <button class="btn-primary" id="newTranscriptionBtn">🆕 新建转录</button>
+        </div>
+      </div>
+
+      <!-- 统计信息 -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-icon">🎙️</div>
+          <div class="stat-content">
+            <p class="stat-label">说话人数</p>
+            <p class="stat-value" id="speakerCount">-</p>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">💬</div>
+          <div class="stat-content">
+            <p class="stat-label">对话数量</p>
+            <p class="stat-value" id="dialogueCount">-</p>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">⏱️</div>
+          <div class="stat-content">
+            <p class="stat-label">音频时长</p>
+            <p class="stat-value" id="audioDuration">-</p>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">📅</div>
+          <div class="stat-content">
+            <p class="stat-label">转录时间</p>
+            <p class="stat-value" id="transcriptionTime">-</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 对话内容 -->
+      <div class="dialogues-container">
+        <h3>💬 对话内容</h3>
+        <div class="dialogues-list" id="dialoguesList">
+          <!-- 动态加载对话 -->
+        </div>
+      </div>
+    </section>
+
+    <!-- 历史记录 -->
+    <section class="history-section">
+      <div class="history-header">
+        <h2>📚 转录历史</h2>
+        <button class="btn-secondary" id="refreshHistoryBtn">🔄 刷新</button>
+      </div>
+      <div class="history-list" id="historyList">
+        <p class="loading-text">加载中...</p>
+      </div>
+    </section>
+  </div>
+
+  <script src="js/transcription.js"></script>
+</body>
+</html>
+

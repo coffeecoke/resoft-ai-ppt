@@ -115,7 +115,7 @@ curl -X POST http://localhost:3000/api/ppt-analysis/prompts \
 
 **注意：** 
 - ⚠️ 不要删除 `{categories}` 占位符
-- ⚠️ 系统会从 `content_categories_ppt` 表读取分类
+- ⚠️ 系统会从 `product_catalogs` 表读取分类（通用产品：`general_ppt_categories`）
 - ⚠️ 只有 `is_active = true` 的分类会被包含
 
 ---
