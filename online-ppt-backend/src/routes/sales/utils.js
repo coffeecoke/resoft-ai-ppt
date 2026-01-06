@@ -2,6 +2,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import fs from 'fs/promises'
 import fsSync from 'fs'
+import { generateDocumentId as generateDocumentIdUtil } from '../../utils/idGenerator.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -142,18 +143,10 @@ export function writeDocumentIndex(indexList) {
   }
 }
 
-// 生成文档ID
+// 生成文档ID：使用统一的ID生成器（时间戳 + 随机字符串）
+// 保留 indexList 参数以兼容旧代码，但实际不再使用
 export function generateDocumentId(indexList) {
-  const nums = indexList
-    .map(item => {
-      if (!item.id || typeof item.id !== 'string') return NaN
-      const match = item.id.match(/^document_(\d+)$/)
-      return match ? parseInt(match[1], 10) : NaN
-    })
-    .filter(n => !isNaN(n))
-  
-  const maxNum = nums.length > 0 ? Math.max(...nums) : 0
-  return `document_${maxNum + 1}`
+  return generateDocumentIdUtil()
 }
 
 

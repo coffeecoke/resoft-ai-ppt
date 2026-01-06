@@ -46,19 +46,6 @@ function writeIndex(list) {
   fs.writeFileSync(INDEX_FILE, JSON.stringify(list, null, 2), 'utf-8')
 }
 
-function generateDocumentId(indexList) {
-  const nums = indexList
-    .map(item => {
-      if (!item.id || typeof item.id !== 'string') return NaN
-      const m = item.id.match(/^document_(\d+)$/)
-      return m ? Number(m[1]) : NaN
-    })
-    .filter(n => !Number.isNaN(n))
-
-  const max = nums.length ? Math.max(...nums, 0) : 0
-  return `document_${max + 1}`
-}
-
 // 从幻灯片数据中获取封面图（使用第一页的缩略图）
 function getCoverFromSlides(slides) {
   if (slides && slides.length > 0) {

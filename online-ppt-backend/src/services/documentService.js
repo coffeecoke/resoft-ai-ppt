@@ -11,6 +11,7 @@ const envPath = path.join(__dirname, '..', '..', '.env')
 dotenv.config({ path: envPath })
 
 import { documentModel } from '../models/documentModel.js'
+import { generateDocumentId } from '../utils/idGenerator.js'
 import fs from 'fs'
 
 const DATA_DIR = path.join(__dirname, '..', '..', 'data')
@@ -51,17 +52,10 @@ const jsonOps = {
     fs.writeFileSync(INDEX_FILE, JSON.stringify(list, null, 2), 'utf-8')
   },
 
+  // 已废弃：使用统一的 generateDocumentId 工具函数
+  // 保留此方法以兼容旧代码，但实际不再使用
   generateDocumentId(indexList) {
-    const nums = indexList
-      .map(item => {
-        if (!item.id || typeof item.id !== 'string') return NaN
-        const m = item.id.match(/^document_(\d+)$/)
-        return m ? Number(m[1]) : NaN
-      })
-      .filter(n => !Number.isNaN(n))
-
-    const max = nums.length ? Math.max(...nums, 0) : 0
-    return `document_${max + 1}`
+    return generateDocumentId()
   },
 
   getCoverFromSlides(slides) {
@@ -132,39 +126,10 @@ export const documentService = {
   async create(data) {
     let result
     
-    // 生成ID
+    // 生成ID：使用统一的ID生成器（时间戳 + 随机字符串）
     let id = data.id
     if (!id) {
-      // 统一从数据库或JSON获取最大ID
-      let maxNum = 0
-      if (USE_DATABASE || DUAL_WRITE) {
-        try {
-          const allDocs = await documentModel.findAll()
-          const nums = allDocs
-            .map(doc => {
-              const m = doc.id.match(/^document_(\d+)$/)
-              return m ? Number(m[1]) : NaN
-            })
-            .filter(n => !Number.isNaN(n))
-          maxNum = nums.length ? Math.max(...nums, 0) : 0
-        } catch (error) {
-          console.warn('[文档服务] 从数据库获取ID失败,使用JSON:', error)
-        }
-      }
-      
-      if (maxNum === 0) {
-        const indexList = jsonOps.readIndex()
-        const nums = indexList
-          .map(item => {
-            if (!item.id || typeof item.id !== 'string') return NaN
-            const m = item.id.match(/^document_(\d+)$/)
-            return m ? Number(m[1]) : NaN
-          })
-          .filter(n => !Number.isNaN(n))
-        maxNum = nums.length ? Math.max(...nums, 0) : 0
-      }
-      
-      id = `document_${maxNum + 1}`
+      id = generateDocumentId()
     }
 
     // 准备文档内容数据

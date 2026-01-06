@@ -12,6 +12,7 @@ dotenv.config({ path: envPath })
 
 import pkg from '@prisma/client'
 const { PrismaClient } = pkg
+import { generateDocumentId } from '../utils/idGenerator.js'
 import fs from 'fs'
 
 const prisma = new PrismaClient()
@@ -95,7 +96,7 @@ export const documentModel = {
   // 创建文档
   async create(data) {
     try {
-      const id = data.id || `document_${Date.now()}`
+      const id = data.id || generateDocumentId()
       const contentFilePath = `documents/${id}.json`
       
       // 写入内容文件
