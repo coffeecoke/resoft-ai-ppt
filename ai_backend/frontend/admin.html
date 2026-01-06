@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI管理后台</title>
+  <link rel="stylesheet" href="css/common.css">
+</head>
+<body>
+  <div class="layout">
+    <!-- 侧边栏 -->
+    <aside class="sidebar">
+      <div class="logo">🤖 AI管理后台</div>
+      <nav class="menu">
+        <a href="#dashboard" class="menu-item active" data-page="dashboard">
+          <span>📊</span> 控制台
+        </a>
+        
+        <div class="menu-group">系统配置</div>
+        <a href="#model-config" class="menu-item" data-page="model-config">
+          <span>🔧</span> 模型配置
+        </a>
+        <a href="#prompt-templates" class="menu-item" data-page="prompt-templates">
+          <span>💬</span> 提示词管理
+        </a>
+        
+        <div class="menu-group">AI功能</div>
+        <a href="#auto-process" class="menu-item" data-page="auto-process">
+          <span>🤖</span> 自动跑批监控
+        </a>
+        <a href="#transcription" class="menu-item" data-page="transcription">
+          <span>🎙️</span> 语音转文本
+        </a>
+        <a href="#ppt-analysis" class="menu-item" data-page="ppt-analysis">
+          <span>📊</span> PPT分析
+        </a>
+        <a href="#document-extract" class="menu-item" data-page="document-extract">
+          <span>📄</span> 文档提取
+        </a>
+        <a href="#document-manage" class="menu-item" data-page="document-manage">
+          <span>📁</span> 文档管理
+        </a>
+      </nav>
+    </aside>
+    
+    <!-- 主内容区 -->
+    <main class="content">
+      <div id="page-container">
+        <!-- 页面内容将在这里动态加载 -->
+        <div class="loading">正在加载...</div>
+      </div>
+    </main>
+  </div>
+  
+  <script src="js/common.js"></script>
+  <script src="js/api.js"></script>
+  <script>
+    // 路由管理
+    const router = {
+      currentPage: null,
+      
+      // 路由映射
+      routes: {
+        'dashboard': './pages/dashboard.html',
+        'model-config': './pages/model-config.html',
+        'prompt-templates': './pages/prompt-templates.html',
+        'auto-process': './pages/auto-process.html',
+        'transcription': './pages/transcription.html',
+        'ppt-analysis': './pages/ppt-analysis.html',
+        'document-extract': './pages/document-extract.html',
+        'document-manage': './pages/document-manage.html',
+      },
+      
+      // 加载页面
+      async loadPage(pageName) {
+        const container = document.getElementById('page-container');
+        
+        // 更新菜单激活状态
+        document.querySelectorAll('.menu-item').forEach(item => {
+          item.classList.remove('active');
+          if (item.dataset.page === pageName) {
+            item.classList.add('active');
+          }
+        });
+        
+        try {
+          const url = this.routes[pageName];
+          if (!url) {
+            container.innerHTML = '<div class="empty"><p>页面不存在</p></div>';
+            return;
+          }
+          
+          container.innerHTML = '<div class="loading">正在加载...</div>';
+          
+          const response = await fetch(url);
+          const html = await response.text();
+          container.innerHTML = html;
+          
+          // 执行页面初始化脚本
+          this.executePageScript(pageName);
+          
+          this.currentPage = pageName;
+        } catch (error) {
+          console.error('加载页面失败:', error);
+          container.innerHTML = `
+            <div class="empty">
+              <p>❌ 页面加载失败</p>
+              <p style="color: var(--text-secondary); font-size: 12px;">${error.message}</p>
+            </div>
+          `;
+        }
+      },
+      
+      // 执行页面脚本
+      executePageScript(pageName) {
+        const scriptUrl = `./js/pages/${pageName}.js`;
+        
+        // 移除旧脚本
+        const oldScript = document.querySelector(`script[data-page="${pageName}"]`);
+        if (oldScript) {
+          oldScript.remove();
+        }
+        
+        // 加载新脚本
+        const script = document.createElement('script');
+        script.src = scriptUrl;
+        script.dataset.page = pageName;
+        script.onerror = () => {
+          console.warn(`页面脚本不存在: ${scriptUrl}`);
+        };
+        document.body.appendChild(script);
+      },
+    };
+    
+    // 监听路由变化
+    window.addEventListener('hashchange', () => {
+      const hash = location.hash.slice(1) || 'dashboard';
+      router.loadPage(hash);
+    });
+    
+    // 初始加载
+    const initialPage = location.hash.slice(1) || 'dashboard';
+    router.loadPage(initialPage);
+    
+    // 菜单点击事件
+    document.querySelectorAll('.menu-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        e.preventDefault();
+        const page = item.dataset.page;
+        location.hash = page;
+      });
+    });
+  </script>
+</body>
+</html>
+

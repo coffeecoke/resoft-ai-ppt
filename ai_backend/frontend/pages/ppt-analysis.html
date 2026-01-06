@@ -1,0 +1,585 @@
+<!-- PPT AI 内容分析页面 -->
+<div class="page-header">
+  <h1>🤖 PPT AI 内容分析</h1>
+  <p class="page-description">使用AI对PPT文档进行智能分类和内容分析</p>
+</div>
+
+<!-- 标签导航 -->
+<div class="nav-tabs">
+  <button class="tab-btn active" data-tab="batch" onclick="switchPptTab('batch')">📚 批量分析</button>
+  <button class="tab-btn" data-tab="results" onclick="switchPptTab('results')">📊 分析结果</button>
+  <button class="tab-btn" data-tab="statistics" onclick="switchPptTab('statistics')">📈 统计报表</button>
+  <button class="tab-btn" data-tab="categories" onclick="switchPptTab('categories')">🏷️ 分类标准</button>
+</div>
+
+<!-- Tab 1: 批量分析 -->
+<div id="ppt-batch-tab" class="tab-content active">
+  <div class="card">
+    <div class="card-header">
+      <h2>📚 文档批量分析</h2>
+      <p class="text-muted">选择已提取文本的文档进行完整的AI分类分析</p>
+    </div>
+    <div class="card-body">
+      <!-- 文档选择 -->
+      <div class="form-group">
+        <label>选择文档</label>
+        <button onclick="loadPptDocuments()" class="btn btn-secondary" style="margin-bottom: 10px;">
+          🔄 刷新文档列表
+        </button>
+        <select id="ppt-document-select" class="form-control" onchange="onPptDocumentChange()">
+          <option value="">-- 请选择文档 --</option>
+        </select>
+      </div>
+
+      <!-- 文档信息 -->
+      <div id="ppt-document-info" class="document-info" style="display: none;">
+        <h3>📄 文档信息</h3>
+        <div class="info-grid">
+          <div class="info-item">
+            <span class="info-label">文档名称</span>
+            <span class="info-value" id="ppt-doc-name"></span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">总页数</span>
+            <span class="info-value" id="ppt-doc-total"></span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">已提取文本</span>
+            <span class="info-value" id="ppt-doc-extracted"></span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">文档ID</span>
+            <span class="info-value code" id="ppt-doc-id"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 分析配置信息（自动从模型配置和提示词管理获取） -->
+      <div id="ppt-config-info" class="config-info" style="display: none;">
+        <h3>⚙️ 分析配置</h3>
+        <div class="info-grid">
+          <div class="info-item">
+            <span class="info-label">AI模型</span>
+            <span class="info-value" id="ppt-config-model">
+              <span id="ppt-config-model-name">加载中...</span>
+              <button onclick="goToModelConfig()" class="btn-link" title="去模型配置修改">⚙️</button>
+            </span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">提示词模板</span>
+            <span class="info-value" id="ppt-config-prompt">
+              <span id="ppt-config-prompt-name">加载中...</span>
+              <button onclick="goToPromptConfig()" class="btn-link" title="去提示词管理修改">⚙️</button>
+            </span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">API提供商</span>
+            <span class="info-value" id="ppt-config-provider">-</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">温度参数</span>
+            <span class="info-value" id="ppt-config-temperature">-</span>
+          </div>
+        </div>
+        <p class="text-muted" style="margin-top: 10px; font-size: 12px;">
+          💡 提示：分析将使用上述配置自动执行。如需修改，请前往 <a href="#" onclick="goToModelConfig(); return false;">模型配置</a> 或 <a href="#" onclick="goToPromptConfig(); return false;">提示词管理</a> 页面。
+        </p>
+      </div>
+
+      <!-- 操作按钮 -->
+      <div class="form-actions">
+        <button id="ppt-start-btn" onclick="startPptBatchAnalysis()" class="btn btn-primary" disabled>
+          🚀 开始分析
+        </button>
+        <button id="ppt-view-results-btn" onclick="switchPptTab('results')" class="btn btn-secondary" disabled>
+          📊 查看结果
+        </button>
+        <button id="ppt-view-stats-btn" onclick="switchPptTab('statistics')" class="btn btn-secondary" disabled>
+          📈 查看统计
+        </button>
+      </div>
+
+      <!-- 分析进度 -->
+      <div id="ppt-progress" class="progress-section" style="display: none;">
+        <h3>📊 分析进度</h3>
+        <div class="progress-bar">
+          <div id="ppt-progress-fill" class="progress-fill" style="width: 0%"></div>
+          <span id="ppt-progress-text" class="progress-text">0%</span>
+        </div>
+        <div class="progress-details">
+          <p id="ppt-progress-detail">准备开始...</p>
+        </div>
+      </div>
+
+      <!-- 分析完成结果 -->
+      <div id="ppt-batch-result" class="result-card" style="display: none;">
+        <h3>✅ 分析完成</h3>
+        <div class="result-grid">
+          <div class="result-item">
+            <span class="result-label">总页数</span>
+            <span class="result-value" id="ppt-result-total">0</span>
+          </div>
+          <div class="result-item">
+            <span class="result-label">成功</span>
+            <span class="result-value success" id="ppt-result-success">0</span>
+          </div>
+          <div class="result-item">
+            <span class="result-label">失败</span>
+            <span class="result-value error" id="ppt-result-failed">0</span>
+          </div>
+          <div class="result-item">
+            <span class="result-label">跳过</span>
+            <span class="result-value" id="ppt-result-skipped">0</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tab 2: 分析结果 -->
+<div id="ppt-results-tab" class="tab-content">
+  <div class="card">
+    <div class="card-header">
+      <h2>📊 分析结果</h2>
+      <button onclick="refreshPptResults()" class="btn btn-secondary">🔄 刷新</button>
+    </div>
+    <div class="card-body">
+      <div id="ppt-results-empty" class="empty-state">
+        <p>请先选择文档并完成分析</p>
+      </div>
+      <div id="ppt-results-table" class="table-container" style="display: none;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>页面索引</th>
+              <th>页面ID</th>
+              <th>分类名称</th>
+              <th>分类代码</th>
+              <th>置信度</th>
+              <th>分析时间</th>
+            </tr>
+          </thead>
+          <tbody id="ppt-results-tbody">
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tab 3: 统计报表 -->
+<div id="ppt-statistics-tab" class="tab-content">
+  <div class="card">
+    <div class="card-header">
+      <h2>📈 统计报表</h2>
+      <button onclick="refreshPptStatistics()" class="btn btn-secondary">🔄 刷新</button>
+    </div>
+    <div class="card-body">
+      <div id="ppt-stats-empty" class="empty-state">
+        <p>请先选择文档并进行分析</p>
+      </div>
+      <div id="ppt-stats-content" class="statistics-section" style="display: none;">
+        <!-- 概览卡片 -->
+        <div class="stats-overview">
+          <div class="stat-card">
+            <div class="stat-icon">📄</div>
+            <div class="stat-content">
+              <div class="stat-value" id="ppt-stat-total">0</div>
+              <div class="stat-label">总页数</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">✅</div>
+            <div class="stat-content">
+              <div class="stat-value" id="ppt-stat-analyzed">0</div>
+              <div class="stat-label">已分析</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">⏳</div>
+            <div class="stat-content">
+              <div class="stat-value" id="ppt-stat-unanalyzed">0</div>
+              <div class="stat-label">未分析</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">🎯</div>
+            <div class="stat-content">
+              <div class="stat-value" id="ppt-stat-confidence">0%</div>
+              <div class="stat-label">平均置信度</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 分类分布 -->
+        <h3 style="margin-top: 30px; margin-bottom: 15px;">📊 分类分布</h3>
+        <div id="ppt-category-stats" class="category-stats">
+          <!-- 动态生成 -->
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tab 4: 分类标准 -->
+<div id="ppt-categories-tab" class="tab-content">
+  <div class="card">
+    <div class="card-header">
+      <h2>🏷️ 分类标准</h2>
+      <button onclick="loadPptCategories()" class="btn btn-secondary">🔄 刷新</button>
+    </div>
+    <div class="card-body">
+      <div id="ppt-categories-loading" class="loading">加载中...</div>
+      <div id="ppt-categories-content" class="categories-tree" style="display: none;">
+        <!-- 动态生成 -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+/* 标签页样式 */
+.nav-tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  border-bottom: 2px solid var(--border-color);
+  padding-bottom: 10px;
+}
+
+.tab-btn {
+  padding: 10px 20px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-secondary);
+  transition: all 0.3s;
+}
+
+.tab-btn:hover {
+  color: var(--primary-color);
+}
+
+.tab-btn.active {
+  color: var(--primary-color);
+  border-bottom-color: var(--primary-color);
+  font-weight: 600;
+}
+
+.tab-content {
+  display: none;
+}
+
+.tab-content.active {
+  display: block;
+}
+
+/* 文档信息 */
+.document-info, .config-info {
+  margin: 20px 0;
+  padding: 20px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.config-info {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border-color: var(--primary-color);
+}
+
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--primary-color);
+  cursor: pointer;
+  padding: 0 5px;
+  font-size: 14px;
+  margin-left: 8px;
+}
+
+.btn-link:hover {
+  color: var(--primary-dark);
+  text-decoration: underline;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+  margin-top: 15px;
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.info-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.info-value {
+  font-size: 16px;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.info-value.code {
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  color: var(--primary-color);
+}
+
+/* 进度条 */
+.progress-section {
+  margin: 20px 0;
+  padding: 20px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.progress-bar {
+  position: relative;
+  height: 30px;
+  background: #e0e0e0;
+  border-radius: 15px;
+  overflow: hidden;
+  margin: 15px 0;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary-color), var(--success-color));
+  transition: width 0.3s;
+  border-radius: 15px;
+}
+
+.progress-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.progress-details {
+  margin-top: 10px;
+  color: var(--text-secondary);
+}
+
+/* 结果卡片 */
+.result-card {
+  margin: 20px 0;
+  padding: 20px;
+  background: var(--bg-success);
+  border-radius: 8px;
+  border: 1px solid var(--success-color);
+}
+
+.result-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 15px;
+  margin-top: 15px;
+}
+
+.result-item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.result-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.result-value {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.result-value.success {
+  color: var(--success-color);
+}
+
+.result-value.error {
+  color: var(--danger-color);
+}
+
+/* 统计卡片 */
+.stats-overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+  margin-bottom: 30px;
+}
+
+.stat-card {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 20px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.stat-icon {
+  font-size: 32px;
+}
+
+.stat-content {
+  flex: 1;
+}
+
+.stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--primary-color);
+}
+
+.stat-label {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-top: 5px;
+}
+
+/* 分类统计 */
+.category-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.category-item {
+  padding: 15px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.category-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.category-name {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.category-count {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.category-bar {
+  height: 8px;
+  background: #e0e0e0;
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 10px 0;
+}
+
+.category-fill {
+  height: 100%;
+  background: var(--primary-color);
+  border-radius: 4px;
+}
+
+.category-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 10px;
+}
+
+.category-code {
+  font-family: 'Courier New', monospace;
+  color: var(--primary-color);
+}
+
+.category-confidence {
+  color: var(--text-secondary);
+}
+
+/* 分类树 */
+.categories-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.category-level1 {
+  padding: 20px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.category-header-l1 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.category-header-l1 h3 {
+  margin: 0;
+  color: var(--primary-color);
+  font-size: 18px;
+}
+
+.category-desc {
+  color: var(--text-secondary);
+  margin: 10px 0;
+  line-height: 1.6;
+}
+
+.category-children {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 15px;
+  padding-left: 20px;
+  border-left: 3px solid var(--primary-color);
+}
+
+.category-level2 {
+  padding: 15px;
+  background: white;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+}
+
+.category-header-l2 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.category-header-l2 h4 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 600;
+}
+</style>
+
+<script src="js/pages/ppt-analysis.js"></script>

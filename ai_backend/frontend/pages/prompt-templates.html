@@ -1,0 +1,201 @@
+<!-- 提示词管理页面 -->
+<div class="page-header">
+  <h1>📝 提示词管理</h1>
+  <div class="header-actions">
+    <button class="btn btn-primary" onclick="openDialog()">
+      <span class="icon">➕</span> 新增提示词
+    </button>
+  </div>
+</div>
+
+<div class="card">
+  <!-- 场景筛选Tab -->
+  <div class="tabs">
+    <button class="tab-btn active" data-scene="all" onclick="filterByScene('all')">全部</button>
+    <button class="tab-btn" data-scene="transcription" onclick="filterByScene('transcription')">语音转文本</button>
+    <button class="tab-btn" data-scene="ppt_analysis" onclick="filterByScene('ppt_analysis')">PPT分析</button>
+    <button class="tab-btn" data-scene="document_extract" onclick="filterByScene('document_extract')">文档提取</button>
+    <button class="tab-btn" data-scene="document_manage" onclick="filterByScene('document_manage')">文档管理</button>
+    <button class="tab-btn" data-scene="general" onclick="filterByScene('general')">通用</button>
+  </div>
+
+  <!-- 提示词列表 -->
+  <div class="table-container">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>名称</th>
+          <th>代码</th>
+          <th>场景</th>
+          <th>版本</th>
+          <th>状态</th>
+          <th>变量数</th>
+          <th>更新时间</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="prompt-list">
+        <tr><td colspan="8" class="loading">加载中...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- 添加/编辑对话框 -->
+<dialog id="prompt-dialog">
+  <form id="prompt-form" onsubmit="savePrompt(event)">
+    <h2 id="dialog-title">添加提示词模板</h2>
+    
+    <input type="hidden" name="id" id="prompt-id">
+    
+    <div class="form-group">
+      <label>模板名称 <span class="required">*</span></label>
+      <input type="text" class="form-control" name="name" required placeholder="如：PPT内容分类提示词">
+    </div>
+    
+    <div class="form-group">
+      <label>模板代码 <span class="required">*</span></label>
+      <input type="text" class="form-control" name="code" required placeholder="如：ppt_classify_v1" pattern="^[a-z0-9_]+$">
+      <small class="form-text">仅支持小写字母、数字和下划线，必须唯一</small>
+    </div>
+    
+    <div class="form-row">
+      <div class="form-group">
+        <label>场景类型 <span class="required">*</span></label>
+        <select class="form-control" name="scene_type" required>
+          <option value="">请选择</option>
+          <option value="transcription">语音转文本</option>
+          <option value="ppt_analysis">PPT分析</option>
+          <option value="document_extract">文档提取</option>
+          <option value="document_manage">文档管理</option>
+          <option value="general">通用</option>
+        </select>
+      </div>
+      
+      <div class="form-group">
+        <label>版本号</label>
+        <input type="text" class="form-control" name="version" placeholder="如：1.0" value="1.0">
+      </div>
+    </div>
+    
+    <div class="form-group">
+      <label>提示词内容 <span class="required">*</span></label>
+      <textarea class="form-control" name="prompt" required rows="10" placeholder="支持变量：{{variable_name}}"></textarea>
+      <small class="form-text">使用 {{变量名}} 定义动态变量，如：{{user_input}}, {{file_name}}</small>
+    </div>
+    
+    <div class="form-group">
+      <label>变量定义（JSON格式）</label>
+      <textarea class="form-control" name="variables" rows="4" placeholder='{"user_input": "用户输入", "file_name": "文件名"}'></textarea>
+      <small class="form-text">格式：{"变量名": "描述"}</small>
+    </div>
+    
+    <div class="form-group">
+      <label>
+        <input type="checkbox" name="is_active"> 启用此模板
+      </label>
+    </div>
+    
+    <div class="form-actions">
+      <button type="button" class="btn btn-secondary" onclick="closeDialog()">取消</button>
+      <button type="button" class="btn btn-info" onclick="testPrompt()">测试渲染</button>
+      <button type="submit" class="btn btn-primary">保存</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 测试渲染对话框 -->
+<dialog id="test-dialog">
+  <div class="dialog-content">
+    <h2>测试提示词渲染</h2>
+    
+    <div class="form-group">
+      <label>输入测试变量（JSON格式）</label>
+      <textarea class="form-control" id="test-variables" rows="4" placeholder='{"user_input": "测试内容", "file_name": "test.pdf"}'></textarea>
+    </div>
+    
+    <div class="form-group">
+      <label>渲染结果</label>
+      <pre id="test-result" style="background: #f5f5f5; padding: 12px; border-radius: 4px; max-height: 300px; overflow: auto;">等待渲染...</pre>
+    </div>
+    
+    <div class="form-actions">
+      <button type="button" class="btn btn-secondary" onclick="closeTestDialog()">关闭</button>
+      <button type="button" class="btn btn-primary" onclick="runTest()">执行渲染</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- 查看提示词对话框 -->
+<dialog id="view-dialog" style="max-width: 800px; width: 90%;">
+  <div class="dialog-content">
+    <h2>查看提示词详情</h2>
+    
+    <div class="view-section">
+      <h3>基本信息</h3>
+      <div id="view-basic-info"></div>
+    </div>
+    
+    <div class="view-section">
+      <h3>提示词内容</h3>
+      <pre id="view-prompt-content" style="background: #f5f5f5; padding: 12px; border-radius: 4px; max-height: 400px; overflow: auto; white-space: pre-wrap; word-wrap: break-word;"></pre>
+    </div>
+    
+    <div class="view-section" id="view-variables-section" style="display: none;">
+      <h3>变量定义</h3>
+      <pre id="view-variables" style="background: #f5f5f5; padding: 12px; border-radius: 4px;"></pre>
+    </div>
+    
+    <div class="view-section" id="view-remark-section" style="display: none;">
+      <h3>备注说明</h3>
+      <p id="view-remark"></p>
+    </div>
+    
+    <div class="form-actions">
+      <button type="button" class="btn btn-secondary" onclick="closeViewDialog()">关闭</button>
+      <button type="button" class="btn btn-primary" onclick="editFromView()">编辑</button>
+    </div>
+  </div>
+</dialog>
+
+<style>
+.view-section {
+  margin-bottom: 20px;
+}
+
+.view-section h3 {
+  margin-bottom: 12px;
+  color: var(--text-primary);
+  font-size: 16px;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 8px;
+}
+
+.view-section pre {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+#view-basic-info {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+#view-basic-info p {
+  margin: 0;
+  padding: 8px;
+  background: var(--bg-color);
+  border-radius: 4px;
+}
+
+#view-basic-info strong {
+  color: var(--text-secondary);
+  display: inline-block;
+  min-width: 80px;
+}
+</style>
+
+<script src="../js/pages/prompt-templates.js"></script>
+

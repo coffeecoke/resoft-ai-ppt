@@ -1,0 +1,128 @@
+<div class="content-body">
+  <div class="page-header">
+    <h1>🔧 模型配置管理</h1>
+    <div class="page-header-actions">
+      <button class="btn btn-primary" onclick="openAddDialog()">
+        ➕ 添加模型
+      </button>
+    </div>
+  </div>
+  
+  <!-- 场景Tab切换 -->
+  <div class="tabs">
+    <button class="tab active" data-scene="all" onclick="switchScene('all')">全部</button>
+    <button class="tab" data-scene="transcription" onclick="switchScene('transcription')">语音转文本</button>
+    <button class="tab" data-scene="ppt_analysis" onclick="switchScene('ppt_analysis')">PPT分析</button>
+    <button class="tab" data-scene="document_extract" onclick="switchScene('document_extract')">文档提取</button>
+    <button class="tab" data-scene="document_manage" onclick="switchScene('document_manage')">文档管理</button>
+    <button class="tab" data-scene="general" onclick="switchScene('general')">通用</button>
+  </div>
+  
+  <!-- 模型列表 -->
+  <div class="card">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>模型名称</th>
+          <th>提供商</th>
+          <th>场景</th>
+          <th>API地址</th>
+          <th>状态</th>
+          <th>默认</th>
+          <th>调用统计</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="model-list">
+        <tr><td colspan="8" class="loading">加载中...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- 添加/编辑对话框 -->
+<dialog id="model-dialog">
+  <form id="model-form" onsubmit="saveModel(event)">
+    <h2 id="dialog-title">添加模型配置</h2>
+    
+    <input type="hidden" name="id" id="model-id">
+    
+    <div class="form-group">
+      <label>显示名称 <span class="required">*</span></label>
+      <input type="text" class="form-control" name="name" required placeholder="如：讯飞星火V3.5">
+    </div>
+    
+    <div class="form-group">
+      <label>模型代码 <span class="required">*</span></label>
+      <input type="text" class="form-control" name="code" required placeholder="如：xfyun_spark_v35" pattern="^[a-z0-9_]+$">
+      <small class="form-text">仅支持小写字母、数字和下划线，必须唯一</small>
+    </div>
+    
+    <div class="form-group">
+      <label>提供商 <span class="required">*</span></label>
+      <select class="form-control" name="provider" required>
+        <option value="">请选择</option>
+        <option value="xfyun">讯飞星火</option>
+        <option value="openai">OpenAI</option>
+        <option value="qwen">通义千问</option>
+        <option value="baidu">文心一言</option>
+        <option value="custom">自定义</option>
+      </select>
+    </div>
+    
+    <div class="form-group">
+      <label>模型名称 <span class="required">*</span></label>
+      <input type="text" class="form-control" name="model_name" required placeholder="如：spark-v3.5">
+    </div>
+    
+    <div class="form-group">
+      <label>API地址 <span class="required">*</span></label>
+      <input type="url" class="form-control" name="api_url" required placeholder="https://...">
+    </div>
+    
+    <div class="form-group">
+      <label>API密钥 <span class="required">*</span></label>
+      <input type="password" class="form-control" name="api_key" required>
+    </div>
+    
+    <div class="form-group">
+      <label>API密钥2（可选）</label>
+      <input type="password" class="form-control" name="api_secret">
+    </div>
+    
+    <div class="form-group">
+      <label>场景类型 <span class="required">*</span></label>
+      <select class="form-control" name="scene_type" required>
+        <option value="">请选择</option>
+        <option value="transcription">语音转文本</option>
+        <option value="ppt_analysis">PPT分析</option>
+        <option value="document_extract">文档提取</option>
+        <option value="document_manage">文档管理</option>
+        <option value="general">通用</option>
+      </select>
+    </div>
+    
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+      <div class="form-group">
+        <label>最大Tokens</label>
+        <input type="number" class="form-control" name="max_tokens" value="2000">
+      </div>
+      
+      <div class="form-group">
+        <label>温度参数</label>
+        <input type="number" class="form-control" name="temperature" value="0.7" step="0.1" min="0" max="2">
+      </div>
+    </div>
+    
+    <div class="form-group">
+      <label>备注说明</label>
+      <textarea class="form-control" name="remark" style="min-height: 60px;"></textarea>
+    </div>
+    
+    <div class="dialog-actions">
+      <button type="button" class="btn" onclick="closeDialog()">取消</button>
+      <button type="submit" class="btn btn-primary">保存</button>
+    </div>
+  </form>
+</dialog>
+

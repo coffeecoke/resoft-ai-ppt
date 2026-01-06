@@ -1,6 +1,6 @@
 /**
- * Prisma 数据库配置
- * 共享 online-ppt-backend 的 Prisma Client
+ * 数据库配置
+ * 用于ai_backend连接online-ppt-backend的数据库
  */
 
 // 尝试多个可能的 Prisma Client 路径
@@ -35,9 +35,21 @@ process.on('beforeExit', async () => {
 });
 
 module.exports = {
-  prisma,
-  prismaConfig: {
-    log: ['query', 'info', 'warn', 'error'],
+  /**
+   * 数据库连接URL
+   */
+  DATABASE_URL: process.env.DATABASE_URL || 'mysql://root:password@localhost:3306/ppt_db',
+  
+  /**
+   * Prisma配置
+   */
+  prisma: {
+    log: process.env.NODE_ENV === 'production' ? ['error'] : ['query', 'info', 'warn', 'error'],
+    errorFormat: 'pretty',
   },
+  
+  /**
+   * 加密密钥（用于敏感信息加密）
+   */
+  ENCRYPTION_KEY: process.env.ENCRYPTION_KEY || 'default-encryption-key-32chars',
 };
-
