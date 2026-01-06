@@ -16,6 +16,7 @@ const pptAnalysisRoutes = require('./routes/pptAnalysisRoutes')
 const transcriptionRoutes = require('./routes/transcriptionRoutes')
 const productsRoutes = require('./routes/productsRoutes')
 const sessionsRoutes = require('./routes/sessionsRoutes')
+const autoProcessRoutes = require('./routes/autoProcessRoutes')
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -55,6 +56,11 @@ app.use(express.urlencoded({ extended: true }))
 app.use(express.static(path.join(__dirname, '../frontend')))
 app.use('/output', express.static(path.join(__dirname, '../output')))
 
+// ==================== AI管理后台路由（新架构） ====================
+const adminRoutes = require('./routes')
+app.use('/api', adminRoutes)
+
+// ==================== 原有功能路由 ====================
 // 路由：AI后台文档管理（新增）
 app.use('/api/documents', documentRoutes)
 
@@ -69,6 +75,9 @@ app.use('/api/products', productsRoutes)
 
 // 路由：交流场次管理（新增）
 app.use('/api/sessions', sessionsRoutes)
+
+// 路由：自动跑批处理（新增）
+app.use('/api/auto-process', autoProcessRoutes)
 
 // 路由：文件提取接口
 app.post('/api/extract', upload.single('file'), async (req, res) => {
@@ -242,6 +251,35 @@ app.listen(PORT, () => {
   console.log(`📤 上传目录: ${path.join(__dirname, '../uploads')}`)
   console.log('')
   console.log('📋 API 接口:')
+  console.log('')
+  console.log('  [AI管理后台 - 统一管理平台 🆕]')
+  console.log('  ┌─ 模型配置管理')
+  console.log('  │  ├─ 模型列表:     GET    /api/admin/models')
+  console.log('  │  ├─ 场景模型:     GET    /api/admin/models/scenes/:sceneType')
+  console.log('  │  ├─ 默认模型:     GET    /api/admin/models/default/:sceneType')
+  console.log('  │  ├─ 创建模型:     POST   /api/admin/models')
+  console.log('  │  ├─ 更新模型:     PUT    /api/admin/models/:id')
+  console.log('  │  ├─ 设为默认:     PUT    /api/admin/models/:id/set-default')
+  console.log('  │  ├─ 删除模型:     DELETE /api/admin/models/:id')
+  console.log('  │  └─ 场景统计:     GET    /api/admin/models/stats/scenes')
+  console.log('  │')
+  console.log('  ┌─ 提示词管理')
+  console.log('  │  ├─ 提示词列表:   GET    /api/admin/prompts')
+  console.log('  │  ├─ 场景提示词:   GET    /api/admin/prompts/scenes/:sceneType')
+  console.log('  │  ├─ 创建提示词:   POST   /api/admin/prompts')
+  console.log('  │  ├─ 更新提示词:   PUT    /api/admin/prompts/:id')
+  console.log('  │  ├─ 删除提示词:   DELETE /api/admin/prompts/:id')
+  console.log('  │  ├─ 复制模板:     POST   /api/admin/prompts/:id/duplicate')
+  console.log('  │  ├─ 测试渲染:     POST   /api/admin/prompts/test/render')
+  console.log('  │  ├─ 提取变量:     POST   /api/admin/prompts/test/extract')
+  console.log('  │  └─ 场景统计:     GET    /api/admin/prompts/stats/scenes')
+  console.log('  │')
+  console.log('  └─ 系统设置')
+  console.log('     ├─ 场景列表:     GET    /api/admin/system/scenes')
+  console.log('     ├─ 提供商列表:   GET    /api/admin/system/providers')
+  console.log('     ├─ 系统统计:     GET    /api/admin/system/stats')
+  console.log('     └─ 健康检查:     GET    /api/admin/system/health')
+  console.log('')
   console.log('  [原有功能]')
   console.log('  - 上传提取: POST   /api/extract')
   console.log('  - 历史记录: GET    /api/history')
@@ -292,6 +330,17 @@ app.listen(PORT, () => {
   console.log('  - 删除场次: DELETE /api/sessions/:id')
   console.log('  - 场次统计: GET    /api/sessions/statistics')
   console.log('  - 最近场次: GET    /api/sessions/recent')
+  console.log('')
+  console.log('  [自动跑批处理 - 新增 🆕]')
+  console.log('  - 获取状态: GET    /api/auto-process/status')
+  console.log('  - 启动跑批: POST   /api/auto-process/start')
+  console.log('  - 停止跑批: POST   /api/auto-process/stop')
+  console.log('  - 获取配置: GET    /api/auto-process/config')
+  console.log('  - 更新配置: PUT    /api/auto-process/config')
+  console.log('  - 统计信息: GET    /api/auto-process/statistics')
+  console.log('  - 处理日志: GET    /api/auto-process/logs')
+  console.log('  - 清空日志: DELETE /api/auto-process/logs')
+  console.log('  - 立即执行: POST   /api/auto-process/run-once')
   console.log('')
   console.log('🤖 支持的AI模型 (20+):')
   console.log('  🔥 推荐: gpt-4o-mini, gpt-4o, deepseek-chat')

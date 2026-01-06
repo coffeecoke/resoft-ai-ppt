@@ -1,30 +1,26 @@
 /**
- * Prisma 数据库配置
- * 共享 online-ppt-backend 的 Prisma Client
+ * 数据库配置
+ * 用于ai_backend连接online-ppt-backend的数据库
  */
 
-const { PrismaClient } = require('../../../online-ppt-backend/node_modules/.prisma/client');
-
-// 创建 Prisma Client 实例（单例模式）
-let prisma;
-
-if (!prisma) {
-  prisma = new PrismaClient({
-    log: process.env.NODE_ENV === 'development' 
-      ? ['query', 'info', 'warn', 'error'] 
-      : ['warn', 'error'],
-  });
-}
-
-// 优雅关闭
-process.on('beforeExit', async () => {
-  await prisma.$disconnect();
-});
+require('dotenv').config({ path: require('path').resolve(__dirname, '../../../online-ppt-backend/.env') });
 
 module.exports = {
-  prisma,
-  prismaConfig: {
-    log: ['query', 'info', 'warn', 'error'],
+  /**
+   * 数据库连接URL
+   */
+  DATABASE_URL: process.env.DATABASE_URL || 'mysql://root:password@localhost:3306/ppt_db',
+  
+  /**
+   * Prisma配置
+   */
+  prisma: {
+    log: process.env.NODE_ENV === 'production' ? ['error'] : ['query', 'info', 'warn', 'error'],
+    errorFormat: 'pretty',
   },
+  
+  /**
+   * 加密密钥（用于敏感信息加密）
+   */
+  ENCRYPTION_KEY: process.env.ENCRYPTION_KEY || 'default-encryption-key-32chars',
 };
-

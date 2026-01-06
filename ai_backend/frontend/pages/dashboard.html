@@ -1,0 +1,67 @@
+<div class="content-body">
+  <div class="page-header">
+    <h1>📊 控制台</h1>
+  </div>
+  
+  <!-- 统计卡片 -->
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 24px; margin-bottom: 24px;">
+    <div class="stat-card" style="background: linear-gradient(135deg, #1890ff 0%, #40a9ff 100%);">
+      <div class="stat-card-title">模型配置数</div>
+      <div class="stat-card-value" id="stat-models">-</div>
+    </div>
+    <div class="stat-card" style="background: linear-gradient(135deg, #52c41a 0%, #73d13d 100%);">
+      <div class="stat-card-title">提示词模板数</div>
+      <div class="stat-card-value" id="stat-prompts">-</div>
+    </div>
+    <div class="stat-card" style="background: linear-gradient(135deg, #fa8c16 0%, #ffa940 100%);">
+      <div class="stat-card-title">总调用次数</div>
+      <div class="stat-card-value" id="stat-calls">-</div>
+    </div>
+    <div class="stat-card" style="background: linear-gradient(135deg, #722ed1 0%, #9254de 100%);">
+      <div class="stat-card-title">消耗Tokens</div>
+      <div class="stat-card-value" id="stat-tokens">-</div>
+    </div>
+  </div>
+  
+  <!-- 场景统计 -->
+  <div class="card">
+    <div class="card-title">场景统计</div>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>场景名称</th>
+          <th>模型数</th>
+          <th>模板数</th>
+          <th>调用次数</th>
+          <th>消耗Tokens</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="scene-stats-table">
+        <tr><td colspan="6" class="loading">加载中...</td></tr>
+      </tbody>
+    </table>
+  </div>
+  
+  <!-- 系统信息 -->
+  <div class="card">
+    <div class="card-title">系统信息</div>
+    <table class="data-table">
+      <tbody>
+        <tr>
+          <td style="width: 200px; font-weight: 600;">数据库状态</td>
+          <td><span id="db-status" class="badge badge-success">正常</span></td>
+        </tr>
+        <tr>
+          <td style="font-weight: 600;">API版本</td>
+          <td>v1.0.0</td>
+        </tr>
+        <tr>
+          <td style="font-weight: 600;">最后更新</td>
+          <td id="last-update">-</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+

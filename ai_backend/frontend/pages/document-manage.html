@@ -1,0 +1,98 @@
+<!-- 文档管理页面 -->
+<div class="page-header">
+  <h1>📁 文档管理</h1>
+  <p class="page-description">查询数据库中的文档，选择文档进行内容提取到 slide_merged_contents 表</p>
+</div>
+
+<div class="card">
+  <div class="filters" style="display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
+    <input type="text" id="doc-keyword" class="form-control" placeholder="搜索关键词（名称/客户名）" style="flex: 1; min-width: 200px;">
+    <select id="doc-status" class="form-control" style="min-width: 150px;">
+      <option value="">全部状态</option>
+      <option value="draft">草稿</option>
+      <option value="published">已发布</option>
+    </select>
+    <select id="doc-category" class="form-control" style="min-width: 150px;">
+      <option value="">全部分类</option>
+      <option value="uncategorized">未分类</option>
+    </select>
+    <button class="btn btn-primary" onclick="searchDocuments()">
+      <span class="icon">🔍</span> 搜索
+    </button>
+    <button class="btn btn-success" onclick="batchExtractDocuments()">
+      <span class="icon">📦</span> 批量提取
+    </button>
+  </div>
+
+  <div id="doc-loading" class="loading" style="display: none; text-align: center; padding: 40px;">
+    正在加载文档...
+  </div>
+
+  <div id="doc-table-container" class="table-container" style="display: none;">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th style="width: 50px;"><input type="checkbox" id="doc-select-all" onchange="toggleSelectAllDocs()"></th>
+          <th style="width: 80px;">封面</th>
+          <th>文档名称</th>
+          <th>客户名称</th>
+          <th style="width: 80px;">页数</th>
+          <th style="width: 100px;">文件大小</th>
+          <th style="width: 100px;">状态</th>
+          <th style="width: 120px;">提取状态</th>
+          <th style="width: 160px;">创建时间</th>
+          <th style="width: 180px;">操作</th>
+        </tr>
+      </thead>
+      <tbody id="doc-document-list">
+        <tr><td colspan="10" style="text-align: center; padding: 40px;">加载中...</td></tr>
+      </tbody>
+    </table>
+
+    <div class="pagination" style="display: flex; justify-content: center; align-items: center; gap: 10px; margin-top: 30px;">
+      <button class="btn btn-secondary" onclick="prevDocPage()">上一页</button>
+      <span id="doc-page-info" style="color: #666; font-size: 14px;">第 1 页 / 共 1 页</span>
+      <button class="btn btn-secondary" onclick="nextDocPage()">下一页</button>
+    </div>
+  </div>
+</div>
+
+<style>
+.doc-cover-img {
+  width: 60px;
+  height: 34px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+}
+
+.doc-status-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.doc-status-badge.extracted {
+  background: #d4edda;
+  color: #155724;
+}
+
+.doc-status-badge.not-extracted {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.doc-actions {
+  display: flex;
+  gap: 5px;
+}
+
+.doc-actions button {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+</style>
+
+<script src="js/pages/document-manage.js"></script>
