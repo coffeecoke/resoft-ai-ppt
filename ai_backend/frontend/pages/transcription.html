@@ -1,13 +1,467 @@
 <!-- 语音转文本页面 -->
 <div class="page-header">
   <h1>🎤 语音转文本</h1>
-  <p class="page-description">上传音频文件，智能转换为文字</p>
+  <p class="page-description">基于讯飞语音识别，支持多说话人角色分离</p>
 </div>
 
-<div class="card">
-  <h2>功能开发中</h2>
-  <p style="text-align: center; padding: 40px; color: var(--text-secondary);">
-    语音转文本功能即将上线，敬请期待！
-  </p>
+<!-- Tab 切换 -->
+<div class="tabs" style="margin-bottom: 20px;">
+  <button class="tab-btn active" onclick="st_switchTab('upload')">📤 手动上传</button>
+  <button class="tab-btn" onclick="st_switchTab('scan')">📁 目录扫描</button>
 </div>
+
+<!-- 目录扫描区域 -->
+<div id="st-scanTab" style="display: none;">
+  <!-- 扫描配置 -->
+  <div class="card">
+    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+      <h2>⚙️ 扫描配置</h2>
+      <button class="btn btn-primary" id="st-saveScanConfigBtn">💾 保存配置</button>
+    </div>
+    <div class="form-group">
+      <label>扫描目录路径</label>
+      <input type="text" class="form-control" id="st-scanDirectory" placeholder="例如: E:\audio_files">
+      <small style="color: var(--text-secondary);">音频文件将从此目录（包括子目录）中扫描</small>
+    </div>
+  </div>
+
+  <!-- 文件列表 -->
+  <div class="card">
+    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+      <h2>📂 音频文件列表</h2>
+      <div style="display: flex; gap: 10px;">
+        <span id="st-fileCount" style="color: var(--text-secondary); padding: 8px;">总计: 0 个文件</span>
+        <button class="btn btn-secondary" id="st-refreshFilesBtn">🔄 刷新</button>
+      </div>
+    </div>
+    <div class="table-container">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>文件名</th>
+            <th>格式</th>
+            <th>大小</th>
+            <th>修改时间</th>
+            <th>状态</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="st-fileList">
+          <tr><td colspan="6" class="loading">暂无数据，请先配置扫描目录</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- 上传区域 -->
+<div class="card" id="st-uploadTab">
+  <div class="upload-card">
+    <h2>📤 上传音频文件</h2>
+    <div class="upload-area" id="st-uploadArea">
+      <div class="upload-icon">🎙️</div>
+      <p class="upload-text">点击或拖拽音频文件到此处</p>
+      <p class="upload-hint">支持格式: MP3, WAV, M4A, FLAC, AAC, WMA, OGG</p>
+      <p class="upload-hint">最大文件: 500MB | 最长时长: 5小时</p>
+      <input type="file" id="st-audioInput" accept=".mp3,.wav,.m4a,.flac,.aac,.wma,.ogg" hidden>
+      <button class="btn btn-primary" id="st-selectFileBtn">选择文件</button>
+    </div>
+
+    <!-- 文件信息 -->
+    <div class="file-info" id="st-fileInfo" style="display: none;">
+      <div class="file-icon">📁</div>
+      <div class="file-details">
+        <p class="file-name" id="st-fileName"></p>
+        <p class="file-size" id="st-fileSize"></p>
+      </div>
+      <button class="btn btn-sm btn-danger" id="st-removeFileBtn">✖ 移除</button>
+    </div>
+
+    <!-- 可选信息 -->
+    <div class="optional-fields" id="st-optionalFields" style="display: none; margin-top: 20px;">
+      <h3>📝 可选信息</h3>
+      
+      <div class="form-group">
+        <label>音频名称</label>
+        <input type="text" class="form-control" id="st-audioName" placeholder="留空则使用原文件名">
+      </div>
+
+      <div class="form-group">
+        <label>客户名称</label>
+        <input type="text" class="form-control" id="st-customerName" placeholder="请输入客户名称（可选）">
+      </div>
+
+      <div class="form-group">
+        <label>关联产品</label>
+        <div style="display: flex; gap: 10px;">
+          <select class="form-control" id="st-productSelect" style="flex: 1;">
+            <option value="">-- 无关联（可选）--</option>
+          </select>
+          <button class="btn btn-sm btn-secondary" id="st-addProductBtn" title="快速新增产品">➕</button>
+          <button class="btn btn-sm btn-secondary" id="st-refreshProductsBtn" title="刷新产品列表">🔄</button>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>关联场次</label>
+        <div style="display: flex; gap: 10px;">
+          <select class="form-control" id="st-sessionSelect" style="flex: 1;">
+            <option value="">-- 无关联（可选）--</option>
+          </select>
+          <button class="btn btn-sm btn-secondary" id="st-addSessionBtn" title="快速新增场次">➕</button>
+          <button class="btn btn-sm btn-secondary" id="st-refreshSessionsBtn" title="刷新场次列表">🔄</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 上传按钮 -->
+    <button class="btn btn-primary btn-lg" id="st-uploadBtn" disabled style="width: 100%; margin-top: 20px;">
+      <span>🚀 开始转录</span>
+    </button>
+  </div>
+</div>
+
+<!-- 进度区域 -->
+<div class="card" id="st-progressSection" style="display: none;">
+  <div class="progress-status" style="text-align: center; margin-bottom: 20px;">
+    <div class="loading-spinner" style="display: inline-block; width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid var(--primary); border-radius: 50%; animation: spin 1s linear infinite;"></div>
+    <div style="margin-top: 15px;">
+      <h3 id="st-progressTitle">⏳ 正在上传...</h3>
+      <p id="st-progressDesc" style="color: var(--text-secondary);">请稍候，正在处理您的音频文件</p>
+    </div>
+  </div>
+  <div class="progress-bar-container" style="width: 100%; height: 30px; background: #f0f0f0; border-radius: 15px; overflow: hidden; position: relative;">
+    <div class="progress-fill" id="st-progressFill" style="height: 100%; background: linear-gradient(90deg, var(--primary), var(--success)); width: 0%; transition: width 0.3s;"></div>
+    <p class="progress-percentage" id="st-progressPercentage" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); margin: 0; font-weight: bold;">0%</p>
+  </div>
+</div>
+
+<!-- 结果区域 -->
+<div id="st-resultSection" style="display: none;">
+  <div class="card">
+    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+      <h2>✅ 转录完成</h2>
+      <div style="display: flex; gap: 10px;">
+        <button class="btn btn-secondary" id="st-copyAllBtn">📋 复制全部</button>
+        <button class="btn btn-secondary" id="st-downloadBtn">💾 下载结果</button>
+        <button class="btn btn-primary" id="st-newTranscriptionBtn">🆕 新建转录</button>
+      </div>
+    </div>
+
+    <!-- 统计信息 -->
+    <div class="stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 20px;">
+      <div class="stat-card" style="padding: 15px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e0e0e0;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div class="stat-icon" style="font-size: 32px;">🎙️</div>
+          <div>
+            <p style="color: #666; margin: 0; font-size: 12px;">说话人数</p>
+            <p class="stat-value" id="st-speakerCount" style="font-size: 24px; font-weight: bold; margin: 5px 0 0 0; color: #333;">-</p>
+          </div>
+        </div>
+      </div>
+      <div class="stat-card" style="padding: 15px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e0e0e0;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div class="stat-icon" style="font-size: 32px;">💬</div>
+          <div>
+            <p style="color: #666; margin: 0; font-size: 12px;">对话数量</p>
+            <p class="stat-value" id="st-dialogueCount" style="font-size: 24px; font-weight: bold; margin: 5px 0 0 0; color: #333;">-</p>
+          </div>
+        </div>
+      </div>
+      <div class="stat-card" style="padding: 15px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e0e0e0;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div class="stat-icon" style="font-size: 32px;">⏱️</div>
+          <div>
+            <p style="color: #666; margin: 0; font-size: 12px;">音频时长</p>
+            <p class="stat-value" id="st-audioDuration" style="font-size: 24px; font-weight: bold; margin: 5px 0 0 0; color: #333;">-</p>
+          </div>
+        </div>
+      </div>
+      <div class="stat-card" style="padding: 15px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e0e0e0;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div class="stat-icon" style="font-size: 32px;">📅</div>
+          <div>
+            <p style="color: #666; margin: 0; font-size: 12px;">转录时间</p>
+            <p class="stat-value" id="st-transcriptionTime" style="font-size: 24px; font-weight: bold; margin: 5px 0 0 0; color: #333;">-</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 音频播放器 -->
+    <div class="audio-player-container" style="margin-top: 30px; display: none;" id="st-audioPlayerContainer">
+      <h3>🎵 音频预览</h3>
+      <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-top: 15px;">
+        <audio id="st-audioPlayer" controls style="width: 100%; margin-bottom: 15px;">
+          <source id="st-audioSource" src="" type="audio/mpeg">
+          您的浏览器不支持音频播放。
+        </audio>
+        <div style="display: flex; gap: 10px; align-items: center;">
+          <span style="color: #666;">当前播放:</span>
+          <span id="st-currentTime" style="color: #1890ff; font-weight: bold;">00:00</span>
+          <span style="color: #666;">/</span>
+          <span id="st-totalTime" style="color: #333;">00:00</span>
+          <span style="flex: 1;"></span>
+          <button class="btn btn-secondary" id="st-toggleAutoScrollBtn">
+            <span id="st-autoScrollIcon">✅</span> 自动定位
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 对话内容 -->
+    <div class="dialogues-container" style="margin-top: 30px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+        <h3>💬 对话内容</h3>
+        <div style="display: flex; gap: 10px;">
+          <button class="btn btn-primary" id="st-batchReplaceSpeakerBtn">🔄 批量替换说话人</button>
+          <button class="btn btn-success" id="st-saveEditBtn" style="display: none;">💾 保存修改</button>
+          <button class="btn btn-secondary" id="st-cancelEditBtn" style="display: none;">❌ 取消</button>
+        </div>
+      </div>
+      <div class="dialogues-list" id="st-dialoguesList" style="max-height: 600px; overflow-y: auto; margin-top: 15px;">
+        <!-- 动态加载对话 -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 历史记录 -->
+<div class="card">
+  <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+    <h2>📚 转录历史</h2>
+    <button class="btn btn-secondary" id="st-refreshHistoryBtn">🔄 刷新</button>
+  </div>
+  <div class="history-list" id="st-historyList" style="margin-top: 20px;">
+    <p class="loading">加载中...</p>
+  </div>
+</div>
+
+<style>
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.upload-area {
+  border: 2px dashed #ddd;
+  border-radius: 8px;
+  padding: 40px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.upload-area:hover {
+  border-color: var(--primary);
+  background: rgba(24, 144, 255, 0.05);
+}
+
+.upload-area.drag-over {
+  border-color: var(--primary);
+  background: rgba(24, 144, 255, 0.1);
+}
+
+.upload-icon {
+  font-size: 48px;
+  margin-bottom: 15px;
+}
+
+.upload-text {
+  font-size: 18px;
+  font-weight: 500;
+  margin: 10px 0;
+}
+
+.upload-hint {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 5px 0;
+}
+
+.file-info {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 15px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  margin-top: 15px;
+}
+
+.file-icon {
+  font-size: 36px;
+}
+
+.file-details {
+  flex: 1;
+}
+
+.file-name {
+  font-weight: 500;
+  margin: 0 0 5px 0;
+}
+
+.file-size {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.optional-fields {
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.optional-fields h3 {
+  margin-top: 0;
+  font-size: 16px;
+}
+
+.form-group {
+  margin-bottom: 15px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: 500;
+}
+
+.dialogue-item {
+  border-left: 3px solid #1890ff;
+  background: #f8f9fa;
+  padding: 8px 15px;
+  margin-bottom: 5px;
+  border-radius: 4px;
+  transition: background 0.2s;
+  cursor: pointer;
+}
+
+.dialogue-item:hover {
+  background: #e6f7ff;
+}
+
+.dialogue-item.active {
+  background: #bae7ff;
+  border-left-color: #ff4d4f;
+}
+
+.dialogue-item.editing {
+  background: #fff7e6;
+  border-left-color: #faad14;
+  padding: 15px;
+}
+
+.dialogue-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.dialogue-time {
+  color: #1890ff;
+  font-weight: 500;
+  font-size: 14px;
+  min-width: 80px;
+}
+
+.speaker-name {
+  color: #333;
+  font-weight: bold;
+  font-size: 14px;
+  min-width: 100px;
+}
+
+.dialogue-text-inline {
+  color: #333;
+  font-size: 14px;
+  flex: 1;
+}
+
+.edit-controls {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.edit-input {
+  padding: 6px 12px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.edit-input:focus {
+  outline: none;
+  border-color: #1890ff;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+}
+
+.edit-textarea {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  font-size: 14px;
+  resize: vertical;
+  min-height: 60px;
+}
+
+.edit-textarea:focus {
+  outline: none;
+  border-color: #1890ff;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+}
+
+.dialogue-edit-btn {
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.dialogue-item:hover .dialogue-edit-btn {
+  opacity: 1;
+}
+
+.dialogue-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.history-item {
+  padding: 15px;
+  border-bottom: 1px solid #eee;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.history-item:hover {
+  background: #f8f9fa;
+}
+
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.history-title {
+  font-weight: 500;
+  margin: 0;
+}
+
+.history-date {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.history-meta {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+</style>
 

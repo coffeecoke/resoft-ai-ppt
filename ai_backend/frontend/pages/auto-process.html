@@ -279,7 +279,14 @@
   </style>
 </head>
 <body>
-  <div class="container">
+  <!-- Tab 切换 -->
+  <div class="tabs" style="margin-bottom: 20px;">
+    <button class="tab-btn active" id="ap-ppt-tab" onclick="switchAutoProcessTab('ppt')">📄 PPT跑批</button>
+    <button class="tab-btn" id="ap-audio-tab" onclick="switchAutoProcessTab('audio')">🎤 音频跑批</button>
+  </div>
+
+  <!-- PPT跑批内容 -->
+  <div class="container" id="ppt-process-content">
     <!-- 控制面板 -->
     <div class="control-panel">
       <h2>
@@ -405,6 +412,129 @@
         <button class="btn btn-sm btn-secondary" onclick="autoClearLogs()">🗑️ 清空日志</button>
       </h3>
       <div class="log-list" id="log-list">
+        <div class="empty-logs">
+          <div class="icon">📝</div>
+          <div>暂无日志记录</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 音频跑批内容 -->
+  <div class="container" id="audio-process-content" style="display: none;">
+    <!-- 控制面板 -->
+    <div class="control-panel">
+      <h2>
+        <span class="status-indicator" id="audio-status-indicator"></span>
+        <span>🎤 音频自动转录监控</span>
+      </h2>
+      <div class="status-text" id="audio-status-text">正在加载...</div>
+      <div class="control-buttons">
+        <button class="btn btn-success" id="audio-start-btn" onclick="audioStartProcess()" disabled>
+          ▶️ 启动自动转录
+        </button>
+        <button class="btn btn-danger" id="audio-stop-btn" onclick="audioStopProcess()" disabled>
+          ⏸️ 停止自动转录
+        </button>
+        <button class="btn btn-primary" id="audio-run-once-btn" onclick="audioRunOnce()">
+          🚀 立即执行一次
+        </button>
+        <button class="btn btn-secondary" onclick="audioRefreshStatus()">
+          🔄 刷新状态
+        </button>
+      </div>
+    </div>
+
+    <!-- 当前任务 -->
+    <div class="current-task" id="audio-current-task" style="display: none;">
+      <h4>⏳ 当前正在转录</h4>
+      <div class="task-info" id="audio-task-info"></div>
+    </div>
+
+    <!-- 统计数据 -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="label">总音频文件</div>
+        <div class="value" id="audio-stat-total">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">已转录</div>
+        <div class="value success" id="audio-stat-transcribed">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">待转录</div>
+        <div class="value warning" id="audio-stat-pending">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">正在处理</div>
+        <div class="value info" id="audio-stat-processing">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">上次运行</div>
+        <div class="value" id="audio-stat-last-run">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">下次运行</div>
+        <div class="value" id="audio-stat-next-run">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">总运行次数</div>
+        <div class="value" id="audio-stat-total-runs">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">成功/失败</div>
+        <div class="value">
+          <span class="success" id="audio-stat-success">-</span> / 
+          <span class="danger" id="audio-stat-failed">-</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 配置设置 -->
+    <div class="config-section">
+      <h3>⚙️ 跑批配置</h3>
+      <div class="config-form">
+        <div class="form-row">
+          <label>扫描目录</label>
+          <input type="text" id="audio-config-scan-dir" placeholder="例如: E:/已转录">
+        </div>
+        <div class="form-row">
+          <label></label>
+          <div class="helper-text">音频文件将从此目录（包括子目录）中扫描</div>
+        </div>
+        
+        <div class="form-row">
+          <label>轮询间隔（分钟）</label>
+          <input type="number" id="audio-config-interval" min="1" max="1440" value="5">
+        </div>
+        <div class="form-row">
+          <label></label>
+          <div class="helper-text">自动扫描的时间间隔（1-1440分钟）</div>
+        </div>
+        
+        <div class="form-row">
+          <label>最大并发数</label>
+          <input type="number" id="audio-config-concurrent" min="1" max="5" value="1">
+        </div>
+        <div class="form-row">
+          <label></label>
+          <div class="helper-text">同时转录的音频文件数量（1-5个）</div>
+        </div>
+        
+        <div class="form-row">
+          <label></label>
+          <button class="btn btn-primary" onclick="audioSaveConfig()">💾 保存配置</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 处理日志 -->
+    <div class="log-section">
+      <h3>
+        <span>📋 转录日志</span>
+        <button class="btn btn-sm btn-secondary" onclick="audioClearLogs()">🗑️ 清空日志</button>
+      </h3>
+      <div class="log-list" id="audio-log-list">
         <div class="empty-logs">
           <div class="icon">📝</div>
           <div>暂无日志记录</div>

@@ -5,11 +5,37 @@
 let currentScene = 'all';
 let models = [];
 
-// 页面初始化
+// 页面初始化 - 等待DOM完全加载
 (async function() {
   console.log('🔧 加载模型配置页面...');
+  
+  // ✅ 等待DOM元素存在
+  await waitForElement('model-list');
+  
   await loadModels();
 })();
+
+// 等待DOM元素加载完成
+function waitForElement(id, timeout = 5000) {
+  return new Promise((resolve, reject) => {
+    const startTime = Date.now();
+    
+    const check = () => {
+      const element = document.getElementById(id);
+      if (element) {
+        console.log(`✅ DOM元素 #${id} 已加载`);
+        resolve(element);
+      } else if (Date.now() - startTime > timeout) {
+        console.error(`❌ 等待DOM元素 #${id} 超时`);
+        reject(new Error(`元素 #${id} 加载超时`));
+      } else {
+        setTimeout(check, 50); // 每50ms检查一次
+      }
+    };
+    
+    check();
+  });
+}
 
 // 加载模型列表
 async function loadModels() {
