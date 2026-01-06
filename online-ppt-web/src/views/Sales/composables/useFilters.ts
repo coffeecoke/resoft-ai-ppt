@@ -13,14 +13,42 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
   const documentsFromAPI = ref<DocumentMetadata[]>([])
   const isLoadingDocuments = ref(false)
 
-  // 🆕 加载文档列表
-  const loadDocuments = async () => {
+  // 🆕 加载文档列表（支持筛选参数）
+  const loadDocuments = async (params?: {
+    pageType?: string[]
+    industry?: string[]
+    audience?: string[]
+    keyword?: string
+  }) => {
     try {
       isLoadingDocuments.value = true
-      const result = await getSalesDocumentList({
+      
+      const queryParams: any = {
         status: 'published',
         pageSize: 100, // 暂时一次性加载所有数据
-      })
+      }
+      
+      // 添加筛选参数
+      if (params?.pageType && params.pageType.length > 0) {
+        queryParams.pageType = params.pageType.join(',')
+        console.log('[Sales首页] 🔍 PPT目录筛选:', params.pageType)
+      }
+      if (params?.industry && params.industry.length > 0) {
+        queryParams.industry = params.industry.join(',')
+        console.log('[Sales首页] 🔍 行业筛选:', params.industry)
+      }
+      if (params?.audience && params.audience.length > 0) {
+        queryParams.audience = params.audience.join(',')
+        console.log('[Sales首页] 🔍 交流对象筛选:', params.audience)
+      }
+      if (params?.keyword) {
+        queryParams.keyword = params.keyword
+        console.log('[Sales首页] 🔍 关键词筛选:', params.keyword)
+      }
+      
+      console.log('[Sales首页] 📤 加载文档请求参数:', queryParams)
+      
+      const result = await getSalesDocumentList(queryParams)
       documentsFromAPI.value = result.documents
       console.log('[Sales首页] 📦 从API加载文档数量:', result.documents.length)
       console.log('[Sales首页] 📦 加载的文档:', result.documents)
@@ -131,16 +159,15 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
   // 独立页面筛选条件
   const filterVersion = ref<string | null>(null)
   
-  // 推荐页面 - 筛选PPT（从API获取）
+  // 推荐页面 - 筛选PPT（只使用API数据）
   const filteredPPT = computed(() => {
     // 🔍 调试信息
     console.log('[Sales首页] 🎯 filteredPPT 计算:')
     console.log('  - pptListFromAPI 数量:', pptListFromAPI.value.length)
-    console.log('  - dataSource.pptList 数量:', dataSource.pptList?.length || 0)
     
-    // 优先使用API数据，如果没有则使用dataSource
-    let list = pptListFromAPI.value.length > 0 ? pptListFromAPI.value : dataSource.pptList
-    console.log('  - 使用数据源:', pptListFromAPI.value.length > 0 ? 'API' : 'Mock')
+    // ✅ 只使用API数据，不再使用Mock数据作为fallback
+    let list = pptListFromAPI.value
+    console.log('  - 使用数据源: API')
     console.log('  - 初始列表数量:', list.length)
     
     // 基础筛选：版本和产品
@@ -193,6 +220,51 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
     return list
   })
   
+  // 🆕 监听筛选条件变化，重新加载数据
+  watch(
+    () => ({
+      productIntro: pptFilters.productIntro,
+      industry: pptFilters.industry,
+      audience: pptFilters.audience,
+      customerName: pptFilters.customerName
+    }),
+    (newFilters, oldFilters) => {
+      console.log('[Sales首页] 🔄 筛选条件变化，重新加载数据:')
+      console.log('  - 新值:', newFilters)
+      console.log('  - 旧值:', oldFilters)
+      
+      // 检查是否有有效的筛选条件
+      const hasFilters = 
+        (newFilters.productIntro && newFilters.productIntro.length > 0) ||
+        (newFilters.industry && newFilters.industry.length > 0) ||
+        (newFilters.audience && newFilters.audience.length > 0) ||
+        (newFilters.customerName && newFilters.customerName.trim() !== '')
+      
+      console.log('  - 是否有筛选条件:', hasFilters)
+      
+      // 构建请求参数，只传递非空值
+      const params: any = {}
+      if (newFilters.productIntro && newFilters.productIntro.length > 0) {
+        params.pageType = newFilters.productIntro
+      }
+      if (newFilters.industry && newFilters.industry.length > 0) {
+        params.industry = newFilters.industry
+      }
+      if (newFilters.audience && newFilters.audience.length > 0) {
+        params.audience = newFilters.audience
+      }
+      if (newFilters.customerName && newFilters.customerName.trim() !== '') {
+        params.keyword = newFilters.customerName
+      }
+      
+      console.log('  - 实际传递参数:', params)
+      console.log('  - 开始调用 loadDocuments，参数为:', JSON.stringify(params, null, 2))
+      
+      loadDocuments(params)
+    },
+    { deep: true }
+  )
+  
   // 推荐页面 - 筛选视频
   const filteredVideos = computed(() => {
     let list = dataSource.videoList
@@ -209,9 +281,10 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
     return list
   })
   
-  // 独立PPT页面 - 筛选结果（从API获取）
+  // 独立PPT页面 - 筛选结果（只使用API数据）
   const filteredPPTPage = computed(() => {
-    return pptListFromAPI.value.length > 0 ? pptListFromAPI.value : dataSource.pptList
+    // ✅ 只使用API数据
+    return pptListFromAPI.value
   })
   
   // 独立视频页面 - 筛选结果

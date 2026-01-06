@@ -17,6 +17,12 @@ export const usePptDialogAiStore = defineStore('pptDialogAi', () => {
   
   // 关闭AI面板的回调函数
   const closeAiPanelCallback = ref<(() => void) | null>(null)
+  
+  // 添加消息到AI助手的回调函数
+  const addAiMessageCallback = ref<((message: { role: string; content: string }) => void) | null>(null)
+  
+  // 更新最后一条AI消息的回调函数
+  const updateLastAiMessageCallback = ref<((content: string) => void) | null>(null)
 
   // 设置PPT对话框打开状态
   const setPptDialogOpen = (open: boolean) => {
@@ -64,6 +70,40 @@ export const usePptDialogAiStore = defineStore('pptDialogAi', () => {
     isAiPanelOpen.value = open
   }
 
+  // 注册添加AI消息的回调
+  const registerAddAiMessage = (callback: (message: { role: string; content: string }) => void) => {
+    addAiMessageCallback.value = callback
+  }
+
+  // 注销添加AI消息回调
+  const unregisterAddAiMessage = () => {
+    addAiMessageCallback.value = null
+  }
+
+  // 添加消息到AI助手
+  const addAiMessage = (message: { role: string; content: string }) => {
+    if (addAiMessageCallback.value) {
+      addAiMessageCallback.value(message)
+    }
+  }
+
+  // 注册更新最后一条AI消息的回调
+  const registerUpdateLastAiMessage = (callback: (content: string) => void) => {
+    updateLastAiMessageCallback.value = callback
+  }
+
+  // 注销更新最后一条AI消息回调
+  const unregisterUpdateLastAiMessage = () => {
+    updateLastAiMessageCallback.value = null
+  }
+
+  // 更新最后一条AI消息
+  const updateLastAiMessage = (content: string) => {
+    if (updateLastAiMessageCallback.value) {
+      updateLastAiMessageCallback.value(content)
+    }
+  }
+
   return {
     isPptDialogOpen,
     isAiPanelOpen,
@@ -75,7 +115,13 @@ export const usePptDialogAiStore = defineStore('pptDialogAi', () => {
     registerCloseAiPanel,
     unregisterCloseAiPanel,
     closeAiPanel,
-    setAiPanelOpen
+    setAiPanelOpen,
+    registerAddAiMessage,
+    unregisterAddAiMessage,
+    addAiMessage,
+    registerUpdateLastAiMessage,
+    unregisterUpdateLastAiMessage,
+    updateLastAiMessage
   }
 })
 

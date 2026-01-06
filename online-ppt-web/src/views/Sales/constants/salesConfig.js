@@ -86,25 +86,10 @@ export const languageOptions = [
 ]
 
 /**
- * PPT目录选项
+ * PPT目录选项（映射到后端的page_type编码）
  */
 export const pptCatalogOptions = [
-  { label: '产品案例', value: '产品案例' },
-  { label: '监管发文与背景分析', value: '监管发文与背景分析' },
-  { label: '行业发展趋势', value: '行业发展趋势' },
-  { label: '监管要求', value: '监管要求' },
-  { label: '客户痛难点', value: '客户痛难点' },
-  { label: '解决方案概述', value: '解决方案概述' },
-  { label: '产品架构设计', value: '产品架构设计' },
-  { label: '产品功能详解', value: '产品功能详解' },
-  { label: 'DEMO交互', value: 'DEMO交互' },
-  { label: '产品优势说明', value: '产品优势说明' },
-  { label: '产品应用场景', value: '产品应用场景' },
-  { label: '软硬件资源需求', value: '软硬件资源需求' },
-  { label: '实施服务流程', value: '实施服务流程' },
-  { label: '售后服务保障', value: '售后服务保障' },
-  { label: '其他', value: '其他' },
-  { label: '合作伙伴名单', value: '合作伙伴名单' }
+ 
 ]
 
 /**

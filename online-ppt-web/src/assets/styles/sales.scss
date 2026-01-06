@@ -180,7 +180,6 @@ body {
 }
 .product-page .main .advanced-filter-panel {
   flex-shrink: 0;
-  max-height: 300px;
   overflow-y: auto;
 }
 .product-page .main .advanced-filter-panel::-webkit-scrollbar {
@@ -1338,7 +1337,15 @@ body {
   gap: 8px;
   color: #1f2d3d;
 }
-.ppt-title-text { color: #1f2d3d; }
+.ppt-title-text { 
+  color: #1f2d3d;
+  max-width: 400px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
+  vertical-align: middle;
+}
 .ppt-title-meta {
   font-size: 12px;
   color: #909399;
@@ -1871,11 +1878,151 @@ body {
   font-size: 18px;
   color: #9ca3af;
 }
+
+// ========== AI总结区域 ==========
+.ai-summary-section {
+  margin-top: 16px;
+  padding: 12px;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  animation: slideDown 0.3s ease;
+  
+  .summary-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    
+    .summary-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #1f2937;
+    }
+    
+    .summary-close {
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      font-size: 18px;
+      color: #6b7280;
+      border-radius: 4px;
+      transition: all 0.2s;
+      
+      &:hover {
+        color: #1f2937;
+        background: #e5e7eb;
+      }
+    }
+  }
+  
+  .summary-content {
+    .summary-loading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #6b7280;
+      padding: 20px 0;
+      gap: 8px;
+      
+      .rotating {
+        font-size: 20px;
+        animation: rotate 1s linear infinite;
+      }
+      
+      span {
+        font-size: 13px;
+      }
+    }
+    
+    .summary-text {
+      line-height: 1.6;
+      color: #374151;
+      font-size: 13px;
+      
+      h4 {
+        font-size: 13px;
+        font-weight: 600;
+        margin: 10px 0 6px;
+        color: #1f2937;
+        
+        &:first-child {
+          margin-top: 0;
+        }
+      }
+      
+      li {
+        margin-left: 16px;
+        margin-bottom: 4px;
+        list-style: none;
+        position: relative;
+        
+        &::before {
+          content: '•';
+          position: absolute;
+          left: -12px;
+          color: #6b7280;
+        }
+      }
+    }
+  }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .ai-panel-footer {
   padding: 16px 20px 20px;
   border-top: 1px solid #e5e7eb;
   background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
+
+
+
+@keyframes messageSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes typingDot {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-10px);
+    opacity: 1;
+  }
+}
+
 .ai-quick-buttons {
   display: flex;
   gap: 8px;
@@ -1984,16 +2131,24 @@ body {
   cursor: pointer;
   transition: all 0.2s;
 }
-.ai-send-btn:hover {
+.ai-send-btn:hover:not(:disabled) {
   background: #1d4ed8;
   transform: translateY(-1px);
   box-shadow: 0 4px 8px rgba(37, 99, 235, 0.3);
 }
-.ai-send-btn:active {
+.ai-send-btn:active:not(:disabled) {
   transform: translateY(0);
+}
+.ai-send-btn:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+  transform: none;
 }
 .ai-send-btn i {
   font-size: 16px;
+}
+.ai-send-btn .rotating {
+  animation: rotate 1s linear infinite;
 }
 .ppt-thumbs { background: #fff; border-right: 1px solid #eef2f6; }
 .ppt-thumbs { padding-right: 15px; }

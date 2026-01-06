@@ -1,7 +1,7 @@
 <template>
   <div class="product-catalog card-block">
     <div class="section-head">
-      <h3>{{ activeProduct || '产品介绍PPT' }}</h3>
+      <h3>产品介绍PPT</h3>
     </div>
     <div class="catalog-mode-switch">
       <div class="mode-switch-container">
@@ -35,8 +35,9 @@
         </div>
       </div>
     </div>
-    <ul class="catalog-list">
-      <li v-for="item in productCatalog" :key="item.id">
+    <div v-if="loading" class="loading">加载中...</div>
+    <ul v-else class="catalog-list">
+      <li v-for="item in catalogs" :key="item.id">
         <div class="cat-title">
           <el-checkbox 
             v-if="catalogMode === 'multiple'" 
@@ -44,34 +45,34 @@
             @change="handleToggleParent(item.id)"
             @click.stop
           />
-          <span>{{ item.text }}</span>
+          <span>{{ item.name }}</span>
         </div>
         <ul class="catalog-sub">
           <li 
             v-for="c in item.children" 
             :key="c.id" 
-            :class="{active: isCatalogSelected(c.id)}"
-            @click="handleSelectCatalog(c.id)"
+            :class="{active: isCatalogSelected(c.code)}"
+            @click="handleSelectCatalog(c.code)"
           >
             <el-checkbox 
               v-if="catalogMode === 'multiple'" 
-              :model-value="activeCatalogIds.includes(c.id)"
-              @change="handleToggleCatalog(c.id)"
+              :model-value="activeCatalogCodes.includes(c.code || '')"
+              @change="handleToggleCatalog(c.code)"
               @click.stop
             >
               <template #default>
-                <span>{{ c.text }}</span>
+                <span>{{ c.name }}</span>
               </template>
             </el-checkbox>
             <el-radio 
               v-else
-              :model-value="activeCatalogIds[0]"
-              :label="c.id"
-              @change="handleSelectCatalog(c.id)"
+              :model-value="activeCatalogCodes[0]"
+              :label="c.code || ''"
+              @change="handleSelectCatalog(c.code)"
               @click.stop
             >
               <template #default>
-                <span>{{ c.text }}</span>
+                <span>{{ c.name }}</span>
               </template>
             </el-radio>
           </li>
@@ -85,86 +86,123 @@
 import { defineProps, defineEmits } from 'vue'
 
 const props = defineProps({
-  activeProduct: {
-    type: String,
-    default: ''
-  },
-  productCatalog: {
+  catalogs: {
     type: Array,
     default: () => []
   },
-  activeCatalogIds: {
+  activeCatalogCodes: {
     type: Array,
     default: () => []
   },
   catalogMode: {
     type: String,
     default: 'single'
+  },
+  loading: {
+    type: Boolean,
+    default: false
   }
 })
 
 const emit = defineEmits([
   'update:catalogMode',
-  'update:activeCatalogIds'
+  'update:activeCatalogCodes',
+  'select-catalog'
 ])
 
-// 判断目录是否选中
-const isCatalogSelected = (catId: string) => {
-  return props.activeCatalogIds.includes(catId)
+// 判断目录是否选中（通过code）
+const isCatalogSelected = (code: string | null) => {
+  if (!code) return false
+  return props.activeCatalogCodes.includes(code)
 }
 
 // 判断父级目录是否全选
 const isParentSelected = (parentId: string) => {
   if (props.catalogMode !== 'multiple') return false
-  const parent = props.productCatalog.find((p: any) => p.id === parentId)
+  const parent = props.catalogs.find((p: any) => p.id === parentId)
   if (!parent) return false
-  return parent.children.every((child: any) => props.activeCatalogIds.includes(child.id))
+  return parent.children.every((child: any) => {
+    const code = child.code
+    return code && props.activeCatalogCodes.includes(code)
+  })
 }
 
 // 事件处理
-const handleModeChange = (mode: string) => {
+const handleModeChange = (mode: 'single' | 'multiple') => {
   emit('update:catalogMode', mode)
+  
+  // 切换模式时，如果是单选模式且当前多选，只保留第一个
+  if (mode === 'single' && props.activeCatalogCodes.length > 1) {
+    emit('update:activeCatalogCodes', [props.activeCatalogCodes[0]])
+  }
 }
 
-const handleSelectCatalog = (catId: string) => {
+const handleSelectCatalog = (code: string | null) => {
+  if (!code) return
+  
   if (props.catalogMode === 'single') {
-    emit('update:activeCatalogIds', catId ? [catId] : [])
+    // 单选模式：替换当前选择
+    emit('update:activeCatalogCodes', [code])
   } else {
-    handleToggleCatalog(catId)
+    // 多选模式：切换选择状态
+    handleToggleCatalog(code)
   }
+  
+  emit('select-catalog', code)
 }
 
-const handleToggleCatalog = (catId: string) => {
-  if (props.catalogMode !== 'multiple') return
-  const newIds = [...props.activeCatalogIds]
-  const index = newIds.indexOf(catId)
+const handleToggleCatalog = (code: string | null) => {
+  if (!code || props.catalogMode !== 'multiple') return
+  
+  const newCodes = [...props.activeCatalogCodes]
+  const index = newCodes.indexOf(code)
+  
   if (index > -1) {
-    newIds.splice(index, 1)
+    newCodes.splice(index, 1)
   } else {
-    newIds.push(catId)
+    newCodes.push(code)
   }
-  emit('update:activeCatalogIds', newIds)
+  
+  emit('update:activeCatalogCodes', newCodes)
 }
 
 const handleToggleParent = (parentId: string) => {
   if (props.catalogMode !== 'multiple') return
-  const parent = props.productCatalog.find((p: any) => p.id === parentId)
+  
+  const parent = props.catalogs.find((p: any) => p.id === parentId)
   if (!parent) return
   
-  const allSelected = parent.children.every((child: any) => props.activeCatalogIds.includes(child.id))
-  let newIds = [...props.activeCatalogIds]
+  const childCodes = parent.children
+    .map((child: any) => child.code)
+    .filter((code: string | null) => code !== null)
+  
+  const allSelected = childCodes.every((code: string) => props.activeCatalogCodes.includes(code))
+  let newCodes = [...props.activeCatalogCodes]
   
   if (allSelected) {
     // 取消选择该一级目录下的所有二级目录
-    newIds = newIds.filter((id: string) => !parent.children.some((child: any) => child.id === id))
+    newCodes = newCodes.filter((code: string) => !childCodes.includes(code))
   } else {
     // 选择该一级目录下的所有二级目录
-    const childIds = parent.children.map((child: any) => child.id)
-    newIds = [...new Set([...newIds, ...childIds])]
+    newCodes = [...new Set([...newCodes, ...childCodes])]
   }
-  emit('update:activeCatalogIds', newIds)
+  
+  emit('update:activeCatalogCodes', newCodes)
 }
 </script>
+
+<style scoped>
+.catalog-stats {
+  font-size: 12px;
+  color: #999;
+  margin-left: 4px;
+}
+.loading {
+  padding: 20px;
+  text-align: center;
+  color: #999;
+}
+</style>
 
 <style scoped>
 /* 样式继承自 sales.scss */

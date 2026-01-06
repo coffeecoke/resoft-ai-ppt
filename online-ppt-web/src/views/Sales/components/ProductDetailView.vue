@@ -3,35 +3,47 @@
     <div class="product-ppt-section">
       <!-- 产品目录选择面板 -->
       <ProductCatalogPanel
-        :activeProduct="activeProduct"
+        :catalogs="catalogs"
+        :activeCatalogCodes="activeCatalogCodes"
         :catalogMode="catalogMode"
-        :activeCatalogIds="activeCatalogIds"
-        :productCatalog="productCatalog"
-        @update:catalogMode="handleCatalogModeChange"
-        @update:activeCatalogIds="handleCatalogIdsChange"
-        @select-catalog="handleSelectCatalog"
-        @toggle-parent="handleToggleParent"
+        :loading="loading"
+        @update:catalogMode="setCatalogMode"
+        @update:activeCatalogCodes="handleCatalogCodesUpdate"
+        @select-catalog="selectCatalog"
       />
       
-      <!-- 公共版PPT展示块 -->
+      <!-- 中间公共版 -->
       <PublicPptBlock
-        :publicPPTData="publicPPTData"
-        :activeCatalogIds="activeCatalogIds"
-        :mergedSlides="mergedSlides"
+        v-if="activeCatalogCodes.length === 0"
+        :publicDocuments="publicDocuments"
+        :loading="loading"
+      />
+      <PublicPptBlock
+        v-else
+        :publicThumbnails="publicThumbnails"
+        :activeCatalogCodes="activeCatalogCodes"
+        :loading="loading"
       />
       
-      <!-- 实战版PPT展示块 -->
+      <!-- 右侧实战版 -->
       <PracticalPptBlock
-        :practicalPPTData="practicalPPTData"
-        :activeCatalogIds="activeCatalogIds"
-        :getMergedSlidesForGroup="getMergedSlidesForGroup"
+        v-if="activeCatalogCodes.length === 0"
+        :practicalDocuments="practicalDocuments"
+        :loading="loading"
+      />
+      <PracticalPptBlock
+        v-else
+        :practicalThumbnailGroups="practicalThumbnailGroups"
+        :activeCatalogCodes="activeCatalogCodes"
+        :loading="loading"
       />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { defineProps, defineEmits } from 'vue'
+import { computed, inject, ref } from 'vue'
+import { useProductCatalogs } from '../composables/useProductCatalogs'
 import ProductCatalogPanel from './ProductCatalogPanel.vue'
 import PublicPptBlock from './PublicPptBlock.vue'
 import PracticalPptBlock from './PracticalPptBlock.vue'
@@ -40,53 +52,32 @@ const props = defineProps({
   activeProduct: {
     type: String,
     required: true
-  },
-  catalogMode: {
-    type: String,
-    default: 'single'
-  },
-  activeCatalogIds: {
-    type: Array,
-    default: () => []
-  },
-  publicPPTData: {
-    type: Array,
-    default: () => []
-  },
-  practicalPPTData: {
-    type: Array,
-    default: () => []
-  },
-  productCatalog: {
-    type: Array,
-    default: () => []
-  },
-  mergedSlides: {
-    type: Array,
-    default: () => []
-  },
-  getMergedSlidesForGroup: {
-    type: Function,
-    default: () => () => []
   }
 })
 
-const emit = defineEmits(['update:catalogMode', 'update:activeCatalogIds'])
+// 从父组件注入的筛选条件
+const filters = inject<ReturnType<typeof ref>>('advancedFilters', ref({}))
 
-const handleCatalogModeChange = (mode: string) => {
-  emit('update:catalogMode', mode)
-}
+// 使用composable管理状态和数据加载
+const {
+  catalogs,
+  activeCatalogCodes,
+  catalogMode,
+  publicDocuments,
+  practicalDocuments,
+  publicThumbnails,
+  practicalThumbnailGroups,
+  loading,
+  setCatalogMode,
+  selectCatalog
+} = useProductCatalogs(
+  computed(() => props.activeProduct),
+  filters
+)
 
-const handleCatalogIdsChange = (ids: string[]) => {
-  emit('update:activeCatalogIds', ids)
-}
-
-const handleSelectCatalog = (catId: string) => {
-  // 由ProductCatalogPanel内部处理或通过inject的composable处理
-}
-
-const handleToggleParent = (parentId: string) => {
-  // 由ProductCatalogPanel内部处理或通过inject的composable处理
+// 处理目录code更新事件
+const handleCatalogCodesUpdate = (codes: string[]) => {
+  activeCatalogCodes.value = codes
 }
 </script>
 

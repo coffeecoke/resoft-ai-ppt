@@ -135,14 +135,22 @@ const updateSelection = () => {
   // 选中状态已通过v-model自动更新
 }
 
-const handleBatchAnalyze = () => {
+const handleBatchAnalyze = async () => {
   const selectedItems = pendingList.value.filter(item => item.selected !== false)
   if (selectedItems.length === 0) {
     ElMessage.warning('请至少选择一个项目')
     return
   }
-  pendingStore.batchAnalyze(selectedItems)
-  ElMessage.success(`开始批量AI分析 ${selectedItems.length} 个项目`)
+  
+  // 关闭抽屉
+  drawerVisible.value = false
+  
+  try {
+    await pendingStore.batchAnalyze(selectedItems)
+    // 不需要显示成功消息，AI助手中会显示完成状态
+  } catch (error) {
+    ElMessage.error('批量AI分析失败：' + (error.message || '未知错误'))
+  }
 }
 
 const handleBatchDownload = () => {

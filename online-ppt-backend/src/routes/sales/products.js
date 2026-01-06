@@ -84,6 +84,139 @@ router.get('/', async (req, res) => {
 })
 
 /**
+ * GET /api/sales/products/:productCode/documents
+ * 获取产品文档列表（未选目录时使用）
+ * 
+ * Query参数:
+ * - tag: 'public' 或 'practical'
+ * - status: 文档状态，默认 'published'
+ * - filters: JSON字符串，包含筛选条件 {product, customer, industry, audience}
+ */
+router.get('/:productCode/documents', async (req, res) => {
+  try {
+    const { productCode } = req.params  // productCode 是产品的 code 或 name
+    const { tag = 'public', status = 'published', filters: filtersStr } = req.query
+    
+    // 解析筛选条件
+    let filters = {}
+    if (filtersStr) {
+      try {
+        filters = typeof filtersStr === 'string' ? JSON.parse(filtersStr) : filtersStr
+      } catch (e) {
+        console.warn('解析筛选条件失败:', e)
+      }
+    }
+    
+    // 构建查询条件
+    const where = {
+      tag: tag,
+      status: status
+    }
+    
+    // 应用筛选条件
+    if (filters.customer) {
+      where.customer_name = filters.customer
+    }
+    
+    // 查询文档列表
+    const documents = await prisma.documents.findMany({
+      where,
+      select: {
+        id: true,
+        name: true,
+        cover: true,
+        slide_count: true,
+        created_at: true,
+        customer_name: true,
+        audience_names: true,
+        product: true,
+        industry: true,
+        audience: true
+      },
+      orderBy: {
+        created_at: 'desc'
+      }
+    })
+    
+    // 根据 product JSON 字段过滤（匹配传入的 productCode）
+    let filteredDocuments = documents.filter(doc => {
+      try {
+        const docProducts = Array.isArray(doc.product) 
+          ? doc.product 
+          : (doc.product ? [doc.product] : [])
+        
+        // 匹配传入的 productCode（可能是 code 或 name）
+        return docProducts.includes(productCode)
+      } catch (e) {
+        return false
+      }
+    })
+    
+    // 应用JSON字段筛选（如果有）
+    if (filters.product && Array.isArray(filters.product) && filters.product.length > 0) {
+      filteredDocuments = filteredDocuments.filter(doc => {
+        try {
+          const docProducts = Array.isArray(doc.product) 
+            ? doc.product 
+            : (doc.product ? [doc.product] : [])
+          return filters.product.some(p => docProducts.includes(p))
+        } catch (e) {
+          return false
+        }
+      })
+    }
+    if (filters.industry && Array.isArray(filters.industry) && filters.industry.length > 0) {
+      filteredDocuments = filteredDocuments.filter(doc => {
+        try {
+          const docIndustries = Array.isArray(doc.industry) 
+            ? doc.industry 
+            : (doc.industry ? [doc.industry] : [])
+          return filters.industry.some(i => docIndustries.includes(i))
+        } catch (e) {
+          return false
+        }
+      })
+    }
+    if (filters.audience && Array.isArray(filters.audience) && filters.audience.length > 0) {
+      filteredDocuments = filteredDocuments.filter(doc => {
+        try {
+          const docAudiences = Array.isArray(doc.audience) 
+            ? doc.audience 
+            : (doc.audience ? [doc.audience] : [])
+          return filters.audience.some(a => docAudiences.includes(a))
+        } catch (e) {
+          return false
+        }
+      })
+    }
+    
+    // 格式化返回数据
+    const formatted = filteredDocuments.map(doc => ({
+      id: doc.id,
+      name: doc.name,
+      cover: doc.cover,
+      slideCount: doc.slide_count,
+      createdAt: doc.created_at,
+      customerName: doc.customer_name,
+      audienceNames: doc.audience_names
+    }))
+    
+    res.json({
+      success: true,
+      data: {
+        documents: formatted
+      }
+    })
+  } catch (error) {
+    console.error('查询产品文档列表失败:', error)
+    res.status(500).json({
+      success: false,
+      error: error.message
+    })
+  }
+})
+
+/**
  * GET /api/sales/products/:id
  * 获取产品详情（包含统计数据）
  */
