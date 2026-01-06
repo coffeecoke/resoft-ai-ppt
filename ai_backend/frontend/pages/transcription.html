@@ -214,11 +214,32 @@
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
         <h3>💬 对话内容</h3>
         <div style="display: flex; gap: 10px;">
+          <button class="btn btn-primary" id="st-roleSettingsBtn">👥 角色设置</button>
           <button class="btn btn-primary" id="st-batchReplaceSpeakerBtn">🔄 批量替换说话人</button>
           <button class="btn btn-success" id="st-saveEditBtn" style="display: none;">💾 保存修改</button>
           <button class="btn btn-secondary" id="st-cancelEditBtn" style="display: none;">❌ 取消</button>
         </div>
       </div>
+      
+      <!-- 角色设置 -->
+      <div class="role-settings-container" id="st-roleSettingsContainer" style="margin-bottom: 20px; display: none;">
+        <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #e0e0e0;">
+          <h4 style="margin: 0 0 15px 0; font-size: 14px; color: #333;">
+            👥 角色设置
+            <span style="color: #666; font-size: 12px; font-weight: normal; margin-left: 10px;">
+              将说话人分配为"客户"或"我方"
+            </span>
+          </h4>
+          <div id="st-roleSettingsList" style="display: flex; flex-direction: column; gap: 10px;">
+            <!-- 动态加载角色设置 -->
+          </div>
+          <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #e0e0e0;">
+            <button class="btn btn-success btn-sm" id="st-saveRoleSettingsBtn">💾 保存角色设置</button>
+            <button class="btn btn-secondary btn-sm" id="st-cancelRoleSettingsBtn" style="margin-left: 10px;">❌ 取消</button>
+          </div>
+        </div>
+      </div>
+      
       <div class="dialogues-list" id="st-dialoguesList" style="max-height: 600px; overflow-y: auto; margin-top: 15px;">
         <!-- 动态加载对话 -->
       </div>
@@ -372,6 +393,27 @@
   font-weight: bold;
   font-size: 14px;
   min-width: 100px;
+}
+
+.role-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  margin-left: 5px;
+}
+
+.role-badge.role-customer {
+  background: #e6f7ff;
+  color: #1890ff;
+  border: 1px solid #91d5ff;
+}
+
+.role-badge.role-our-side {
+  background: #f6ffed;
+  color: #52c41a;
+  border: 1px solid #b7eb8f;
 }
 
 .dialogue-text-inline {

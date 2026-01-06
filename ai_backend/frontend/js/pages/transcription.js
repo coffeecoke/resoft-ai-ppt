@@ -11,6 +11,7 @@ let st_currentDialogues = [];
 let st_editedDialogues = new Map(); // 存储编辑过的对话
 let st_isEditMode = false;
 let st_currentAudioPath = null;
+let st_speakerRoles = {}; // 存储角色设置，格式：{ "SPEAKER_1": "customer", "SPEAKER_2": "our_side" }
 
 // 页面初始化 - 等待DOM完全加载
 (async function() {
@@ -119,9 +120,14 @@ function initEventListeners() {
   document.getElementById('st-toggleAutoScrollBtn')?.addEventListener('click', toggleAutoScroll);
   
   // ✅ 编辑功能相关
+  document.getElementById('st-roleSettingsBtn')?.addEventListener('click', showRoleSettings);
   document.getElementById('st-batchReplaceSpeakerBtn')?.addEventListener('click', showBatchReplaceDialog);
   document.getElementById('st-saveEditBtn')?.addEventListener('click', saveEdits);
   document.getElementById('st-cancelEditBtn')?.addEventListener('click', cancelEdits);
+  
+  // ✅ 角色设置相关
+  document.getElementById('st-saveRoleSettingsBtn')?.addEventListener('click', saveRoleSettings);
+  document.getElementById('st-cancelRoleSettingsBtn')?.addEventListener('click', hideRoleSettings);
   
   // ✅ 对话列表的事件委托（点击定位、编辑按钮）
   document.getElementById('st-dialoguesList')?.addEventListener('click', handleDialogueClick);
@@ -466,6 +472,113 @@ function cancelEdits() {
   showToast('已取消所有修改', 'info');
 }
 
+// ==================== 角色设置功能 ====================
+function showRoleSettings() {
+  if (!st_currentDialogues || st_currentDialogues.length === 0) {
+    showToast('请先加载转录内容', 'warning');
+    return;
+  }
+  
+  // 获取所有唯一的说话人
+  const speakers = [...new Set(st_currentDialogues.map(d => d.speaker))];
+  
+  if (speakers.length === 0) {
+    showToast('没有找到说话人', 'warning');
+    return;
+  }
+  
+  // 渲染角色设置界面
+  const container = document.getElementById('st-roleSettingsList');
+  container.innerHTML = speakers.map(speaker => {
+    const currentRole = st_speakerRoles[speaker] || '';
+    return `
+      <div style="display: flex; align-items: center; gap: 15px; background: white; padding: 10px 15px; border-radius: 6px; border: 1px solid #ddd;">
+        <span style="min-width: 120px; font-weight: 500; color: #333;">${escapeHtml(speaker)}</span>
+        <div style="display: flex; gap: 10px; flex: 1;">
+          <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+            <input type="radio" name="role-${escapeHtml(speaker)}" value="customer" ${currentRole === 'customer' ? 'checked' : ''}>
+            <span>👤 客户</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+            <input type="radio" name="role-${escapeHtml(speaker)}" value="our_side" ${currentRole === 'our_side' ? 'checked' : ''}>
+            <span>👔 我方</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+            <input type="radio" name="role-${escapeHtml(speaker)}" value="" ${!currentRole ? 'checked' : ''}>
+            <span style="color: #999;">未设置</span>
+          </label>
+        </div>
+      </div>
+    `;
+  }).join('');
+  
+  // 显示角色设置容器
+  document.getElementById('st-roleSettingsContainer').style.display = 'block';
+  
+  // 滚动到角色设置区域
+  document.getElementById('st-roleSettingsContainer').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function hideRoleSettings() {
+  document.getElementById('st-roleSettingsContainer').style.display = 'none';
+}
+
+async function saveRoleSettings() {
+  if (!st_currentTranscriptionId) {
+    showToast('没有当前转录记录', 'error');
+    return;
+  }
+  
+  // 收集所有角色设置
+  const speakers = [...new Set(st_currentDialogues.map(d => d.speaker))];
+  const newRoles = {};
+  
+  speakers.forEach(speaker => {
+    const radioName = `role-${escapeHtml(speaker)}`;
+    const selected = document.querySelector(`input[name="${radioName}"]:checked`);
+    if (selected && selected.value) {
+      newRoles[speaker] = selected.value;
+    }
+  });
+  
+  // 验证是否有设置
+  if (Object.keys(newRoles).length === 0) {
+    showToast('请至少设置一个说话人的角色', 'warning');
+    return;
+  }
+  
+  try {
+    const response = await fetch(`${ST_API_BASE}/transcription/${st_currentTranscriptionId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        speaker_roles: JSON.stringify(newRoles)
+      })
+    });
+    
+    const result = await response.json();
+    
+    if (!result.success) {
+      throw new Error(result.error || '保存失败');
+    }
+    
+    // 更新本地状态
+    st_speakerRoles = newRoles;
+    
+    // 重新渲染对话列表，显示角色标签
+    renderDialogues(st_currentDialogues);
+    
+    hideRoleSettings();
+    showToast('角色设置已保存！', 'success');
+    
+  } catch (error) {
+    console.error('保存角色设置失败:', error);
+    showToast('保存失败: ' + error.message, 'error');
+  }
+}
+
 async function loadTranscriptionById(id) {
   try {
     const response = await fetch(`${ST_API_BASE}/transcription/${id}`);
@@ -612,6 +725,19 @@ function displayResult(data) {
     }
   }
   
+  // ✅ 加载角色设置
+  if (data.speaker_roles) {
+    try {
+      st_speakerRoles = typeof data.speaker_roles === 'string' 
+        ? JSON.parse(data.speaker_roles) 
+        : data.speaker_roles;
+    } catch (e) {
+      st_speakerRoles = {};
+    }
+  } else {
+    st_speakerRoles = {};
+  }
+  
   document.getElementById('st-dialogueCount').textContent = (dialogues?.length || 0);
   document.getElementById('st-audioDuration').textContent = formatDuration(
     data.audio_duration || data.audioDuration || data.duration  // ✅ 兼容三种命名
@@ -642,11 +768,21 @@ function renderDialogues(dialogues) {
     const speaker = dialogue.speaker || '说话人' + (index + 1);
     const text = dialogue.text || '';
     
+    // 获取角色标签
+    const role = st_speakerRoles[speaker];
+    let roleTag = '';
+    if (role === 'customer') {
+      roleTag = '<span class="role-badge role-customer">👤 客户</span>';
+    } else if (role === 'our_side') {
+      roleTag = '<span class="role-badge role-our-side">👔 我方</span>';
+    }
+    
     return `
       <div class="dialogue-item" data-index="${index}" data-start="${parseTimeToSeconds(timeRange.split('-')[0])}">
         <div class="dialogue-header">
           <span class="dialogue-time">${timeRange}</span>
           <span class="speaker-name">${escapeHtml(speaker)}</span>
+          ${roleTag}
           <span style="color: #333;">：</span>
           <span class="dialogue-text-inline">${escapeHtml(text)}</span>
           <button class="btn btn-sm btn-secondary dialogue-edit-btn" data-index="${index}" style="margin-left: auto;">✏️</button>

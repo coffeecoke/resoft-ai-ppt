@@ -317,7 +317,7 @@ router.get('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, customerName, sessionId, productId, dialogues } = req.body;
+    const { name, customerName, sessionId, productId, dialogues, speaker_roles } = req.body;
 
     const updates = {};
     if (name !== undefined) updates.name = name;
@@ -331,6 +331,13 @@ router.put('/:id', async (req, res) => {
       // 重新计算说话人数
       const speakers = [...new Set(dialogues.map(d => d.speaker))];
       updates.speaker_count = speakers.length;
+    }
+    
+    // ✅ 支持更新说话人角色设置
+    if (speaker_roles !== undefined) {
+      updates.speaker_roles = typeof speaker_roles === 'string' 
+        ? speaker_roles 
+        : JSON.stringify(speaker_roles);
     }
 
     const transcription = await transcriptionService.updateTranscription(id, updates);
