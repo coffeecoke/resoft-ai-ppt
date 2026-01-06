@@ -556,12 +556,13 @@
 
 <script setup>
 import { defineProps, defineEmits } from 'vue'
+import { useGlobalCatalogOptions } from '../composables/useGlobalCatalogOptions'
 import {
   productSolutionOptions,
   industryOptions,
   audienceOptions,
   languageOptions,
-  pptCatalogOptions,
+  // pptCatalogOptions,  // ❌ 移除静态配置，改用动态加载
   meetingTypeOptions,
   questionerOptions,
   exchangeStageOptions,
@@ -580,6 +581,9 @@ import {
   casesProofOptions,
   companyStructure
 } from '../constants/salesConfig'
+
+// 🆕 使用动态加载的目录选项
+const { catalogOptions: pptCatalogOptions, loading: catalogLoading } = useGlobalCatalogOptions()
 
 const props = defineProps({
   visible: {

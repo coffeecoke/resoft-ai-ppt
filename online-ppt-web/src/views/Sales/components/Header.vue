@@ -34,7 +34,7 @@
 import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { usePendingOperationsStore } from '@/store/Sales/pendingOperations'
-import PendingOperationsDrawer from './PendingOperationsDrawer.vue'
+import PendingOperationsDrawer from '@/components/Sales/PendingOperationsDrawer.vue'
 
 const route = useRoute()
 const router = useRouter()

@@ -52,6 +52,7 @@
       
       <!-- 🆕 新组件：PPT tab 未选产品时显示PPT网格 -->
       <ContentGridSection
+        key="ppt-grid"
         v-if="showPptGrid"
         :activeTab="activeTab"
         :filteredPPT="filters.filteredPPT.value"
@@ -62,6 +63,7 @@
       
       <!-- 🆕 新组件：视频/招标/响应 tab 始终显示内容网格 -->
       <ContentGridSection
+        key="content-grid"
         v-if="showContentGrid"
         :activeTab="activeTab"
         :filteredPPT="filters.filteredPPT.value"
@@ -185,6 +187,17 @@ provide('dialogs', dialogs)
 provide('productContent', productContent)
 
 // ============================================
+// 2.1 高级筛选状态（用于产品目录和文档筛选）
+// ============================================
+const advancedFilters = ref<{
+  product?: string[]
+  customer?: string
+  industry?: string[]
+  audience?: string[]
+}>({})
+provide('advancedFilters', advancedFilters)
+
+// ============================================
 // 3. 页面级状态（仅UI状态，无业务逻辑）
 // ============================================
 const activeNav = ref('recommend')
@@ -294,6 +307,33 @@ const handleFiltersUpdate = (newFilters: any) => {
   if (newFilters.qa) Object.assign(qaFilters, newFilters.qa)
   if (newFilters.tender) Object.assign(tenderFilters, newFilters.tender)
   if (newFilters.response) Object.assign(responseFilters, newFilters.response)
+  
+  // 同步PPT筛选条件到advancedFilters（用于产品目录和文档筛选）
+  // ⚠️ 重要：不能直接替换整个对象，否则会导致子组件inject的ref引用失效
+  // 必须逐个更新属性以保持响应式
+  if (newFilters.ppt) {
+    // 先清空所有属性
+    delete advancedFilters.value.customer
+    delete advancedFilters.value.industry
+    delete advancedFilters.value.audience
+    delete advancedFilters.value.product
+    
+    // 再设置新值（只设置有效值）
+    if (newFilters.ppt.customerName) {
+      advancedFilters.value.customer = newFilters.ppt.customerName
+    }
+    if (newFilters.ppt.industry && newFilters.ppt.industry.length > 0) {
+      advancedFilters.value.industry = newFilters.ppt.industry
+    }
+    if (newFilters.ppt.audience && newFilters.ppt.audience.length > 0) {
+      advancedFilters.value.audience = newFilters.ppt.audience
+    }
+    if (newFilters.ppt.product && newFilters.ppt.product.length > 0) {
+      advancedFilters.value.product = newFilters.ppt.product
+    }
+    
+    console.log('[Sales首页] 🔄 更新高级筛选条件:', advancedFilters.value)
+  }
 }
 
 // ============================================

@@ -18,7 +18,9 @@
             >
               {{ type === 'public' ? '公共版' : '实战版' }}
             </span>
-            <span class="ppt-title-text">{{ title }}</span>
+            <el-tooltip :content="title" placement="top" :disabled="title.length <= 20">
+              <span class="ppt-title-text">{{ title }}</span>
+            </el-tooltip>
             <span class="ppt-title-meta">创建人：融鑫小R · {{ formattedCreatedAt }} · 阅读 {{ viewCount }}</span>
           </div>
           <div class="ppt-actions">
@@ -30,9 +32,9 @@
                 <i class="ri-folder-download-line"></i>
                 下载
               </el-button>
-              <el-button size="small" @click="togglePendingList">
+              <el-button size="small" @click="pendingDrawerVisible = true">
                 <i class="ri-list-check-3"></i>
-                {{ isInPendingList ? '已添加待操作' : '待操作' }}
+                待操作
               </el-button>
               <button class="ai-analyze-btn" type="button" @click="openAiPanel">
                 <i class="ri-quill-pen-ai-line"></i>
@@ -233,6 +235,7 @@
       </div>
       <aside class="ppt-ai-panel" v-show="aiPanelVisible">
         <div class="ai-panel-content">
+          <!-- 顶部标题 -->
           <div class="ai-panel-header">
             <div class="ai-panel-title">
               AI助手
@@ -241,34 +244,83 @@
               </button>
             </div>
           </div>
-          <div class="ai-panel-main">
+          
+          <!-- 功能按钮区域（固定不滚动） -->
+          <div class="ai-panel-actions">
             <div class="ai-panel-subtitle">试试以下 AI 功能,提升阅读写作效率</div>
             <div class="ai-feature-list">
-              <div class="ai-feature-item">
+              <div class="ai-feature-item" @click="editCurrentPPT">
                 <span class="feature-text">
                   使用当前PPT再编辑
                   <i class="ri-quill-pen-ai-line feature-icon"></i>
                 </span>
                 <i class="ri-arrow-right-s-line feature-arrow"></i>
               </div>
-              <div class="ai-feature-item">
+              <div class="ai-feature-item" @click="handleSummarize">
                 <span class="feature-text">总结本文档大意</span>
                 <i class="ri-arrow-right-s-line feature-arrow"></i>
               </div>
             </div>
           </div>
+          
+          <!-- 中间内容区域（可滚动：聊天记录） -->
+          <div class="ai-panel-main">
+            <!-- 聊天记录 -->
+            <div v-if="chatMessages.length > 0" class="ai-chat-messages">
+              <div 
+                v-for="(msg, index) in chatMessages" 
+                :key="index" 
+                class="chat-message"
+                :class="msg.role"
+              >
+                <div class="message-avatar">
+                  <i v-if="msg.role === 'user'" class="ri-user-line"></i>
+                  <i v-else class="ri-robot-line"></i>
+                </div>
+                <div class="message-content">
+                  <div class="message-text" v-html="msg.content"></div>
+                </div>
+              </div>
+              <!-- AI正在输入状态 -->
+              <div v-if="aiTyping" class="chat-message assistant typing">
+                <div class="message-avatar">
+                  <i class="ri-robot-line"></i>
+                </div>
+                <div class="message-content">
+                  <div class="typing-indicator">
+                    <span></span><span></span><span></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 空状态提示 -->
+            <div v-else class="empty-state">
+              <i class="ri-chat-3-line"></i>
+              <p>开始与AI助手对话吧</p>
+            </div>
+          </div>
+          
+          <!-- 底部输入框（固定不滚动） -->
           <div class="ai-panel-footer">
             <div class="ai-input-wrapper">
               <textarea 
                 class="ai-input" 
                 placeholder="需要我做什么?输入@发现更多技能"
                 v-model="aiInputText"
-                rows="4"
+                rows="3"
+                @keydown.enter.ctrl="sendAiMessage"
               ></textarea>
               <div class="ai-input-actions">
-                <button class="ai-send-btn" type="button" @click="sendAiMessage">
-                  <i class="ri-send-plane-fill"></i>
-                  发送
+                <button 
+                  class="ai-send-btn" 
+                  type="button" 
+                  @click="sendAiMessage"
+                  :disabled="aiChatLoading || !aiInputText.trim()"
+                >
+                  <i v-if="!aiChatLoading" class="ri-send-plane-fill"></i>
+                  <i v-else class="ri-loader-4-line rotating"></i>
+                  {{ aiChatLoading ? '发送中' : '发送' }}
                 </button>
               </div>
             </div>
@@ -283,12 +335,15 @@
 
 <script setup lang="ts">
 import { ref, computed, nextTick, watch, onMounted, onBeforeUnmount } from 'vue'
+import { useRouter } from 'vue-router'
 import { MagicStick, Download } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { usePendingOperationsStore } from '@/store/Sales/pendingOperations'
 import { usePptDialogAiStore } from '@/store/Sales/pptDialogAi'
 import PendingOperationsDrawer from '@/components/Sales/PendingOperationsDrawer.vue'
 import { useExportPPT } from '../composables/useExportPPT'
+
+const router = useRouter()
 
 const props = defineProps({
   visible: {
@@ -416,11 +471,31 @@ const aiInputText = ref('')
 const pendingDrawerVisible = ref(false) // 待操作列表抽屉显示状态
 const exporting = ref(false) // 导出状态
 
-// 检查当前PPT是否已在待操作列表中
-const isInPendingList = computed(() => {
-  const currentId = props.title || ''
-  return pendingStore.pendingList.some(item => item.id === currentId && item.type === 'ppt')
-})
+// 文档总结相关状态
+const summaryVisible = ref(false)
+const summaryLoading = ref(false)
+const summaryText = ref('')
+
+// AI聊天相关状态
+const chatMessages = ref<Array<{role: 'user' | 'assistant', content: string}>>([])
+const aiChatLoading = ref(false)
+const aiTyping = ref(false)
+
+// 格式化总结内容（简单格式化为HTML）- 已废弃，现在直接存储HTML
+// const formattedSummary = computed(() => {
+//   if (!summaryText.value) return ''
+//   
+//   let html = summaryText.value
+//     // emoji标题转为h4
+//     .replace(/^(📌|🎯|💡|👥|📊)\s+(.+)$/gm, '<h4>$1 $2</h4>')
+//     // bullet points转为li
+//     .replace(/^•\s+(.+)$/gm, '<li>$1</li>')
+//     // 换行转为br
+//     .replace(/\n/g, '<br>')
+//   
+//   return html
+// })
+
 
 // 响应文件目录扁平化
 const responseTocFlat = computed(() => {
@@ -514,27 +589,302 @@ watch(() => aiPanelVisible.value, (newVal) => {
 onBeforeUnmount(() => {
   pptDialogAiStore.unregisterOpenAiPanel()
   pptDialogAiStore.unregisterCloseAiPanel()
+  pptDialogAiStore.unregisterAddAiMessage()
+  pptDialogAiStore.unregisterUpdateLastAiMessage()
   pptDialogAiStore.setPptDialogOpen(false)
   pptDialogAiStore.setAiPanelOpen(false)
 })
 
+// 添加消息到AI助手的函数
+const addMessageToAi = (message: { role: string; content: string }) => {
+  chatMessages.value.push(message)
+  nextTick(() => {
+    scrollToBottom()
+  })
+}
+
+// 更新最后一条AI消息的函数
+const updateLastAiMessageFn = (content: string) => {
+  if (chatMessages.value.length > 0) {
+    const lastMessage = chatMessages.value[chatMessages.value.length - 1]
+    if (lastMessage.role === 'assistant') {
+      lastMessage.content = content
+      nextTick(() => {
+        scrollToBottom()
+      })
+    }
+  }
+}
+
+// 注册添加消息和更新消息的回调
+pptDialogAiStore.registerAddAiMessage(addMessageToAi)
+pptDialogAiStore.registerUpdateLastAiMessage(updateLastAiMessageFn)
+
 // 发送AI消息
-const sendAiMessage = () => {
+const sendAiMessage = async () => {
   if (!aiInputText.value.trim()) {
     ElMessage.warning('请输入消息内容')
     return
   }
-  // TODO: 实现发送AI消息的逻辑
-  console.log('发送消息:', aiInputText.value)
-  ElMessage.success('消息已发送')
+  
+  if (!props.documentId) {
+    ElMessage.error('文档ID不存在')
+    return
+  }
+  
+  if (aiChatLoading.value) {
+    return // 防止重复发送
+  }
+  
+  const userMessage = aiInputText.value.trim()
+  
+  // 添加用户消息到聊天记录
+  chatMessages.value.push({
+    role: 'user',
+    content: userMessage
+  })
+  
   // 清空输入框
   aiInputText.value = ''
+  
+  // 滚动到底部
+  await nextTick()
+  scrollToBottom()
+  
+  // 设置加载状态
+  aiChatLoading.value = true
+  aiTyping.value = true
+  
+  try {
+    console.log('[AI助手] 发送消息:', userMessage)
+    
+    // 准备历史对话（只保留最近5轮对话，避免token过多）
+    const history = chatMessages.value.slice(-10).map(msg => ({
+      role: msg.role,
+      content: msg.content
+    }))
+    
+    // 调用后端流式API
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
+    const response = await fetch(
+      `${API_BASE_URL}/sales/documents/${props.documentId}/chat`,
+      { 
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          message: userMessage,
+          history: history.slice(0, -1) // 不包含刚发送的用户消息
+        })
+      }
+    )
+    
+    if (!response.ok) {
+      throw new Error('AI助手回复失败')
+    }
+    
+    // 流式读取响应
+    const reader = response.body!.getReader()
+    const decoder = new TextDecoder()
+    
+    // 创建助手消息
+    const assistantMessage = {
+      role: 'assistant' as const,
+      content: ''
+    }
+    chatMessages.value.push(assistantMessage)
+    
+    // 滚动到底部显示新消息
+    await nextTick()
+    scrollToBottom()
+    
+    aiTyping.value = false // 停止输入动画，开始显示文字
+    
+    let chunkCount = 0
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      
+      const chunk = decoder.decode(value, { stream: true })
+      chunkCount++
+      console.log(`[AI助手] 接收chunk #${chunkCount}, 长度:`, chunk.length)
+      
+      // 确保触发响应式更新
+      chatMessages.value[chatMessages.value.length - 1].content += chunk
+      
+      // 流式输出时也滚动到底部
+      await nextTick()
+      scrollToBottom()
+    }
+    
+    console.log('[AI助手] 回复完成，总内容长度:', chatMessages.value[chatMessages.value.length - 1].content.length)
+  } catch (error: any) {
+    console.error('[AI助手] 发送失败:', error)
+    ElMessage.error('AI助手回复失败：' + (error.message || '未知错误'))
+    
+    // 移除失败的用户消息
+    if (chatMessages.value[chatMessages.value.length - 1]?.role === 'assistant' && 
+        !chatMessages.value[chatMessages.value.length - 1]?.content) {
+      chatMessages.value.pop()
+    }
+  } finally {
+    aiChatLoading.value = false
+    aiTyping.value = false
+  }
 }
 
-const analyzeSelectedSlide = () => {
-  const targetIndex = selectedSlides.value.length ? selectedSlides.value[0] : activeSlide.value
-  activeSlide.value = targetIndex
+/**
+ * 滚动聊天区域到底部
+ */
+const scrollToBottom = () => {
+  const mainEl = document.querySelector('.ai-panel-main')
+  if (mainEl) {
+    mainEl.scrollTop = mainEl.scrollHeight
+  }
+}
+
+/**
+ * 分析选中的幻灯片
+ */
+const analyzeSelectedSlide = async () => {
+  // 1. 验证是否选中
+  if (selectedSlides.value.length === 0) {
+    ElMessage.warning('请先选择要分析的幻灯片')
+    return
+  }
+  
+  // 2. 验证文档ID
+  if (!props.documentId) {
+    ElMessage.error('文档ID不存在，无法进行分析')
+    return
+  }
+  
+  // 3. 获取选中幻灯片的 slideId
+  const selectedSlideIds = selectedSlides.value.map(index => {
+    const slide = props.slides[index]
+    return slide?.id // 这里的 id 就是 slideId
+  }).filter(id => id) // 过滤掉 undefined
+  
+  if (selectedSlideIds.length === 0) {
+    ElMessage.error('选中的幻灯片数据不完整')
+    return
+  }
+  
+  const pageCount = selectedSlides.value.length
+  const pageList = selectedSlides.value.map(i => i + 1).join('、')
+  
+  console.log('[幻灯片分析] slideIds:', selectedSlideIds, 'pageNumbers:', pageList)
+  
+  // 4. 打开AI面板
   aiPanelVisible.value = true
+  
+  // 5. 添加用户请求到聊天记录
+  const requestMessage = pageCount === 1
+    ? `请分析第${pageList}页的内容`
+    : `请分析选中的${pageCount}页内容（第${pageList}页）`
+  
+  chatMessages.value.push({
+    role: 'user',
+    content: requestMessage
+  })
+  
+  // 6. 滚动到底部
+  await nextTick()
+  scrollToBottom()
+  
+  // 7. 设置加载状态
+  aiChatLoading.value = true
+  aiTyping.value = true
+  
+  try {
+    console.log('[幻灯片分析] 开始分析，documentId:', props.documentId, 
+                'slideIds:', selectedSlideIds)
+    
+    // 8. 调用后端流式API
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
+    const response = await fetch(
+      `${API_BASE_URL}/sales/documents/${props.documentId}/analyze-slides`,
+      { 
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          slideIds: selectedSlideIds // 传递 slideId 数组
+        })
+      }
+    )
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.error || '生成分析失败')
+    }
+    
+    // 9. 流式读取响应
+    const reader = response.body!.getReader()
+    const decoder = new TextDecoder()
+    
+    // 10. 创建助手消息
+    const assistantMessage = {
+      role: 'assistant' as const,
+      content: ''
+    }
+    chatMessages.value.push(assistantMessage)
+    
+    // 11. 滚动到底部显示新消息
+    await nextTick()
+    scrollToBottom()
+    
+    aiTyping.value = false // 停止输入动画，开始显示文字
+    
+    let rawContent = ''
+    let chunkCount = 0
+    while (true) {
+      const { done, value } = await reader.read()
+      
+      if (done) {
+        console.log('[幻灯片分析] 流式传输完成，总块数:', chunkCount)
+        break
+      }
+      
+      chunkCount++
+      const chunk = decoder.decode(value, { stream: true })
+      rawContent += chunk
+      
+      // 更新助手消息内容
+      assistantMessage.content = rawContent
+      
+      // 定期滚动
+      if (chunkCount % 3 === 0) {
+        await nextTick()
+        scrollToBottom()
+      }
+    }
+    
+    console.log('[幻灯片分析] 分析完成，内容长度:', rawContent.length)
+    
+    // 最后滚动一次
+    await nextTick()
+    scrollToBottom()
+    
+  } catch (error: any) {
+    console.error('[幻灯片分析] 分析失败:', error)
+    ElMessage.error('AI分析失败：' + (error.message || '未知错误'))
+    
+    // 移除失败的消息
+    if (chatMessages.value[chatMessages.value.length - 1]?.role === 'assistant' && 
+        !chatMessages.value[chatMessages.value.length - 1]?.content) {
+      chatMessages.value.pop()
+    }
+    // 也移除用户消息
+    if (chatMessages.value[chatMessages.value.length - 1]?.role === 'user') {
+      chatMessages.value.pop()
+    }
+  } finally {
+    aiChatLoading.value = false
+    aiTyping.value = false
+  }
 }
 
 // 头部下载按钮：如果有选中，下载选中的；否则下载全部
@@ -597,13 +947,19 @@ const addSelectedToPendingList = () => {
     return
   }
   
+  if (!props.documentId) {
+    ElMessage.error('文档ID不存在，无法添加到待操作列表')
+    return
+  }
+  
   let addedCount = 0
   
   // 为每个选中的幻灯片创建待操作项
   selectedSlides.value.forEach(slideIndex => {
     const slide = props.slides[slideIndex]
-    if (slide) {
-      const itemId = `${props.title || Date.now().toString()}-slide-${slideIndex}`
+    if (slide && slide.id) {
+      // 使用 documentId 和 slideId 生成唯一ID
+      const itemId = `${props.documentId}-slide-${slide.id}`
       // 检查是否已存在，避免重复添加
       const exists = pendingStore.pendingList.find(
         item => item.id === itemId && item.type === 'ppt'
@@ -614,13 +970,17 @@ const addSelectedToPendingList = () => {
           id: itemId,
           type: 'ppt',
           title: `${props.title} - 第${slideIndex + 1}页`,
+          documentId: props.documentId, // 必须字段，用于后端查询
+          slideIds: [slide.id], // 幻灯片ID数组
           thumbnail: slide.img || '',
           tag: props.type === 'public' ? '公共版' : '实战版',
           date: new Date().toISOString().split('T')[0], // 使用当前日期
-          slides: [slide] // 只包含选中的单张幻灯片
+          slides: [slide] // 保留用于兼容
         })
         addedCount++
       }
+    } else {
+      console.warn('[待操作] 幻灯片缺少id字段，跳过:', slide)
     }
   })
   
@@ -633,29 +993,168 @@ const addSelectedToPendingList = () => {
   }
 }
 
-// 切换待操作列表状态（添加/移除当前PPT）
-const togglePendingList = () => {
-  const currentId = props.title || Date.now().toString()
-  
-  if (isInPendingList.value) {
-    // 如果已在列表中，则移除
-    pendingStore.removeFromPending(currentId, 'ppt')
-    ElMessage.success('已从待操作列表移除')
-  } else {
-    // 如果不在列表中，则添加
-    pendingStore.addToPending({
-      id: currentId,
-      type: 'ppt',
-      title: props.title,
-      thumbnail: props.slides[0]?.img || '',
-      tag: props.type === 'public' ? '公共版' : '实战版',
-      date: new Date().toISOString().split('T')[0], // 使用当前日期
-      slides: props.slides
-    })
-    ElMessage.success('已添加到待操作列表')
-    // 添加后打开抽屉，让用户看到操作结果
-    pendingDrawerVisible.value = true
+
+/**
+ * 使用当前PPT再编辑
+ * 跳转到编辑器页面，打开当前documentId的文档
+ */
+const editCurrentPPT = async () => {
+  if (!props.documentId) {
+    ElMessage.error('文档ID不存在，无法编辑')
+    return
   }
+  
+  try {
+    ElMessage.info('正在打开编辑器...')
+    
+    // 关闭当前弹框
+    handleClose(false)
+    
+    // 跳转到编辑器页面，传递documentId参数
+    await router.push({
+      path: '/ppt/editor',
+      query: {
+        documentId: props.documentId
+      }
+    })
+    
+    console.log('[PPT弹框] 跳转到编辑器，documentId:', props.documentId)
+  } catch (error) {
+    console.error('[PPT弹框] 跳转失败:', error)
+    ElMessage.error('跳转编辑器失败')
+  }
+}
+
+/**
+ * 总结文档
+ * 调用后端API，流式接收总结内容，作为聊天消息展示
+ */
+const handleSummarize = async () => {
+  if (!props.documentId) {
+    ElMessage.error('文档ID不存在，无法生成总结')
+    return
+  }
+  
+  if (summaryLoading.value) {
+    return // 防止重复生成
+  }
+  
+  // 添加用户请求到聊天记录
+  chatMessages.value.push({
+    role: 'user',
+    content: '请总结这个PPT文档的大意'
+  })
+  
+  // 滚动到底部
+  await nextTick()
+  scrollToBottom()
+  
+  // 设置加载状态
+  summaryLoading.value = true
+  aiTyping.value = true
+  
+  try {
+    console.log('[PPT弹框] 开始生成总结，documentId:', props.documentId)
+    
+    // 调用后端流式API
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
+    const response = await fetch(
+      `${API_BASE_URL}/sales/documents/${props.documentId}/summary`,
+      { 
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      }
+    )
+    
+    if (!response.ok) {
+      throw new Error('生成总结失败')
+    }
+    
+    // 流式读取响应
+    const reader = response.body!.getReader()
+    const decoder = new TextDecoder()
+    
+    // 创建助手消息
+    const assistantMessage = {
+      role: 'assistant' as const,
+      content: ''
+    }
+    chatMessages.value.push(assistantMessage)
+    
+    // 滚动到底部显示新消息
+    await nextTick()
+    scrollToBottom()
+    
+    aiTyping.value = false // 停止输入动画，开始显示文字
+    
+    let rawContent = ''
+    let chunkCount = 0
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      
+      const chunk = decoder.decode(value, { stream: true })
+      chunkCount++
+      console.log(`[PPT弹框] 接收chunk #${chunkCount}, 长度:`, chunk.length, '内容:', chunk.substring(0, 50))
+      
+      rawContent += chunk
+      
+      // 实时格式化内容并更新（确保触发响应式更新）
+      const formattedContent = formatSummaryContent(rawContent)
+      chatMessages.value[chatMessages.value.length - 1].content = formattedContent
+      
+      // 流式输出时也滚动到底部
+      await nextTick()
+      scrollToBottom()
+    }
+    
+    console.log('[PPT弹框] 总结生成完成，总长度:', rawContent.length)
+    console.log('[PPT弹框] 最终内容:', rawContent.substring(0, 200))
+    ElMessage.success('总结完成')
+    
+    // 最终滚动到底部
+    await nextTick()
+    scrollToBottom()
+  } catch (error: any) {
+    console.error('[PPT弹框] 生成总结失败:', error)
+    ElMessage.error('生成总结失败：' + (error.message || '未知错误'))
+    
+    // 移除失败的消息
+    if (chatMessages.value[chatMessages.value.length - 1]?.role === 'assistant' && 
+        !chatMessages.value[chatMessages.value.length - 1]?.content) {
+      chatMessages.value.pop()
+    }
+  } finally {
+    summaryLoading.value = false
+    aiTyping.value = false
+  }
+}
+
+/**
+ * 格式化总结内容为HTML
+ */
+const formatSummaryContent = (text: string): string => {
+  if (!text) return ''
+  
+  let html = text
+    // emoji标题转为h4
+    .replace(/^(📌|🎯|💡|👥|📊)\s+(.+)$/gm, '<h4>$1 $2</h4>')
+    // bullet points转为li
+    .replace(/^•\s+(.+)$/gm, '<li>$1</li>')
+    // 换行转为br
+    .replace(/\n/g, '<br>')
+  
+  return html
+}
+
+/**
+ * 关闭总结区域 - 已废弃，总结现在是聊天消息的一部分
+ */
+const closeSummary = () => {
+  // summaryVisible.value = false
+  // summaryText.value = ''
 }
 </script>
 
@@ -668,6 +1167,382 @@ const togglePendingList = () => {
 /* ppt-thumbs-footer 按钮图标间距 */
 .ppt-thumbs-footer .el-button i {
   margin-right: 4px;
+}
+
+/* ==================== AI助手面板样式 ==================== */
+
+/* 整体布局：固定高度，内部分区 */
+.ai-panel-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #fff;
+}
+
+/* 顶部标题区域（固定） */
+.ai-panel-header {
+  flex-shrink: 0;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.ai-panel-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.ai-panel-close-btn {
+  padding: 4px 12px;
+  background: transparent;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ai-panel-close-btn:hover {
+  border-color: #2563eb;
+  color: #2563eb;
+  background: #eff6ff;
+}
+
+/* 功能按钮区域（固定） */
+.ai-panel-actions {
+  flex-shrink: 0;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fff;
+}
+
+.ai-panel-subtitle {
+  font-size: 13px;
+  color: #6b7280;
+  margin-bottom: 12px;
+}
+
+.ai-feature-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ai-feature-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.ai-feature-item:hover {
+  border-color: #2563eb;
+  box-shadow: 0 4px 6px rgba(37, 99, 235, 0.1);
+  transform: translateY(-1px);
+}
+
+.feature-text {
+  font-size: 13px;
+  color: #1f2937;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.feature-icon {
+  font-size: 16px;
+  color: #2563eb;
+}
+
+.feature-arrow {
+  font-size: 16px;
+  color: #9ca3af;
+}
+
+/* 中间内容区域（可滚动） */
+.ai-panel-main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+  background: #f9fafb;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 空状态 */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  color: #9ca3af;
+}
+
+.empty-state i {
+  font-size: 48px;
+  margin-bottom: 12px;
+  opacity: 0.5;
+}
+
+.empty-state p {
+  font-size: 14px;
+  margin: 0;
+}
+
+/* 聊天记录 */
+
+.ai-chat-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+}
+
+.chat-message {
+  display: flex;
+  gap: 10px;
+  animation: messageSlideIn 0.3s ease;
+}
+
+.chat-message.user {
+  flex-direction: row-reverse;
+}
+
+.chat-message.user .message-content {
+  background: #2563eb;
+  color: #fff;
+}
+
+.chat-message.user .message-avatar {
+  background: #2563eb;
+  color: #fff;
+}
+
+.chat-message.assistant .message-content {
+  background: #ffffff;
+  color: #1f2937;
+  border: 1px solid #d1d5db;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.chat-message.assistant .message-avatar {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.message-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.message-avatar i {
+  font-size: 18px;
+}
+
+.message-content {
+  max-width: 80%;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  word-wrap: break-word;
+}
+
+.message-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 消息中的HTML格式 */
+.message-text :deep(h4) {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 10px 0 6px;
+  color: inherit;
+}
+
+.message-text :deep(h4:first-child) {
+  margin-top: 0;
+}
+
+.message-text :deep(li) {
+  margin-left: 16px;
+  margin-bottom: 4px;
+  list-style: none;
+  position: relative;
+}
+
+.message-text :deep(li::before) {
+  content: '•';
+  position: absolute;
+  left: -12px;
+  opacity: 0.7;
+}
+
+/* 用户消息中的HTML格式（白色文字） */
+.chat-message.user .message-text :deep(h4) {
+  color: #fff;
+}
+
+.chat-message.user .message-text :deep(li::before) {
+  color: #fff;
+}
+
+/* AI消息中的HTML格式（深色文字） */
+.chat-message.assistant .message-text :deep(h4) {
+  color: #1f2937;
+}
+
+.chat-message.assistant .message-text :deep(li::before) {
+  color: #6b7280;
+}
+
+/* AI输入动画 */
+.typing-indicator {
+  display: flex;
+  gap: 4px;
+  padding: 4px 0;
+}
+
+.typing-indicator span {
+  width: 8px;
+  height: 8px;
+  background: #9ca3af;
+  border-radius: 50%;
+  animation: typingDot 1.4s infinite;
+}
+
+.typing-indicator span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-indicator span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+/* 底部输入框（固定） */
+.ai-panel-footer {
+  flex-shrink: 0;
+  padding: 16px 20px;
+  border-top: 1px solid #e5e7eb;
+  background: #fff;
+}
+
+.ai-input-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ai-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: none;
+  transition: border-color 0.2s;
+}
+
+.ai-input:focus {
+  outline: none;
+  border-color: #2563eb;
+}
+
+.ai-input-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.ai-send-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 20px;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ai-send-btn:hover:not(:disabled) {
+  background: #1d4ed8;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(37, 99, 235, 0.3);
+}
+
+.ai-send-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.ai-send-btn:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.ai-send-btn i {
+  font-size: 16px;
+}
+
+/* 动画 */
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes messageSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes typingDot {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-10px);
+    opacity: 1;
+  }
 }
 </style>
 
