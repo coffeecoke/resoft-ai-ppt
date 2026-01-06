@@ -8,6 +8,10 @@ const path = require('path');
 const fs = require('fs').promises;
 const { v4: uuidv4 } = require('uuid');
 
+// ✅ 使用正确的 Prisma Client 导入方式
+const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client');
+const prisma = new PrismaClient();
+
 class TranscriptionService {
   constructor() {
     // Python 脚本路径（更新为新的模块化路径）
@@ -86,8 +90,7 @@ class TranscriptionService {
    * @returns {Promise<Object>} 数据库记录
    */
   async saveTranscription(data) {
-    const { prisma } = require('../config/database');
-
+    // ✅ prisma 已在文件顶部导入，无需重复导入
     const transcription = await prisma.transcriptions.create({
       data: {
         id: uuidv4(),
@@ -112,7 +115,11 @@ class TranscriptionService {
       }
     });
 
-    return transcription;
+    // ✅ 转换 BigInt 为 Number，避免 JSON 序列化错误
+    return {
+      ...transcription,
+      audio_file_size: transcription.audio_file_size ? Number(transcription.audio_file_size) : 0
+    };
   }
 
   /**
@@ -121,15 +128,20 @@ class TranscriptionService {
    * @param {Object} updates - 更新数据
    */
   async updateTranscription(id, updates) {
-    const { prisma } = require('../config/database');
-
-    return await prisma.transcriptions.update({
+    // ✅ prisma 已在文件顶部导入
+    const transcription = await prisma.transcriptions.update({
       where: { id },
       data: {
         ...updates,
         updated_at: new Date()
       }
     });
+    
+    // ✅ 转换 BigInt 为 Number，避免 JSON 序列化错误
+    return {
+      ...transcription,
+      audio_file_size: transcription.audio_file_size ? Number(transcription.audio_file_size) : 0
+    };
   }
 
   /**
@@ -137,8 +149,7 @@ class TranscriptionService {
    * @param {string} id - 转录记录ID
    */
   async getTranscriptionById(id) {
-    const { prisma } = require('../config/database');
-
+    // ✅ prisma 已在文件顶部导入
     const transcription = await prisma.transcriptions.findUnique({
       where: { id },
       include: {
@@ -162,8 +173,7 @@ class TranscriptionService {
    * @param {Object} pagination - 分页参数
    */
   async getTranscriptionList(filters = {}, pagination = {}) {
-    const { prisma } = require('../config/database');
-
+    // ✅ prisma 已在文件顶部导入
     const { page = 1, pageSize = 20 } = pagination;
     const skip = (page - 1) * pageSize;
 
@@ -228,8 +238,8 @@ class TranscriptionService {
    * @param {string} id - 转录记录ID
    */
   async deleteTranscription(id) {
-    const { prisma } = require('../config/database');
-
+    // ✅ prisma 已在文件顶部导入
+    
     // 可选：同时删除音频文件和结果文件
     const transcription = await this.getTranscriptionById(id);
     

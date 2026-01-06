@@ -75,6 +75,18 @@
       async loadPage(pageName) {
         const container = document.getElementById('page-container');
         
+        // ✅ 在切换页面前清理定时器
+        if (window.autoRefreshInterval) {
+          console.log('🧹 清理PPT跑批定时器');
+          clearInterval(window.autoRefreshInterval);
+          window.autoRefreshInterval = null;
+        }
+        if (window.audioRefreshInterval) {
+          console.log('🧹 清理音频跑批定时器');
+          clearInterval(window.audioRefreshInterval);
+          window.audioRefreshInterval = null;
+        }
+        
         // 更新菜单激活状态
         document.querySelectorAll('.menu-item').forEach(item => {
           item.classList.remove('active');
@@ -96,6 +108,16 @@
           const html = await response.text();
           container.innerHTML = html;
           
+          // ✅ 等待DOM渲染完成后再执行脚本
+          // 使用 requestAnimationFrame 确保DOM已经渲染
+          await new Promise(resolve => {
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                resolve();
+              });
+            });
+          });
+          
           // 执行页面初始化脚本
           this.executePageScript(pageName);
           
@@ -115,20 +137,28 @@
       executePageScript(pageName) {
         const scriptUrl = `./js/pages/${pageName}.js`;
         
-        // 移除旧脚本
-        const oldScript = document.querySelector(`script[data-page="${pageName}"]`);
-        if (oldScript) {
-          oldScript.remove();
-        }
+        console.log(`🔄 加载页面脚本: ${pageName}`);
         
-        // 加载新脚本
-        const script = document.createElement('script');
-        script.src = scriptUrl;
-        script.dataset.page = pageName;
-        script.onerror = () => {
-          console.warn(`页面脚本不存在: ${scriptUrl}`);
-        };
-        document.body.appendChild(script);
+        // 移除所有旧的页面脚本（不仅是当前页面的）
+        document.querySelectorAll('script[data-page]').forEach(oldScript => {
+          console.log(`🗑️ 移除旧脚本: ${oldScript.dataset.page}`);
+          oldScript.remove();
+        });
+        
+        // 等待一个tick，确保旧脚本完全移除
+        setTimeout(() => {
+          // 加载新脚本 - 添加时间戳防止缓存
+          const script = document.createElement('script');
+          script.src = `${scriptUrl}?t=${Date.now()}`;
+          script.dataset.page = pageName;
+          script.onload = () => {
+            console.log(`✅ 脚本加载成功: ${pageName}`);
+          };
+          script.onerror = () => {
+            console.warn(`⚠️ 页面脚本不存在: ${scriptUrl}`);
+          };
+          document.body.appendChild(script);
+        }, 10);
       },
     };
     

@@ -8,6 +8,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;
 const transcriptionService = require('../services/transcriptionService');
+const audioScanService = require('../services/audioScanService');
 
 const router = express.Router();
 
@@ -143,6 +144,100 @@ router.post('/upload', upload.single('audio'), async (req, res) => {
 });
 
 /**
+ * GET /api/transcription/:id/audio
+ * 获取音频文件（支持流式传输）
+ */
+router.get('/:id/audio', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // 获取转录记录
+    const transcription = await transcriptionService.getTranscriptionById(id);
+    
+    if (!transcription) {
+      return res.status(404).json({
+        success: false,
+        error: '转录记录不存在'
+      });
+    }
+    
+    const audioPath = transcription.audio_file_path;
+    if (!audioPath) {
+      return res.status(404).json({
+        success: false,
+        error: '音频文件路径不存在'
+      });
+    }
+    
+    // 检查文件是否存在
+    try {
+      await fs.access(audioPath);
+    } catch (error) {
+      console.error(`音频文件不存在: ${audioPath}`);
+      return res.status(404).json({
+        success: false,
+        error: '音频文件不存在'
+      });
+    }
+    
+    // 获取文件信息
+    const stat = await fs.stat(audioPath);
+    const fileSize = stat.size;
+    const range = req.headers.range;
+    
+    // 设置正确的Content-Type
+    const ext = path.extname(audioPath).toLowerCase();
+    const mimeTypes = {
+      '.mp3': 'audio/mpeg',
+      '.wav': 'audio/wav',
+      '.m4a': 'audio/mp4',
+      '.flac': 'audio/flac',
+      '.aac': 'audio/aac',
+      '.wma': 'audio/x-ms-wma',
+      '.ogg': 'audio/ogg'
+    };
+    const contentType = mimeTypes[ext] || 'audio/mpeg';
+    
+    // 支持范围请求（重要：用于音频拖动）
+    if (range) {
+      const parts = range.replace(/bytes=/, '').split('-');
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+      const chunkSize = (end - start) + 1;
+      
+      res.writeHead(206, {
+        'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': chunkSize,
+        'Content-Type': contentType
+      });
+      
+      const fsLib = require('fs');
+      const stream = fsLib.createReadStream(audioPath, { start, end });
+      stream.pipe(res);
+    } else {
+      // 完整文件响应
+      res.writeHead(200, {
+        'Content-Length': fileSize,
+        'Content-Type': contentType,
+        'Accept-Ranges': 'bytes'
+      });
+      
+      const fsLib = require('fs');
+      const stream = fsLib.createReadStream(audioPath);
+      stream.pipe(res);
+    }
+    
+  } catch (error) {
+    console.error('获取音频文件失败:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
  * GET /api/transcription/:id
  * 获取转录结果详情
  */
@@ -222,13 +317,21 @@ router.get('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, customerName, sessionId, productId } = req.body;
+    const { name, customerName, sessionId, productId, dialogues } = req.body;
 
     const updates = {};
     if (name !== undefined) updates.name = name;
     if (customerName !== undefined) updates.customer_name = customerName;
     if (sessionId !== undefined) updates.session_id = sessionId;
     if (productId !== undefined) updates.product_id = productId;
+    
+    // ✅ 支持更新对话内容（编辑功能）
+    if (dialogues !== undefined) {
+      updates.dialogues = JSON.stringify(dialogues);
+      // 重新计算说话人数
+      const speakers = [...new Set(dialogues.map(d => d.speaker))];
+      updates.speaker_count = speakers.length;
+    }
 
     const transcription = await transcriptionService.updateTranscription(id, updates);
 
@@ -264,6 +367,129 @@ router.delete('/:id', async (req, res) => {
 
   } catch (error) {
     console.error('删除转录记录失败:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// ==================== 音频扫描相关接口 ====================
+
+/**
+ * GET /api/transcription/scan/config
+ * 获取扫描配置
+ */
+router.get('/scan/config', async (req, res) => {
+  try {
+    const config = await audioScanService.getConfig();
+    res.json({
+      success: true,
+      data: config
+    });
+  } catch (error) {
+    console.error('获取扫描配置失败:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * PUT /api/transcription/scan/config
+ * 更新扫描配置
+ */
+router.put('/scan/config', async (req, res) => {
+  try {
+    const config = await audioScanService.updateConfig(req.body);
+    res.json({
+      success: true,
+      data: config,
+      message: '配置已更新'
+    });
+  } catch (error) {
+    console.error('更新扫描配置失败:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/transcription/scan/files
+ * 扫描目录下的音频文件
+ */
+router.get('/scan/files', async (req, res) => {
+  try {
+    console.log('🔍 开始扫描音频文件...');
+    
+    const files = await audioScanService.scanAudioFiles();
+    
+    // 批量检查转录状态
+    const filesWithStatus = await audioScanService.checkFilesStatus(files);
+    
+    res.json({
+      success: true,
+      data: filesWithStatus,
+      total: filesWithStatus.length,
+      message: `找到 ${filesWithStatus.length} 个音频文件`
+    });
+  } catch (error) {
+    console.error('扫描音频文件失败:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/transcription/scan/transcribe
+ * 转录指定文件
+ */
+router.post('/scan/transcribe', async (req, res) => {
+  try {
+    const { filePath, fileName, customerName, productId, sessionId } = req.body;
+
+    if (!filePath) {
+      return res.status(400).json({
+        success: false,
+        error: '缺少文件路径参数'
+      });
+    }
+
+    console.log('🎤 开始转录文件:', filePath);
+
+    // 调用转录服务
+    const result = await transcriptionService.transcribeAudio(filePath);
+
+    // 保存转录结果
+    const transcription = await transcriptionService.saveTranscription({
+      name: fileName || path.basename(filePath),
+      originalFileName: path.basename(filePath),
+      audioFilePath: filePath,
+      audioFileSize: result.audioFileSize || 0,
+      audioFormat: path.extname(filePath).replace('.', ''),
+      audioDuration: result.duration,
+      resultFilePath: null,
+      dialogues: result.dialogues,
+      fullText: result.fullText,
+      speakerCount: result.speakerCount,
+      customerName: customerName || null,
+      productId: productId || null,
+      sessionId: sessionId || null
+    });
+
+    res.json({
+      success: true,
+      data: transcription,
+      message: '转录成功'
+    });
+
+  } catch (error) {
+    console.error('转录文件失败:', error);
     res.status(500).json({
       success: false,
       error: error.message
