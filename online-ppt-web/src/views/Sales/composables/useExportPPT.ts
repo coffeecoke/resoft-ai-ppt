@@ -301,11 +301,24 @@ export function useExportPPT(documentId: string) {
   }
 
   // 导出PPTX文件
-  async function exportPPTX(slideIndexes: number[] = []) {
+  // documentDataOverride: 可选，外部传入的文档数据（用于批量导出合并后的数据）
+  async function exportPPTX(slideIndexes: number[] = [], documentDataOverride?: any) {
     exporting.value = true
     try {
       // 获取完整文档数据
-      const { metadata, documentData } = await fetchCompleteDocument()
+      let metadata, documentData
+      
+      if (documentDataOverride) {
+        // 使用外部传入的数据（批量导出场景）
+        documentData = documentDataOverride
+        metadata = { name: documentData.title || '批量导出' }
+      } else {
+        // 从后端获取数据（正常单文档导出场景）
+        const result = await fetchCompleteDocument()
+        metadata = result.metadata
+        documentData = result.documentData
+      }
+      
       const { title, width, height, theme, slides } = documentData
       
       console.log('[导出PPTX] 文档数据:', {

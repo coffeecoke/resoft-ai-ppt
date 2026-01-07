@@ -5,7 +5,6 @@
  */
 
 import { ref } from 'vue'
-import pptxgen from 'pptxgenjs'
 import { ElMessage } from 'element-plus'
 import axios from '@/services/config'
 import { SERVER_URL } from '@/services'
@@ -114,87 +113,32 @@ export function useBatchExport() {
 
       console.log('[批量导出] 成功获取', validDocuments.length, '个文档')
 
-      // 2. 创建PPTX实例
-      const pptx = new pptxgen()
-      
-      // 使用第一个文档的布局设置（假设所有文档使用相同布局）
-      const firstDoc = validDocuments[0]
-      if (firstDoc.documentData) {
-        const { width, height } = firstDoc.documentData
-        if (width && height) {
-          const viewportRatio = height / width
-          if (viewportRatio === 0.625) pptx.layout = 'LAYOUT_16x10'
-          else if (viewportRatio === 0.75) pptx.layout = 'LAYOUT_4x3'
-          else if (viewportRatio === 0.70710678) {
-            pptx.defineLayout({ name: 'A3', width: 10, height: 7.0710678 })
-            pptx.layout = 'A3'
-          }
-          else if (viewportRatio === 1.41421356) {
-            pptx.defineLayout({ name: 'A3_V', width: 10, height: 14.1421356 })
-            pptx.layout = 'A3_V'
-          }
-          else pptx.layout = 'LAYOUT_16x9'
+      // 2. 合并所有文档的幻灯片到一个文档数据中
+      const mergedDocumentData: any = {
+        title: `批量导出_${new Date().toISOString().split('T')[0]}`,
+        width: validDocuments[0].documentData.width || 1000,
+        height: validDocuments[0].documentData.height || 562.5,
+        theme: validDocuments[0].documentData.theme || {},
+        slides: []
+      }
+
+      // 合并所有幻灯片
+      for (const doc of validDocuments) {
+        if (doc.documentData && doc.documentData.slides) {
+          mergedDocumentData.slides.push(...doc.documentData.slides)
         }
       }
 
-      // 3. 遍历所有文档，添加幻灯片
-      let totalSlides = 0
-      for (let i = 0; i < validDocuments.length; i++) {
-        const doc = validDocuments[i]
-        progress.value = { current: i + 1, total: validDocuments.length }
+      console.log('[批量导出] 合并后的总幻灯片数:', mergedDocumentData.slides.length)
 
-        if (!doc.documentData || !doc.documentData.slides) {
-          console.warn(`[批量导出] 文档 ${doc.documentId} 没有幻灯片数据，跳过`)
-          continue
-        }
-
-        const slides = doc.documentData.slides
-        console.log(`[批量导出] 处理文档 ${i + 1}/${validDocuments.length}: ${doc.metadata?.name || doc.documentId}，幻灯片数量:`, slides.length)
-
-        // 使用 useExportPPT 的逻辑处理每个幻灯片
-        // 由于 useExportPPT 是针对单个文档的，我们需要手动处理每个幻灯片
-        // 这里简化处理：直接使用第一个文档的导出逻辑作为参考
-        
-        // 为每个幻灯片创建分隔页（可选，用于区分不同文档）
-        if (i > 0 && slides.length > 0) {
-          const separatorSlide = pptx.addSlide()
-          separatorSlide.addText(`--- ${doc.metadata?.name || '文档'} ---`, {
-            x: 1,
-            y: 3,
-            w: 8,
-            h: 1,
-            fontSize: 24,
-            align: 'center',
-            color: '666666'
-          })
-          totalSlides++
-        }
-
-        // 添加文档的所有幻灯片
-        // 注意：这里需要调用 useExportPPT 中的幻灯片处理逻辑
-        // 但由于 useExportPPT 是 hook，我们需要提取其逻辑或直接复用
-        // 为了简化，这里先使用基础方法，后续可以优化
-        
-        // 由于幻灯片处理逻辑复杂，建议使用现有的导出方法
-        // 但批量导出需要合并，所以我们需要手动处理
-        // 这里先实现基础版本，后续可以优化
-        
-        ElMessage.info(`正在处理第 ${i + 1}/${validDocuments.length} 个文档...`)
-        
-        // 暂时跳过详细处理，使用简化版本
-        // TODO: 完善幻灯片处理逻辑，复用 useExportPPT 中的代码
-        totalSlides += slides.length
-      }
-
-      // 4. 生成文件名
-      const fileName = `批量导出_${new Date().toISOString().split('T')[0]}.pptx`
-
-      // 5. 导出文件
+      // 3. 使用 useExportPPT 导出合并后的数据
       ElMessage.info('正在生成PPTX文件...')
-      await pptx.writeFile({ fileName })
+      
+      const { exportPPTX } = useExportPPT('temp_batch_export') // documentId 参数在这个场景下不会被使用
+      await exportPPTX([], mergedDocumentData) // 传入合并后的数据
 
-      ElMessage.success(`批量导出完成！共 ${totalSlides} 张幻灯片`)
-      console.log('[批量导出] 导出完成，总幻灯片数:', totalSlides)
+      ElMessage.success(`批量导出完成！共 ${mergedDocumentData.slides.length} 张幻灯片`)
+      console.log('[批量导出] 导出完成，总幻灯片数:', mergedDocumentData.slides.length)
 
     } catch (error: any) {
       console.error('[批量导出] 导出失败:', error)
