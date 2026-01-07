@@ -387,7 +387,8 @@ ${slideText}
         slide_index: true,
         page_type: true,
         page_type_confidence: true,
-        analyzed_at: true
+        analyzed_at: true,
+        url: true  // 添加缩略图URL
       }
     })
     
@@ -419,7 +420,8 @@ ${slideText}
         categoryCode: thumb.page_type,
         categoryName: category?.name || '未知分类',
         confidence: thumb.page_type_confidence,
-        analyzedAt: thumb.analyzed_at
+        analyzedAt: thumb.analyzed_at,
+        thumbnailUrl: thumb.url || null  // 添加缩略图URL
       })
     }
     

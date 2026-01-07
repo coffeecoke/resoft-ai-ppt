@@ -2,7 +2,8 @@
  * 语音转文本页面 - 集成到AI后台管理系统
  */
 
-const ST_API_BASE = 'http://localhost:3000/api';
+// 使用相对路径，支持本地和远程访问
+const ST_API_BASE = (window.location.origin || 'http://localhost:3000') + '/api';
 let st_selectedFile = null;
 let st_currentTranscriptionId = null;
 let st_audioPlayer = null;
@@ -103,10 +104,10 @@ function initEventListeners() {
   });
   document.getElementById('st-refreshSessionsBtn').addEventListener('click', loadSessions);
   
-  // 结果操作
-  document.getElementById('st-copyAllBtn').addEventListener('click', copyAllDialogues);
-  document.getElementById('st-downloadBtn').addEventListener('click', downloadResult);
-  document.getElementById('st-newTranscriptionBtn').addEventListener('click', resetForm);
+  // 结果操作（使用可选链，避免元素不存在时报错）
+  document.getElementById('st-copyAllBtn')?.addEventListener('click', copyAllDialogues);
+  document.getElementById('st-downloadBtn')?.addEventListener('click', downloadResult);
+  document.getElementById('st-newTranscriptionBtn')?.addEventListener('click', resetForm);
   
   // 历史记录
   document.getElementById('st-refreshHistoryBtn').addEventListener('click', loadHistory);
@@ -960,7 +961,33 @@ function displayResult(data) {
   
   renderDialogues(dialogues || []);
   
+  // ✅ 重新绑定按钮事件（确保按钮可用）
+  bindResultButtons();
+  
   showToast('转录成功！', 'success');
+}
+
+// 绑定结果区域的按钮事件
+function bindResultButtons() {
+  const copyBtn = document.getElementById('st-copyAllBtn');
+  const downloadBtn = document.getElementById('st-downloadBtn');
+  const newBtn = document.getElementById('st-newTranscriptionBtn');
+  
+  // 移除旧的事件监听器（如果存在）
+  if (copyBtn) {
+    copyBtn.replaceWith(copyBtn.cloneNode(true));
+    document.getElementById('st-copyAllBtn').addEventListener('click', copyAllDialogues);
+  }
+  
+  if (downloadBtn) {
+    downloadBtn.replaceWith(downloadBtn.cloneNode(true));
+    document.getElementById('st-downloadBtn').addEventListener('click', downloadResult);
+  }
+  
+  if (newBtn) {
+    newBtn.replaceWith(newBtn.cloneNode(true));
+    document.getElementById('st-newTranscriptionBtn').addEventListener('click', resetForm);
+  }
 }
 
 function renderDialogues(dialogues) {
@@ -1005,14 +1032,53 @@ function renderDialogues(dialogues) {
 
 // ==================== 操作功能 ====================
 function copyAllDialogues() {
-  const dialogues = document.querySelectorAll('.dialogue-text');
-  const text = Array.from(dialogues).map(d => d.textContent).join('\n\n');
+  // 修复：使用正确的类名 .dialogue-text-inline 或从对话数据中获取
+  const dialogues = document.querySelectorAll('.dialogue-item');
+  
+  if (dialogues.length === 0) {
+    showToast('没有可复制的内容', 'error');
+    return;
+  }
+  
+  // 从对话项中提取时间戳、说话人和文本
+  const text = Array.from(dialogues).map(dialogue => {
+    const timeEl = dialogue.querySelector('.dialogue-time');
+    const timeRange = timeEl?.textContent || '';
+    const speaker = dialogue.querySelector('.speaker-name')?.textContent || '未知说话人';
+    const textEl = dialogue.querySelector('.dialogue-text-inline') || dialogue.querySelector('.dialogue-text');
+    const text = textEl?.textContent || '';
+    
+    // 格式：[时间戳] 【说话人】文本
+    if (timeRange) {
+      return `[${timeRange}] 【${speaker}】\n${text}`;
+    } else {
+      return `【${speaker}】\n${text}`;
+    }
+  }).join('\n\n');
+  
+  if (!text || text.trim().length === 0) {
+    showToast('没有可复制的内容', 'error');
+    return;
+  }
   
   navigator.clipboard.writeText(text).then(() => {
     showToast('已复制到剪贴板', 'success');
   }).catch(err => {
     console.error('复制失败:', err);
-    showToast('复制失败', 'error');
+    // 降级方案：使用传统方法
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+      document.execCommand('copy');
+      showToast('已复制到剪贴板', 'success');
+    } catch (e) {
+      showToast('复制失败，请手动复制', 'error');
+    }
+    document.body.removeChild(textarea);
   });
 }
 
@@ -1023,28 +1089,55 @@ function downloadResult() {
   }
   
   const dialogues = document.querySelectorAll('.dialogue-item');
+  
+  if (dialogues.length === 0) {
+    showToast('没有可下载的内容', 'error');
+    return;
+  }
+  
   let content = `语音转文本结果\n\n`;
-  content += `转录时间: ${document.getElementById('st-transcriptionTime').textContent}\n`;
-  content += `说话人数: ${document.getElementById('st-speakerCount').textContent}\n`;
-  content += `对话数量: ${document.getElementById('st-dialogueCount').textContent}\n`;
-  content += `音频时长: ${document.getElementById('st-audioDuration').textContent}\n\n`;
+  content += `转录时间: ${document.getElementById('st-transcriptionTime')?.textContent || '-'}\n`;
+  content += `说话人数: ${document.getElementById('st-speakerCount')?.textContent || '-'}\n`;
+  content += `对话数量: ${document.getElementById('st-dialogueCount')?.textContent || '-'}\n`;
+  content += `音频时长: ${document.getElementById('st-audioDuration')?.textContent || '-'}\n\n`;
   content += `${'='.repeat(50)}\n\n`;
   
   dialogues.forEach(dialogue => {
-    const speaker = dialogue.querySelector('.speaker-name').textContent;
-    const text = dialogue.querySelector('.dialogue-text').textContent;
-    content += `【${speaker}】\n${text}\n\n`;
+    const timeEl = dialogue.querySelector('.dialogue-time');
+    const timeRange = timeEl?.textContent || '';
+    const speaker = dialogue.querySelector('.speaker-name')?.textContent || '未知说话人';
+    const textEl = dialogue.querySelector('.dialogue-text-inline') || dialogue.querySelector('.dialogue-text');
+    const text = textEl?.textContent || '';
+    
+    // 格式：[时间戳] 【说话人】文本
+    if (timeRange) {
+      content += `[${timeRange}] 【${speaker}】\n${text}\n\n`;
+    } else {
+      content += `【${speaker}】\n${text}\n\n`;
+    }
   });
   
-  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `转录结果_${new Date().getTime()}.txt`;
-  a.click();
-  URL.revokeObjectURL(url);
+  if (content.trim().length === 0) {
+    showToast('没有可下载的内容', 'error');
+    return;
+  }
   
-  showToast('下载成功', 'success');
+  try {
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `转录结果_${new Date().getTime()}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    showToast('下载成功', 'success');
+  } catch (error) {
+    console.error('下载失败:', error);
+    showToast('下载失败: ' + error.message, 'error');
+  }
 }
 
 function resetForm() {
