@@ -293,7 +293,8 @@ async function startPptBatchAnalysis() {
     });
 
     // 使用EventSource接收实时进度
-    const eventSource = new EventSource(`${PPT_API_BASE}/analyze/${docId}?modelName=${encodeURIComponent(pptModelConfig.model_name || 'custom-openai')}`);
+    // ✅ 传递实际的模型标识符（model_name），如 gpt-4o
+    const eventSource = new EventSource(`${PPT_API_BASE}/analyze/${docId}?modelName=${encodeURIComponent(pptModelConfig.model_name || 'gpt-4o')}`);
     
     let results = {
       total: 0,

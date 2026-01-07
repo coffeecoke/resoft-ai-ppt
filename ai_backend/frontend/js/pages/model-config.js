@@ -238,6 +238,7 @@ function getProviderName(provider) {
 function getSceneName(scene) {
   const names = {
     transcription: '语音转文本',
+    transcription_correction: '语音转录纠错',
     ppt_analysis: 'PPT分析',
     document_extract: '文档提取',
     document_manage: '文档管理',
