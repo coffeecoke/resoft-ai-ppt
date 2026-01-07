@@ -11,6 +11,8 @@ let st_currentDialogues = [];
 let st_editedDialogues = new Map(); // 存储编辑过的对话
 let st_isEditMode = false;
 let st_currentAudioPath = null;
+let st_speakerRoles = {}; // 存储角色设置，格式：{ "SPEAKER_1": "customer", "SPEAKER_2": "our_side" }
+let st_aiCorrectionResult = null; // 存储 AI 修正结果
 
 // 页面初始化 - 等待DOM完全加载
 (async function() {
@@ -119,9 +121,18 @@ function initEventListeners() {
   document.getElementById('st-toggleAutoScrollBtn')?.addEventListener('click', toggleAutoScroll);
   
   // ✅ 编辑功能相关
+  document.getElementById('st-aiCorrectionBtn')?.addEventListener('click', startAiCorrection);
+  document.getElementById('st-roleSettingsBtn')?.addEventListener('click', showRoleSettings);
   document.getElementById('st-batchReplaceSpeakerBtn')?.addEventListener('click', showBatchReplaceDialog);
   document.getElementById('st-saveEditBtn')?.addEventListener('click', saveEdits);
   document.getElementById('st-cancelEditBtn')?.addEventListener('click', cancelEdits);
+  
+  // ✅ 角色设置相关
+  document.getElementById('st-saveRoleSettingsBtn')?.addEventListener('click', saveRoleSettings);
+  document.getElementById('st-cancelRoleSettingsBtn')?.addEventListener('click', hideRoleSettings);
+  
+  // ✅ AI 修正相关
+  document.getElementById('st-applyCorrectionsBtn')?.addEventListener('click', applyAiCorrections);
   
   // ✅ 对话列表的事件委托（点击定位、编辑按钮）
   document.getElementById('st-dialoguesList')?.addEventListener('click', handleDialogueClick);
@@ -466,6 +477,319 @@ function cancelEdits() {
   showToast('已取消所有修改', 'info');
 }
 
+// ==================== AI 错别字修正功能 ====================
+async function startAiCorrection() {
+  if (!st_currentDialogues || st_currentDialogues.length === 0) {
+    showToast('请先加载转录内容', 'warning');
+    return;
+  }
+  
+  if (!st_currentTranscriptionId) {
+    showToast('没有当前转录记录', 'error');
+    return;
+  }
+  
+  // 显示加载界面
+  const overlay = document.getElementById('st-aiCorrectionOverlay');
+  const body = document.getElementById('st-aiCorrectionBody');
+  const applyBtn = document.getElementById('st-applyCorrectionsBtn');
+  
+  body.innerHTML = `
+    <div class="ai-correction-loading">
+      <div class="ai-correction-spinner"></div>
+      <p>🤖 AI 正在分析对话内容...</p>
+      <p style="font-size: 12px; color: #999;">正在修正错别字并判断说话人角色</p>
+      <p style="font-size: 12px; color: #999;">这可能需要几秒钟时间</p>
+    </div>
+  `;
+  
+  overlay.style.display = 'flex';
+  applyBtn.style.display = 'none';
+  
+  try {
+    const response = await fetch(`${ST_API_BASE}/transcription/${st_currentTranscriptionId}/ai-correction`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        modelName: 'deepseek-chat' // 可以让用户选择模型
+      })
+    });
+    
+    const result = await response.json();
+    
+    if (!result.success) {
+      throw new Error(result.error || 'AI 修正失败');
+    }
+    
+    // 保存修正结果
+    st_aiCorrectionResult = result.data;
+    
+    // 显示对比界面
+    renderAiCorrectionResult(result.data);
+    applyBtn.style.display = 'inline-block';
+    
+  } catch (error) {
+    console.error('AI 修正失败:', error);
+    body.innerHTML = `
+      <div style="text-align: center; padding: 40px;">
+        <p style="color: #e53935; font-size: 18px;">❌ AI 修正失败</p>
+        <p style="color: #666;">${error.message}</p>
+        <button class="btn btn-primary" onclick="closeAiCorrectionModal()">关闭</button>
+      </div>
+    `;
+  }
+}
+
+function renderAiCorrectionResult(data) {
+  const { original, corrected, summary } = data;
+  const body = document.getElementById('st-aiCorrectionBody');
+  const summaryDiv = document.getElementById('st-correctionSummary');
+  
+  // 渲染摘要信息
+  summaryDiv.innerHTML = `
+    <span style="font-weight: 500;">📊 统计：</span>
+    <span>共 ${summary.totalDialogues} 条对话</span>
+    <span style="margin-left: 15px; color: #ff9800;">需要修正 ${summary.correctedCount} 条</span>
+    ${summary.customerSpeakers?.length > 0 ? `<span style="margin-left: 15px; color: #1890ff;">客户：${summary.customerSpeakers.join(', ')}</span>` : ''}
+    ${summary.ourSideSpeakers?.length > 0 ? `<span style="margin-left: 15px; color: #52c41a;">我方：${summary.ourSideSpeakers.join(', ')}</span>` : ''}
+  `;
+  
+  // 渲染对比列表
+  const html = corrected.map((item, index) => {
+    const hasTextChange = item.originalText !== item.correctedText;
+    const hasRoleChange = item.role && item.role !== 'unknown';
+    const itemClass = hasTextChange ? 'has-changes' : (hasRoleChange ? 'role-changed' : '');
+    
+    const roleLabel = {
+      'customer': '👤 客户',
+      'our_side': '👔 我方',
+      'unknown': '❓ 未知'
+    }[item.role] || '';
+    
+    return `
+      <div class="correction-item ${itemClass}">
+        <div class="correction-header">
+          <div>
+            <span class="correction-time">${item.timeRange}</span>
+            <span class="correction-speaker">${escapeHtml(item.speaker)}</span>
+            ${hasRoleChange ? `<span class="role-badge-correction ${item.role}">${roleLabel}</span>` : ''}
+            ${item.confidence ? `<span style="font-size: 11px; color: #999; margin-left: 5px;">(置信度: ${Math.round(item.confidence * 100)}%)</span>` : ''}
+          </div>
+          ${hasTextChange ? '<span style="color: #ff9800; font-size: 12px;">✏️ 已修正</span>' : '<span style="color: #52c41a; font-size: 12px;">✓ 无需修正</span>'}
+        </div>
+        
+        ${hasTextChange ? `
+          <div class="correction-changes">
+            <div class="correction-column">
+              <div class="correction-label">原始文本</div>
+              <div class="correction-text original">${escapeHtml(item.originalText)}</div>
+            </div>
+            <div class="correction-column">
+              <div class="correction-label">修正后文本</div>
+              <div class="correction-text corrected">${escapeHtml(item.correctedText)}</div>
+            </div>
+          </div>
+          ${item.changes && item.changes.length > 0 ? `
+            <div style="margin-top: 10px;">
+              <div class="correction-label">修改详情</div>
+              <div>
+                ${item.changes.map(change => `<span class="change-tag">${escapeHtml(change)}</span>`).join('')}
+              </div>
+            </div>
+          ` : ''}
+        ` : `
+          <div style="margin-top: 10px;">
+            <div class="correction-text">${escapeHtml(item.correctedText)}</div>
+          </div>
+        `}
+      </div>
+    `;
+  }).join('');
+  
+  body.innerHTML = html || '<p style="text-align: center; padding: 40px; color: #999;">没有需要修正的内容</p>';
+}
+
+function closeAiCorrectionModal() {
+  document.getElementById('st-aiCorrectionOverlay').style.display = 'none';
+  st_aiCorrectionResult = null;
+}
+
+async function applyAiCorrections() {
+  if (!st_aiCorrectionResult) {
+    showToast('没有修正结果', 'error');
+    return;
+  }
+  
+  if (!window.confirm('确认应用所有 AI 修正？这将更新对话内容和角色设置。')) {
+    return;
+  }
+  
+  try {
+    const { corrected, summary } = st_aiCorrectionResult;
+    
+    // 构建修正后的对话数组
+    const correctedDialogues = corrected.map(item => ({
+      timeRange: item.timeRange,
+      speaker: item.speaker,
+      text: item.correctedText
+    }));
+    
+    // 提取角色设置
+    const roleSettings = {};
+    corrected.forEach(item => {
+      if (item.role && item.role !== 'unknown') {
+        roleSettings[item.speaker] = item.role;
+      }
+    });
+    
+    // 调用应用接口
+    const response = await fetch(`${ST_API_BASE}/transcription/${st_currentTranscriptionId}/apply-corrections`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        correctedDialogues,
+        roleSettings
+      })
+    });
+    
+    const result = await response.json();
+    
+    if (!result.success) {
+      throw new Error(result.error || '应用修正失败');
+    }
+    
+    // 更新本地状态
+    st_currentDialogues = correctedDialogues;
+    st_speakerRoles = roleSettings;
+    
+    // 重新渲染对话列表
+    renderDialogues(correctedDialogues);
+    
+    // 关闭模态框
+    closeAiCorrectionModal();
+    
+    showToast(`✅ 修正已应用！修正了 ${summary.correctedCount} 条对话`, 'success');
+    
+  } catch (error) {
+    console.error('应用修正失败:', error);
+    showToast('应用修正失败: ' + error.message, 'error');
+  }
+}
+
+// 全局函数供 HTML onclick 调用
+window.closeAiCorrectionModal = closeAiCorrectionModal;
+
+// ==================== 角色设置功能 ====================
+function showRoleSettings() {
+  if (!st_currentDialogues || st_currentDialogues.length === 0) {
+    showToast('请先加载转录内容', 'warning');
+    return;
+  }
+  
+  // 获取所有唯一的说话人
+  const speakers = [...new Set(st_currentDialogues.map(d => d.speaker))];
+  
+  if (speakers.length === 0) {
+    showToast('没有找到说话人', 'warning');
+    return;
+  }
+  
+  // 渲染角色设置界面
+  const container = document.getElementById('st-roleSettingsList');
+  container.innerHTML = speakers.map(speaker => {
+    const currentRole = st_speakerRoles[speaker] || '';
+    return `
+      <div style="display: flex; align-items: center; gap: 15px; background: white; padding: 10px 15px; border-radius: 6px; border: 1px solid #ddd;">
+        <span style="min-width: 120px; font-weight: 500; color: #333;">${escapeHtml(speaker)}</span>
+        <div style="display: flex; gap: 10px; flex: 1;">
+          <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+            <input type="radio" name="role-${escapeHtml(speaker)}" value="customer" ${currentRole === 'customer' ? 'checked' : ''}>
+            <span>👤 客户</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+            <input type="radio" name="role-${escapeHtml(speaker)}" value="our_side" ${currentRole === 'our_side' ? 'checked' : ''}>
+            <span>👔 我方</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+            <input type="radio" name="role-${escapeHtml(speaker)}" value="" ${!currentRole ? 'checked' : ''}>
+            <span style="color: #999;">未设置</span>
+          </label>
+        </div>
+      </div>
+    `;
+  }).join('');
+  
+  // 显示角色设置容器
+  document.getElementById('st-roleSettingsContainer').style.display = 'block';
+  
+  // 滚动到角色设置区域
+  document.getElementById('st-roleSettingsContainer').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function hideRoleSettings() {
+  document.getElementById('st-roleSettingsContainer').style.display = 'none';
+}
+
+async function saveRoleSettings() {
+  if (!st_currentTranscriptionId) {
+    showToast('没有当前转录记录', 'error');
+    return;
+  }
+  
+  // 收集所有角色设置
+  const speakers = [...new Set(st_currentDialogues.map(d => d.speaker))];
+  const newRoles = {};
+  
+  speakers.forEach(speaker => {
+    const radioName = `role-${escapeHtml(speaker)}`;
+    const selected = document.querySelector(`input[name="${radioName}"]:checked`);
+    if (selected && selected.value) {
+      newRoles[speaker] = selected.value;
+    }
+  });
+  
+  // 验证是否有设置
+  if (Object.keys(newRoles).length === 0) {
+    showToast('请至少设置一个说话人的角色', 'warning');
+    return;
+  }
+  
+  try {
+    const response = await fetch(`${ST_API_BASE}/transcription/${st_currentTranscriptionId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        speaker_roles: JSON.stringify(newRoles)
+      })
+    });
+    
+    const result = await response.json();
+    
+    if (!result.success) {
+      throw new Error(result.error || '保存失败');
+    }
+    
+    // 更新本地状态
+    st_speakerRoles = newRoles;
+    
+    // 重新渲染对话列表，显示角色标签
+    renderDialogues(st_currentDialogues);
+    
+    hideRoleSettings();
+    showToast('角色设置已保存！', 'success');
+    
+  } catch (error) {
+    console.error('保存角色设置失败:', error);
+    showToast('保存失败: ' + error.message, 'error');
+  }
+}
+
 async function loadTranscriptionById(id) {
   try {
     const response = await fetch(`${ST_API_BASE}/transcription/${id}`);
@@ -612,6 +936,19 @@ function displayResult(data) {
     }
   }
   
+  // ✅ 加载角色设置
+  if (data.speaker_roles) {
+    try {
+      st_speakerRoles = typeof data.speaker_roles === 'string' 
+        ? JSON.parse(data.speaker_roles) 
+        : data.speaker_roles;
+    } catch (e) {
+      st_speakerRoles = {};
+    }
+  } else {
+    st_speakerRoles = {};
+  }
+  
   document.getElementById('st-dialogueCount').textContent = (dialogues?.length || 0);
   document.getElementById('st-audioDuration').textContent = formatDuration(
     data.audio_duration || data.audioDuration || data.duration  // ✅ 兼容三种命名
@@ -642,11 +979,21 @@ function renderDialogues(dialogues) {
     const speaker = dialogue.speaker || '说话人' + (index + 1);
     const text = dialogue.text || '';
     
+    // 获取角色标签
+    const role = st_speakerRoles[speaker];
+    let roleTag = '';
+    if (role === 'customer') {
+      roleTag = '<span class="role-badge role-customer">👤 客户</span>';
+    } else if (role === 'our_side') {
+      roleTag = '<span class="role-badge role-our-side">👔 我方</span>';
+    }
+    
     return `
       <div class="dialogue-item" data-index="${index}" data-start="${parseTimeToSeconds(timeRange.split('-')[0])}">
         <div class="dialogue-header">
           <span class="dialogue-time">${timeRange}</span>
           <span class="speaker-name">${escapeHtml(speaker)}</span>
+          ${roleTag}
           <span style="color: #333;">：</span>
           <span class="dialogue-text-inline">${escapeHtml(text)}</span>
           <button class="btn btn-sm btn-secondary dialogue-edit-btn" data-index="${index}" style="margin-left: auto;">✏️</button>

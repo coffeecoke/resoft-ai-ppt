@@ -339,6 +339,7 @@ model transcriptions {
   xfyun_order_id      String? @db.VarChar(100) /// 讯飞订单ID
   speaker_count       Int     @default(0) /// 说话人数量
   has_role_separation Boolean @default(true) /// 是否启用角色分离
+  speaker_roles       String? @db.Text /// 说话人角色设置（JSON格式：{"SPEAKER_1": "customer", "SPEAKER_2": "our_side"}）
 
   // 业务关联
   session_id    String? @db.VarChar(50) /// 关联交流场次ID（可选）

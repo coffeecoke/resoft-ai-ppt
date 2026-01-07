@@ -63,6 +63,7 @@ function renderSceneStats(scenes) {
 function getSceneIcon(code) {
   const icons = {
     transcription: '🎙️',
+    transcription_correction: '✍️',
     ppt_analysis: '📊',
     document_extract: '📄',
     document_manage: '📁',

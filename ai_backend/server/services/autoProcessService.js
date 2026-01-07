@@ -310,7 +310,7 @@ class AutoProcessService {
         try {
           const analysisResult = await pptAnalysisService.analyzeDocument(
             document.id,
-            'custom-openai', // 使用默认模型
+            null, // 不传参数，使用配置的默认模型
             (current, total, result) => {
               // 进度回调
               logger.info(`  分析进度: ${current}/${total}`)

@@ -214,11 +214,33 @@
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
         <h3>💬 对话内容</h3>
         <div style="display: flex; gap: 10px;">
+          <button class="btn btn-success" id="st-aiCorrectionBtn">✏️ 错别字修正</button>
+          <button class="btn btn-primary" id="st-roleSettingsBtn">👥 角色设置</button>
           <button class="btn btn-primary" id="st-batchReplaceSpeakerBtn">🔄 批量替换说话人</button>
           <button class="btn btn-success" id="st-saveEditBtn" style="display: none;">💾 保存修改</button>
           <button class="btn btn-secondary" id="st-cancelEditBtn" style="display: none;">❌ 取消</button>
         </div>
       </div>
+      
+      <!-- 角色设置 -->
+      <div class="role-settings-container" id="st-roleSettingsContainer" style="margin-bottom: 20px; display: none;">
+        <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #e0e0e0;">
+          <h4 style="margin: 0 0 15px 0; font-size: 14px; color: #333;">
+            👥 角色设置
+            <span style="color: #666; font-size: 12px; font-weight: normal; margin-left: 10px;">
+              将说话人分配为"客户"或"我方"
+            </span>
+          </h4>
+          <div id="st-roleSettingsList" style="display: flex; flex-direction: column; gap: 10px;">
+            <!-- 动态加载角色设置 -->
+          </div>
+          <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #e0e0e0;">
+            <button class="btn btn-success btn-sm" id="st-saveRoleSettingsBtn">💾 保存角色设置</button>
+            <button class="btn btn-secondary btn-sm" id="st-cancelRoleSettingsBtn" style="margin-left: 10px;">❌ 取消</button>
+          </div>
+        </div>
+      </div>
+      
       <div class="dialogues-list" id="st-dialoguesList" style="max-height: 600px; overflow-y: auto; margin-top: 15px;">
         <!-- 动态加载对话 -->
       </div>
@@ -374,6 +396,27 @@
   min-width: 100px;
 }
 
+.role-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  margin-left: 5px;
+}
+
+.role-badge.role-customer {
+  background: #e6f7ff;
+  color: #1890ff;
+  border: 1px solid #91d5ff;
+}
+
+.role-badge.role-our-side {
+  background: #f6ffed;
+  color: #52c41a;
+  border: 1px solid #b7eb8f;
+}
+
 .dialogue-text-inline {
   color: #333;
   font-size: 14px;
@@ -463,5 +506,207 @@
   font-size: 13px;
   color: var(--text-secondary);
 }
+
+/* AI 修正对比界面 */
+.ai-correction-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: none;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+
+.ai-correction-modal {
+  background: white;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 1200px;
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
+.ai-correction-header {
+  padding: 20px 30px;
+  border-bottom: 1px solid #e0e0e0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ai-correction-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 30px;
+}
+
+.ai-correction-footer {
+  padding: 15px 30px;
+  border-top: 1px solid #e0e0e0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #f8f9fa;
+}
+
+.correction-item {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 15px;
+  border-left: 3px solid #ddd;
+}
+
+.correction-item.has-changes {
+  border-left-color: #ff9800;
+  background: #fff8e1;
+}
+
+.correction-item.role-changed {
+  border-left-color: #2196f3;
+  background: #e3f2fd;
+}
+
+.correction-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.correction-speaker {
+  font-weight: bold;
+  color: #333;
+}
+
+.correction-time {
+  color: #666;
+  font-size: 12px;
+}
+
+.correction-changes {
+  display: flex;
+  gap: 15px;
+  margin-top: 10px;
+}
+
+.correction-column {
+  flex: 1;
+}
+
+.correction-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #666;
+  margin-bottom: 5px;
+}
+
+.correction-text {
+  padding: 10px;
+  background: white;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.correction-text.original {
+  color: #e53935;
+  text-decoration: line-through;
+}
+
+.correction-text.corrected {
+  color: #43a047;
+  font-weight: 500;
+}
+
+.role-badge-correction {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  margin-left: 10px;
+}
+
+.role-badge-correction.customer {
+  background: #e6f7ff;
+  color: #1890ff;
+  border: 1px solid #91d5ff;
+}
+
+.role-badge-correction.our_side {
+  background: #f6ffed;
+  color: #52c41a;
+  border: 1px solid #b7eb8f;
+}
+
+.role-badge-correction.unknown {
+  background: #f5f5f5;
+  color: #999;
+  border: 1px solid #d9d9d9;
+}
+
+.change-tag {
+  display: inline-block;
+  background: #fff3e0;
+  color: #f57c00;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  margin-right: 5px;
+  margin-bottom: 3px;
+}
+
+.ai-correction-loading {
+  text-align: center;
+  padding: 40px;
+}
+
+.ai-correction-spinner {
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #1890ff;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 15px;
+}
+</style>
+
+<!-- AI 修正对比界面 -->
+<div class="ai-correction-overlay" id="st-aiCorrectionOverlay">
+  <div class="ai-correction-modal" onclick="event.stopPropagation()">
+    <div class="ai-correction-header">
+      <h3 style="margin: 0;">✏️ AI 错别字修正及角色判断</h3>
+      <button class="btn btn-sm btn-secondary" onclick="closeAiCorrectionModal()">✖ 关闭</button>
+    </div>
+    
+    <div class="ai-correction-body" id="st-aiCorrectionBody">
+      <div class="ai-correction-loading">
+        <div class="ai-correction-spinner"></div>
+        <p>AI 正在分析对话内容...</p>
+        <p style="font-size: 12px; color: #999;">这可能需要几秒钟时间</p>
+      </div>
+    </div>
+    
+    <div class="ai-correction-footer">
+      <div id="st-correctionSummary" style="font-size: 14px; color: #666;">
+        <!-- 摘要信息 -->
+      </div>
+      <div>
+        <button class="btn btn-success" id="st-applyCorrectionsBtn" style="display: none;">✅ 应用所有修正</button>
+        <button class="btn btn-secondary" onclick="closeAiCorrectionModal()" style="margin-left: 10px;">❌ 取消</button>
+      </div>
+    </div>
+  </div>
+</div>
 </style>
 

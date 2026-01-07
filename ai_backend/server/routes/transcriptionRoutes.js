@@ -317,7 +317,7 @@ router.get('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, customerName, sessionId, productId, dialogues } = req.body;
+    const { name, customerName, sessionId, productId, dialogues, speaker_roles } = req.body;
 
     const updates = {};
     if (name !== undefined) updates.name = name;
@@ -331,6 +331,13 @@ router.put('/:id', async (req, res) => {
       // 重新计算说话人数
       const speakers = [...new Set(dialogues.map(d => d.speaker))];
       updates.speaker_count = speakers.length;
+    }
+    
+    // ✅ 支持更新说话人角色设置
+    if (speaker_roles !== undefined) {
+      updates.speaker_roles = typeof speaker_roles === 'string' 
+        ? speaker_roles 
+        : JSON.stringify(speaker_roles);
     }
 
     const transcription = await transcriptionService.updateTranscription(id, updates);
@@ -493,6 +500,127 @@ router.post('/scan/transcribe', async (req, res) => {
     res.status(500).json({
       success: false,
       error: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/transcription/:id/ai-correction
+ * AI 错别字修正及角色初步判断
+ */
+router.post('/:id/ai-correction', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { modelName } = req.body; // 可选：前端指定模型
+
+    const transcriptionAiService = require('../services/transcriptionAiService');
+    const transcriptionService = require('../services/transcriptionService');
+
+    // 1. 获取转录记录
+    const transcription = await transcriptionService.getTranscriptionById(id);
+    if (!transcription) {
+      return res.status(404).json({
+        success: false,
+        error: '转录记录不存在'
+      });
+    }
+
+    // 2. 解析对话内容
+    let dialogues = transcription.dialogues;
+    if (typeof dialogues === 'string') {
+      try {
+        dialogues = JSON.parse(dialogues);
+      } catch (e) {
+        return res.status(400).json({
+          success: false,
+          error: '对话内容格式错误'
+        });
+      }
+    }
+
+    if (!dialogues || dialogues.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: '没有对话内容可以修正'
+      });
+    }
+
+    // 3. 调用 AI 进行修正和角色判断
+    // 如果前端没有指定模型，会自动使用场景类型为 'transcription_correction' 的默认模型
+    const result = await transcriptionAiService.correctTyposAndRoles(dialogues, {
+      modelName: modelName // 可选参数
+    });
+
+    // 4. 返回修正结果
+    res.json({
+      success: true,
+      message: 'AI 分析完成',
+      data: {
+        original: dialogues,
+        corrected: result.data.dialogues,
+        summary: result.data.summary,
+        processingTime: result.processingTime,
+        modelName: result.modelName
+      }
+    });
+
+  } catch (error) {
+    console.error('AI 错别字修正失败:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'AI 修正失败'
+    });
+  }
+});
+
+/**
+ * PUT /api/transcription/:id/apply-corrections
+ * 应用 AI 修正结果
+ */
+router.put('/:id/apply-corrections', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { correctedDialogues, roleSettings } = req.body;
+
+    if (!correctedDialogues || !Array.isArray(correctedDialogues)) {
+      return res.status(400).json({
+        success: false,
+        error: '缺少修正后的对话数据'
+      });
+    }
+
+    const transcriptionService = require('../services/transcriptionService');
+
+    // 1. 准备更新数据
+    const updates = {
+      dialogues: JSON.stringify(correctedDialogues)
+    };
+
+    // 2. 如果有角色设置，也一起更新
+    if (roleSettings) {
+      updates.speaker_roles = typeof roleSettings === 'string' 
+        ? roleSettings 
+        : JSON.stringify(roleSettings);
+    }
+
+    // 3. 重新计算说话人数量
+    const speakers = [...new Set(correctedDialogues.map(d => d.speaker))];
+    updates.speaker_count = speakers.length;
+
+    // 4. 更新数据库
+    const transcription = await transcriptionService.updateTranscription(id, updates);
+
+    res.json({
+      success: true,
+      message: '修正已应用',
+      data: transcription
+    });
+
+  } catch (error) {
+    console.error('应用修正失败:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || '应用修正失败'
     });
   }
 });

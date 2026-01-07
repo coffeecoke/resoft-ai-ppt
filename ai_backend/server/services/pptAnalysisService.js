@@ -9,10 +9,34 @@ require('dotenv').config()
 const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client')
 const aiService = require('./aiService')
 const { buildPPTAnalysisMessages } = require('../prompts/pptAnalysisPrompt')
+const logger = require('../utils/logger')
 
 const prisma = new PrismaClient()
 
 class PPTAnalysisService {
+  constructor() {
+    this.SCENE_TYPE = 'ppt_analysis'; // 场景类型
+  }
+
+  /**
+   * 获取默认模型配置
+   * @returns {Promise<Object>} 模型配置
+   */
+  async getDefaultModel() {
+    try {
+      const { modelConfigService } = require('./index');
+      const defaultModel = await modelConfigService.getDefaultModel(this.SCENE_TYPE);
+      
+      if (!defaultModel) {
+        throw new Error(`未配置PPT分析场景的默认模型，请前往"模型配置"中设置场景类型为"${this.SCENE_TYPE}"的模型`);
+      }
+      
+      return defaultModel;
+    } catch (error) {
+      logger.error('获取PPT分析默认模型失败:', error);
+      throw error;
+    }
+  }
   /**
    * 获取所有分类标准(用于AI分析)
    * 
@@ -52,12 +76,19 @@ class PPTAnalysisService {
    * @param {string} slideText - 页面文本内容
    * @param {number} slideIndex - 页面索引
    * @param {string} slideId - 页面ID
-   * @param {string} modelName - 使用的AI模型名称
+   * @param {string} modelName - 使用的AI模型名称（可选，不传则使用默认配置）
    * @param {string} promptId - 提示词模板ID(可选)
    * @returns {Promise<Object>} 分析结果 { category_code, confidence, reason }
    */
-  async analyzeSingleSlide(slideText, slideIndex, slideId, modelName = 'custom-openai', promptId = null) {
+  async analyzeSingleSlide(slideText, slideIndex, slideId, modelName = null, promptId = null) {
     try {
+      // 如果没有指定模型，使用默认配置
+      if (!modelName) {
+        const defaultModel = await this.getDefaultModel();
+        modelName = defaultModel.model_name;  // ✅ 使用 model_name 字段（实际的模型标识符，如 gpt-4o）
+        logger.info(`🤖 使用默认PPT分析模型: ${defaultModel.name} (${modelName})`);
+      }
+      
       // 获取分类标准
       const categories = await this.getAllCategories()
       
@@ -184,12 +215,19 @@ ${slideText}
    * 批量分析文档的所有页面
    * 
    * @param {string} documentId - 文档ID
-   * @param {string} modelName - 使用的AI模型名称
+   * @param {string} modelName - 使用的AI模型名称（可选，不传则使用默认配置）
    * @param {Function} progressCallback - 进度回调函数 (current, total, result)
    * @returns {Promise<Object>} 分析结果统计
    */
-  async analyzeDocument(documentId, modelName = 'custom-openai', progressCallback = null) {
+  async analyzeDocument(documentId, modelName = null, progressCallback = null) {
     try {
+      // 如果没有指定模型，使用默认配置
+      if (!modelName) {
+        const defaultModel = await this.getDefaultModel();
+        modelName = defaultModel.model_name;  // ✅ 使用 model_name 字段（实际的模型标识符，如 gpt-4o）
+        logger.info(`🤖 使用默认PPT分析模型: ${defaultModel.name} (${modelName})`);
+      }
+      
       console.log(`\n[PPT分析] 开始分析文档: ${documentId}`)
       console.log(`[PPT分析] 使用模型: ${modelName}`)
       

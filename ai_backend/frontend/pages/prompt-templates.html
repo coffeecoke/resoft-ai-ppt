@@ -13,6 +13,7 @@
   <div class="tabs">
     <button class="tab-btn active" data-scene="all" onclick="filterByScene('all')">全部</button>
     <button class="tab-btn" data-scene="transcription" onclick="filterByScene('transcription')">语音转文本</button>
+    <button class="tab-btn" data-scene="transcription_correction" onclick="filterByScene('transcription_correction')">语音转录纠错</button>
     <button class="tab-btn" data-scene="ppt_analysis" onclick="filterByScene('ppt_analysis')">PPT分析</button>
     <button class="tab-btn" data-scene="document_extract" onclick="filterByScene('document_extract')">文档提取</button>
     <button class="tab-btn" data-scene="document_manage" onclick="filterByScene('document_manage')">文档管理</button>
@@ -65,6 +66,7 @@
         <select class="form-control" name="scene_type" required>
           <option value="">请选择</option>
           <option value="transcription">语音转文本</option>
+          <option value="transcription_correction">语音转录纠错</option>
           <option value="ppt_analysis">PPT分析</option>
           <option value="document_extract">文档提取</option>
           <option value="document_manage">文档管理</option>
