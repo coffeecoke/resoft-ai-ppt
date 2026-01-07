@@ -36,6 +36,16 @@ export default defineConfig({
             console.log(`📥 代理响应: ${proxyRes.statusCode} ${req.url}`)
           })
         },
+      },
+      // 🆕 代理静态资源：缩略图
+      '/snapshots': {
+        target: 'http://localhost:5001',
+        changeOrigin: true,
+      },
+      // 🆕 代理静态资源：封面图
+      '/covers': {
+        target: 'http://localhost:5001',
+        changeOrigin: true,
       }
     }
   },
