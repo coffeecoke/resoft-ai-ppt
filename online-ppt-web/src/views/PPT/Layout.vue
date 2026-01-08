@@ -4,8 +4,11 @@
     <RouterView />
   </template>
   <!-- 编辑器/演示/移动端页面需要slides数据 -->
+  <!-- 使用 keep-alive 缓存编辑器组件，避免退出演示时重新挂载导致网络请求 -->
   <template v-else-if="slides.length">
-    <RouterView />
+    <KeepAlive :include="['Editor']">
+      <RouterView />
+    </KeepAlive>
   </template>
   <FullscreenSpin tip="数据初始化中，请稍等 ..." v-else loading :mask="false" />
 </template>
@@ -33,10 +36,17 @@ const { databaseId } = storeToRefs(mainStore)
 const { slides } = storeToRefs(slidesStore)
 const { screening } = storeToRefs(useScreenStore())
 
+// 保存进入演示前的编辑器路由信息（用于退出时恢复）
+let editorRouteBeforeScreen: { path: string; query: Record<string, any> } | null = null
+
 // 判断是否为不需要slides数据的路由（管理后台、文档列表等）
 const isAdminRoute = computed(() => {
   return route.path.includes('/ppt/admin') || route.path.includes('/ppt/docs')
 })
+
+// 保存已加载的 documentId/templateId，避免重复加载
+let loadedDocumentId: string | null = null
+let loadedTemplateId: string | null = null
 
 // 根据当前路由和 templateId/documentId 加载对应的幻灯片 / 模板 / 文档数据
 const loadSlidesForRoute = async () => {
@@ -47,6 +57,17 @@ const loadSlidesForRoute = async () => {
 
   const templateId = route.query.templateId as string | undefined
   const documentId = route.query.documentId as string | undefined
+  
+  // 优化：如果已经加载过相同的数据，且 store 中有数据，跳过重新加载（避免退出演示时重复请求）
+  if (documentId && documentId === loadedDocumentId && slidesStore.slides.length > 0) {
+    console.log('[PPTLayout] 检测到已加载相同文档，跳过重新加载（可能是从演示模式返回）')
+    return
+  }
+  
+  if (templateId && templateId === loadedTemplateId && slidesStore.slides.length > 0) {
+    console.log('[PPTLayout] 检测到已加载相同模板，跳过重新加载')
+    return
+  }
 
   if (templateId) {
     // 从后端加载指定模板数据
@@ -79,6 +100,8 @@ const loadSlidesForRoute = async () => {
 
           // 打开类型标注面板，方便做模板标注
           mainStore.setMarkupPanelState(true)
+          // 标记已加载的 templateId
+          loadedTemplateId = templateId
           return
         }
         throw new Error('模板数据格式错误')
@@ -119,6 +142,8 @@ const loadSlidesForRoute = async () => {
           }
 
           // 文档模式不打开标注面板
+          // 标记已加载的 documentId
+          loadedDocumentId = documentId
           return
         }
         throw new Error('文档数据格式错误')
@@ -144,9 +169,27 @@ const unwatchScreening = watch(screening, (newVal) => {
   if (isAdminRoute.value) return
   
   if (newVal && route.path !== '/ppt/screen') {
-    router.push('/ppt/screen')
+    // 进入演示模式：保存当前编辑器路由信息，并跳转到演示页面（保留 query 参数）
+    editorRouteBeforeScreen = {
+      path: route.path,
+      query: { ...route.query }
+    }
+    router.replace({
+      path: '/ppt/screen',
+      query: route.query
+    })
   } else if (!newVal && route.path === '/ppt/screen') {
-    router.push('/ppt/editor')
+    // 退出演示模式：恢复到进入演示前的编辑器路由（使用 replace 避免添加历史记录）
+    const targetRoute = editorRouteBeforeScreen || {
+      path: '/ppt/editor',
+      query: route.query
+    }
+    router.replace({
+      path: targetRoute.path,
+      query: targetRoute.query
+    })
+    // 清空保存的路由信息
+    editorRouteBeforeScreen = null
   }
 })
 
@@ -187,11 +230,20 @@ onBeforeUnmount(() => {
 // 监听地址栏中的 templateId/documentId 变化，支持在单页应用内从模板列表跳转过来（仅在编辑器路由时生效）
 watch(
   () => [route.query.templateId, route.query.documentId],
-  async () => {
+  async (newVal, oldVal) => {
     // 管理后台页面不需要监听templateId变化
-    if (!isAdminRoute.value) {
-      await loadSlidesForRoute()
+    if (isAdminRoute.value) return
+    
+    // 优化：如果参数没有实际变化，跳过加载（避免退出演示时触发）
+    const [newTemplateId, newDocumentId] = newVal as [string | undefined, string | undefined]
+    const [oldTemplateId, oldDocumentId] = (oldVal || []) as [string | undefined, string | undefined]
+    
+    if (newTemplateId === oldTemplateId && newDocumentId === oldDocumentId) {
+      console.log('[PPTLayout] query 参数未变化，跳过加载')
+      return
     }
+    
+    await loadSlidesForRoute()
   }
 )
 </script>
