@@ -630,5 +630,98 @@ router.patch('/prompts/:id/toggle', async (req, res) => {
   }
 })
 
+/**
+ * POST /api/ppt-analysis/correct-single
+ * 手动纠偏单个页面（人为调整分类）
+ * Body参数: documentId, slideId, categoryCode
+ */
+router.post('/correct-single', async (req, res) => {
+  try {
+    const { documentId, slideId, categoryCode } = req.body
+    
+    if (!documentId || !slideId || !categoryCode) {
+      return res.status(400).json({
+        success: false,
+        message: '文档ID、页面ID和分类代码为必填项'
+      })
+    }
+    
+    // 验证文档是否存在
+    const document = await prisma.documents.findUnique({
+      where: { id: documentId }
+    })
+    
+    if (!document) {
+      return res.status(404).json({
+        success: false,
+        message: '文档不存在'
+      })
+    }
+    
+    // 验证分类是否存在
+    const GENERAL_PRODUCT_CODE = 'general_ppt_categories'
+    const generalProduct = await prisma.products.findFirst({
+      where: { code: GENERAL_PRODUCT_CODE }
+    })
+    
+    if (!generalProduct) {
+      throw new Error('未找到通用PPT分类产品')
+    }
+    
+    const category = await prisma.product_catalogs.findFirst({
+      where: {
+        product_id: generalProduct.id,
+        code: categoryCode
+      }
+    })
+    
+    if (!category) {
+      return res.status(400).json({
+        success: false,
+        message: '分类代码不存在'
+      })
+    }
+    
+    // 更新thumbnails表（人为纠偏，置信度设为1.0）
+    const updateResult = await prisma.thumbnails.updateMany({
+      where: {
+        document_id: documentId,
+        slide_id: slideId
+      },
+      data: {
+        page_type: categoryCode,
+        page_type_confidence: 1.0,  // 人为纠偏，置信度为100%
+        analyzed_at: new Date()
+      }
+    })
+    
+    if (updateResult.count === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '页面不存在'
+      })
+    }
+    
+    res.json({
+      success: true,
+      message: '纠偏成功',
+      result: {
+        slideId: slideId,
+        categoryCode: categoryCode,
+        categoryName: category.name,
+        confidence: 1.0,
+        correctedAt: new Date()
+      }
+    })
+    
+  } catch (error) {
+    console.error('纠偏页面错误:', error)
+    res.status(500).json({
+      success: false,
+      message: error.message || '纠偏失败'
+    })
+  }
+})
+
 module.exports = router
 

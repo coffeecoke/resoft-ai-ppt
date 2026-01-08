@@ -332,14 +332,14 @@ model transcriptions {
 
   // 转录结果
   result_file_path String? @db.VarChar(500) /// 转录结果文件路径
-  dialogues        String? @db.Text /// 对话列表（JSON数组）
-  full_text        String? @db.Text /// 完整文本内容（用于搜索）
+  dialogues        String? @db.LongText /// 对话列表（JSON数组）
+  full_text        String? @db.LongText /// 完整文本内容（用于搜索）
 
   // 讯飞API相关
   xfyun_order_id      String? @db.VarChar(100) /// 讯飞订单ID
   speaker_count       Int     @default(0) /// 说话人数量
   has_role_separation Boolean @default(true) /// 是否启用角色分离
-  speaker_roles       String? @db.Text /// 说话人角色设置（JSON格式：{"SPEAKER_1": "customer", "SPEAKER_2": "our_side"}）
+  speaker_roles       String? @db.LongText /// 说话人角色设置（JSON格式：{"SPEAKER_1": "customer", "SPEAKER_2": "our_side"}）
 
   // 业务关联
   session_id    String? @db.VarChar(50) /// 关联交流场次ID（可选）
@@ -348,7 +348,7 @@ model transcriptions {
 
   // 状态管理
   status        String  @default("pending") @db.VarChar(20) /// 状态：pending=待处理，uploading=上传中，processing=转录中，completed=已完成，failed=失败
-  error_message String? @db.Text /// 错误信息（失败时记录）
+  error_message String? @db.LongText /// 错误信息（失败时记录）
   progress      Int     @default(0) /// 进度（0-100）
 
   // 时间戳

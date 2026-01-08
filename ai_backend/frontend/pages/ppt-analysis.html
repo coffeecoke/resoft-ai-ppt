@@ -6,10 +6,30 @@
 
 <!-- 标签导航 -->
 <div class="nav-tabs">
+  <button class="tab-btn" data-tab="all-files" onclick="switchPptTab('all-files')">📁 所有文件</button>
   <button class="tab-btn active" data-tab="batch" onclick="switchPptTab('batch')">📚 批量分析</button>
   <button class="tab-btn" data-tab="results" onclick="switchPptTab('results')">📊 分析结果</button>
   <button class="tab-btn" data-tab="statistics" onclick="switchPptTab('statistics')">📈 统计报表</button>
   <button class="tab-btn" data-tab="categories" onclick="switchPptTab('categories')">🏷️ 分类标准</button>
+</div>
+
+<!-- Tab 0: 所有文件 -->
+<div id="ppt-all-files-tab" class="tab-content">
+  <div class="card">
+    <div class="card-header">
+      <h2>📁 所有文件</h2>
+      <button onclick="loadAllPptFiles()" class="btn btn-secondary">🔄 刷新</button>
+    </div>
+    <div class="card-body">
+      <div id="ppt-all-files-loading" class="loading">加载中...</div>
+      <div id="ppt-all-files-empty" class="empty-state" style="display: none;">
+        <p>暂无文件</p>
+      </div>
+      <div id="ppt-all-files-content" class="files-list" style="display: none;">
+        <!-- 动态生成文件列表 -->
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- Tab 1: 批量分析 -->
@@ -153,11 +173,13 @@
           <thead>
             <tr>
               <th>页面索引</th>
+              <th>缩略图</th>
               <th>页面ID</th>
               <th>分类名称</th>
               <th>分类代码</th>
               <th>置信度</th>
               <th>分析时间</th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody id="ppt-results-tbody">
@@ -516,6 +538,134 @@
 
 .category-confidence {
   color: var(--text-secondary);
+}
+
+/* 缩略图样式 */
+.thumbnail-cell {
+  width: 120px;
+  text-align: center;
+  padding: 8px !important;
+}
+
+.thumbnail-img {
+  width: 100px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 2px solid var(--border-color);
+  transition: all 0.3s;
+}
+
+.thumbnail-img:hover {
+  border-color: var(--primary-color);
+  transform: scale(1.05);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.btn-sm {
+  padding: 4px 12px;
+  font-size: 12px;
+}
+
+.btn-warning {
+  background: #faad14;
+  border-color: #faad14;
+  color: #fff;
+}
+
+.btn-warning:hover {
+  background: #ffc53d;
+  border-color: #ffc53d;
+  color: #fff;
+}
+
+/* 所有文件列表 */
+.files-list {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  transition: all 0.3s;
+}
+
+.file-item:hover {
+  border-color: var(--primary-color);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.file-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.file-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.file-status {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.file-status.analyzed {
+  background: #e6f7ff;
+  color: #1890ff;
+  border: 1px solid #91d5ff;
+}
+
+.file-status.unanalyzed {
+  background: #fff7e6;
+  color: #fa8c16;
+  border: 1px solid #ffd591;
+}
+
+.file-status.no-extract {
+  background: #f5f5f5;
+  color: #8c8c8c;
+  border: 1px solid #d9d9d9;
+}
+
+.file-meta {
+  display: flex;
+  gap: 20px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.file-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.file-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.file-actions .btn {
+  padding: 8px 16px;
+  font-size: 14px;
 }
 
 /* 分类树 */
