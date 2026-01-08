@@ -14,7 +14,8 @@ import { documentModel } from '../models/documentModel.js'
 import { generateDocumentId } from '../utils/idGenerator.js'
 import fs from 'fs'
 
-const DATA_DIR = path.join(__dirname, '..', '..', 'data')
+// 优先使用环境变量 DATA_DIR，如果没有则使用默认相对路径
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', '..', 'data')
 const DOCUMENTS_DIR = path.join(DATA_DIR, 'documents')
 const INDEX_FILE = path.join(DATA_DIR, 'document-index.json')
 

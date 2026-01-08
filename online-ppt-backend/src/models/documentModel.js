@@ -16,7 +16,8 @@ import { generateDocumentId } from '../utils/idGenerator.js'
 import fs from 'fs'
 
 const prisma = new PrismaClient()
-const DATA_DIR = path.join(__dirname, '..', '..', 'data')
+// 优先使用环境变量 DATA_DIR，如果没有则使用默认相对路径
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', '..', 'data')
 
 // 将 BigInt 转换为 Number（用于 JSON 序列化）
 // 同时将数据库字段（下划线）转换为前端字段（驼峰）

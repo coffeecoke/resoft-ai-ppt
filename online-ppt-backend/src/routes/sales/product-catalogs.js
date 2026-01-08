@@ -39,7 +39,7 @@ router.get('/', async (req, res) => {
     // 筛选条件只用于统计每个目录下有多少条数据
     const catalogs = await prisma.product_catalogs.findMany({
       where: {
-        product_id: null,  // 所有产品共用目录
+        // product_id: null,  // 所有产品共用目录
         is_active: true
       },
       orderBy: [
