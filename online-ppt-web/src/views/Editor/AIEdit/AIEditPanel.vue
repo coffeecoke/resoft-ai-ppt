@@ -158,41 +158,67 @@
               </div>
               
               <!-- 智能润色：对比结果 -->
-              <div v-if="msg.action === 'polish_result'" class="polish-result">
+              <div v-if="msg.action === 'polish_result' || msg.action === 'text_polish_result'" class="polish-result">
+                <!-- 策略提示 -->
+                <div v-if="msg.data.strategy" class="polish-strategy-tag">
+                  <span v-if="msg.data.strategy === 'moderate'">📌 适中策略</span>
+                  <span v-if="msg.data.strategy === 'user_defined'">🎯 按您的要求</span>
+                </div>
+                
                 <div class="comparison">
-                  <div class="original-content">
-                    <div class="content-label">📄 原内容</div>
-                    <div class="content-text">
-                      <div v-if="msg.data.original.title" class="content-item">
-                        <strong>标题：</strong>{{ msg.data.original.title }}
-                      </div>
-                      <div v-if="msg.data.original.items && msg.data.original.items.length" class="content-item">
-                        <strong>要点：</strong>
-                        <ul>
-                          <li v-for="(item, i) in msg.data.original.items" :key="i">
-                            {{ item.title }}{{ item.text ? ': ' + item.text : '' }}
-                          </li>
-                        </ul>
+                  <!-- 范围选择模式：显示标题和要点 -->
+                  <template v-if="msg.action === 'polish_result'">
+                    <div class="original-content">
+                      <div class="content-label">📄 原内容</div>
+                      <div class="content-text">
+                        <div v-if="msg.data.original.title" class="content-item">
+                          <strong>标题：</strong>{{ msg.data.original.title }}
+                        </div>
+                        <div v-if="msg.data.original.items && msg.data.original.items.length" class="content-item">
+                          <strong>要点：</strong>
+                          <ul>
+                            <li v-for="(item, i) in msg.data.original.items" :key="i">
+                              {{ item.title }}{{ item.text ? ': ' + item.text : '' }}
+                            </li>
+                          </ul>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                    
+                    <div class="polished-content">
+                      <div class="content-label">✨ 润色后</div>
+                      <div class="content-text">
+                        <div v-if="msg.data.polished.title" class="content-item">
+                          <strong>标题：</strong>{{ msg.data.polished.title }}
+                        </div>
+                        <div v-if="msg.data.polished.items && msg.data.polished.items.length" class="content-item">
+                          <strong>要点：</strong>
+                          <ul>
+                            <li v-for="(item, i) in msg.data.polished.items" :key="i">
+                              {{ item.title }}{{ item.text ? ': ' + item.text : '' }}
+                            </li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                  </template>
                   
-                  <div class="polished-content">
-                    <div class="content-label">✨ 润色后</div>
-                    <div class="content-text">
-                      <div v-if="msg.data.polished.title" class="content-item">
-                        <strong>标题：</strong>{{ msg.data.polished.title }}
-                      </div>
-                      <div v-if="msg.data.polished.items && msg.data.polished.items.length" class="content-item">
-                        <strong>要点：</strong>
-                        <ul>
-                          <li v-for="(item, i) in msg.data.polished.items" :key="i">
-                            {{ item.title }}{{ item.text ? ': ' + item.text : '' }}
-                          </li>
-                        </ul>
+                  <!-- 文本编辑模式：显示纯文本对比 -->
+                  <template v-if="msg.action === 'text_polish_result'">
+                    <div class="original-content">
+                      <div class="content-label">📄 原文</div>
+                      <div class="content-text plain-text">
+                        {{ msg.data.original }}
                       </div>
                     </div>
-                  </div>
+                    
+                    <div class="polished-content">
+                      <div class="content-label">✨ 润色后</div>
+                      <div class="content-text plain-text highlight">
+                        {{ msg.data.polished }}
+                      </div>
+                    </div>
+                  </template>
                 </div>
                 
                 <div class="ai-explanation" v-if="msg.data.explanation">
@@ -263,6 +289,7 @@ import PopoverMenuItem from '@/components/PopoverMenuItem.vue'
 import Select from '@/components/Select.vue'
 import { modelOptions } from '@/configs/aiModels'
 import useHistorySnapshot from '@/hooks/useHistorySnapshot'
+import emitter, { EmitterEvents, type SelectionInfo } from '@/utils/emitter'
 
 // 配置 marked
 marked.setOptions({
@@ -308,7 +335,17 @@ const adjustContentMenuVisible = ref(false)
 // 【新增】智能润色上下文状态
 const polishContext = ref({
   active: false,           // 是否在润色流程中
-  scope: '',              // 润色范围（'all' | 'title' | 'items'）
+  mode: '',                // 'scope_selection' | 'text_editing'
+  scope: '',              // 润色范围（'all' | 'title' | 'items'） - scope_selection模式使用
+  
+  // text_editing 模式使用
+  elementId: '',          // 正在编辑的元素ID
+  hasSelection: false,    // 是否有选中文字
+  selectedText: '',       // 选中的文字
+  from: 0,                // 选中起始位置
+  to: 0,                  // 选中结束位置
+  fullContent: '',        // 完整文本内容
+  
   requirement: '',        // 用户输入的润色要求
   originalContent: null as any,  // 原始内容
   polishedContent: null as any,  // 润色后内容
@@ -403,6 +440,171 @@ const parsePolishIntent = (text: string): { isPolish: boolean; requirement: stri
   return { isPolish: false, requirement: '' }
 }
 
+/**
+ * 【新增】检测内容是否主要是数据统计类
+ */
+const isDataStatisticsContent = (text: string): boolean => {
+  // 去除HTML标签，只看纯文本
+  const pureText = text.replace(/<[^>]+>/g, '').trim()
+  
+  if (!pureText) return false
+  
+  // 正则匹配：数字、百分比、货币符号、单位等
+  const dataPatterns = [
+    /\d+[.,]?\d*%/g,           // 百分比：35.6%, 100%
+    /[¥$€£]\s*[\d,]+\.?\d*/g,  // 货币：¥1,234,567
+    /\d+[.,]?\d*\s*(万|亿|千|百|个|次|人|元|台|项|家|份)/g,  // 数字+单位
+    /\d{4}[-/年]\d{1,2}[-/月]\d{1,2}[日]?/g,   // 日期
+  ]
+  
+  // 统计数据类字符数量
+  let dataCharCount = 0
+  dataPatterns.forEach(pattern => {
+    const matches = pureText.match(pattern)
+    if (matches) {
+      matches.forEach(match => {
+        dataCharCount += match.length
+      })
+    }
+  })
+  
+  // 如果数据类字符占比超过40%，认为是数据统计类内容
+  const ratio = dataCharCount / pureText.length
+  return ratio > 0.4
+}
+
+/**
+ * 【新增】开始文本编辑模式的润色
+ */
+const startTextPolish = (elementId: string) => {
+  emitter.emit(EmitterEvents.GET_SELECTION_INFO, {
+    elementId,
+    callback: (selectionInfo: SelectionInfo) => {
+      startTextPolishWithInfo(selectionInfo)
+    }
+  })
+}
+
+/**
+ * 【新增】使用已获取的选中信息开始润色
+ */
+const startTextPolishWithInfo = (selectionInfo: SelectionInfo) => {
+  // 检测内容类型
+  const contentToCheck = selectionInfo.hasSelection 
+    ? selectionInfo.selectedText 
+    : selectionInfo.fullContent
+  
+  if (isDataStatisticsContent(contentToCheck)) {
+    // ❌ 禁止润色数据统计类内容
+    message.warning('检测到数据统计类内容，不建议使用润色功能，以免改变数字准确性')
+    return
+  }
+  
+  // ✅ 可以润色
+  polishContext.value = {
+    active: true,
+    mode: 'text_editing',
+    elementId: selectionInfo.elementId,
+    hasSelection: selectionInfo.hasSelection,
+    selectedText: selectionInfo.selectedText,
+    from: selectionInfo.from,
+    to: selectionInfo.to,
+    fullContent: selectionInfo.fullContent,
+    scope: '',
+    requirement: '',
+    originalContent: null,
+    polishedContent: null,
+    explanation: '',
+  }
+  
+  // 显示提示消息（带使用建议）
+  const contentDesc = selectionInfo.hasSelection
+    ? `选中的文字："${selectionInfo.selectedText.substring(0, 40)}${selectionInfo.selectedText.length > 40 ? '...' : ''}"`
+    : '当前编辑的文字'
+  
+  messages.value.push({
+    id: genMsgId(),
+    role: 'assistant',
+    content: `📝 将润色${contentDesc}\n\n💡 **使用提示：**\n• 直接发送：使用适中策略，保留核心信息\n• 输入具体要求：如"只优化表达"、"可以重写"、"精简到一句话"\n\n请输入润色要求（可选）：`,
+    type: 'edit',
+    action: 'text_polish_prompt',
+  })
+  scrollToBottom()
+  
+  // 自动填充前缀
+  inputText.value = POLISH_PREFIX
+  nextTick(() => {
+    inputRef.value?.focus()
+    const len = inputText.value.length
+    inputRef.value?.setSelectionRange(len, len)
+  })
+}
+
+/**
+ * 【新增】点击润色按钮的统一入口
+ */
+const handlePolishButtonClick = () => {
+  if (!currentSlide.value) {
+    message.error('当前没有选中的页面')
+    return
+  }
+  
+  // 判断当前页面是否是AI生成的（有type标注，如 'content', 'cover' 等）
+  const isAIGenerated = !!currentSlide.value.type
+  
+  const selectedElementId = mainStore.handleElementId
+  
+  // 【优先级1】如果用户选中了元素且在编辑状态，使用文本编辑模式
+  if (selectedElementId) {
+    const element = currentSlide.value.elements.find(
+      el => el.id === selectedElementId
+    )
+    
+    if (element && (element.type === 'text' || element.type === 'shape')) {
+      // 尝试获取编辑器的选中信息（判断是否在编辑状态）
+      let isInEditMode = false
+      
+      emitter.emit(EmitterEvents.GET_SELECTION_INFO, {
+        elementId: selectedElementId,
+        callback: (selectionInfo: SelectionInfo) => {
+          // 如果能获取到内容，说明编辑器已激活
+          if (selectionInfo.fullContent) {
+            isInEditMode = true
+          }
+        }
+      })
+      
+      // 如果在编辑状态，使用文本编辑模式（优先级最高）
+      if (isInEditMode) {
+        startTextPolish(selectedElementId)
+        return
+      }
+    }
+  }
+  
+  // 【优先级2】判断整个页面是否是AI生成的
+  if (isAIGenerated) {
+    // AI生成的页面 → 显示范围选择
+    messages.value.push({
+      id: genMsgId(),
+      role: 'assistant',
+      content: '请选择要润色的内容范围：',
+      type: 'edit',
+      action: 'polish_scope',
+    })
+    scrollToBottom()
+    return
+  }
+  
+  // 【优先级3】导入的PPT页面，且不在编辑状态
+  message.warning('导入的PPT需要先双击文本进入编辑状态才能润色')
+}
+
+// 暴露给外部调用
+defineExpose({
+  handlePolishButtonClick
+})
+
 const quickAction = (action: string) => {
   // 续写一页：特殊处理，填入话术并聚焦
   if (action === 'continue_write') {
@@ -416,22 +618,9 @@ const quickAction = (action: string) => {
     return
   }
   
-  // 【新增】智能润色：显示范围选择界面
+  // 【修改】智能润色：使用新的统一入口
   if (action === 'smart_polish') {
-    if (!currentSlide.value) {
-      message.error('当前没有选中的页面')
-      return
-    }
-    
-    // 显示范围选择消息
-    messages.value.push({
-      id: genMsgId(),
-      role: 'assistant',
-      content: '请选择要润色的内容范围：',
-      type: 'edit',
-      action: 'polish_scope',
-    })
-    scrollToBottom()
+    handlePolishButtonClick()
     return
   }
   
@@ -1282,6 +1471,7 @@ const handleAdjustConfirm = (data: { items: any[], template?: Slide }) => {
  */
 const confirmPolishScope = (scope: 'all' | 'title' | 'items') => {
   polishContext.value.active = true
+  polishContext.value.mode = 'scope_selection'  // 标记为范围选择模式
   polishContext.value.scope = scope
   
   // 自动填充前缀
@@ -1296,7 +1486,7 @@ const confirmPolishScope = (scope: 'all' | 'title' | 'items') => {
 }
 
 /**
- * 处理智能润色请求
+ * 处理智能润色请求（统一处理两种模式）
  */
 const handleSmartPolish = async (requirement: string) => {
   if (!currentSlide.value) {
@@ -1304,26 +1494,76 @@ const handleSmartPolish = async (requirement: string) => {
     return
   }
   
-  if (!polishContext.value.scope) {
-    message.error('请先选择润色范围')
-    return
-  }
-  
   loading.value = true
   
   try {
-    const response = await api.aipptChat({
+    // 构建轻量级的上下文（不包含完整元素，避免请求体过大）
+    const lightContext = {
+      slideIndex: slidesStore.slideIndex,
+      totalSlides: slidesStore.slides.length,
+      topic: slidesStore.topic || '',
+      slideType: currentSlide.value.type,  // AI生成的页面才有这个字段
+    }
+    
+    const requestData: any = {
       message: requirement === 'default' ? POLISH_PREFIX : `${POLISH_PREFIX}${requirement}`,
-      context: pptContext.value,
-      scope: polishContext.value.scope,
-      requirement: requirement,
-      history: [],
+      context: lightContext,  // ✅ 使用轻量级上下文
+      requirement,
       model: selectedModel.value,
+      history: [],
+    }
+    
+    // 根据模式添加不同的参数
+    if (polishContext.value.mode === 'scope_selection') {
+      // 范围选择模式：传递 scope
+      if (!polishContext.value.scope) {
+        message.error('请先选择润色范围')
+        return
+      }
+      requestData.scope = polishContext.value.scope
+      // 范围选择模式需要完整的 slide 元素
+      requestData.context.currentSlide = currentSlide.value
+    } else if (polishContext.value.mode === 'text_editing') {
+      // 文本编辑模式：传递详细的选中信息
+      requestData.polishContext = {
+        elementId: polishContext.value.elementId,
+        hasSelection: polishContext.value.hasSelection,
+        selectedText: polishContext.value.selectedText,
+        from: polishContext.value.from,
+        to: polishContext.value.to,
+        fullContent: polishContext.value.fullContent,
+      }
+    }
+    
+    // 【调试】打印请求数据（简化版）
+    console.log('[AIEditPanel] 发送润色请求:', {
+      mode: polishContext.value.mode,
+      message: requestData.message,
+      requirement: requestData.requirement,
+      scope: requestData.scope,
+      hasPolishContext: !!requestData.polishContext,
+      polishContextSummary: requestData.polishContext ? {
+        elementId: requestData.polishContext.elementId,
+        hasSelection: requestData.polishContext.hasSelection,
+        contentLength: requestData.polishContext.fullContent?.length || 0,
+      } : null
     })
     
+    const response = await api.aipptChat(requestData)
+    
+    // 【修复】检查响应类型，判断是流式还是JSON
+    const contentType = response.headers.get('content-type')
+    
+    if (contentType?.includes('text/event-stream')) {
+      // ❌ 流式响应说明后端没有正确识别润色请求，当作普通聊天处理了
+      console.error('[AIEditPanel] 后端返回了流式响应，应该返回JSON！')
+      throw new Error('后端未正确识别润色请求，请检查后端日志')
+    }
+    
+    // JSON 响应
     const result = await response.json()
     
-    if (result.success && result.type === 'edit' && result.action === 'polish_result') {
+    if (result.success && result.type === 'edit' && (result.action === 'polish_result' || result.action === 'text_polish_result')) {
       polishContext.value.originalContent = result.data.original
       polishContext.value.polishedContent = result.data.polished
       polishContext.value.explanation = result.data.explanation || ''
@@ -1335,7 +1575,7 @@ const handleSmartPolish = async (requirement: string) => {
         role: 'assistant',
         content: '✨ 润色完成！以下是对比结果：',
         type: 'edit',
-        action: 'polish_result',
+        action: result.action,
         data: result.data,
       })
       scrollToBottom()
@@ -1357,90 +1597,156 @@ const handleSmartPolish = async (requirement: string) => {
 }
 
 /**
- * 应用润色结果
+ * 应用润色结果（统一处理两种模式）
  */
 const applyPolish = () => {
-  if (!currentSlide.value || !polishContext.value.polishedContent) {
+  if (!polishContext.value.polishedContent) {
     message.error('润色数据丢失，请重新润色')
     return
   }
   
   try {
-    const polished = polishContext.value.polishedContent
-    const scope = polishContext.value.scope
-    
-    // 【修复】根据范围更新内容，确保只更新文本，不改变样式
-    if (scope === 'all' || scope === 'title') {
-      // 更新标题：只更新文本内容，保留所有样式属性
-      if (polished.title) {
-        const titleEl = currentSlide.value.elements.find(el =>
-          (el.type === 'text' && el.textType === 'title') ||
-          (el.type === 'shape' && el.text?.type === 'title')
-        )
-        if (titleEl) {
-          if (titleEl.type === 'text') {
-            // 【修复】只更新 content 属性，不改变其他属性（如样式、位置等）
-            slidesStore.updateElement({
-              id: titleEl.id,
-              props: { content: replaceTextContent(titleEl.content || '', polished.title) }
-            })
-          } else if (titleEl.type === 'shape' && titleEl.text) {
-            // 【修复】只更新 text.content，保留 text 的其他属性（如样式）
-            slidesStore.updateElement({
-              id: titleEl.id,
-              props: {
-                text: {
-                  ...titleEl.text,
-                  content: replaceTextContent(titleEl.text.content || '', polished.title)
-                }
-              }
-            })
-          }
-        }
-      }
+    if (polishContext.value.mode === 'scope_selection') {
+      // 范围选择模式：使用原有逻辑
+      applyPolishByScope()
+    } else if (polishContext.value.mode === 'text_editing') {
+      // 文本编辑模式：精准替换
+      applyPolishByTextRange()
     }
-    
-    if (scope === 'all' || scope === 'items') {
-      // 【修复】更新要点：使用专门的润色更新函数，确保保留所有元素和样式
-      if (polished.items && Array.isArray(polished.items)) {
-        const newElements = updateSlideContentForPolish(currentSlide.value, polished.items)
-        // 【修复】只更新 elements，不更新 background 等其他属性
-        slidesStore.updateSlide({ elements: newElements })
-      }
-    }
-    
-    // 【修复】添加撤销快照，支持撤销操作
-    addHistorySnapshot()
     
     message.success('润色已应用！')
+    
+    // 【修复】保留上下文信息，只清空结果数据，以便支持"重新润色"
+    // 不要完全清空 polishContext，保留 elementId, hasSelection 等信息
+    polishContext.value.polishedContent = null
+    polishContext.value.originalContent = null
+    polishContext.value.explanation = ''
+    // 保留 active, mode, elementId, hasSelection, from, to, fullContent, scope, requirement
     
     // 添加成功消息
     messages.value.push({
       id: genMsgId(),
       role: 'assistant',
-      content: '✅ 润色已应用到当前页面！',
+      content: '✅ 润色已应用！',
       type: 'chat',
     })
-    
-    // 重置润色上下文
-    polishContext.value.active = false
-    polishContext.value.scope = ''
-    polishContext.value.requirement = ''
-    polishContext.value.originalContent = null
-    polishContext.value.polishedContent = null
-    polishContext.value.explanation = ''
-    
     scrollToBottom()
   } catch (error: any) {
     console.error('应用润色失败:', error)
-    message.error('应用润色失败：' + error.message)
+    message.error('应用失败：' + error.message)
   }
+}
+
+/**
+ * 【新增】文本编辑模式：精准替换
+ */
+const applyPolishByTextRange = () => {
+  const { elementId, hasSelection, from, to, polishedContent } = polishContext.value
+  
+  if (!currentSlide.value) return
+  
+  if (hasSelection) {
+    // 替换选中部分
+    emitter.emit(EmitterEvents.REPLACE_TEXT_RANGE, {
+      elementId,
+      from,
+      to,
+      newText: polishedContent,
+    })
+  } else {
+    // 替换整个内容
+    const element = currentSlide.value.elements.find(el => el.id === elementId)
+    if (element) {
+      if (element.type === 'text') {
+        slidesStore.updateElement({
+          id: elementId,
+          props: { content: replaceTextContent(element.content || '', polishedContent) }
+        })
+      } else if (element.type === 'shape' && (element as any).text) {
+        const shapeEl = element as any
+        slidesStore.updateElement({
+          id: elementId,
+          props: {
+            text: {
+              ...shapeEl.text,
+              content: replaceTextContent(shapeEl.text.content || '', polishedContent)
+            }
+          }
+        })
+      }
+    }
+  }
+  
+  // 添加撤销快照
+  addHistorySnapshot()
+}
+
+/**
+ * 范围选择模式：应用润色
+ */
+const applyPolishByScope = () => {
+  if (!currentSlide.value) {
+    message.error('当前没有选中的页面')
+    return
+  }
+  
+  const polished = polishContext.value.polishedContent
+  const scope = polishContext.value.scope
+  
+  // 【修复】根据范围更新内容，确保只更新文本，不改变样式
+  if (scope === 'all' || scope === 'title') {
+    // 更新标题：只更新文本内容，保留所有样式属性
+    if (polished.title) {
+      const titleEl = currentSlide.value.elements.find(el =>
+        (el.type === 'text' && el.textType === 'title') ||
+        (el.type === 'shape' && (el as any).text?.type === 'title')
+      )
+      if (titleEl) {
+        if (titleEl.type === 'text') {
+          // 【修复】只更新 content 属性，不改变其他属性（如样式、位置等）
+          slidesStore.updateElement({
+            id: titleEl.id,
+            props: { content: replaceTextContent(titleEl.content || '', polished.title) }
+          })
+        } else if (titleEl.type === 'shape' && (titleEl as any).text) {
+          const shapeEl = titleEl as any
+          // 【修复】只更新 text.content，保留 text 的其他属性（如样式）
+          slidesStore.updateElement({
+            id: titleEl.id,
+            props: {
+              text: {
+                ...shapeEl.text,
+                content: replaceTextContent(shapeEl.text.content || '', polished.title)
+              }
+            }
+          })
+        }
+      }
+    }
+  }
+  
+  if (scope === 'all' || scope === 'items') {
+    // 【修复】更新要点：使用专门的润色更新函数，确保保留所有元素和样式
+    if (polished.items && Array.isArray(polished.items)) {
+      const newElements = updateSlideContentForPolish(currentSlide.value, polished.items)
+      // 【修复】只更新 elements，不更新 background 等其他属性
+      slidesStore.updateSlide({ elements: newElements })
+    }
+  }
+  
+  // 【修复】添加撤销快照，支持撤销操作
+  addHistorySnapshot()
 }
 
 /**
  * 重新润色
  */
 const rePolish = () => {
+  // ✅ 确保上下文保持激活状态
+  if (!polishContext.value.active) {
+    polishContext.value.active = true
+  }
+  
   // 保留之前的要求
   if (polishContext.value.requirement && polishContext.value.requirement !== 'default') {
     inputText.value = `${POLISH_PREFIX}${polishContext.value.requirement}`
@@ -2141,6 +2447,31 @@ onMounted(() => {
 .polish-result {
   margin-top: 12px;
   
+  .polish-strategy-tag {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    margin-bottom: 12px;
+    
+    span {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    
+    &:has(span:first-child:contains('📌')) {
+      background: rgba(24, 144, 255, 0.1);
+      color: #1890ff;
+    }
+    
+    &:has(span:first-child:contains('🎯')) {
+      background: rgba(82, 196, 26, 0.1);
+      color: #52c41a;
+    }
+  }
+  
   .comparison {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -2169,6 +2500,15 @@ onMounted(() => {
         font-size: 13px;
         color: var(--text-primary);
         line-height: 1.6;
+        
+        &.plain-text {
+          white-space: pre-wrap;
+          word-break: break-word;
+        }
+        
+        &.highlight {
+          font-weight: 500;
+        }
         
         .content-item {
           margin-bottom: 8px;

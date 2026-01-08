@@ -16,7 +16,7 @@ import type { EditorView } from 'prosemirror-view'
 import { toggleMark, wrapIn, lift } from 'prosemirror-commands'
 import { initProsemirrorEditor, createDocument } from '@/utils/prosemirror'
 import { isActiveOfParentNodeType, findNodesWithSameMark, getTextAttrs, autoSelectAll, addMark, markActive, getFontsize } from '@/utils/prosemirror/utils'
-import emitter, { EmitterEvents, type RichTextAction, type RichTextCommand } from '@/utils/emitter'
+import emitter, { EmitterEvents, type RichTextAction, type RichTextCommand, type GetSelectionInfoPayload, type ReplaceTextRangePayload, type SelectionInfo } from '@/utils/emitter'
 import { alignmentCommand } from '@/utils/prosemirror/commands/setTextAlign'
 import { indentCommand, textIndentCommand } from '@/utils/prosemirror/commands/setTextIndent'
 import { toggleList } from '@/utils/prosemirror/commands/toggleList'
@@ -308,11 +308,105 @@ const syncAttrsToStore = () => {
   handleClick()
 }
 
+// 获取选中信息
+const handleGetSelectionInfo = ({ elementId, callback }: GetSelectionInfoPayload) => {
+  if (elementId !== props.elementId) return
+  if (!editorView) return
+  
+  const { selection, doc } = editorView.state
+  const { from, to, empty } = selection
+  
+  // 判断是否有选中
+  const hasSelection = !empty && from !== to
+  
+  // 获取选中的文本
+  const selectedText = hasSelection 
+    ? doc.textBetween(from, to, '\n') 
+    : ''
+  
+  // 获取完整内容
+  const fullContent = doc.textContent
+  
+  const info: SelectionInfo = {
+    hasSelection,
+    selectedText,
+    from,
+    to,
+    fullContent,
+    elementId: props.elementId,
+  }
+  
+  callback(info)
+}
+
+// 替换指定范围的文字
+const handleReplaceTextRange = ({ elementId, from, to, newText }: ReplaceTextRangePayload) => {
+  if (elementId !== props.elementId) return
+  if (!editorView) return
+  
+  const { doc, tr, selection } = editorView.state
+  
+  // 确保范围有效
+  if (from < 0 || to > doc.content.size || from > to) {
+    console.error('Invalid text range:', { from, to, docSize: doc.content.size })
+    return
+  }
+  
+  // 【修复】获取被替换文本范围内的样式标记，而不是起始位置的
+  // 如果选中了文本（from !== to），获取选中文本的 marks
+  // 如果是光标位置（from === to），获取光标处的 storedMarks 或当前 marks
+  let marks: any[] = []
+  
+  if (from !== to) {
+    // 有选中文本：遍历选中范围，收集所有共同的 marks
+    const $from = doc.resolve(from)
+    const $to = doc.resolve(to)
+    
+    // 获取选中范围内第一个字符的 marks 作为基准
+    if (from + 1 <= to) {
+      const $pos = doc.resolve(from + 1) // 从选中文本的第一个字符开始
+      marks = $pos.marks()
+    } else {
+      marks = $from.marks()
+    }
+    
+    console.log('[ProsemirrorEditor] 替换选中文本，保留样式:', {
+      from, to, 
+      newText: newText.substring(0, 50),
+      marks: marks.map(m => ({ type: m.type.name, attrs: m.attrs }))
+    })
+  } else {
+    // 光标位置：使用当前的 storedMarks 或位置的 marks
+    marks = tr.storedMarks || selection.$from.marks()
+    console.log('[ProsemirrorEditor] 在光标位置插入文本，保留样式:', {
+      from, 
+      newText: newText.substring(0, 50),
+      marks: marks.map(m => ({ type: m.type.name, attrs: m.attrs }))
+    })
+  }
+  
+  // 创建带样式的文本节点
+  const schema = editorView.state.schema
+  const textNode = schema.text(newText, marks)
+  
+  // 替换文字
+  const transaction = tr.replaceWith(from, to, textNode)
+  editorView.dispatch(transaction)
+  
+  // 触发更新
+  handleInput()
+  editorView.focus()
+}
+
 emitter.on(EmitterEvents.RICH_TEXT_COMMAND, execCommand)
 emitter.on(EmitterEvents.SYNC_RICH_TEXT_ATTRS_TO_STORE, syncAttrsToStore)
+emitter.on(EmitterEvents.GET_SELECTION_INFO, handleGetSelectionInfo)
+emitter.on(EmitterEvents.REPLACE_TEXT_RANGE, handleReplaceTextRange)
 onUnmounted(() => {
   emitter.off(EmitterEvents.RICH_TEXT_COMMAND, execCommand)
   emitter.off(EmitterEvents.SYNC_RICH_TEXT_ATTRS_TO_STORE, syncAttrsToStore)
+  emitter.off(EmitterEvents.GET_SELECTION_INFO, handleGetSelectionInfo)
+  emitter.off(EmitterEvents.REPLACE_TEXT_RANGE, handleReplaceTextRange)
 })
 </script>
 

@@ -5,6 +5,8 @@ export const enum EmitterEvents {
   SYNC_RICH_TEXT_ATTRS_TO_STORE = 'SYNC_RICH_TEXT_ATTRS_TO_STORE',
   OPEN_CHART_DATA_EDITOR = 'OPEN_CHART_DATA_EDITOR',
   OPEN_LATEX_EDITOR = 'OPEN_LATEX_EDITOR',
+  GET_SELECTION_INFO = 'GET_SELECTION_INFO',
+  REPLACE_TEXT_RANGE = 'REPLACE_TEXT_RANGE',
 }
 
 export interface RichTextAction {
@@ -17,11 +19,34 @@ export interface RichTextCommand {
   action: RichTextAction | RichTextAction[]
 }
 
+export interface SelectionInfo {
+  hasSelection: boolean
+  selectedText: string
+  from: number
+  to: number
+  fullContent: string
+  elementId: string
+}
+
+export interface GetSelectionInfoPayload {
+  elementId: string
+  callback: (info: SelectionInfo) => void
+}
+
+export interface ReplaceTextRangePayload {
+  elementId: string
+  from: number
+  to: number
+  newText: string
+}
+
 type Events = {
   [EmitterEvents.RICH_TEXT_COMMAND]: RichTextCommand
   [EmitterEvents.SYNC_RICH_TEXT_ATTRS_TO_STORE]: void
   [EmitterEvents.OPEN_CHART_DATA_EDITOR]: void
   [EmitterEvents.OPEN_LATEX_EDITOR]: void
+  [EmitterEvents.GET_SELECTION_INFO]: GetSelectionInfoPayload
+  [EmitterEvents.REPLACE_TEXT_RANGE]: ReplaceTextRangePayload
 } 
 
 const emitter: Emitter<Events> = mitt<Events>()

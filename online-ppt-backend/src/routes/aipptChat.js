@@ -43,7 +43,16 @@ const USE_AI_FOR_DECREASE = false
  */
 router.post('/chat', async (req, res) => {
   try {
-    const { message, context = {}, history = [], model = 'deepseek-chat', scope, requirement } = req.body
+    const { message, context = {}, history = [], model = 'deepseek-chat', scope, requirement, polishContext } = req.body
+    
+    // 【调试】打印请求参数
+    console.log('[aipptChat] 收到请求:', {
+      message: message?.substring(0, 50),
+      scope,
+      requirement,
+      hasPolishContext: !!polishContext,
+      polishContextKeys: polishContext ? Object.keys(polishContext) : []
+    })
     
     if (!message) {
       return res.json({
@@ -59,11 +68,21 @@ router.post('/chat', async (req, res) => {
       return handleContinueWrite({ ...context, topic: continueTopic }, model, res)
     }
     
-    // 【新增】0.5. 优先检查润色意图（特殊格式优先处理）
+    // 【修改】0.5. 优先检查润色意图（特殊格式优先处理）
     const polishIntent = parsePolishIntent(message)
-    if (polishIntent.isPolish && scope) {
-      console.log(`[对话] 润色话术识别: scope=${scope}, requirement=${requirement || 'default'}`)
-      return handleSmartPolish(context, scope, requirement || polishIntent.requirement, model, res)
+    console.log('[aipptChat] 润色意图识别:', polishIntent)
+    
+    if (polishIntent.isPolish) {
+      // 文本编辑模式：有 polishContext
+      if (polishContext) {
+        console.log(`[对话] 文本编辑润色: elementId=${polishContext.elementId}, hasSelection=${polishContext.hasSelection}`)
+        return handleTextEditingPolish(context, polishContext, requirement || polishIntent.requirement, model, res)
+      }
+      // 范围选择模式：有 scope
+      else if (scope) {
+        console.log(`[对话] 范围选择润色: scope=${scope}, requirement=${requirement || 'default'}`)
+        return handleSmartPolish(context, scope, requirement || polishIntent.requirement, model, res)
+      }
     }
     
     // 1. 意图识别
@@ -813,6 +832,130 @@ async function handleSmartPolish(context, scope, requirement, model, res) {
     })
   } catch (error) {
     console.error('[智能润色] 错误:', error)
+    return res.json({
+      success: false,
+      error: '润色失败：' + error.message
+    })
+  }
+}
+
+/**
+ * 【新增】处理文本编辑模式的润色
+ * @param {object} context PPT上下文
+ * @param {object} polishContext 润色上下文（包含选中信息）
+ * @param {string} requirement 润色要求
+ * @param {string} model AI模型
+ * @param {object} res Express响应对象
+ */
+async function handleTextEditingPolish(context, polishContext, requirement, model, res) {
+  try {
+    if (!polishContext || !polishContext.elementId) {
+      return res.json({
+        success: false,
+        error: '缺少润色上下文信息'
+      })
+    }
+    
+    // 提取要润色的内容
+    const contentToPolish = polishContext.hasSelection
+      ? polishContext.selectedText
+      : polishContext.fullContent
+    
+    if (!contentToPolish) {
+      return res.json({
+        success: false,
+        error: '未找到可润色的内容'
+      })
+    }
+    
+    // 判断润色策略
+    const hasUserRequirement = requirement && requirement !== 'default' && requirement.trim() !== ''
+    
+    let systemPrompt = ''
+    let userPrompt = ''
+    let temperature = 0.6
+    
+    if (hasUserRequirement) {
+      // 用户指定了要求 → 按用户要求来
+      systemPrompt = `你是PPT内容润色专家。请严格按照用户的要求对文字进行润色。
+
+关键规则：
+1. 用户说怎么改就怎么改，充分理解用户意图
+2. 如果用户说"可以重写"、"大改"，可以大幅调整
+3. 如果用户说"只改表达"、"微调"，只做小幅优化
+4. 返回JSON格式：{"polished": "润色后的文字", "explanation": "说明优化了哪些方面"}`
+
+      userPrompt = `原文：\n${contentToPolish}\n\n用户要求：${requirement}\n\n请按要求润色。`
+      temperature = 0.8  // 用户指定时温度更高
+    } else {
+      // 用户未指定 → 适中策略
+      systemPrompt = `你是PPT内容润色专家。请对文字进行适度优化润色。
+
+润色策略（适中模式）：
+1. 保留核心含义和关键信息，不大幅改写
+2. 优化表达方式，提升专业性和简洁性
+3. 如果是标题，保持简短（不超过15字），不改变核心意思
+4. 如果是正文，适度调整句式，增强可读性
+5. 保持原文风格，不要过度修饰
+6. 返回JSON格式：{"polished": "润色后的文字", "explanation": "说明优化了哪些方面"}`
+
+      userPrompt = `请对以下文字进行适度润色：\n\n${contentToPolish}`
+    }
+    
+    // 调用AI
+    const result = await aiService.chat(model, [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ], { 
+      temperature, 
+      maxTokens: 800 
+    })
+    
+    console.log('[文本编辑润色] AI原始返回:', result.substring(0, 500))
+    
+    // 解析结果
+    const jsonMatch = result.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) {
+      console.error('[文本编辑润色] 无法匹配JSON:', result)
+      throw new Error('AI返回格式无效')
+    }
+    
+    console.log('[文本编辑润色] 提取的JSON:', jsonMatch[0].substring(0, 300))
+    
+    // 清理 JSON 字符串中的控制字符，避免解析错误
+    let jsonString = jsonMatch[0]
+    // 移除不可见的控制字符（但保留已转义的 \n, \t 等）
+    jsonString = jsonString.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
+    
+    let polishResult
+    try {
+      polishResult = JSON.parse(jsonString)
+    } catch (parseError) {
+      console.error('[文本编辑润色] JSON解析失败:', jsonString.substring(0, 200))
+      console.error('[文本编辑润色] 解析错误:', parseError.message)
+      throw new Error('AI返回的JSON格式无效，请重试')
+    }
+    
+    // 返回结果
+    return res.json({
+      success: true,
+      type: 'edit',
+      action: 'text_polish_result',
+      message: '润色完成！',
+      data: {
+        mode: 'text_editing',
+        elementId: polishContext.elementId,
+        hasSelection: polishContext.hasSelection,
+        from: polishContext.from,
+        to: polishContext.to,
+        original: contentToPolish,
+        polished: polishResult.polished,
+        explanation: polishResult.explanation || '',
+        strategy: hasUserRequirement ? 'user_defined' : 'moderate'  // 标记使用的策略
+      }
+    })
+  } catch (error) {
+    console.error('[文本编辑润色] 错误:', error)
     return res.json({
       success: false,
       error: '润色失败：' + error.message

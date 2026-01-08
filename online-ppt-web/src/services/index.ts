@@ -289,6 +289,9 @@ export default {
    * @param context PPT上下文
    * @param history 对话历史
    * @param model AI模型
+   * @param scope 润色范围（范围选择模式）
+   * @param requirement 润色要求
+   * @param polishContext 润色上下文（文本编辑模式）
    * @returns 对话结果（可能是流式）
    */
   aipptChat({
@@ -298,6 +301,7 @@ export default {
     model = 'deepseek-chat',
     scope,
     requirement,
+    polishContext,
   }: {
     message: string
     context?: {
@@ -311,6 +315,14 @@ export default {
     model?: string
     scope?: string
     requirement?: string
+    polishContext?: {
+      elementId: string
+      hasSelection: boolean
+      selectedText: string
+      from: number
+      to: number
+      fullContent: string
+    }
   }): Promise<Response> {
     return fetch(`${SERVER_URL}/aippt/chat`, {
       method: 'POST',
@@ -324,6 +336,7 @@ export default {
         model,
         scope,
         requirement,
+        polishContext,
       }),
     })
   },
