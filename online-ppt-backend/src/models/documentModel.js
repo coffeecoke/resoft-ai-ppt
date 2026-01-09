@@ -230,6 +230,18 @@ export const documentModel = {
     const doc = await prisma.documents.findUnique({ where: { id } })
     if (!doc) throw new Error('文档不存在')
     
+    // 删除文档前，更新所有关联的 file_scan_history 记录
+    // 将 document_id 设为 null，status 设为 'pending'（未处理状态）
+    await prisma.file_scan_history.updateMany({
+      where: { document_id: id },
+      data: {
+        document_id: null,
+        status: 'pending',
+        processed_time: null,
+        error_message: null
+      }
+    })
+    
     // 删除内容文件
     const contentPath = path.join(DATA_DIR, doc.content_file_path)
     if (fs.existsSync(contentPath)) {

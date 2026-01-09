@@ -151,6 +151,13 @@ npm start
 OPENAI_API_KEY=sk-your-key-here
 ZHIPU_API_KEY=your-zhipu-key
 PORT=5001
+
+# 数据目录配置（可选）
+# 如果不设置，默认使用项目内的 data/ 目录
+# Windows 示例：
+DATA_DIR=D:\ppt-data
+# Linux/Mac 示例：
+# DATA_DIR=/data/ppt-data
 ```
 
 ### 后端目录 `.env`（本地开发使用）
@@ -160,9 +167,114 @@ PORT=5001
 OPENAI_API_KEY=sk-your-key-here
 ZHIPU_API_KEY=your-zhipu-key
 PORT=5001
+
+# 数据目录配置（可选）
+# 如果不设置，默认使用项目内的 data/ 目录
+# Windows 示例：
+DATA_DIR=D:\ppt-data
+# Linux/Mac 示例：
+# DATA_DIR=/data/ppt-data
 ```
 
 **注意：** 两个文件的内容可以相同，但用途不同。
+
+---
+
+## 📁 数据目录配置（DATA_DIR）
+
+### 功能说明
+
+`DATA_DIR` 环境变量用于指定数据文件的存储路径。如果不设置，系统会使用项目内的 `data/` 目录作为默认路径。
+
+### 使用场景
+
+- ✅ **数据量大**：需要将数据存储在独立的磁盘分区
+- ✅ **数据备份**：需要将数据存储在易于备份的位置
+- ✅ **多环境部署**：不同环境使用不同的数据目录
+- ✅ **性能优化**：将数据存储在 SSD 或高性能磁盘
+
+### 配置方式
+
+#### Windows 系统
+
+```bash
+# 在 .env 文件中添加
+DATA_DIR=D:\ppt-data
+
+# 或者使用其他盘符
+DATA_DIR=E:\work\ppt-data
+DATA_DIR=F:\data\ppt
+```
+
+#### Linux/Mac 系统
+
+```bash
+# 在 .env 文件中添加
+DATA_DIR=/data/ppt-data
+
+# 或者使用用户目录
+DATA_DIR=/home/user/ppt-data
+```
+
+### 目录结构
+
+设置 `DATA_DIR` 后，系统会自动在该目录下创建以下子目录：
+
+```
+DATA_DIR/
+├── documents/      # 文档内容文件
+├── templates/      # 模板文件
+├── covers/         # 封面图片
+├── snapshots/      # 快照文件
+├── thumbnails/     # 缩略图
+├── sales/          # 销售业务数据
+└── document-index.json  # 文档索引
+```
+
+### 注意事项
+
+1. **路径格式**：
+   - Windows：使用反斜杠 `\` 或正斜杠 `/` 都可以，如 `D:\ppt-data` 或 `D:/ppt-data`
+   - Linux/Mac：使用正斜杠 `/`，如 `/data/ppt-data`
+
+2. **目录权限**：
+   - 确保应用有读写权限
+   - Linux/Mac 可能需要设置目录权限：`chmod 755 /data/ppt-data`
+
+3. **路径不存在**：
+   - 系统会自动创建目录（如果父目录存在）
+   - 建议先手动创建目录，确保路径正确
+
+4. **迁移数据**：
+   - 如果从默认路径迁移到新路径，需要手动复制 `data/` 目录下的所有文件
+   - 迁移后重启服务即可
+
+### 示例：迁移到 D 盘
+
+```bash
+# 1. 创建目标目录
+mkdir D:\ppt-data
+
+# 2. 复制现有数据（如果存在）
+xcopy /E /I online-ppt-backend\data D:\ppt-data
+
+# 3. 在 .env 文件中配置
+DATA_DIR=D:\ppt-data
+
+# 4. 重启服务
+npm start
+```
+
+### 验证配置
+
+启动服务后，检查日志输出，确认数据目录路径：
+
+```bash
+# 查看日志，应该显示：
+[文档模型] 数据目录: D:\ppt-data
+```
+
+或者查看实际创建的文件路径，确认是否正确使用了配置的目录。
 
 ---
 

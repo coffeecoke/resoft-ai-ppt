@@ -74,7 +74,7 @@ const routes: RouteRecordRaw[] = [
             name: 'TemplateEditor',
             component: () => import('@/views/Admin/TemplateEditor.vue'),
             meta: { title: '模板编辑器' }
-          }
+          },
         ]
       },
       {
@@ -82,6 +82,20 @@ const routes: RouteRecordRaw[] = [
         name: 'DocumentList',
         component: () => import('@/views/Docs/index.vue'),
         meta: { title: '我的文档' }
+      },
+      
+    ]
+  },
+  {
+    path: '/admin',
+    name: 'admin',
+    component: () => import('@/views/Admin/index.vue'),
+    children: [
+      {
+        path: 'file-scan',
+        name: 'FileScan',
+        component: () => import('@/views/Admin/FileScan.vue'),
+        meta: { title: '文件扫描管理' }
       }
     ]
   }

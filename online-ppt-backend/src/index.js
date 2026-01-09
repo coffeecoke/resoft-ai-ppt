@@ -27,6 +27,8 @@ import templatesRouter from './routes/templates.js'
 import documentsRouter from './routes/documents.js'
 import salesRouter from './routes/sales.js'
 import thumbnailsRouter from './routes/thumbnails.js'
+import adminRouter from './routes/admin/index.js'
+import scanScheduler from './services/admin/scanScheduler.js'
 
 const app = express()
 const PORT = process.env.PORT || 5001
@@ -54,6 +56,7 @@ app.use('/templates', templatesRouter)      // 模板管理
 app.use('/documents', documentsRouter)      // 文档管理
 app.use('/thumbnails', thumbnailsRouter)    // 预览图管理
 app.use('/sales', salesRouter)              // 售前平台接口
+app.use('/admin', adminRouter)          // 管理后台接口
 
 // 健康检查
 app.get('/health', (req, res) => {
@@ -82,5 +85,19 @@ app.listen(PORT, () => {
   console.log(`  - 推荐内容: GET  /api/recommendations`)
   console.log(`  - 宣传物料: GET  /api/materials`)
   console.log(`  - 用户信息: GET  /api/user/profile`)
+  console.log(``)
+  console.log(`  管理后台接口:`)
+  console.log(`  - 扫描配置: GET  /api/admin/file-scan/config`)
+  console.log(`  - 文件列表: GET  /api/admin/file-scan/files`)
+  console.log(`  - 立即处理: POST /api/admin/file-scan/process`)
+  console.log(`  - 手动扫描: POST /api/admin/file-scan/scan`)
+  console.log(`  - 处理历史: GET  /api/admin/file-scan/history`)
   console.log('=========================================')
+  
+  // 启动定时扫描任务
+  try {
+    scanScheduler.start()
+  } catch (error) {
+    console.error('[启动] 定时扫描任务启动失败:', error)
+  }
 })

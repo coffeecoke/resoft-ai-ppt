@@ -268,15 +268,19 @@ export const documentService = {
       }
 
       // 如果有内容更新
-      if (data.slides || data.theme) {
+      if (data.slides || data.theme || data.width || data.height) {
         const contentPath = path.join(DOCUMENTS_DIR, `${id}.json`)
         if (fs.existsSync(contentPath)) {
           const content = JSON.parse(fs.readFileSync(contentPath, 'utf-8'))
           if (data.slides) content.slides = data.slides
           if (data.theme) content.theme = data.theme
+          if (data.width !== undefined) content.width = data.width
+          if (data.height !== undefined) content.height = data.height
           fs.writeFileSync(contentPath, JSON.stringify(content, null, 2), 'utf-8')
           
-          updatedMeta.slideCount = content.slides.length
+          if (data.slides) {
+            updatedMeta.slideCount = content.slides.length
+          }
           updatedMeta.fileSize = jsonOps.getFileSize(contentPath)
         }
       }
