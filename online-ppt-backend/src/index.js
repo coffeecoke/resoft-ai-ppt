@@ -100,4 +100,23 @@ app.listen(PORT, () => {
   } catch (error) {
     console.error('[启动] 定时扫描任务启动失败:', error)
   }
+}).on('error', (error) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(`❌ 端口 ${PORT} 已被占用，请更换端口或关闭占用该端口的程序`)
+    console.error(`   可以使用命令查看占用端口的进程: netstat -ano | findstr :${PORT}`)
+  } else {
+    console.error('❌ 服务器启动失败:', error)
+  }
+  process.exit(1)
+})
+
+// 处理未捕获的错误
+process.on('unhandledRejection', (error) => {
+  console.error('❌ 未处理的 Promise 拒绝:', error)
+  process.exit(1)
+})
+
+process.on('uncaughtException', (error) => {
+  console.error('❌ 未捕获的异常:', error)
+  process.exit(1)
 })

@@ -18,11 +18,11 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 // 加载环境变量
-const envPath = path.join(__dirname, '..', '..', '..', '.env')
+const envPath = path.join(__dirname, '..', '..', '..', '..', '.env')
 dotenv.config({ path: envPath })
 
 // 获取 DATA_DIR
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', '..', '..', 'data')
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', '..', '..', '..', 'data')
 
 const prisma = new PrismaClient()
 
@@ -447,8 +447,4 @@ class FileScanService {
 }
 
 export default new FileScanService()
-
-
-
-
 

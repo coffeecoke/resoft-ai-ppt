@@ -6,7 +6,7 @@
 
 import { Router } from 'express'
 import path from 'path'
-import fileScanService from '../../services/admin/fileScanService.js'
+import fileScanService from '../../services/admin/document/fileScanService.js'
 import scanConfigService from '../../services/admin/scanConfigService.js'
 
 const router = Router()

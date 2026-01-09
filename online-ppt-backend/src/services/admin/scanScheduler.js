@@ -5,7 +5,7 @@
  */
 
 import cron from 'node-cron'
-import fileScanService from './fileScanService.js'
+import fileScanService from './document/fileScanService.js'
 import scanConfigService from './scanConfigService.js'
 
 class ScanScheduler {

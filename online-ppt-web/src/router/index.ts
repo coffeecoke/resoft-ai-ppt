@@ -88,14 +88,55 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/admin',
-    name: 'admin',
-    component: () => import('@/views/Admin/index.vue'),
+    component: () => import('@/views/Admin/Layout.vue'),
     children: [
       {
-        path: 'file-scan',
-        name: 'FileScan',
-        component: () => import('@/views/Admin/FileScan.vue'),
-        meta: { title: '文件扫描管理' }
+        path: '',
+        redirect: '/admin/system/role'
+      },
+      // 系统管理
+      {
+        path: 'system/role',
+        name: 'SystemRole',
+        component: () => import('@/views/Admin/System/Role/index.vue'),
+        meta: { title: '角色管理' }
+      },
+      {
+        path: 'system/user',
+        name: 'SystemUser',
+        component: () => import('@/views/Admin/System/User/index.vue'),
+        meta: { title: '用户管理' }
+      },
+      {
+        path: 'system/dept',
+        name: 'SystemDept',
+        component: () => import('@/views/Admin/System/Dept/index.vue'),
+        meta: { title: '部门管理' }
+      },
+      {
+        path: 'system/dict',
+        name: 'SystemDict',
+        component: () => import('@/views/Admin/System/Dict/index.vue'),
+        meta: { title: '字典管理' }
+      },
+      // 文档管理
+      {
+        path: 'document/template',
+        name: 'DocumentTemplate',
+        component: () => import('@/views/Admin/Document/Template/index.vue'),
+        meta: { title: '模版管理' }
+      },
+      {
+        path: 'document/document',
+        name: 'DocumentDocument',
+        component: () => import('@/views/Admin/Document/Document/index.vue'),
+        meta: { title: '文档管理' }
+      },
+      {
+        path: 'document/file-scan',
+        name: 'DocumentFileScan',
+        component: () => import('@/views/Admin/Document/FileScan/index.vue'),
+        meta: { title: '文件扫描' }
       }
     ]
   }

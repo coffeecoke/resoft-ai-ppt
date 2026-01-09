@@ -1,36 +1,40 @@
-export const enum ShapePathFormulasKeys {
-  ROUND_RECT = 'roundRect',
-  ROUND_RECT_DIAGONAL = 'roundRectDiagonal',
-  ROUND_RECT_SINGLE = 'roundRectSingle',
-  ROUND_RECT_SAMESIDE = 'roundRectSameSide',
-  CUT_RECT_DIAGONAL = 'cutRectDiagonal',
-  CUT_RECT_SINGLE = 'cutRectSingle',
-  CUT_RECT_SAMESIDE = 'cutRectSameSide',
-  CUT_ROUND_RECT = 'cutRoundRect',
-  MESSAGE = 'message',
-  ROUND_MESSAGE = 'roundMessage',
-  L = 'L',
-  RING_RECT = 'ringRect',
-  PLUS = 'plus',
-  TRIANGLE = 'triangle',
-  PARALLELOGRAM_LEFT = 'parallelogramLeft',
-  PARALLELOGRAM_RIGHT = 'parallelogramRight',
-  TRAPEZOID = 'trapezoid',
-  BULLET = 'bullet',
-  INDICATOR = 'indicator',
-}
+export const ShapePathFormulasKeys = {
+  ROUND_RECT: 'roundRect',
+  ROUND_RECT_DIAGONAL: 'roundRectDiagonal',
+  ROUND_RECT_SINGLE: 'roundRectSingle',
+  ROUND_RECT_SAMESIDE: 'roundRectSameSide',
+  CUT_RECT_DIAGONAL: 'cutRectDiagonal',
+  CUT_RECT_SINGLE: 'cutRectSingle',
+  CUT_RECT_SAMESIDE: 'cutRectSameSide',
+  CUT_ROUND_RECT: 'cutRoundRect',
+  MESSAGE: 'message',
+  ROUND_MESSAGE: 'roundMessage',
+  L: 'L',
+  RING_RECT: 'ringRect',
+  PLUS: 'plus',
+  TRIANGLE: 'triangle',
+  PARALLELOGRAM_LEFT: 'parallelogramLeft',
+  PARALLELOGRAM_RIGHT: 'parallelogramRight',
+  TRAPEZOID: 'trapezoid',
+  BULLET: 'bullet',
+  INDICATOR: 'indicator',
+} as const
 
-export const enum ElementTypes {
-  TEXT = 'text',
-  IMAGE = 'image',
-  SHAPE = 'shape',
-  LINE = 'line',
-  CHART = 'chart',
-  TABLE = 'table',
-  LATEX = 'latex',
-  VIDEO = 'video',
-  AUDIO = 'audio',
-}
+export type ShapePathFormulasKeys = typeof ShapePathFormulasKeys[keyof typeof ShapePathFormulasKeys]
+
+export const ElementTypes = {
+  TEXT: 'text',
+  IMAGE: 'image',
+  SHAPE: 'shape',
+  LINE: 'line',
+  CHART: 'chart',
+  TABLE: 'table',
+  LATEX: 'latex',
+  VIDEO: 'video',
+  AUDIO: 'audio',
+} as const
+
+export type ElementTypes = typeof ElementTypes[keyof typeof ElementTypes]
 
 /**
  * 渐变

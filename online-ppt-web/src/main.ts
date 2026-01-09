@@ -16,6 +16,8 @@ import '@/assets/styles/element-plus-scoped.scss'
 
 // 售前平台样式
 import '@/assets/styles/sales.scss'
+// 管理后台样式
+import '@/assets/styles/admin.scss'
 import 'remixicon/fonts/remixicon.css'
 
 import Icon from '@/plugins/icon'
@@ -23,6 +25,7 @@ import Directive from '@/plugins/directive'
 
 // Element Plus（全局注册组件功能，但样式已在 sales.scss 中隔离）
 import ElementPlus from 'element-plus'
+import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 
 const app = createApp(App)
@@ -34,7 +37,9 @@ for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
 
 app.use(Icon)
 app.use(Directive)
-app.use(ElementPlus)  // Element Plus 组件功能全局可用
+app.use(ElementPlus, {
+  locale: zhCn
+})  // Element Plus 组件功能全局可用，配置为中文
 app.use(createPinia())
 app.use(router)
 app.mount('#app')
