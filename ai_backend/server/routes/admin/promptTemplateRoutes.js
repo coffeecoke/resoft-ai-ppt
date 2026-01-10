@@ -99,6 +99,11 @@ router.post('/', async (req, res) => {
   try {
     const data = req.body;
     
+    // 如果缺少 type 字段，使用 scene_type 的值
+    if (!data.type && data.scene_type) {
+      data.type = data.scene_type;
+    }
+    
     // 验证必填字段
     const requiredFields = ['name', 'code', 'type', 'prompt'];
     const missingFields = requiredFields.filter(field => !data[field]);
@@ -133,6 +138,11 @@ router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const data = { ...req.body, id };
+    
+    // 如果缺少 type 字段，使用 scene_type 的值
+    if (!data.type && data.scene_type) {
+      data.type = data.scene_type;
+    }
     
     const result = await promptTemplateService.upsertPromptTemplate(data);
     

@@ -214,11 +214,13 @@
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
         <h3>💬 对话内容</h3>
         <div style="display: flex; gap: 10px;">
+          <button class="btn btn-info" id="st-roleJudgmentBtn">👥 角色判断</button>
           <button class="btn btn-success" id="st-aiCorrectionBtn">✏️ 错别字修正</button>
           <button class="btn btn-primary" id="st-roleSettingsBtn">👥 角色设置</button>
           <button class="btn btn-primary" id="st-batchReplaceSpeakerBtn">🔄 批量替换说话人</button>
           <button class="btn btn-success" id="st-saveEditBtn" style="display: none;">💾 保存修改</button>
           <button class="btn btn-secondary" id="st-cancelEditBtn" style="display: none;">❌ 取消</button>
+          <button class="btn btn-info" id="st-reMergeBtn" style="display: none;" onclick="triggerReMerge()">🔄 重新合并对话</button>
         </div>
       </div>
       
@@ -241,8 +243,34 @@
         </div>
       </div>
       
-      <div class="dialogues-list" id="st-dialoguesList" style="max-height: 600px; overflow-y: auto; margin-top: 15px;">
-        <!-- 动态加载对话 -->
+      <!-- 标签页 -->
+      <div class="dialogues-tabs" style="margin-top: 15px;">
+        <div class="tabs" style="display: flex; gap: 5px; border-bottom: 2px solid #e0e0e0; margin-bottom: 15px;">
+          <button class="tab-btn active" id="st-tab-original" onclick="switchDialogueTab('original')" style="padding: 10px 20px; border: none; background: transparent; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.3s;">
+            📝 原始对话
+          </button>
+          <button class="tab-btn" id="st-tab-merged" onclick="switchDialogueTab('merged')" style="padding: 10px 20px; border: none; background: transparent; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.3s;">
+            🔗 合并后的对话
+          </button>
+          <button class="tab-btn" id="st-tab-corrected" onclick="switchDialogueTab('corrected')" style="padding: 10px 20px; border: none; background: transparent; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.3s;">
+            ✏️ AI修正后的对话
+          </button>
+        </div>
+        
+        <!-- 原始对话列表 -->
+        <div class="dialogues-list" id="st-dialoguesList-original" style="max-height: 600px; overflow-y: auto;">
+          <!-- 动态加载原始对话 -->
+        </div>
+        
+        <!-- 合并后的对话列表 -->
+        <div class="dialogues-list" id="st-dialoguesList-merged" style="max-height: 600px; overflow-y: auto; display: none;">
+          <!-- 动态加载合并后的对话 -->
+        </div>
+        
+        <!-- AI修正后的对话列表 -->
+        <div class="dialogues-list" id="st-dialoguesList-corrected" style="max-height: 600px; overflow-y: auto; display: none;">
+          <!-- 动态加载AI修正后的对话 -->
+        </div>
       </div>
     </div>
   </div>
@@ -507,6 +535,37 @@
   color: var(--text-secondary);
 }
 
+/* 对话标签页样式 */
+.dialogues-tabs .tabs {
+  display: flex;
+  gap: 5px;
+  border-bottom: 2px solid #e0e0e0;
+  margin-bottom: 15px;
+}
+
+.dialogues-tabs .tab-btn {
+  padding: 10px 20px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  transition: all 0.3s;
+  font-size: 14px;
+  color: #666;
+}
+
+.dialogues-tabs .tab-btn:hover {
+  color: var(--primary);
+  background: rgba(24, 144, 255, 0.05);
+}
+
+.dialogues-tabs .tab-btn.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+  font-weight: 500;
+}
+
 /* AI 修正对比界面 */
 .ai-correction-overlay {
   position: fixed;
@@ -686,7 +745,10 @@
   <div class="ai-correction-modal" onclick="event.stopPropagation()">
     <div class="ai-correction-header">
       <h3 style="margin: 0;">✏️ AI 错别字修正及角色判断</h3>
-      <button class="btn btn-sm btn-secondary" onclick="closeAiCorrectionModal()">✖ 关闭</button>
+      <div style="display: flex; gap: 10px;">
+        <button class="btn btn-sm btn-info" id="st-aiCorrectionSettingsBtn" onclick="if(typeof openAiCorrectionSettings === 'function') { openAiCorrectionSettings(); } else { console.error('openAiCorrectionSettings 函数未定义'); showToast('设置功能未加载，请刷新页面', 'error'); }" title="设置">⚙️ 设置</button>
+        <button class="btn btn-sm btn-secondary" onclick="closeAiCorrectionModal()">✖ 关闭</button>
+      </div>
     </div>
     
     <div class="ai-correction-body" id="st-aiCorrectionBody">
@@ -705,6 +767,76 @@
         <button class="btn btn-success" id="st-applyCorrectionsBtn" style="display: none;">✅ 应用所有修正</button>
         <button class="btn btn-secondary" onclick="closeAiCorrectionModal()" style="margin-left: 10px;">❌ 取消</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- AI 修正设置对话框 -->
+<div class="modal" id="st-aiCorrectionSettingsModal" style="display: none;" onclick="if(event.target === this) closeAiCorrectionSettings()">
+  <div class="modal-content" style="max-width: 500px;" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3>⚙️ AI 修正设置</h3>
+      <button class="btn btn-sm btn-secondary modal-close" onclick="closeAiCorrectionSettings()" title="关闭">✖</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label for="st-batchSize">每批处理的对话数量</label>
+        <input type="number" class="form-control" id="st-batchSize" min="10" max="200" step="10" placeholder="50">
+        <small style="color: var(--text-secondary);">
+          设置每次发送给AI的对话数量。建议值：<br>
+          • 20-30：适合token限制较小的模型<br>
+          • 30-50：适合大多数模型（推荐）<br>
+          • 50-100：适合token限制较大的模型（如GPT-4）
+        </small>
+      </div>
+      
+      <div class="form-group">
+        <label for="st-aiModel">AI 模型</label>
+        <select class="form-control" id="st-aiModel">
+          <option value="">使用默认模型</option>
+          <option value="deepseek-chat">DeepSeek Chat</option>
+          <option value="gpt-4">GPT-4</option>
+          <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+        </select>
+        <small style="color: var(--text-secondary);">留空则使用系统默认模型</small>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="saveAiCorrectionSettings()">💾 保存设置</button>
+      <button class="btn btn-secondary" onclick="closeAiCorrectionSettings()">❌ 取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- 角色判断设置对话框 -->
+<div class="modal" id="st-roleJudgmentSettingsModal" style="display: none;" onclick="if(event.target === this) closeRoleJudgmentSettings()">
+  <div class="modal-content" style="max-width: 500px;" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3>⚙️ 角色判断设置</h3>
+      <button class="btn btn-sm btn-secondary modal-close" onclick="closeRoleJudgmentSettings()" title="关闭">✖</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label for="st-roleJudgmentModel">AI 模型</label>
+        <select class="form-control" id="st-roleJudgmentModel">
+          <option value="">使用默认模型</option>
+          <option value="deepseek-chat">DeepSeek Chat</option>
+          <option value="gpt-4">GPT-4</option>
+          <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+        </select>
+        <small style="color: var(--text-secondary);">留空则使用系统默认模型（场景：角色判断）</small>
+      </div>
+      <div class="form-group">
+        <label for="st-roleJudgmentPrompt">提示词模板</label>
+        <select class="form-control" id="st-roleJudgmentPrompt">
+          <option value="">使用默认提示词</option>
+        </select>
+        <small style="color: var(--text-secondary);">留空则使用系统默认提示词</small>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="saveRoleJudgmentSettings()">💾 保存设置</button>
+      <button class="btn btn-secondary" onclick="closeRoleJudgmentSettings()">❌ 取消</button>
     </div>
   </div>
 </div>

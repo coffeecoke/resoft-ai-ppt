@@ -152,11 +152,12 @@ model products {
   is_active         Boolean             @default(true) /// 是否启用
   created_at        DateTime            @default(now()) /// 创建时间
   updated_at        DateTime /// 更新时间
-  documents         documents[]
-  product_catalogs  product_catalogs[]
-  product_documents product_documents[]
-  sessions          sessions[]
-  transcriptions    transcriptions[]
+  documents            documents[]
+  product_catalogs     product_catalogs[]
+  product_documents    product_documents[]
+  sessions             sessions[]
+  transcriptions       transcriptions[]
+  dialogue_adjustments dialogue_adjustments[]
 
   @@index([category], map: "idx_category")
   @@index([is_active], map: "idx_is_active")
@@ -259,11 +260,12 @@ model sessions {
   created_at       DateTime           @default(now()) /// 创建时间
   updated_at       DateTime /// 更新时间
   created_by       String?            @db.VarChar(50) /// 创建人ID
-  documents        documents[]
-  session_concerns session_concerns[]
-  session_needs    session_needs[]
-  transcriptions   transcriptions[]
-  products         products?          @relation(fields: [product_id], references: [id])
+  documents            documents[]
+  session_concerns     session_concerns[]
+  session_needs        session_needs[]
+  transcriptions       transcriptions[]
+  dialogue_adjustments dialogue_adjustments[]
+  products             products?          @relation(fields: [product_id], references: [id])
 
   @@index([created_by], map: "idx_created_by")
   @@index([customer_name], map: "idx_customer_name")
@@ -357,8 +359,9 @@ model transcriptions {
   completed_at DateTime? /// 完成时间
 
   // 关联
-  sessions sessions? @relation(fields: [session_id], references: [id])
-  products products? @relation(fields: [product_id], references: [id])
+  sessions            sessions?             @relation(fields: [session_id], references: [id])
+  products            products?             @relation(fields: [product_id], references: [id])
+  dialogue_adjustments dialogue_adjustments[] /// 对话调整记录
 
   @@index([status], map: "idx_status")
   @@index([session_id], map: "idx_session_id")
@@ -366,6 +369,55 @@ model transcriptions {
   @@index([customer_name], map: "idx_customer_name")
   @@index([created_at], map: "idx_created_at")
   @@fulltext([full_text], map: "ft_full_text")
+}
+
+/// 对话调整记录表（用于多次调整对话内容）
+model dialogue_adjustments {
+  // 基础信息
+  id                 String @id @db.VarChar(50) /// 调整记录ID
+  transcription_id  String @db.VarChar(50) /// 关联的转录ID
+  
+  // 基础信息（从transcription复制）
+  name               String @db.VarChar(255) /// 音频文件名称
+  original_file_name String @db.VarChar(255) /// 原始音频文件名
+
+  // 文件信息
+  audio_file_path String @db.VarChar(500) /// 音频文件存储路径
+  audio_file_size BigInt @default(0) /// 音频文件大小（字节）
+  audio_format    String @db.VarChar(20) /// 音频格式
+  audio_duration  Int? /// 音频时长（秒）
+
+  // 调整后的对话结果
+  adjusted_dialogues String? @db.LongText /// 调整后的对话列表（JSON数组）
+  full_text          String? @db.LongText /// 完整文本内容（用于搜索）
+
+  // 讯飞API相关
+  xfyun_order_id      String? @db.VarChar(100) /// 讯飞订单ID
+  speaker_count       Int     @default(0) /// 说话人数量
+  has_role_separation Boolean @default(true) /// 是否启用角色分离
+  speaker_roles       String? @db.LongText /// 说话人角色设置
+
+  // 业务关联
+  session_id    String? @db.VarChar(50) /// 关联交流场次ID
+  product_id    String? @db.VarChar(50) /// 关联产品ID
+  customer_name String? @db.VarChar(255) /// 客户名称
+
+  // 备注字段（用于记录调整原因、说明等）
+  note1 String? @db.Text /// 备注1
+  note2 String? @db.Text /// 备注2
+
+  // 时间戳
+  created_at DateTime @default(now()) /// 创建时间
+  updated_at DateTime @updatedAt /// 更新时间
+
+  // 关联
+  transcription transcriptions @relation(fields: [transcription_id], references: [id], onDelete: Cascade)
+  sessions      sessions?      @relation(fields: [session_id], references: [id])
+  products      products?      @relation(fields: [product_id], references: [id])
+
+  @@index([transcription_id], map: "idx_adjustment_transcription_id")
+  @@index([created_at], map: "idx_adjustment_created_at")
+  @@fulltext([full_text], map: "ft_adjustment_full_text")
 }
 
 // ==================== AI后台管理相关表 ====================

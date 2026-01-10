@@ -49,8 +49,9 @@ const upload = multer({
 })
 
 // 中间件
-app.use(express.json())
-app.use(express.urlencoded({ extended: true }))
+// 增加 JSON 和 URL 编码的请求体大小限制（默认 100KB，增加到 50MB 以支持大量对话内容）
+app.use(express.json({ limit: '50mb' }))
+app.use(express.urlencoded({ extended: true, limit: '50mb' }))
 
 // 静态文件服务
 app.use(express.static(path.join(__dirname, '../frontend')))

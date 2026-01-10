@@ -44,22 +44,12 @@ class PPTAnalysisService {
    * 
    * @returns {Promise<Array>} 分类标准数组
    */
-  async getAllCategories() {
-    // 🔄 修改：支持 product_id 为 null 的通用分类
-    // 先尝试获取通用产品ID
-    const GENERAL_PRODUCT_CODE = 'general_ppt_categories'
-    const generalProduct = await prisma.products.findFirst({
-      where: { code: GENERAL_PRODUCT_CODE }
-    })
-    
+  async getAllCategories() { 
     // 从 product_catalogs 表读取分类
     // 优先查询 product_id = generalProduct.id 的记录，其次查询 product_id = null 的记录
     const categories = await prisma.product_catalogs.findMany({
       where: {
-        OR: [
-          generalProduct ? { product_id: generalProduct.id } : {},
-          { product_id: null } // 兼容旧数据（product_id 为 null 表示通用分类）
-        ],
+        
         is_active: true
       },
       orderBy: [
