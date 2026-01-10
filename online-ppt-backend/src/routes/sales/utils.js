@@ -2,15 +2,21 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import fs from 'fs/promises'
 import fsSync from 'fs'
+import dotenv from 'dotenv'
 import { generateDocumentId as generateDocumentIdUtil } from '../../utils/idGenerator.js'
 
+// 加载环境变量
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
+const envPath = path.join(__dirname, '..', '..', '..', '.env')
+dotenv.config({ path: envPath })
 
 // ========== Sales 数据目录相关 ==========
 
+// 优先使用环境变量 DATA_DIR，如果没有则使用默认相对路径
+const BASE_DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', '..', '..', 'data')
 // Sales 业务数据目录
-export const dataDir = path.join(__dirname, '..', '..', '..', 'data', 'sales')
+export const dataDir = path.join(BASE_DATA_DIR, 'sales')
 
 // 确保数据目录存在
 export async function ensureDataDir() {
@@ -114,7 +120,8 @@ export async function writeJSONFile(filename, data) {
 // ========== 文档索引操作 ==========
 
 // 文档相关路径（复用documents的路径）
-export const DATA_DIR = path.join(__dirname, '..', '..', '..', 'data')
+// 优先使用环境变量 DATA_DIR，如果没有则使用默认相对路径
+export const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', '..', '..', 'data')
 export const DOCUMENTS_DIR = path.join(DATA_DIR, 'documents')
 export const INDEX_FILE = path.join(DATA_DIR, 'document-index.json')
 

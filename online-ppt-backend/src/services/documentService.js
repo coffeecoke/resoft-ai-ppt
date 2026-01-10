@@ -14,7 +14,8 @@ import { documentModel } from '../models/documentModel.js'
 import { generateDocumentId } from '../utils/idGenerator.js'
 import fs from 'fs'
 
-const DATA_DIR = path.join(__dirname, '..', '..', 'data')
+// 优先使用环境变量 DATA_DIR，如果没有则使用默认相对路径
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', '..', 'data')
 const DOCUMENTS_DIR = path.join(DATA_DIR, 'documents')
 const INDEX_FILE = path.join(DATA_DIR, 'document-index.json')
 
@@ -267,15 +268,19 @@ export const documentService = {
       }
 
       // 如果有内容更新
-      if (data.slides || data.theme) {
+      if (data.slides || data.theme || data.width || data.height) {
         const contentPath = path.join(DOCUMENTS_DIR, `${id}.json`)
         if (fs.existsSync(contentPath)) {
           const content = JSON.parse(fs.readFileSync(contentPath, 'utf-8'))
           if (data.slides) content.slides = data.slides
           if (data.theme) content.theme = data.theme
+          if (data.width !== undefined) content.width = data.width
+          if (data.height !== undefined) content.height = data.height
           fs.writeFileSync(contentPath, JSON.stringify(content, null, 2), 'utf-8')
           
-          updatedMeta.slideCount = content.slides.length
+          if (data.slides) {
+            updatedMeta.slideCount = content.slides.length
+          }
           updatedMeta.fileSize = jsonOps.getFileSize(contentPath)
         }
       }

@@ -483,3 +483,67 @@ model ai_model_configs {
   @@index([provider], map: "idx_provider")
   @@index([sort_order], map: "idx_sort_order")
 }
+
+// ==================== 系统管理相关表 ====================
+
+/// 字典类型表
+model dict_types {
+  id          String      @id @db.VarChar(50) /// 字典类型ID
+  dict_type   String      @unique @db.VarChar(100) /// 字典类型代码（唯一）
+  dict_name   String      @db.VarChar(255) /// 字典类型名称
+  status      String      @default("0") @db.VarChar(1) /// 状态：0=正常，1=停用
+  remark      String?     @db.VarChar(500) /// 备注
+  sort_order  Int         @default(0) /// 排序字段
+  created_at  DateTime    @default(now()) /// 创建时间
+  updated_at  DateTime    @updatedAt /// 更新时间
+  dict_data   dict_data[] /// 关联字典数据
+
+  @@index([dict_type], map: "idx_dict_type")
+  @@index([status], map: "idx_status")
+}
+
+/// 字典数据表
+model dict_data {
+  id          String      @id @db.VarChar(50) /// 字典数据ID
+  dict_type   String      @db.VarChar(100) /// 字典类型代码
+  dict_label  String      @db.VarChar(255) /// 字典标签（显示名称）
+  dict_value  String      @db.VarChar(255) /// 字典值
+  dict_sort   Int         @default(0) /// 排序字段
+  css_class   String?     @db.VarChar(100) /// CSS类名（用于样式）
+  list_class  String?     @db.VarChar(100) /// 列表样式类
+  is_default  String      @default("N") @db.VarChar(1) /// 是否默认：Y=是，N=否
+  status      String      @default("0") @db.VarChar(1) /// 状态：0=正常，1=停用
+  remark      String?     @db.VarChar(500) /// 备注
+  created_at  DateTime    @default(now()) /// 创建时间
+  updated_at  DateTime    @updatedAt /// 更新时间
+  dict_types  dict_types  @relation(fields: [dict_type], references: [dict_type], onDelete: Cascade)
+
+  @@index([dict_type], map: "idx_dict_type")
+  @@index([dict_value], map: "idx_dict_value")
+  @@index([status], map: "idx_status")
+  @@unique([dict_type, dict_value], map: "uk_dict_type_value")
+}
+
+// ==================== 文件扫描相关表 ====================
+
+/// 文件扫描历史记录表
+model file_scan_history {
+  id            String   @id @db.VarChar(50)           /// 记录ID
+  file_path     String   @unique @db.VarChar(500)      /// 文件完整路径（唯一索引）
+  file_name     String   @db.VarChar(255)              /// 文件名
+  file_size     BigInt   @default(0)                   /// 文件大小（字节）
+  file_type     String   @db.VarChar(20)                /// 文件类型（.pptx, .docx, .pdf）
+  modified_time DateTime                               /// 文件修改时间
+  processed_time DateTime?                             /// 处理时间
+  document_id   String?  @db.VarChar(50)               /// 生成的文档ID
+  status        String   @default("pending") @db.VarChar(20)  /// 状态：pending=待处理，processing=处理中，success=成功，failed=失败
+  error_message String?  @db.Text                      /// 错误信息（失败时）
+  scan_time     DateTime                                /// 扫描时间
+  created_at    DateTime @default(now())               /// 创建时间
+  updated_at    DateTime @updatedAt                    /// 更新时间
+  
+  @@index([status], map: "idx_status")
+  @@index([processed_time], map: "idx_processed_time")
+  @@index([scan_time], map: "idx_scan_time")
+  @@index([file_type], map: "idx_file_type")
+}

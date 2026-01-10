@@ -1,12 +1,5 @@
 <template>
   <div class="admin-layout">
-    <!-- <div class="admin-header">
-      <div class="logo">PPT 管理后台</div>
-      <div class="nav">
-        <router-link to="/admin/templates" class="nav-item">模板管理</router-link>
-        <router-link to="/" class="nav-item">返回编辑器</router-link>
-      </div>
-    </div> -->
     <div class="admin-content">
       <RouterView />
     </div>

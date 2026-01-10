@@ -12,6 +12,10 @@ import message from '@/utils/message'
  * 2. State中无数据时从后端加载（F5刷新/直接访问）
  * 3. 统一管理loading状态和错误处理
  */
+
+// 全局标记：记录已加载的 documentId 和 templateId（避免退出演示时重复加载）
+const loadedIds = new Set<string>()
+
 export function useEditorDataLoader() {
   const route = useRoute()
   const router = useRouter()
@@ -26,6 +30,13 @@ export function useEditorDataLoader() {
     
     if (!documentId && !templateId) {
       // 普通编辑模式，使用mock数据
+      return
+    }
+    
+    // 优化：检查是否已经加载过相同的数据（避免退出演示时重复请求）
+    const currentId = documentId || templateId
+    if (currentId && loadedIds.has(currentId) && slidesStore.slides.length > 0) {
+      console.log('[编辑器] 检测到已加载相同数据，跳过重新加载（可能是从演示模式返回）', currentId)
       return
     }
     
@@ -60,9 +71,14 @@ export function useEditorDataLoader() {
         slidesStore.setTheme(data.theme)
         slidesStore.setSlides(data.slides)
         slidesStore.setViewportSize(data.width)
+        
+        // 标记已加载
+        loadedIds.add(documentId)
+        console.log('[编辑器] 文档数据加载完成，已标记:', documentId)
       } else if (templateId) {
         // 模板编辑器暂不处理，保持原有逻辑
         console.log('[编辑器] 模板编辑模式，跳过数据加载')
+        loadedIds.add(templateId)
       }
     } catch (error) {
       console.error('[编辑器] 加载数据失败:', error)

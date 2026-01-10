@@ -3,6 +3,7 @@ import multer from 'multer'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import dotenv from 'dotenv'
 import aiService from '../services/aiService.js'
 import wordService from '../services/wordService.js'
 import slotService from '../services/slotService.js'
@@ -13,6 +14,12 @@ import { buildTemplateFillMessages } from '../prompts/templateFillPrompt.js'
 
 const router = Router()
 
+// 加载环境变量
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+const envPath = path.join(__dirname, '..', '..', '.env')
+dotenv.config({ path: envPath })
+
 // ============ 本地数据支持 ============
 // 为了逐步摆脱前端静态 mocks，提供一个统一的后端读取能力
 // 所有静态 JSON 数据统一放在 data/ 目录下：
@@ -20,9 +27,8 @@ const router = Router()
 // - data/AIPPT.json          AI PPT 示例
 // - data/imgs.json           图片示例
 // - data/templates/*.json    模板文件（template_1 ~）
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-const DATA_DIR = path.join(__dirname, '..', '..', 'data')
+// 优先使用环境变量 DATA_DIR，如果没有则使用默认相对路径
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', '..', 'data')
 const TEMPLATES_DIR = path.join(DATA_DIR, 'templates')
 
 router.get('/mock/:name', (req, res) => {

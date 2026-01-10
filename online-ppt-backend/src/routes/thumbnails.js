@@ -3,15 +3,20 @@ import multer from 'multer'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import dotenv from 'dotenv'
 import { thumbnailService } from '../services/thumbnailService.js'
 import { documentModel } from '../models/documentModel.js'
 
 const router = Router()
 
+// 加载环境变量
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
+const envPath = path.join(__dirname, '..', '..', '.env')
+dotenv.config({ path: envPath })
 
-const DATA_DIR = path.join(__dirname, '..', '..', 'data')
+// 优先使用环境变量 DATA_DIR，如果没有则使用默认相对路径
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', '..', 'data')
 const DOCUMENTS_DIR = path.join(DATA_DIR, 'documents')
 const SNAPSHOTS_DIR = path.join(DATA_DIR, 'snapshots')
 

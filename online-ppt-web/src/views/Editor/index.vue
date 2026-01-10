@@ -69,6 +69,13 @@
   </template>
 </template>
 
+<script lang="ts">
+// 定义组件名，用于 keep-alive 缓存
+export default {
+  name: 'Editor'
+}
+</script>
+
 <script lang="ts" setup>
 import { ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'

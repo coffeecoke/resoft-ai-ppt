@@ -16,7 +16,8 @@ import { generateDocumentId } from '../utils/idGenerator.js'
 import fs from 'fs'
 
 const prisma = new PrismaClient()
-const DATA_DIR = path.join(__dirname, '..', '..', 'data')
+// 优先使用环境变量 DATA_DIR，如果没有则使用默认相对路径
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', '..', 'data')
 
 // 将 BigInt 转换为 Number（用于 JSON 序列化）
 // 同时将数据库字段（下划线）转换为前端字段（驼峰）
@@ -228,6 +229,18 @@ export const documentModel = {
   async delete(id) {
     const doc = await prisma.documents.findUnique({ where: { id } })
     if (!doc) throw new Error('文档不存在')
+    
+    // 删除文档前，更新所有关联的 file_scan_history 记录
+    // 将 document_id 设为 null，status 设为 'pending'（未处理状态）
+    await prisma.file_scan_history.updateMany({
+      where: { document_id: id },
+      data: {
+        document_id: null,
+        status: 'pending',
+        processed_time: null,
+        error_message: null
+      }
+    })
     
     // 删除内容文件
     const contentPath = path.join(DATA_DIR, doc.content_file_path)

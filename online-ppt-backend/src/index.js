@@ -1,11 +1,24 @@
 // 首先加载环境变量（必须在其他 import 之前）
 import dotenv from 'dotenv'
-dotenv.config()
+import { fileURLToPath } from 'url'
+import path from 'path'
+
+// 计算当前文件目录
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
+// 从项目根目录加载 .env 文件（online-ppt-backend/.env）
+const envPath = path.join(__dirname, '..', '.env')
+dotenv.config({ path: envPath })
+
+// 调试信息：显示 DATA_DIR 配置
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data')
+console.log('📁 数据目录配置:')
+console.log(`   DATA_DIR 环境变量: ${process.env.DATA_DIR || '(未设置，使用默认路径)'}`)
+console.log(`   实际使用路径: ${DATA_DIR}`)
 
 import express from 'express'
 import cors from 'cors'
-import path from 'path'
-import { fileURLToPath } from 'url'
 import toolsRouter from './routes/tools.js'
 import aipptChatRouter from './routes/aipptChat.js'
 import imagesRouter from './routes/images.js'
@@ -14,13 +27,11 @@ import templatesRouter from './routes/templates.js'
 import documentsRouter from './routes/documents.js'
 import salesRouter from './routes/sales.js'
 import thumbnailsRouter from './routes/thumbnails.js'
+import adminRouter from './routes/admin/index.js'
+import scanScheduler from './services/admin/scanScheduler.js'
 
 const app = express()
 const PORT = process.env.PORT || 5001
-
-// 计算当前文件目录（ESM 环境无 __dirname，需要自行计算）
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
 
 // 中间件
 app.use(cors())
@@ -29,11 +40,11 @@ app.use(express.json({ limit: '100mb' }))
 app.use(express.urlencoded({ extended: true, limit: '100mb' }))
 
 // 静态资源：模板封面图（data/covers 下的图片）
-const coversDir = path.join(__dirname, '..', 'data', 'covers')
+const coversDir = path.join(DATA_DIR, 'covers')
 app.use('/covers', express.static(coversDir))
 
 // 静态资源：预览图快照（data/snapshots 下的图片）
-const snapshotsDir = path.join(__dirname, '..', 'data', 'snapshots')
+const snapshotsDir = path.join(DATA_DIR, 'snapshots')
 app.use('/snapshots', express.static(snapshotsDir))
 
 // 路由 - 按业务模块区分
@@ -45,6 +56,7 @@ app.use('/templates', templatesRouter)      // 模板管理
 app.use('/documents', documentsRouter)      // 文档管理
 app.use('/thumbnails', thumbnailsRouter)    // 预览图管理
 app.use('/sales', salesRouter)              // 售前平台接口
+app.use('/admin', adminRouter)          // 管理后台接口
 
 // 健康检查
 app.get('/health', (req, res) => {
@@ -73,5 +85,38 @@ app.listen(PORT, () => {
   console.log(`  - 推荐内容: GET  /api/recommendations`)
   console.log(`  - 宣传物料: GET  /api/materials`)
   console.log(`  - 用户信息: GET  /api/user/profile`)
+  console.log(``)
+  console.log(`  管理后台接口:`)
+  console.log(`  - 扫描配置: GET  /api/admin/file-scan/config`)
+  console.log(`  - 文件列表: GET  /api/admin/file-scan/files`)
+  console.log(`  - 立即处理: POST /api/admin/file-scan/process`)
+  console.log(`  - 手动扫描: POST /api/admin/file-scan/scan`)
+  console.log(`  - 处理历史: GET  /api/admin/file-scan/history`)
   console.log('=========================================')
+  
+  // 启动定时扫描任务
+  try {
+    scanScheduler.start()
+  } catch (error) {
+    console.error('[启动] 定时扫描任务启动失败:', error)
+  }
+}).on('error', (error) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(`❌ 端口 ${PORT} 已被占用，请更换端口或关闭占用该端口的程序`)
+    console.error(`   可以使用命令查看占用端口的进程: netstat -ano | findstr :${PORT}`)
+  } else {
+    console.error('❌ 服务器启动失败:', error)
+  }
+  process.exit(1)
+})
+
+// 处理未捕获的错误
+process.on('unhandledRejection', (error) => {
+  console.error('❌ 未处理的 Promise 拒绝:', error)
+  process.exit(1)
+})
+
+process.on('uncaughtException', (error) => {
+  console.error('❌ 未捕获的异常:', error)
+  process.exit(1)
 })
