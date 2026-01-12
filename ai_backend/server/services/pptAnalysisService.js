@@ -44,10 +44,12 @@ class PPTAnalysisService {
    * 
    * @returns {Promise<Array>} 分类标准数组
    */
-  async getAllCategories() {
-    // 从 product_catalogs 表读取所有激活的分类（不限制 product_id）
+  async getAllCategories() { 
+    // 从 product_catalogs 表读取分类
+    // 优先查询 product_id = generalProduct.id 的记录，其次查询 product_id = null 的记录
     const categories = await prisma.product_catalogs.findMany({
       where: {
+        
         is_active: true
       },
       orderBy: [

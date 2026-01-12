@@ -14,6 +14,7 @@ const path = require('path')
 const logger = require('../utils/logger')
 const audioScanService = require('./audioScanService')
 const transcriptionService = require('./transcriptionService') // ✅ 导入转录服务
+const transcriptionAiService = require('./transcriptionAiService') // ✅ 导入AI修正服务
 
 const prisma = new PrismaClient()
 
@@ -26,6 +27,7 @@ class AudioAutoProcessService {
       scanDirectory: '', // 扫描目录
       pollingInterval: 5 * 60 * 1000, // 默认5分钟
       maxConcurrent: 1, // 同时处理的音频数量
+      enableAiCorrection: true, // ✅ 是否启用AI错别字修正（默认true，音频跑批自动执行错别字修正）
       supportedFormats: ['mp3', 'wav', 'm4a', 'flac', 'aac', 'wma', 'ogg']
     }
     this.statistics = {
@@ -235,7 +237,7 @@ class AudioAutoProcessService {
         const stats = await fs.stat(filePath);
         const ext = path.extname(filePath).toLowerCase().replace('.', '');
         
-        await transcriptionService.saveTranscription({
+        const savedTranscription = await transcriptionService.saveTranscription({
           name: fileName,
           originalFileName: fileName,
           audioFilePath: filePath,
@@ -252,6 +254,109 @@ class AudioAutoProcessService {
         });
         
         this.addLog('success', `✅ 转录成功: ${fileName}`)
+        
+        // ✅ 转录完成后自动合并同一说话人的对话
+        try {
+          this.addLog('info', `🔄 开始合并同一说话人的对话: ${fileName}`)
+          const mergeResult = await transcriptionService.mergeDialogues(savedTranscription.id)
+          this.addLog('success', `✅ 合并完成: ${fileName} (合并前: ${mergeResult.originalCount} 条，合并后: ${mergeResult.mergedCount} 条)`)
+          logger.info(`✅ 自动合并完成: ${fileName} - ${mergeResult.originalCount} 条 → ${mergeResult.mergedCount} 条`)
+          
+          // ✅ 如果配置了启用AI错别字修正，则执行AI修正
+          if (this.config.enableAiCorrection) {
+            try {
+              this.addLog('info', `🤖 开始AI错别字修正: ${fileName}`)
+              
+              // 获取转录记录（包含合并后的对话）
+              const transcription = await transcriptionService.getTranscriptionById(savedTranscription.id)
+              let dialogues = transcription.dialogues
+              
+              // 解析对话内容
+              if (typeof dialogues === 'string') {
+                dialogues = JSON.parse(dialogues)
+              }
+              
+              // 优先使用合并后的对话（mergeAdjustment 是合并记录）
+              if (transcription.mergeAdjustment && transcription.mergeAdjustment.adjusted_dialogues) {
+                if (typeof transcription.mergeAdjustment.adjusted_dialogues === 'string') {
+                  dialogues = JSON.parse(transcription.mergeAdjustment.adjusted_dialogues)
+                } else {
+                  dialogues = transcription.mergeAdjustment.adjusted_dialogues
+                }
+              } else if (transcription.adjustment && transcription.adjustment.note1 === '合并相邻同一说话人的对话') {
+                // 如果 mergeAdjustment 不存在，尝试从 adjustment 获取
+                if (typeof transcription.adjustment.adjusted_dialogues === 'string') {
+                  dialogues = JSON.parse(transcription.adjustment.adjusted_dialogues)
+                } else {
+                  dialogues = transcription.adjustment.adjusted_dialogues
+                }
+              }
+              
+              if (!dialogues || dialogues.length === 0) {
+                throw new Error('没有对话内容可以修正')
+              }
+              
+              // 调用AI修正
+              const correctionResult = await transcriptionAiService.correctTyposAndRoles(dialogues, {
+                onProgress: (current, total) => {
+                  logger.info(`📊 AI修正进度: ${current}/${total} (${Math.round(current/total*100)}%)`)
+                }
+              })
+              
+              // 合并修正结果
+              const correctedDialogues = transcriptionAiService.mergeCorrections(
+                dialogues,
+                correctionResult.data.dialogues
+              )
+              
+              // 生成修正后的完整文本
+              const correctedFullText = correctedDialogues.map(d => {
+                const timeRange = d.timeRange || ''
+                const speaker = d.speaker || '未知说话人'
+                const text = d.text || d.correctedText || ''
+                return timeRange ? `[${timeRange}] 【${speaker}】\n${text}` : `【${speaker}】\n${text}`
+              }).join('\n\n')
+              
+              // 保存AI修正结果到数据库
+              const { v4: uuidv4 } = require('uuid')
+              const speakers = [...new Set(correctedDialogues.map(d => d.speaker))]
+              
+              await prisma.dialogue_adjustments.create({
+                data: {
+                  id: uuidv4(),
+                  transcription_id: savedTranscription.id,
+                  name: transcription.name,
+                  original_file_name: transcription.original_file_name,
+                  audio_file_path: transcription.audio_file_path,
+                  audio_file_size: transcription.audio_file_size,
+                  audio_format: transcription.audio_format,
+                  audio_duration: transcription.audio_duration,
+                  adjusted_dialogues: JSON.stringify(correctedDialogues),
+                  full_text: correctedFullText,
+                  xfyun_order_id: transcription.xfyun_order_id,
+                  speaker_count: speakers.length,
+                  has_role_separation: transcription.has_role_separation,
+                  session_id: transcription.session_id,
+                  product_id: transcription.product_id,
+                  customer_name: transcription.customer_name,
+                  note1: 'AI错别字修正',
+                  note2: `修正了 ${correctionResult.data.summary?.correctedCount || 0} 条对话，共 ${correctedDialogues.length} 条（基于 ${dialogues.length} 条对话）`
+                }
+              })
+              
+              this.addLog('success', `✅ AI错别字修正完成: ${fileName} (修正了 ${correctionResult.data.summary?.correctedCount || 0} 条对话)`)
+              logger.info(`✅ AI错别字修正完成: ${fileName} - 修正了 ${correctionResult.data.summary?.correctedCount || 0} 条对话`)
+            } catch (correctionError) {
+              // AI修正失败不影响转录成功的状态，只记录错误日志
+              logger.error(`⚠️ AI错别字修正失败: ${fileName}`, correctionError)
+              this.addLog('error', `⚠️ AI错别字修正失败: ${fileName} - ${correctionError.message}`)
+            }
+          }
+        } catch (mergeError) {
+          // 合并失败不影响转录成功的状态，只记录错误日志
+          logger.error(`⚠️ 自动合并失败: ${fileName}`, mergeError)
+          this.addLog('error', `⚠️ 合并失败: ${fileName} - ${mergeError.message}`)
+        }
       } else {
         this.addLog('error', `❌ 转录失败: ${fileName} - ${transcribeResult.error}`)
       }
@@ -332,8 +437,59 @@ class AudioAutoProcessService {
   /**
    * 获取统计信息
    */
-  getStatistics() {
-    return this.statistics
+  async getStatistics() {
+    // ✅ 查询当前配置目录下的音频文件中已做AI错别字修正的数量
+    let correctedCount = 0;
+    try {
+      // 1. 如果没有配置扫描目录，返回0
+      if (!this.config.scanDirectory) {
+        return {
+          ...this.statistics,
+          correctedDialogues: 0
+        };
+      }
+      
+      // 2. 扫描配置目录下的音频文件
+      const files = await audioScanService.scanAudioFiles(this.config.scanDirectory);
+      const filesWithStatus = await audioScanService.checkFilesStatus(files);
+      
+      // 3. 获取所有已转录的文件ID
+      const transcriptionIds = filesWithStatus
+        .filter(f => f.transcribed && f.transcriptionId)
+        .map(f => f.transcriptionId);
+      
+      if (transcriptionIds.length === 0) {
+        return {
+          ...this.statistics,
+          correctedDialogues: 0
+        };
+      }
+      
+      // 4. 查询这些转录记录中已做AI错别字修正的数量
+      const corrections = await prisma.dialogue_adjustments.findMany({
+        where: {
+          transcription_id: {
+            in: transcriptionIds
+          },
+          note1: 'AI错别字修正'
+        },
+        select: {
+          transcription_id: true
+        }
+      });
+      
+      // 去重：每个转录记录只统计一次
+      const uniqueTranscriptionIds = [...new Set(corrections.map(c => c.transcription_id))];
+      correctedCount = uniqueTranscriptionIds.length;
+    } catch (error) {
+      logger.warn('查询AI错别字修正统计失败:', error.message);
+      // 查询失败不影响其他统计，继续返回
+    }
+    
+    return {
+      ...this.statistics,
+      correctedDialogues: correctedCount // ✅ 当前配置目录下已做AI错别字修正的文件数量
+    };
   }
 
   /**

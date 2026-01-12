@@ -45,6 +45,24 @@ router.get('/scenes', async (req, res) => {
         description: '通用对话和文本处理',
         icon: 'chat',
       },
+      {
+        code: 'transcription_correction',
+        name: '语音转录纠错',
+        description: '语音转录后的文本纠错和修正',
+        icon: 'edit',
+      },
+      {
+        code: 'role_judgment',
+        name: '角色判断',
+        description: '对话中说话人角色判断（客户方/我方）',
+        icon: 'user',
+      },
+      {
+        code: 'qa_extraction',
+        name: '问答对提取',
+        description: '从对话中提取客户提问和我方回答的问答对',
+        icon: 'question-circle',
+      },
     ];
     
     // 获取各场景的统计信息

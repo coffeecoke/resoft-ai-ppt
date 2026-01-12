@@ -2,6 +2,7 @@
 
 let currentPrompt = null;
 let currentScene = 'all';
+let promptsCache = []; // 缓存提示词列表，用于通过ID查找
 
 // 页面初始化 - 等待DOM完全加载
 (async function() {
@@ -10,8 +11,49 @@ let currentScene = 'all';
   // ✅ 等待DOM元素存在
   await waitForElement('prompt-list');
   
+  // ✅ 初始化事件委托
+  initEventDelegation();
+  
   await loadPrompts();
 })();
+
+// 初始化事件委托
+function initEventDelegation() {
+  const promptList = document.getElementById('prompt-list');
+  if (promptList) {
+    promptList.addEventListener('click', handlePromptListClick);
+  }
+}
+
+// 处理提示词列表的点击事件
+function handlePromptListClick(e) {
+  const target = e.target;
+  
+  // 查找包含 data-prompt-id 的按钮
+  const btn = target.closest('[data-prompt-id]');
+  if (!btn) return;
+  
+  const promptId = btn.dataset.promptId;
+  const prompt = promptsCache.find(p => p.id === promptId);
+  if (!prompt) {
+    console.error('❌ 未找到提示词:', promptId);
+    return;
+  }
+  
+  // 查看按钮
+  if (btn.classList.contains('btn-view')) {
+    e.preventDefault();
+    viewPrompt(prompt);
+    return;
+  }
+  
+  // 编辑按钮
+  if (btn.classList.contains('btn-edit')) {
+    e.preventDefault();
+    editPrompt(prompt);
+    return;
+  }
+}
 
 // 等待DOM元素加载完成
 function waitForElement(id, timeout = 5000) {
@@ -60,6 +102,9 @@ async function loadPrompts() {
 function renderPromptList(prompts) {
   const tbody = document.getElementById('prompt-list');
   
+  // 缓存提示词列表
+  promptsCache = prompts || [];
+  
   if (prompts.length === 0) {
     tbody.innerHTML = '<tr><td colspan="8" class="empty">暂无提示词模板</td></tr>';
     return;
@@ -90,8 +135,8 @@ function renderPromptList(prompts) {
         <td>${variables}</td>
         <td>${formatDate(prompt.updated_at)}</td>
         <td>
-          <button class="btn btn-sm btn-primary" onclick='viewPrompt(${JSON.stringify(prompt)})'>查看</button>
-          <button class="btn btn-sm btn-secondary" onclick='editPrompt(${JSON.stringify(prompt)})'>编辑</button>
+          <button class="btn btn-sm btn-primary btn-view" data-prompt-id="${prompt.id}" title="查看">查看</button>
+          <button class="btn btn-sm btn-secondary btn-edit" data-prompt-id="${prompt.id}" title="编辑">编辑</button>
           <button class="btn btn-sm btn-info" onclick='duplicatePrompt("${prompt.id}")'>复制</button>
           <button class="btn btn-sm btn-danger" onclick='deletePrompt("${prompt.id}", "${escapeHtml(prompt.name)}")'>删除</button>
         </td>
@@ -226,6 +271,13 @@ function editFromView() {
 
 // 编辑提示词
 function editPrompt(prompt) {
+  if (!prompt) {
+    console.error('❌ editPrompt: prompt 参数为空');
+    showMessage('无法编辑：提示词数据不存在', 'error');
+    return;
+  }
+  
+  console.log('✏️ 编辑提示词:', prompt.id, prompt.name);
   openDialog(prompt);
 }
 
@@ -257,11 +309,18 @@ async function savePrompt(event) {
     data.id = currentPrompt.id;
   }
   
+  // 如果缺少 type 字段，使用 scene_type 的值
+  if (!data.type && data.scene_type) {
+    data.type = data.scene_type;
+  }
+  
   console.log('💾 保存提示词数据:', {
     isEdit: !!data.id,
     id: data.id,
     code: data.code,
-    name: data.name
+    name: data.name,
+    type: data.type,
+    scene_type: data.scene_type
   });
   
   try {

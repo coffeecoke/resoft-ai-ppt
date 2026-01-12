@@ -9,11 +9,77 @@ let st_currentTranscriptionId = null;
 let st_audioPlayer = null;
 let st_autoScrollEnabled = true;
 let st_currentDialogues = [];
+let st_originalDialogues = []; // 存储原始对话（从 transcriptions 表）
+let st_mergedDialogues = []; // 存储第一次合并后的对话（从 dialogue_adjustments 表，note1='合并相邻同一说话人的对话'）
+let st_correctedDialogues = []; // 存储AI修正后的对话（从 dialogue_adjustments 表，note1='AI错别字修正'）
+let st_reMergedDialogues = []; // 存储再次合并后的对话（从 dialogue_adjustments 表，note1='再次合并对话'）
+let st_currentTab = 'original'; // 当前显示的标签页：'original'、'merged'、'corrected'、'remerged' 或 'qa'
 let st_editedDialogues = new Map(); // 存储编辑过的对话
 let st_isEditMode = false;
 let st_currentAudioPath = null;
 let st_speakerRoles = {}; // 存储角色设置，格式：{ "SPEAKER_1": "customer", "SPEAKER_2": "our_side" }
 let st_aiCorrectionResult = null; // 存储 AI 修正结果
+let st_qaPairs = []; // 存储问答对数据
+
+// AI 修正设置（从 localStorage 读取）
+function loadAiCorrectionSettings() {
+  const settings = {
+    batchSize: parseInt(localStorage.getItem('aiCorrection_batchSize')) || 50,
+    modelName: localStorage.getItem('aiCorrection_modelName') || ''
+  };
+  return settings;
+}
+
+function saveAiCorrectionSettingsToStorage(settings) {
+  localStorage.setItem('aiCorrection_batchSize', settings.batchSize);
+  if (settings.modelName) {
+    localStorage.setItem('aiCorrection_modelName', settings.modelName);
+  } else {
+    localStorage.removeItem('aiCorrection_modelName');
+  }
+}
+
+// ==================== 角色判断设置管理 ====================
+function loadRoleJudgmentSettings() {
+  return {
+    modelName: localStorage.getItem('roleJudgment_modelName') || '',
+    promptId: localStorage.getItem('roleJudgment_promptId') || ''
+  };
+}
+
+function saveRoleJudgmentSettingsToStorage(settings) {
+  if (settings.modelName) {
+    localStorage.setItem('roleJudgment_modelName', settings.modelName);
+  } else {
+    localStorage.removeItem('roleJudgment_modelName');
+  }
+  if (settings.promptId) {
+    localStorage.setItem('roleJudgment_promptId', settings.promptId);
+  } else {
+    localStorage.removeItem('roleJudgment_promptId');
+  }
+}
+
+// ==================== 问答对提取设置管理 ====================
+function loadQAExtractionSettings() {
+  return {
+    modelName: localStorage.getItem('qaExtraction_modelName') || '',
+    promptId: localStorage.getItem('qaExtraction_promptId') || ''
+  };
+}
+
+function saveQAExtractionSettingsToStorage(settings) {
+  if (settings.modelName) {
+    localStorage.setItem('qaExtraction_modelName', settings.modelName);
+  } else {
+    localStorage.removeItem('qaExtraction_modelName');
+  }
+  if (settings.promptId) {
+    localStorage.setItem('qaExtraction_promptId', settings.promptId);
+  } else {
+    localStorage.removeItem('qaExtraction_promptId');
+  }
+}
 
 // 页面初始化 - 等待DOM完全加载
 (async function() {
@@ -122,7 +188,9 @@ function initEventListeners() {
   document.getElementById('st-toggleAutoScrollBtn')?.addEventListener('click', toggleAutoScroll);
   
   // ✅ 编辑功能相关
+  document.getElementById('st-roleJudgmentBtn')?.addEventListener('click', startRoleJudgment);
   document.getElementById('st-aiCorrectionBtn')?.addEventListener('click', startAiCorrection);
+  document.getElementById('st-qaExtractionBtn')?.addEventListener('click', startQAExtraction);
   document.getElementById('st-roleSettingsBtn')?.addEventListener('click', showRoleSettings);
   document.getElementById('st-batchReplaceSpeakerBtn')?.addEventListener('click', showBatchReplaceDialog);
   document.getElementById('st-saveEditBtn')?.addEventListener('click', saveEdits);
@@ -136,7 +204,28 @@ function initEventListeners() {
   document.getElementById('st-applyCorrectionsBtn')?.addEventListener('click', applyAiCorrections);
   
   // ✅ 对话列表的事件委托（点击定位、编辑按钮）
-  document.getElementById('st-dialoguesList')?.addEventListener('click', handleDialogueClick);
+  // 为所有页签的对话列表容器绑定点击事件
+  const dialogueListContainers = [
+    'st-dialoguesList-original',
+    'st-dialoguesList-merged',
+    'st-dialoguesList-corrected',
+    'st-dialoguesList-remerged', // 再次合并后的对话列表
+    'st-dialoguesList-qa' // 问答对列表
+  ];
+  
+  dialogueListContainers.forEach(containerId => {
+    const container = document.getElementById(containerId);
+    if (container) {
+      container.addEventListener('click', handleDialogueClick);
+      console.log(`✅ 已为容器 ${containerId} 绑定点击事件`);
+    }
+  });
+  
+  // 兼容旧版本：如果存在 st-dialoguesList，也绑定事件
+  const oldContainer = document.getElementById('st-dialoguesList');
+  if (oldContainer) {
+    oldContainer.addEventListener('click', handleDialogueClick);
+  }
 }
 
 // ==================== 音频播放器功能 ====================
@@ -177,10 +266,24 @@ function handleAudioTimeUpdate() {
   if (!st_audioPlayer || !st_autoScrollEnabled) return;
   
   const currentTime = st_audioPlayer.currentTime;
-  document.getElementById('st-currentTime').textContent = formatTimeFromSeconds(currentTime);
+  const currentTimeEl = document.getElementById('st-currentTime');
+  if (currentTimeEl) {
+    currentTimeEl.textContent = formatTimeFromSeconds(currentTime);
+  }
   
-  // 找到当前播放时间对应的对话
-  const dialogueItems = document.querySelectorAll('.dialogue-item');
+  // 根据当前标签页，只查找当前显示的对话列表
+  let currentListId = 'st-dialoguesList-original';
+  if (st_currentTab === 'merged') {
+    currentListId = 'st-dialoguesList-merged';
+  } else if (st_currentTab === 'corrected') {
+    currentListId = 'st-dialoguesList-corrected';
+  }
+  
+  const currentList = document.getElementById(currentListId);
+  if (!currentList) return;
+  
+  // 只查找当前显示的对话列表中的对话项
+  const dialogueItems = currentList.querySelectorAll('.dialogue-item');
   let activeIndex = -1;
   
   dialogueItems.forEach((item, index) => {
@@ -188,7 +291,7 @@ function handleAudioTimeUpdate() {
     const nextItem = dialogueItems[index + 1];
     const endTime = nextItem ? parseFloat(nextItem.getAttribute('data-start')) : Infinity;
     
-    // 移除所有高亮
+    // 移除所有高亮（只移除当前列表中的）
     item.classList.remove('active');
     
     // 检查当前时间是否在此对话区间
@@ -226,16 +329,13 @@ function parseTimeToSeconds(timeStr) {
   return 0;
 }
 
-// 将秒数转换为时间字符串 "00:00:12"
+// 将秒数转换为时间字符串 "00:00:12" 或 "01:50:49"（HH:MM:SS格式）
 function formatTimeFromSeconds(seconds) {
-  if (!seconds || isNaN(seconds)) return '00:00';
+  if (!seconds || isNaN(seconds)) return '00:00:00';
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
   const s = Math.floor(seconds % 60);
-  if (h > 0) {
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  }
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
 // ==================== 编辑功能 ====================
@@ -260,10 +360,24 @@ function handleDialogueClick(e) {
 
 function startEditDialogue(index) {
   const dialogue = st_currentDialogues[index];
-  if (!dialogue) return;
+  if (!dialogue) {
+    console.error(`对话索引 ${index} 不存在`);
+    return;
+  }
   
-  const dialogueItem = document.querySelector(`.dialogue-item[data-index="${index}"]`);
-  if (!dialogueItem) return;
+  // ✅ 在当前活动页签的对话列表容器中查找对话项
+  const currentContainerId = `st-dialoguesList-${st_currentTab || 'original'}`;
+  const container = document.getElementById(currentContainerId);
+  if (!container) {
+    console.error(`容器 ${currentContainerId} 不存在`);
+    return;
+  }
+  
+  const dialogueItem = container.querySelector(`.dialogue-item[data-index="${index}"]`);
+  if (!dialogueItem) {
+    console.error(`在容器 ${currentContainerId} 中找不到对话项，索引: ${index}`);
+    return;
+  }
   
   // 切换为编辑模式
   dialogueItem.classList.add('editing');
@@ -288,8 +402,19 @@ function startEditDialogue(index) {
 }
 
 function saveDialogueEdit(index) {
-  const dialogueItem = document.querySelector(`.dialogue-item[data-index="${index}"]`);
-  if (!dialogueItem) return;
+  // ✅ 在当前活动页签的对话列表容器中查找对话项
+  const currentContainerId = `st-dialoguesList-${st_currentTab || 'original'}`;
+  const container = document.getElementById(currentContainerId);
+  if (!container) {
+    console.error(`容器 ${currentContainerId} 不存在`);
+    return;
+  }
+  
+  const dialogueItem = container.querySelector(`.dialogue-item[data-index="${index}"]`);
+  if (!dialogueItem) {
+    console.error(`在容器 ${currentContainerId} 中找不到对话项，索引: ${index}`);
+    return;
+  }
   
   const newSpeaker = dialogueItem.querySelector('[data-field="speaker"]').value.trim();
   const newText = dialogueItem.querySelector('[data-field="text"]').value.trim();
@@ -322,8 +447,24 @@ function cancelDialogueEdit(index) {
 
 function renderSingleDialogue(index) {
   const dialogue = st_currentDialogues[index];
-  const dialogueItem = document.querySelector(`.dialogue-item[data-index="${index}"]`);
-  if (!dialogueItem || !dialogue) return;
+  if (!dialogue) {
+    console.error(`对话索引 ${index} 不存在`);
+    return;
+  }
+  
+  // ✅ 在当前活动页签的对话列表容器中查找对话项
+  const currentContainerId = `st-dialoguesList-${st_currentTab || 'original'}`;
+  const container = document.getElementById(currentContainerId);
+  if (!container) {
+    console.error(`容器 ${currentContainerId} 不存在`);
+    return;
+  }
+  
+  const dialogueItem = container.querySelector(`.dialogue-item[data-index="${index}"]`);
+  if (!dialogueItem) {
+    console.error(`在容器 ${currentContainerId} 中找不到对话项，索引: ${index}`);
+    return;
+  }
   
   dialogueItem.classList.remove('editing');
   const timeRange = dialogue.timeRange || dialogue.startTime || '';
@@ -411,14 +552,22 @@ function executeBatchReplace() {
   });
   
   // 重新渲染所有对话
-  renderDialogues(st_currentDialogues);
+  renderDialogues(st_currentDialogues, `st-dialoguesList-${st_currentTab || 'original'}`);
   
   // 显示保存按钮
   document.getElementById('st-saveEditBtn').style.display = 'inline-block';
   document.getElementById('st-cancelEditBtn').style.display = 'inline-block';
   
-  closeBatchReplaceDialog();
-  showToast(`已替换 ${count} 条对话的说话人，请点击"保存修改"提交`, 'success');
+  // ✅ 检测是否需要重新合并（相邻的相同说话人）
+  if (checkNeedsReMergeLocally(st_currentDialogues)) {
+    document.getElementById('st-reMergeBtn').style.display = 'inline-block';
+    closeBatchReplaceDialog();
+    showToast(`已替换 ${count} 条对话的说话人。检测到相邻的相同说话人，可以点击"重新合并"按钮进行合并`, 'success');
+  } else {
+    document.getElementById('st-reMergeBtn').style.display = 'none';
+    closeBatchReplaceDialog();
+    showToast(`已替换 ${count} 条对话的说话人，请点击"保存修改"提交`, 'success');
+  }
 }
 
 async function saveEdits() {
@@ -432,15 +581,23 @@ async function saveEdits() {
   }
   
   try {
-    const response = await fetch(`${ST_API_BASE}/transcription/${st_currentTranscriptionId}`, {
+    // ✅ 使用新的API，保存到 dialogue_adjustments 表
+    // 传递 tabType 参数，用于确定更新哪个 adjustment 记录
+    const response = await fetch(`${ST_API_BASE}/transcription/${st_currentTranscriptionId}/dialogues`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        dialogues: st_currentDialogues
+        dialogues: st_currentDialogues,
+        tabType: st_currentTab || 'original' // 传递当前页签类型
       })
     });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP错误: ${response.status}`);
+    }
     
     const result = await response.json();
     
@@ -452,8 +609,32 @@ async function saveEdits() {
     document.getElementById('st-saveEditBtn').style.display = 'none';
     document.getElementById('st-cancelEditBtn').style.display = 'none';
     
-    showToast('保存成功！', 'success');
-    await loadHistory(); // 刷新历史记录
+    showToast('保存成功！对话已保存到 dialogue_adjustments 表', 'success');
+    
+    // ✅ 检测是否需要重新合并（保存后可能有相邻的相同说话人）
+    // 先重新加载数据，然后检测
+    if (st_currentTranscriptionId) {
+      await loadTranscriptionById(st_currentTranscriptionId);
+      
+      // 重新加载后，检测当前页签的对话是否需要重新合并
+      let currentDialogues = [];
+      if (st_currentTab === 'original') {
+        currentDialogues = st_originalDialogues || [];
+      } else if (st_currentTab === 'merged') {
+        currentDialogues = st_mergedDialogues || [];
+      } else if (st_currentTab === 'corrected') {
+        currentDialogues = st_correctedDialogues || [];
+      } else if (st_currentTab === 'remerged') {
+        currentDialogues = st_reMergedDialogues || []; // ✅ 支持再次合并页签
+      }
+      
+      if (checkNeedsReMergeLocally(currentDialogues)) {
+        document.getElementById('st-reMergeBtn').style.display = 'inline-block';
+        showToast('检测到相邻的相同说话人，可以点击"重新合并"按钮进行合并', 'info');
+      } else {
+        document.getElementById('st-reMergeBtn').style.display = 'none';
+      }
+    }
     
   } catch (error) {
     console.error('保存编辑失败:', error);
@@ -474,19 +655,743 @@ function cancelEdits() {
   st_editedDialogues.clear();
   document.getElementById('st-saveEditBtn').style.display = 'none';
   document.getElementById('st-cancelEditBtn').style.display = 'none';
+  document.getElementById('st-reMergeBtn').style.display = 'none'; // 隐藏重新合并按钮
   
   showToast('已取消所有修改', 'info');
 }
 
-// ==================== AI 错别字修正功能 ====================
-async function startAiCorrection() {
-  if (!st_currentDialogues || st_currentDialogues.length === 0) {
-    showToast('请先加载转录内容', 'warning');
+/**
+ * 检测是否需要重新合并（前端快速检测）
+ * @param {Array} dialogues - 对话列表
+ * @returns {boolean} 是否需要重新合并
+ */
+function checkNeedsReMergeLocally(dialogues) {
+  if (!Array.isArray(dialogues) || dialogues.length < 2) {
+    return false;
+  }
+  
+  // 检测是否有相邻的相同说话人
+  for (let i = 0; i < dialogues.length - 1; i++) {
+    const current = dialogues[i];
+    const next = dialogues[i + 1];
+    
+    if (current && next && current.speaker && next.speaker && current.speaker === next.speaker) {
+      return true; // 发现相邻的相同说话人，需要合并
+    }
+  }
+  
+  return false;
+}
+
+/**
+ * 触发重新合并对话
+ */
+async function triggerReMerge() {
+  if (!st_currentTranscriptionId) {
+    showToast('没有当前转录记录', 'error');
     return;
   }
   
+  try {
+    showToast('正在重新合并对话...', 'info');
+    
+    // 使用当前页签类型作为数据来源
+    const tabType = st_currentTab || 'original';
+    
+    const response = await fetch(`${ST_API_BASE}/transcription/${st_currentTranscriptionId}/re-merge`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        tabType: tabType
+        // ✅ 不再传递 autoMerge 参数，后端总是创建新记录（note1='再次合并对话'）
+      })
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP错误: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    
+    if (!result.success) {
+      throw new Error(result.error || '重新合并失败');
+    }
+    
+    const { originalCount, mergedCount } = result.data;
+    
+    showToast(
+      `重新合并成功：${originalCount} 条 → ${mergedCount} 条（已创建再次合并记录）`,
+      'success'
+    );
+    
+    // 隐藏重新合并按钮
+    document.getElementById('st-reMergeBtn').style.display = 'none';
+    
+    // ✅ 重新加载当前转录记录，刷新数据
+    if (st_currentTranscriptionId) {
+      await loadTranscriptionById(st_currentTranscriptionId);
+      
+      // ✅ 切换到"再次合并后的对话"页签，显示合并结果
+      setTimeout(() => {
+        if (st_reMergedDialogues && st_reMergedDialogues.length > 0) {
+          // 确保"再次合并"页签显示
+          const reMergedTab = document.getElementById('st-tab-remerged');
+          if (reMergedTab) {
+            reMergedTab.style.display = 'block';
+          }
+          switchDialogueTab('remerged');
+        } else {
+          showToast('⚠️ 未找到再次合并后的对话', 'warning');
+          // 如果再次合并页签不存在，切换到合并页签
+          if (st_mergedDialogues && st_mergedDialogues.length > 0) {
+            switchDialogueTab('merged');
+          }
+        }
+      }, 300);
+    }
+    
+  } catch (error) {
+    console.error('重新合并失败:', error);
+    showToast('重新合并失败: ' + error.message, 'error');
+  }
+}
+
+// ==================== 角色判断功能 ====================
+async function startRoleJudgment() {
   if (!st_currentTranscriptionId) {
     showToast('没有当前转录记录', 'error');
+    return;
+  }
+  
+  // 优先使用AI修正后的对话，如果没有则使用当前标签页的对话
+  let dialoguesToSend = [];
+  let dialogueSource = '';
+  
+  // 优先使用AI修正后的对话（根据用户需求）
+  if (st_correctedDialogues && st_correctedDialogues.length > 0) {
+    dialoguesToSend = st_correctedDialogues;
+    dialogueSource = 'AI修正后的对话';
+  } else {
+    // 如果没有AI修正后的对话，根据当前标签页决定
+    if (st_currentTab === 'original') {
+      dialoguesToSend = st_originalDialogues || [];
+      dialogueSource = '原始对话';
+    } else if (st_currentTab === 'merged') {
+      dialoguesToSend = st_mergedDialogues || [];
+      dialogueSource = '合并后的对话';
+    } else if (st_currentTab === 'corrected') {
+      dialoguesToSend = st_correctedDialogues || [];
+      dialogueSource = 'AI修正后的对话';
+    }
+  }
+  
+  if (!dialoguesToSend || dialoguesToSend.length === 0) {
+    showToast(`请先加载对话内容（优先使用AI修正后的对话）`, 'warning');
+    return;
+  }
+  
+  // 显示加载提示
+  showToast(`🤖 AI 正在分析角色（使用${dialogueSource}）...`, 'info');
+  
+  try {
+    // 读取设置
+    const settings = loadRoleJudgmentSettings();
+    
+    // 调用后端API
+    const response = await fetch(`${ST_API_BASE}/transcription/${st_currentTranscriptionId}/role-judgment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        modelName: settings.modelName || undefined,
+        promptId: settings.promptId || undefined,
+        dialogues: dialoguesToSend
+      })
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP错误: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    
+    if (!result.success) {
+      throw new Error(result.error || '角色判断失败');
+    }
+    
+    // 更新角色设置
+    if (result.data && result.data.speakerRoles) {
+      st_speakerRoles = result.data.speakerRoles;
+      
+      // 根据当前标签页重新渲染对话列表以显示角色标签
+      let currentDialogues = [];
+      if (st_currentTab === 'original') {
+        currentDialogues = st_originalDialogues;
+      } else if (st_currentTab === 'merged') {
+        currentDialogues = st_mergedDialogues;
+      } else if (st_currentTab === 'corrected') {
+        currentDialogues = st_correctedDialogues;
+      } else if (st_currentTab === 'remerged') {
+        currentDialogues = st_reMergedDialogues; // ✅ 支持再次合并页签
+      }
+      
+      if (currentDialogues && currentDialogues.length > 0) {
+        renderDialogues(currentDialogues, `st-dialoguesList-${st_currentTab}`);
+      }
+      
+      showToast('✅ 角色判断完成！', 'success');
+    } else {
+      showToast('⚠️ 未获取到角色判断结果', 'warning');
+    }
+    
+  } catch (error) {
+    console.error('角色判断失败:', error);
+    showToast('角色判断失败: ' + error.message, 'error');
+  }
+}
+
+// ==================== 问答对提取功能 ====================
+async function startQAExtraction() {
+  if (!st_currentTranscriptionId) {
+    showToast('没有当前转录记录', 'error');
+    return;
+  }
+
+  // ✅ 优先使用最后一次合并完成后的内容（再次合并 > AI修正 > 第一次合并 > 原始对话）
+  let dialoguesToSend = [];
+  let dialogueSource = '';
+
+  // 1. 最优先使用再次合并后的对话（最后合并完成的内容）
+  if (st_reMergedDialogues && st_reMergedDialogues.length > 0) {
+    dialoguesToSend = st_reMergedDialogues;
+    dialogueSource = '再次合并后的对话';
+  } 
+  // 2. 其次使用AI修正后的对话
+  else if (st_correctedDialogues && st_correctedDialogues.length > 0) {
+    dialoguesToSend = st_correctedDialogues;
+    dialogueSource = 'AI修正后的对话';
+  } 
+  // 3. 再次使用第一次合并后的对话
+  else if (st_mergedDialogues && st_mergedDialogues.length > 0) {
+    dialoguesToSend = st_mergedDialogues;
+    dialogueSource = '第一次合并后的对话';
+  } 
+  // 4. 最后使用原始对话
+  else if (st_originalDialogues && st_originalDialogues.length > 0) {
+    dialoguesToSend = st_originalDialogues;
+    dialogueSource = '原始对话';
+  }
+
+  if (!dialoguesToSend || dialoguesToSend.length === 0) {
+    showToast(`请先加载对话内容`, 'warning');
+    return;
+  }
+
+  // 检查是否有角色信息
+  if (!st_speakerRoles || Object.keys(st_speakerRoles).length === 0) {
+    if (!window.confirm('未找到角色信息，问答对提取需要先进行角色判断。是否现在进行角色判断？')) {
+      return;
+    }
+    // 触发角色判断
+    await startRoleJudgment();
+    // 角色判断完成后，重新检查角色信息
+    if (!st_speakerRoles || Object.keys(st_speakerRoles).length === 0) {
+      showToast('角色判断未完成或失败，无法进行问答对提取', 'error');
+      return;
+    }
+  }
+
+  // 显示加载提示
+  showToast(`🤖 AI 正在提取问答对（使用${dialogueSource}，优先使用最后一次合并完成的内容）...`, 'info');
+
+  try {
+    // 读取设置
+    const settings = loadQAExtractionSettings();
+
+    const response = await fetch(`${ST_API_BASE}/transcription/${st_currentTranscriptionId}/qa-extraction`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        modelName: settings.modelName || undefined,
+        promptId: settings.promptId || undefined,
+        dialogues: dialoguesToSend
+      })
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP错误: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    
+    if (!result.success) {
+      throw new Error(result.error || '问答对提取失败');
+    }
+    
+    // 更新问答对数据
+    if (result.data && result.data.qaPairs) {
+      st_qaPairs = result.data.qaPairs;
+      
+      // 切换到问答对页签并显示结果
+      switchDialogueTab('qa');
+      renderQAPairs(st_qaPairs, 'st-dialoguesList-qa');
+      
+      const summary = result.summary || {};
+      showToast(
+        `✅ 问答对提取完成！共提取 ${summary.totalPairs || 0} 个问答对（已回答: ${summary.answeredPairs || 0}，待回答: ${summary.pendingPairs || 0}）`,
+        'success'
+      );
+    } else {
+      showToast('⚠️ 未提取到问答对', 'warning');
+    }
+    
+  } catch (error) {
+    console.error('问答对提取失败:', error);
+    showToast('问答对提取失败: ' + error.message, 'error');
+  }
+}
+
+/**
+ * 加载问答对（从 concerns 表查询）
+ */
+async function loadQAPairs(transcriptionId) {
+  if (!transcriptionId) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`${ST_API_BASE}/transcription/${transcriptionId}/qa-pairs`);
+    const result = await response.json();
+    
+    if (result.success && result.data && result.data.qaPairs) {
+      st_qaPairs = result.data.qaPairs;
+      
+      // 调试：输出第一个问答对的数据结构
+      if (st_qaPairs.length > 0) {
+        console.log('📋 加载的问答对数据示例（第一个）:', JSON.stringify(st_qaPairs[0], null, 2));
+        console.log('   - time_range:', st_qaPairs[0].time_range);
+        console.log('   - time_range1:', st_qaPairs[0].time_range1);
+        console.log('   - time_range2:', st_qaPairs[0].time_range2);
+      }
+      
+      // 如果当前在问答对页签，刷新显示
+      if (st_currentTab === 'qa') {
+        renderQAPairs(st_qaPairs, 'st-dialoguesList-qa');
+      }
+    } else {
+      st_qaPairs = [];
+      // 如果当前在问答对页签，显示提示
+      if (st_currentTab === 'qa') {
+        const qaContainer = document.getElementById('st-dialoguesList-qa');
+        if (qaContainer) {
+          qaContainer.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 20px;">暂无问答对，请点击"问答对提取"按钮提取</p>';
+        }
+      }
+    }
+  } catch (error) {
+    console.error('加载问答对失败:', error);
+    st_qaPairs = [];
+  }
+}
+
+/**
+ * 解析时间范围字符串，返回开始时间和结束时间的秒数
+ * 支持格式: "[00:10-00:30]" 或 "01:50:49-01:51:33"
+ */
+function parseTimeRange(timeRangeStr) {
+  if (!timeRangeStr) return { startSeconds: 0, endSeconds: 0, startTime: '', endTime: '' };
+  
+  // 移除方括号（如果有）
+  let cleanStr = timeRangeStr.replace(/[\[\]]/g, '').trim();
+  
+  // 分割开始和结束时间
+  const parts = cleanStr.split('-').map(s => s.trim());
+  if (parts.length !== 2) {
+    return { startSeconds: 0, endSeconds: 0, startTime: '', endTime: '' };
+  }
+  
+  const [startTime, endTime] = parts;
+  
+  // 转换为秒数
+  const startSeconds = parseTimeToSeconds(startTime);
+  const endSeconds = parseTimeToSeconds(endTime);
+  
+  return { startSeconds, endSeconds, startTime, endTime };
+}
+
+/**
+ * 渲染问答对列表
+ */
+function renderQAPairs(qaPairs, containerId = 'st-dialoguesList-qa') {
+  const container = document.getElementById(containerId);
+  if (!container) {
+    console.error(`容器 ${containerId} 不存在`);
+    return;
+  }
+  
+  if (!qaPairs || qaPairs.length === 0) {
+    container.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 20px;">暂无问答对，请点击"问答对提取"按钮提取</p>';
+    return;
+  }
+  
+  container.innerHTML = qaPairs.map((qa, index) => {
+    const qaIndex = index + 1;
+    
+    // ✅ 使用新的格式：time_range1 和 time_range2（问题和回答分别的时间范围）
+    // ✅ 兼容旧格式：time_range（整体时间范围）
+    const questionTimeRangeStr = qa.time_range1 || qa.time_range || null;
+    const answerTimeRangeStr = qa.time_range2 || null;
+    
+    // 调试：输出每个问答对的时间范围
+    if (index === 0) {
+      console.log(`🔍 渲染问答对 ${qaIndex}:`, {
+        'qa.time_range': qa.time_range,
+        'qa.time_range1': qa.time_range1,
+        'qa.time_range2': qa.time_range2,
+        'questionTimeRangeStr': questionTimeRangeStr,
+        'answerTimeRangeStr': answerTimeRangeStr
+      });
+    }
+    
+    // 解析问题时间范围
+    const questionTimeRange = parseTimeRange(questionTimeRangeStr);
+    // 解析回答时间范围
+    const answerTimeRange = parseTimeRange(answerTimeRangeStr);
+    
+    // 格式化时间显示（去掉方括号，转换为标准格式）
+    const formatTimeDisplay = (timeStr) => {
+      if (!timeStr) return '';
+      // 移除方括号（如果有）
+      let cleaned = String(timeStr).replace(/[\[\]]/g, '').trim();
+      // 确保格式正确：应该包含 "-" 分隔符
+      if (cleaned && cleaned.includes('-')) {
+        return cleaned;
+      }
+      // 如果格式不对，尝试修复或返回原始值
+      return cleaned || '';
+    };
+    
+    // 计算问题时间显示（如果存在 time_range1，使用它；否则兼容旧格式）
+    let questionTimeDisplay = '';
+    if (questionTimeRangeStr) {
+      questionTimeDisplay = formatTimeDisplay(questionTimeRangeStr);
+      if (!questionTimeDisplay && index === 0) {
+        console.warn(`⚠️ 问答对 ${qaIndex} 问题时间范围解析失败:`, questionTimeRangeStr);
+      }
+    } else if (index === 0) {
+      console.warn(`⚠️ 问答对 ${qaIndex} 没有问题时间范围字段 (time_range1/time_range 均为空)`);
+    }
+    
+    // 计算回答时间显示（如果存在 time_range2，使用它）
+    let answerTimeDisplay = '';
+    if (answerTimeRangeStr) {
+      answerTimeDisplay = formatTimeDisplay(answerTimeRangeStr);
+      if (!answerTimeDisplay && index === 0 && qa.answer && qa.answer.length > 0) {
+        console.warn(`⚠️ 问答对 ${qaIndex} 回答时间范围解析失败:`, answerTimeRangeStr);
+      }
+    } else if (qa.answer && qa.answer.length > 0 && index === 0) {
+      console.warn(`⚠️ 问答对 ${qaIndex} 有回答但没有回答时间范围字段 (time_range2 为空)`);
+    }
+    
+    // ✅ 计算完整的播放时间范围（从问题开始到回答结束，包含5秒冗余）
+    let playStartSeconds = 0;
+    let playEndSeconds = 0;
+    
+    if (questionTimeRange.startSeconds >= 0) {
+      // 从问题的开始时间播放
+      playStartSeconds = questionTimeRange.startSeconds;
+      
+      // 如果有回答时间范围，播放到回答的结束时间；否则播放到问题的结束时间
+      if (answerTimeRange.endSeconds > 0) {
+        playEndSeconds = answerTimeRange.endSeconds;
+      } else if (questionTimeRange.endSeconds > 0) {
+        playEndSeconds = questionTimeRange.endSeconds;
+      } else {
+        // 默认播放30秒
+        playEndSeconds = playStartSeconds + 30;
+      }
+    } else if (qa.time_range) {
+      // 兼容旧格式：使用整体的 time_range
+      const oldTimeRange = parseTimeRange(qa.time_range);
+      playStartSeconds = oldTimeRange.startSeconds || 0;
+      playEndSeconds = oldTimeRange.endSeconds || (playStartSeconds + 30);
+    }
+    
+    return `
+      <div class="qa-pair-item" data-qa-index="${index}" data-play-start="${playStartSeconds}" data-play-end="${playEndSeconds}" style="margin-bottom: 15px; padding: 12px; border: 1px solid #e0e0e0; border-radius: 6px; background: #fff; cursor: pointer; transition: all 0.2s;" 
+           onmouseover="this.style.background='#f0f7ff'; this.style.borderColor='#1890ff';" 
+           onmouseout="this.style.background='#fff'; this.style.borderColor='#e0e0e0';"
+           onclick="playQAAudio(${index})">
+        <div style="font-weight: bold; color: #1890ff; font-size: 16px; margin-bottom: 10px;">Q${qaIndex}</div>
+        <div style="margin-bottom: ${qa.answer && qa.answer.length > 0 ? '8px' : '0'}; line-height: 1.8; color: #333; font-size: 14px;">
+          ${questionTimeDisplay ? `<span style="color: #666; font-size: 13px; font-family: monospace; margin-right: 8px;">${escapeHtml(questionTimeDisplay)}</span>` : ''}
+          ${qa.question_speaker ? `<span style="color: #1890ff; font-size: 13px; font-weight: 500; margin-right: 8px;">${escapeHtml(qa.question_speaker)}</span>` : ''}
+          <span style="font-weight: 500; color: #333;">问题：</span>
+          <span style="color: #333;">${escapeHtml(qa.question)}</span>
+        </div>
+        ${qa.answer && qa.answer.length > 0 ? `
+          <div style="margin-top: 8px; line-height: 1.8; color: #333; font-size: 14px;">
+            ${answerTimeDisplay ? `<span style="color: #666; font-size: 13px; font-family: monospace; margin-right: 8px;">${escapeHtml(answerTimeDisplay)}</span>` : ''}
+            ${qa.answer_speaker ? `<span style="color: #52c41a; font-size: 13px; font-weight: 500; margin-right: 8px;">${escapeHtml(qa.answer_speaker)}</span>` : ''}
+            <span style="font-weight: 500; color: #333;">回答：</span>
+            <span style="color: #333;">${escapeHtml(qa.answer)}</span>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
+  
+  // 如果容器是问答对列表，确保它在当前页签中显示
+  if (containerId === 'st-dialoguesList-qa' && st_currentTab === 'qa') {
+    container.style.display = 'block';
+  }
+}
+
+/**
+ * 播放问答对的音频片段（包含问题和回答的完整时间段）
+ */
+function playQAAudio(qaIndex) {
+  if (!st_audioPlayer) {
+    showToast('请先加载音频文件', 'warning');
+    return;
+  }
+  
+  const qa = st_qaPairs[qaIndex];
+  if (!qa) {
+    showToast('问答对不存在', 'error');
+    return;
+  }
+  
+  // ✅ 优先使用 time_range1 和 time_range2（新的格式）
+  // ✅ 兼容旧格式：time_range（整体时间范围）
+  let playStartSeconds = 0;
+  let playEndSeconds = 0;
+  
+  const questionTimeRangeStr = qa.time_range1 || qa.time_range || null;
+  const answerTimeRangeStr = qa.time_range2 || null;
+  
+  if (questionTimeRangeStr) {
+    // 解析问题时间范围
+    const questionTimeRange = parseTimeRange(questionTimeRangeStr);
+    playStartSeconds = questionTimeRange.startSeconds || 0;
+    
+    // 如果有回答时间范围，播放到回答的结束时间；否则播放到问题的结束时间
+    if (answerTimeRangeStr) {
+      const answerTimeRange = parseTimeRange(answerTimeRangeStr);
+      playEndSeconds = answerTimeRange.endSeconds || (playStartSeconds + 30);
+    } else if (questionTimeRange.endSeconds > 0) {
+      playEndSeconds = questionTimeRange.endSeconds;
+    } else {
+      playEndSeconds = playStartSeconds + 30;
+    }
+  } else {
+    // 兼容旧格式：从DOM元素获取播放时间范围（如果存在）
+    const qaItem = document.querySelector(`.qa-pair-item[data-qa-index="${qaIndex}"]`);
+    if (qaItem) {
+      playStartSeconds = parseFloat(qaItem.getAttribute('data-play-start')) || 0;
+      playEndSeconds = parseFloat(qaItem.getAttribute('data-play-end')) || 0;
+    }
+    
+    // 如果还是没有，使用默认值
+    if (playStartSeconds === 0 && playEndSeconds === 0) {
+      playEndSeconds = 30;
+    }
+  }
+  
+  // ✅ 添加5秒冗余缓冲（上下各5秒）
+  const BUFFER_SECONDS = 5;
+  const actualStartSeconds = Math.max(0, playStartSeconds - BUFFER_SECONDS); // 开始时间减去5秒，但不能小于0
+  const audioDuration = st_audioPlayer.duration || Infinity;
+  const actualEndSeconds = Math.min(audioDuration, playEndSeconds + BUFFER_SECONDS); // 结束时间加上5秒，但不能超过音频总长度
+  
+  console.log(`播放问答对 Q${qaIndex + 1}: 原始范围 ${playStartSeconds}s-${playEndSeconds}s, 实际播放 ${actualStartSeconds}s-${actualEndSeconds}s`);
+  
+  // 准备显示信息用的时间字符串
+  const questionTimeDisplay = questionTimeRangeStr ? questionTimeRangeStr.replace(/[\[\]]/g, '') : '';
+  const answerTimeDisplay = answerTimeRangeStr ? answerTimeRangeStr.replace(/[\[\]]/g, '') : '';
+  const timeRangeDisplay = questionTimeDisplay && answerTimeDisplay 
+    ? `问题: ${questionTimeDisplay}, 回答: ${answerTimeDisplay}` 
+    : questionTimeDisplay || qa.time_range ? (qa.time_range || questionTimeRangeStr || '').replace(/[\[\]]/g, '') : '';
+  
+  // 移除之前的停止监听器（如果存在）
+  if (st_audioPlayer._qaStopHandler) {
+    st_audioPlayer.removeEventListener('timeupdate', st_audioPlayer._qaStopHandler);
+    st_audioPlayer._qaStopHandler = null;
+  }
+  
+  // 设置播放位置（从缓冲后的开始时间播放）
+  st_audioPlayer.currentTime = actualStartSeconds;
+  
+  // 创建停止监听器（在缓冲后的结束时间停止）
+  const stopAtEnd = () => {
+    if (st_audioPlayer && st_audioPlayer.currentTime >= actualEndSeconds) {
+      st_audioPlayer.pause();
+      st_audioPlayer.removeEventListener('timeupdate', stopAtEnd);
+      st_audioPlayer._qaStopHandler = null;
+      showToast(`问答对 Q${qaIndex + 1} 播放完成（包含问题和回答）`, 'success');
+    }
+  };
+  
+  // 保存监听器引用，方便后续移除
+  st_audioPlayer._qaStopHandler = stopAtEnd;
+  st_audioPlayer.addEventListener('timeupdate', stopAtEnd);
+  
+  // 播放音频
+  st_audioPlayer.play().catch(err => {
+    console.error('播放音频失败:', err);
+    showToast('播放音频失败', 'error');
+    // 移除监听器
+    if (st_audioPlayer._qaStopHandler) {
+      st_audioPlayer.removeEventListener('timeupdate', st_audioPlayer._qaStopHandler);
+      st_audioPlayer._qaStopHandler = null;
+    }
+  });
+  
+  // 高亮当前问答对
+  const qaContainer = document.getElementById('st-dialoguesList-qa');
+  if (qaContainer) {
+    const qaItems = qaContainer.querySelectorAll('.qa-pair-item');
+    qaItems.forEach((item, index) => {
+      if (index === qaIndex) {
+        item.style.background = '#e6f7ff';
+        item.style.borderColor = '#1890ff';
+        item.style.borderWidth = '2px';
+      } else {
+        item.style.background = '#fff';
+        item.style.borderColor = '#e0e0e0';
+        item.style.borderWidth = '1px';
+      }
+    });
+    
+    // 滚动到当前问答对
+    const currentItem = qaItems[qaIndex];
+    if (currentItem) {
+      currentItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
+  
+  // 显示播放信息（使用之前已声明的变量）
+  const startTimeDisplay = formatTimeFromSeconds(actualStartSeconds);
+  const endTimeDisplay = formatTimeFromSeconds(actualEndSeconds);
+  showToast(`正在播放问答对 Q${qaIndex + 1} ${timeRangeDisplay}（缓冲范围：${startTimeDisplay}-${endTimeDisplay}）`, 'info');
+}
+
+// 角色判断设置对话框管理
+function openRoleJudgmentSettings() {
+  try {
+    const modal = document.getElementById('st-roleJudgmentSettingsModal');
+    if (!modal) {
+      showToast('设置对话框未找到', 'error');
+      return;
+    }
+    
+    const settings = loadRoleJudgmentSettings();
+    document.getElementById('st-roleJudgmentModel').value = settings.modelName || '';
+    document.getElementById('st-roleJudgmentPrompt').value = settings.promptId || '';
+    
+    // 加载提示词模板列表
+    loadRoleJudgmentPrompts();
+    
+    modal.style.display = 'flex';
+  } catch (error) {
+    console.error('打开角色判断设置失败:', error);
+    showToast('打开设置失败', 'error');
+  }
+}
+
+function closeRoleJudgmentSettings() {
+  try {
+    const modal = document.getElementById('st-roleJudgmentSettingsModal');
+    if (modal) {
+      modal.style.display = 'none';
+    }
+  } catch (error) {
+    console.error('关闭设置对话框失败:', error);
+  }
+}
+
+async function loadRoleJudgmentPrompts() {
+  try {
+    // 尝试使用 role_judgment 场景，如果不存在则使用 transcription_correction
+    let response = await fetch(`${ADMIN_API_BASE}/prompts/scenes/role_judgment`);
+    let result = await response.json();
+    
+    // 如果 role_judgment 场景不存在，尝试使用 transcription_correction 场景
+    if (!result.success || !result.data || result.data.length === 0) {
+      response = await fetch(`${ADMIN_API_BASE}/prompts/scenes/transcription_correction`);
+      result = await response.json();
+    }
+    
+    const select = document.getElementById('st-roleJudgmentPrompt');
+    if (!select) return;
+    
+    // 保留第一个选项（使用默认提示词）
+    select.innerHTML = '<option value="">使用默认提示词</option>';
+    
+    if (result.success && result.data && result.data.length > 0) {
+      result.data.forEach(prompt => {
+        const option = document.createElement('option');
+        option.value = prompt.id;
+        option.textContent = prompt.name + (prompt.is_active ? ' (启用)' : '');
+        select.appendChild(option);
+      });
+    }
+  } catch (error) {
+    console.error('加载提示词模板失败:', error);
+  }
+}
+
+function saveRoleJudgmentSettings() {
+  const modelName = document.getElementById('st-roleJudgmentModel').value;
+  const promptId = document.getElementById('st-roleJudgmentPrompt').value;
+  
+  saveRoleJudgmentSettingsToStorage({
+    modelName: modelName,
+    promptId: promptId
+  });
+  
+  showToast('✅ 设置已保存', 'success');
+  closeRoleJudgmentSettings();
+}
+
+// 全局函数
+window.openRoleJudgmentSettings = openRoleJudgmentSettings;
+window.closeRoleJudgmentSettings = closeRoleJudgmentSettings;
+window.saveRoleJudgmentSettings = saveRoleJudgmentSettings;
+
+// ==================== AI 错别字修正功能 ====================
+async function startAiCorrection() {
+  if (!st_currentTranscriptionId) {
+    showToast('没有当前转录记录', 'error');
+    return;
+  }
+  
+  // 根据当前标签页决定发送哪个对话内容
+  let dialoguesToSend = [];
+  let dialogueSource = '';
+  
+  if (st_currentTab === 'original') {
+    // 原始对话标签页：发送原始对话内容
+    dialoguesToSend = st_originalDialogues || [];
+    dialogueSource = '原始对话';
+  } else if (st_currentTab === 'merged') {
+    // 合并后的对话标签页：发送合并后的对话内容
+    dialoguesToSend = st_mergedDialogues || [];
+    dialogueSource = '合并后的对话';
+  } else if (st_currentTab === 'corrected') {
+    // AI修正后的对话标签页：发送AI修正后的对话内容
+    dialoguesToSend = st_correctedDialogues || [];
+    dialogueSource = 'AI修正后的对话';
+  }
+  
+  if (!dialoguesToSend || dialoguesToSend.length === 0) {
+    showToast(`请先加载${dialogueSource}内容`, 'warning');
     return;
   }
   
@@ -498,9 +1403,10 @@ async function startAiCorrection() {
   body.innerHTML = `
     <div class="ai-correction-loading">
       <div class="ai-correction-spinner"></div>
-      <p>🤖 AI 正在分析对话内容...</p>
+      <p>🤖 AI 正在分析${dialogueSource}内容...</p>
       <p style="font-size: 12px; color: #999;">正在修正错别字并判断说话人角色</p>
       <p style="font-size: 12px; color: #999;">这可能需要几秒钟时间</p>
+      <p style="font-size: 11px; color: #999; margin-top: 10px;">当前处理：${dialogueSource}（${dialoguesToSend.length} 条）</p>
     </div>
   `;
   
@@ -508,31 +1414,77 @@ async function startAiCorrection() {
   applyBtn.style.display = 'none';
   
   try {
+    // 读取设置
+    const settings = loadAiCorrectionSettings();
+    
+    // 准备请求体，包含对话内容
+    // 确保对话格式正确：每个对话至少包含 timeRange, speaker, text 字段
+    const formattedDialogues = dialoguesToSend.map(d => ({
+      timeRange: d.timeRange || d.startTime || '',
+      speaker: d.speaker || d.speakerName || '未知说话人',
+      text: d.text || d.correctedText || d.originalText || ''
+    }));
+    
+    const requestBody = {
+      modelName: settings.modelName || undefined, // 如果为空则不传，使用默认模型
+      batchSize: settings.batchSize, // 每批处理的对话数量
+      dialogues: formattedDialogues // 发送格式化后的对话内容
+    };
+    
+    console.log(`📤 发送${dialogueSource}给AI修正，共 ${formattedDialogues.length} 条`);
+    console.log(`📤 对话示例:`, formattedDialogues.slice(0, 2)); // 打印前2条作为示例
+    
     const response = await fetch(`${ST_API_BASE}/transcription/${st_currentTranscriptionId}/ai-correction`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        modelName: 'deepseek-chat' // 可以让用户选择模型
-      })
+      body: JSON.stringify(requestBody)
     });
+    
+    // 检查响应状态
+    if (!response.ok) {
+      const errorText = await response.text();
+      let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+      try {
+        const errorJson = JSON.parse(errorText);
+        errorMessage = errorJson.error || errorJson.message || errorMessage;
+      } catch (e) {
+        errorMessage = errorText || errorMessage;
+      }
+      throw new Error(errorMessage);
+    }
     
     const result = await response.json();
     
     if (!result.success) {
-      throw new Error(result.error || 'AI 修正失败');
+      throw new Error(result.error || result.message || 'AI 修正失败');
     }
     
     // 保存修正结果
     st_aiCorrectionResult = result.data;
     
-    // 显示对比界面
-    renderAiCorrectionResult(result.data);
-    applyBtn.style.display = 'inline-block';
+    // 如果AI修正已自动保存（autoSave=true），刷新转录记录以显示新的修正内容
+    if (result.data.saved) {
+      console.log('✅ AI修正已自动保存，刷新转录记录...');
+      // 关闭加载界面
+      overlay.style.display = 'none';
+      // 重新加载转录记录，以显示新的AI修正页签
+      await viewTranscription(st_currentTranscriptionId);
+      // 切换到AI修正后的对话标签页
+      setTimeout(() => {
+        switchDialogueTab('corrected');
+        showToast('✅ AI修正完成并已保存！', 'success');
+      }, 500);
+    } else {
+      // 显示对比界面（手动应用模式）
+      renderAiCorrectionResult(result.data);
+      applyBtn.style.display = 'inline-block';
+    }
     
   } catch (error) {
     console.error('AI 修正失败:', error);
+    // 确保加载界面显示错误信息，而不是一直转圈
     body.innerHTML = `
       <div style="text-align: center; padding: 40px;">
         <p style="color: #e53935; font-size: 18px;">❌ AI 修正失败</p>
@@ -540,34 +1492,42 @@ async function startAiCorrection() {
         <button class="btn btn-primary" onclick="closeAiCorrectionModal()">关闭</button>
       </div>
     `;
+    // 注意：这里不关闭 overlay，让用户看到错误信息，用户可以点击关闭按钮
   }
 }
 
 function renderAiCorrectionResult(data) {
+  // 兼容后端返回格式：可能没有 original 字段
   const { original, corrected, summary } = data;
   const body = document.getElementById('st-aiCorrectionBody');
   const summaryDiv = document.getElementById('st-correctionSummary');
   
-  // 渲染摘要信息
-  summaryDiv.innerHTML = `
-    <span style="font-weight: 500;">📊 统计：</span>
-    <span>共 ${summary.totalDialogues} 条对话</span>
-    <span style="margin-left: 15px; color: #ff9800;">需要修正 ${summary.correctedCount} 条</span>
-    ${summary.customerSpeakers?.length > 0 ? `<span style="margin-left: 15px; color: #1890ff;">客户：${summary.customerSpeakers.join(', ')}</span>` : ''}
-    ${summary.ourSideSpeakers?.length > 0 ? `<span style="margin-left: 15px; color: #52c41a;">我方：${summary.ourSideSpeakers.join(', ')}</span>` : ''}
-  `;
+  // 确保 corrected 存在且是数组
+  if (!corrected || !Array.isArray(corrected)) {
+    console.error('❌ AI修正结果格式错误:', data);
+    body.innerHTML = `
+      <div style="text-align: center; padding: 40px;">
+        <p style="color: #e53935; font-size: 18px;">❌ 数据格式错误</p>
+        <p style="color: #666;">修正结果格式不正确，请重试</p>
+        <button class="btn btn-primary" onclick="closeAiCorrectionModal()">关闭</button>
+      </div>
+    `;
+    return;
+  }
   
-  // 渲染对比列表
+  // 渲染摘要信息（只显示错别字修正统计）
+  if (summaryDiv) {
+    summaryDiv.innerHTML = `
+      <span style="font-weight: 500;">📊 统计：</span>
+      <span>共 ${summary?.totalDialogues || corrected.length} 条对话</span>
+      <span style="margin-left: 15px; color: #ff9800;">需要修正 ${summary?.correctedCount || 0} 条</span>
+    `;
+  }
+  
+  // 渲染对比列表（只显示错别字修正）
   const html = corrected.map((item, index) => {
     const hasTextChange = item.originalText !== item.correctedText;
-    const hasRoleChange = item.role && item.role !== 'unknown';
-    const itemClass = hasTextChange ? 'has-changes' : (hasRoleChange ? 'role-changed' : '');
-    
-    const roleLabel = {
-      'customer': '👤 客户',
-      'our_side': '👔 我方',
-      'unknown': '❓ 未知'
-    }[item.role] || '';
+    const itemClass = hasTextChange ? 'has-changes' : '';
     
     return `
       <div class="correction-item ${itemClass}">
@@ -575,8 +1535,6 @@ function renderAiCorrectionResult(data) {
           <div>
             <span class="correction-time">${item.timeRange}</span>
             <span class="correction-speaker">${escapeHtml(item.speaker)}</span>
-            ${hasRoleChange ? `<span class="role-badge-correction ${item.role}">${roleLabel}</span>` : ''}
-            ${item.confidence ? `<span style="font-size: 11px; color: #999; margin-left: 5px;">(置信度: ${Math.round(item.confidence * 100)}%)</span>` : ''}
           </div>
           ${hasTextChange ? '<span style="color: #ff9800; font-size: 12px;">✏️ 已修正</span>' : '<span style="color: #52c41a; font-size: 12px;">✓ 无需修正</span>'}
         </div>
@@ -623,7 +1581,7 @@ async function applyAiCorrections() {
     return;
   }
   
-  if (!window.confirm('确认应用所有 AI 修正？这将更新对话内容和角色设置。')) {
+  if (!window.confirm('确认应用所有 AI 修正？这将更新对话内容。')) {
     return;
   }
   
@@ -637,23 +1595,14 @@ async function applyAiCorrections() {
       text: item.correctedText
     }));
     
-    // 提取角色设置
-    const roleSettings = {};
-    corrected.forEach(item => {
-      if (item.role && item.role !== 'unknown') {
-        roleSettings[item.speaker] = item.role;
-      }
-    });
-    
-    // 调用应用接口
+    // 调用应用接口（只传递修正后的对话，不包含角色设置）
     const response = await fetch(`${ST_API_BASE}/transcription/${st_currentTranscriptionId}/apply-corrections`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        correctedDialogues,
-        roleSettings
+        correctedDialogues
       })
     });
     
@@ -665,10 +1614,21 @@ async function applyAiCorrections() {
     
     // 更新本地状态
     st_currentDialogues = correctedDialogues;
-    st_speakerRoles = roleSettings;
     
-    // 重新渲染对话列表
-    renderDialogues(correctedDialogues);
+    // 根据当前标签页更新对应的对话列表
+    if (st_currentTab === 'original') {
+      // 更新原始对话
+      st_originalDialogues = correctedDialogues;
+      renderDialogues(correctedDialogues, 'st-dialoguesList-original');
+    } else if (st_currentTab === 'merged') {
+      // 更新合并后的对话
+      st_mergedDialogues = correctedDialogues;
+      renderDialogues(correctedDialogues, 'st-dialoguesList-merged');
+    } else if (st_currentTab === 'corrected') {
+      // 更新AI修正后的对话
+      st_correctedDialogues = correctedDialogues;
+      renderDialogues(correctedDialogues, 'st-dialoguesList-corrected');
+    }
     
     // 关闭模态框
     closeAiCorrectionModal();
@@ -683,6 +1643,115 @@ async function applyAiCorrections() {
 
 // 全局函数供 HTML onclick 调用
 window.closeAiCorrectionModal = closeAiCorrectionModal;
+
+// ==================== AI 修正设置功能 ====================
+
+/**
+ * 打开 AI 修正设置对话框
+ */
+function openAiCorrectionSettings() {
+  try {
+    console.log('🔧 打开AI修正设置对话框');
+    const modal = document.getElementById('st-aiCorrectionSettingsModal');
+    if (!modal) {
+      console.error('❌ 未找到设置模态框元素: st-aiCorrectionSettingsModal');
+      showToast('设置对话框未找到', 'error');
+      return;
+    }
+    
+    const settings = loadAiCorrectionSettings();
+    console.log('📋 当前设置:', settings);
+    
+    // 填充当前设置
+    const batchSizeInput = document.getElementById('st-batchSize');
+    const modelSelect = document.getElementById('st-aiModel');
+    
+    if (batchSizeInput) {
+      batchSizeInput.value = settings.batchSize;
+    } else {
+      console.error('❌ 未找到 batchSize 输入框');
+    }
+    
+    if (modelSelect) {
+      modelSelect.value = settings.modelName || '';
+    } else {
+      console.error('❌ 未找到 modelSelect 选择框');
+    }
+    
+    // 显示模态框
+    modal.style.display = 'flex';
+    console.log('✅ 设置对话框已显示');
+  } catch (error) {
+    console.error('❌ 打开设置对话框失败:', error);
+    showToast('打开设置失败: ' + error.message, 'error');
+  }
+}
+
+/**
+ * 关闭 AI 修正设置对话框
+ */
+function closeAiCorrectionSettings() {
+  try {
+    const modal = document.getElementById('st-aiCorrectionSettingsModal');
+    if (modal) {
+      modal.style.display = 'none';
+      console.log('✅ 设置对话框已关闭');
+    }
+  } catch (error) {
+    console.error('❌ 关闭设置对话框失败:', error);
+  }
+}
+
+/**
+ * 保存 AI 修正设置
+ */
+function saveAiCorrectionSettings() {
+  const batchSize = parseInt(document.getElementById('st-batchSize').value);
+  const modelName = document.getElementById('st-aiModel').value;
+  
+  // 验证
+  if (isNaN(batchSize) || batchSize < 10 || batchSize > 200) {
+    showToast('每批对话数量必须在 10-200 之间', 'error');
+    return;
+  }
+  
+  // 保存到 localStorage
+  saveAiCorrectionSettingsToStorage({
+    batchSize: batchSize,
+    modelName: modelName
+  });
+  
+  showToast('✅ 设置已保存', 'success');
+  closeAiCorrectionSettings();
+}
+
+// 全局函数
+window.openAiCorrectionSettings = openAiCorrectionSettings;
+window.closeAiCorrectionSettings = closeAiCorrectionSettings;
+window.saveAiCorrectionSettings = saveAiCorrectionSettings;
+
+// 确保按钮事件绑定（备用方案）
+setTimeout(() => {
+  const settingsBtn = document.getElementById('st-aiCorrectionSettingsBtn');
+  if (settingsBtn) {
+    // 移除旧的 onclick，使用 addEventListener
+    settingsBtn.removeAttribute('onclick');
+    settingsBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log('🔧 设置按钮被点击（通过事件监听器）');
+      if (typeof openAiCorrectionSettings === 'function') {
+        openAiCorrectionSettings();
+      } else {
+        console.error('❌ openAiCorrectionSettings 函数未定义');
+        showToast('设置功能未加载，请刷新页面', 'error');
+      }
+    });
+    console.log('✅ 设置按钮事件监听器已绑定');
+  } else {
+    console.warn('⚠️ 未找到设置按钮元素: st-aiCorrectionSettingsBtn');
+  }
+}, 500);
 
 // ==================== 角色设置功能 ====================
 function showRoleSettings() {
@@ -760,15 +1829,21 @@ async function saveRoleSettings() {
   }
   
   try {
-    const response = await fetch(`${ST_API_BASE}/transcription/${st_currentTranscriptionId}`, {
+    // ✅ 使用新的API，保存到 dialogue_adjustments 表
+    const response = await fetch(`${ST_API_BASE}/transcription/${st_currentTranscriptionId}/role-settings`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        speaker_roles: JSON.stringify(newRoles)
+        speaker_roles: newRoles // 直接传递对象，后端会处理JSON序列化
       })
     });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP错误: ${response.status}`);
+    }
     
     const result = await response.json();
     
@@ -780,10 +1855,23 @@ async function saveRoleSettings() {
     st_speakerRoles = newRoles;
     
     // 重新渲染对话列表，显示角色标签
-    renderDialogues(st_currentDialogues);
+    let currentDialogues = [];
+    if (st_currentTab === 'original') {
+      currentDialogues = st_originalDialogues;
+    } else if (st_currentTab === 'merged') {
+      currentDialogues = st_mergedDialogues;
+    } else if (st_currentTab === 'corrected') {
+      currentDialogues = st_correctedDialogues;
+    } else if (st_currentTab === 'remerged') {
+      currentDialogues = st_reMergedDialogues; // ✅ 支持再次合并页签
+    }
+    
+    if (currentDialogues && currentDialogues.length > 0) {
+      renderDialogues(currentDialogues, `st-dialoguesList-${st_currentTab}`);
+    }
     
     hideRoleSettings();
-    showToast('角色设置已保存！', 'success');
+    showToast('角色设置已保存到 dialogue_adjustments 表！', 'success');
     
   } catch (error) {
     console.error('保存角色设置失败:', error);
@@ -927,30 +2015,145 @@ function displayResult(data) {
   // ✅ 修复字段名匹配（使用数据库字段名 + Python返回的驼峰命名）
   document.getElementById('st-speakerCount').textContent = data.speaker_count || data.speakerCount || '-';
   
-  // 解析 dialogues（如果是字符串）
-  let dialogues = data.dialogues;
-  if (typeof dialogues === 'string') {
+  // ✅ 更新音频名称显示
+  const audioNameDisplay = document.getElementById('st-audioNameDisplay');
+  if (audioNameDisplay) {
+    const audioName = data.name || data.original_file_name || '';
+    audioNameDisplay.textContent = audioName ? `(${audioName})` : '';
+  }
+  
+  // 解析原始对话（从 transcriptions 表）
+  let originalDialogues = data.original_dialogues || data.dialogues || [];
+  if (typeof originalDialogues === 'string') {
     try {
-      dialogues = JSON.parse(dialogues);
+      originalDialogues = JSON.parse(originalDialogues);
     } catch (e) {
-      dialogues = [];
+      originalDialogues = [];
     }
   }
   
-  // ✅ 加载角色设置
-  if (data.speaker_roles) {
+  // 解析合并后的对话（从 dialogue_adjustments 表，note1='合并相邻同一说话人的对话'）- 第一次合并
+  let mergedDialogues = [];
+  // 解析AI修正后的对话（从 dialogue_adjustments 表，note1='AI错别字修正'）
+  let correctedDialogues = [];
+  // ✅ 解析再次合并后的对话（从 dialogue_adjustments 表，note1='再次合并对话'）
+  let reMergedDialogues = [];
+  
+  // ✅ 优先从 mergeAdjustment 字段获取第一次合并记录（如果后端单独返回）
+  if (data.mergeAdjustment && data.mergeAdjustment.adjusted_dialogues) {
+    mergedDialogues = Array.isArray(data.mergeAdjustment.adjusted_dialogues)
+      ? data.mergeAdjustment.adjusted_dialogues
+      : (typeof data.mergeAdjustment.adjusted_dialogues === 'string'
+        ? JSON.parse(data.mergeAdjustment.adjusted_dialogues)
+        : []);
+  }
+  
+  // ✅ 从 reMergeAdjustment 字段获取再次合并记录（如果后端单独返回）
+  if (data.reMergeAdjustment && data.reMergeAdjustment.adjusted_dialogues) {
+    reMergedDialogues = Array.isArray(data.reMergeAdjustment.adjusted_dialogues)
+      ? data.reMergeAdjustment.adjusted_dialogues
+      : (typeof data.reMergeAdjustment.adjusted_dialogues === 'string'
+        ? JSON.parse(data.reMergeAdjustment.adjusted_dialogues)
+        : []);
+    console.log('✅ 再次合并后的对话已加载，共', reMergedDialogues.length, '条');
+  }
+  
+  // 如果有调整记录，需要区分是合并、AI修正还是再次合并
+  if (data.adjustment) {
+    const note1 = data.adjustment.note1 || '';
+    
+    if (note1 === '合并相邻同一说话人的对话' && data.adjustment.adjusted_dialogues) {
+      // 第一次合并后的对话（如果 mergeAdjustment 没有数据，使用 adjustment）
+      if (mergedDialogues.length === 0) {
+        mergedDialogues = Array.isArray(data.adjustment.adjusted_dialogues)
+          ? data.adjustment.adjusted_dialogues
+          : (typeof data.adjustment.adjusted_dialogues === 'string'
+            ? JSON.parse(data.adjustment.adjusted_dialogues)
+            : []);
+      }
+    } else if (note1 === '再次合并对话' && data.adjustment.adjusted_dialogues) {
+      // ✅ 再次合并后的对话（如果 reMergeAdjustment 没有数据，使用 adjustment）
+      if (reMergedDialogues.length === 0) {
+        reMergedDialogues = Array.isArray(data.adjustment.adjusted_dialogues)
+          ? data.adjustment.adjusted_dialogues
+          : (typeof data.adjustment.adjusted_dialogues === 'string'
+            ? JSON.parse(data.adjustment.adjusted_dialogues)
+            : []);
+        console.log('✅ 再次合并后的对话已从 adjustment 加载，共', reMergedDialogues.length, '条');
+      }
+    } else if (note1 === 'AI错别字修正' && data.adjustment.adjusted_dialogues) {
+      // AI修正后的对话
+      correctedDialogues = Array.isArray(data.adjustment.adjusted_dialogues)
+        ? data.adjustment.adjusted_dialogues
+        : (typeof data.adjustment.adjusted_dialogues === 'string'
+          ? JSON.parse(data.adjustment.adjusted_dialogues)
+          : []);
+      
+      // ✅ 兼容旧数据格式：如果只有 text 字段，需要转换为 correctedText
+      // 旧格式：{ text: "修正后的文本" }
+      // 新格式：{ originalText: "原始文本", correctedText: "修正后的文本", text: "修正后的文本" }
+      correctedDialogues = correctedDialogues.map(dialogue => {
+        // 如果已经有 correctedText 字段，直接返回
+        if (dialogue.correctedText) {
+          return dialogue;
+        }
+        // 如果只有 text 字段（旧格式），将其作为 correctedText
+        if (dialogue.text && !dialogue.correctedText) {
+          return {
+            ...dialogue,
+            originalText: dialogue.text, // 旧数据没有原始文本，暂时用 text 代替
+            correctedText: dialogue.text, // 将 text 作为 correctedText
+            text: dialogue.text // 保留 text 字段
+          };
+        }
+        return dialogue;
+      });
+      
+      console.log('✅ AI修正后的对话已加载，共', correctedDialogues.length, '条');
+      if (correctedDialogues.length > 0) {
+        console.log('📋 第一条对话示例:', correctedDialogues[0]);
+      }
+    }
+  }
+  
+  // ✅ 加载角色设置（优先从 dialogue_adjustments 表的 adjustment 记录中获取）
+  // 后端会优先返回包含 speaker_roles 的 adjustment 记录（AI修正记录或角色判断记录）
+  // 如果没有 adjustment 记录，才从 transcriptions 表读取（兼容旧数据）
+  if (data.adjustment && data.adjustment.speaker_roles) {
+    try {
+      st_speakerRoles = typeof data.adjustment.speaker_roles === 'string' 
+        ? JSON.parse(data.adjustment.speaker_roles) 
+        : data.adjustment.speaker_roles;
+      console.log(`✅ 角色设置已从 dialogue_adjustments 表加载（${data.adjustment.note1 || '调整记录'}）`);
+    } catch (e) {
+      console.error('解析 dialogue_adjustments 表的角色设置失败:', e);
+      st_speakerRoles = {};
+    }
+  } else if (data.speaker_roles) {
+    // 兼容旧数据：从 transcriptions 表读取（不推荐，已废弃）
     try {
       st_speakerRoles = typeof data.speaker_roles === 'string' 
         ? JSON.parse(data.speaker_roles) 
         : data.speaker_roles;
+      console.warn('⚠️ 角色设置从 transcriptions 表读取（旧数据，建议迁移到 dialogue_adjustments 表）');
     } catch (e) {
+      console.error('解析 transcriptions 表的角色设置失败:', e);
       st_speakerRoles = {};
     }
   } else {
     st_speakerRoles = {};
+    console.log('ℹ️ 未找到角色设置');
   }
   
-  document.getElementById('st-dialogueCount').textContent = (dialogues?.length || 0);
+  // 保存所有对话版本
+  st_originalDialogues = originalDialogues;
+  st_mergedDialogues = mergedDialogues;
+  st_correctedDialogues = correctedDialogues;
+  st_reMergedDialogues = reMergedDialogues; // ✅ 保存再次合并后的对话
+  st_currentDialogues = originalDialogues; // 默认显示原始对话
+  
+  // 更新对话数量（显示原始对话的数量）
+  document.getElementById('st-dialogueCount').textContent = (originalDialogues?.length || 0);
   document.getElementById('st-audioDuration').textContent = formatDuration(
     data.audio_duration || data.audioDuration || data.duration  // ✅ 兼容三种命名
   );
@@ -959,10 +2162,39 @@ function displayResult(data) {
   // ✅ 初始化音频播放器
   initAudioPlayer(st_currentAudioPath);
   
-  renderDialogues(dialogues || []);
+  // 渲染所有对话列表
+  renderDialogues(originalDialogues || [], 'st-dialoguesList-original');
+  
+  // 始终显示"合并后的对话"标签页（第一次合并），即使没有数据也显示（显示空状态）
+  renderDialogues(mergedDialogues || [], 'st-dialoguesList-merged');
+  document.getElementById('st-tab-merged').style.display = 'block';
+  
+  // 始终显示"AI修正后的对话"标签页，即使没有数据也显示（显示空状态）
+  renderDialogues(correctedDialogues || [], 'st-dialoguesList-corrected');
+  document.getElementById('st-tab-corrected').style.display = 'block';
+  
+  // ✅ 如果有再次合并的记录，显示"再次合并后的对话"标签页
+  if (reMergedDialogues && reMergedDialogues.length > 0) {
+    renderDialogues(reMergedDialogues || [], 'st-dialoguesList-remerged');
+    document.getElementById('st-tab-remerged').style.display = 'block';
+  } else {
+    document.getElementById('st-tab-remerged').style.display = 'none';
+    renderDialogues([], 'st-dialoguesList-remerged'); // 渲染空列表
+  }
+  
+  // 默认显示原始对话标签页
+  switchDialogueTab('original');
   
   // ✅ 重新绑定按钮事件（确保按钮可用）
   bindResultButtons();
+  
+  // ✅ 加载问答对（异步，不阻塞页面显示）
+  if (st_currentTranscriptionId) {
+    loadQAPairs(st_currentTranscriptionId).catch(error => {
+      console.error('加载问答对失败:', error);
+      // 静默失败，不影响主流程
+    });
+  }
   
   showToast('转录成功！', 'success');
 }
@@ -990,21 +2222,123 @@ function bindResultButtons() {
   }
 }
 
-function renderDialogues(dialogues) {
-  const container = document.getElementById('st-dialoguesList');
+// 切换对话标签页
+function switchDialogueTab(tab) {
+  st_currentTab = tab;
+  
+  // 更新标签页按钮样式
+  const originalTab = document.getElementById('st-tab-original');
+  const mergedTab = document.getElementById('st-tab-merged');
+  const correctedTab = document.getElementById('st-tab-corrected');
+  const reMergedTab = document.getElementById('st-tab-remerged');
+  const qaTab = document.getElementById('st-tab-qa');
+  const originalList = document.getElementById('st-dialoguesList-original');
+  const mergedList = document.getElementById('st-dialoguesList-merged');
+  const correctedList = document.getElementById('st-dialoguesList-corrected');
+  const reMergedList = document.getElementById('st-dialoguesList-remerged');
+  const qaList = document.getElementById('st-dialoguesList-qa');
+  
+  // 重置所有标签页样式
+  [originalTab, mergedTab, correctedTab, reMergedTab, qaTab].forEach(t => {
+    if (t) {
+      t.classList.remove('active');
+      t.style.borderBottomColor = 'transparent';
+      t.style.color = '#666';
+    }
+  });
+  
+  // 隐藏所有列表
+  [originalList, mergedList, correctedList, reMergedList, qaList].forEach(list => {
+    if (list) {
+      list.style.display = 'none';
+    }
+  });
+  
+  if (tab === 'original') {
+    if (originalTab) {
+      originalTab.classList.add('active');
+      originalTab.style.borderBottomColor = 'var(--primary)';
+      originalTab.style.color = 'var(--primary)';
+    }
+    if (originalList) {
+      originalList.style.display = 'block';
+    }
+    st_currentDialogues = st_originalDialogues;
+  } else if (tab === 'merged') {
+    if (mergedTab) {
+      mergedTab.classList.add('active');
+      mergedTab.style.borderBottomColor = 'var(--primary)';
+      mergedTab.style.color = 'var(--primary)';
+    }
+    if (mergedList) {
+      mergedList.style.display = 'block';
+    }
+    st_currentDialogues = st_mergedDialogues;
+  } else if (tab === 'corrected') {
+    if (correctedTab) {
+      correctedTab.classList.add('active');
+      correctedTab.style.borderBottomColor = 'var(--primary)';
+      correctedTab.style.color = 'var(--primary)';
+    }
+    if (correctedList) {
+      correctedList.style.display = 'block';
+    }
+    st_currentDialogues = st_correctedDialogues;
+  } else if (tab === 'remerged') {
+    // ✅ 再次合并后的对话页签
+    if (reMergedTab) {
+      reMergedTab.classList.add('active');
+      reMergedTab.style.borderBottomColor = 'var(--primary)';
+      reMergedTab.style.color = 'var(--primary)';
+    }
+    if (reMergedList) {
+      reMergedList.style.display = 'block';
+    }
+    st_currentDialogues = st_reMergedDialogues;
+  } else if (tab === 'qa') {
+    if (qaTab) {
+      qaTab.classList.add('active');
+      qaTab.style.borderBottomColor = 'var(--primary)';
+      qaTab.style.color = 'var(--primary)';
+    }
+    if (qaList) {
+      qaList.style.display = 'block';
+      // 如果问答对列表为空，重新加载
+      if (!st_qaPairs || st_qaPairs.length === 0) {
+        loadQAPairs(st_currentTranscriptionId);
+      } else {
+        renderQAPairs(st_qaPairs, 'st-dialoguesList-qa');
+      }
+    }
+  }
+}
+
+function renderDialogues(dialogues, containerId = 'st-dialoguesList-original') {
+  const container = document.getElementById(containerId);
+  if (!container) {
+    console.error(`容器 ${containerId} 不存在`);
+    return;
+  }
   
   if (!dialogues || dialogues.length === 0) {
     container.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 20px;">暂无对话内容</p>';
     return;
   }
   
-  // 保存原始对话数据
-  st_currentDialogues = dialogues;
+  // 判断是否是AI修正后的对话列表
+  const isCorrectedTab = containerId === 'st-dialoguesList-corrected';
   
   container.innerHTML = dialogues.map((dialogue, index) => {
     const timeRange = dialogue.timeRange || dialogue.startTime || '';
     const speaker = dialogue.speaker || '说话人' + (index + 1);
-    const text = dialogue.text || '';
+    
+    // 对于AI修正后的对话，优先使用 correctedText，否则使用 text
+    let text = '';
+    if (isCorrectedTab) {
+      text = dialogue.correctedText || dialogue.text || '';
+    } else {
+      text = dialogue.text || '';
+    }
     
     // 获取角色标签
     const role = st_speakerRoles[speaker];
@@ -1015,6 +2349,44 @@ function renderDialogues(dialogues) {
       roleTag = '<span class="role-badge role-our-side">👔 我方</span>';
     }
     
+    // 对于AI修正后的对话，如果有修改，显示修改说明
+    // 格式：对话文本 【原文--修正文】
+    let changesDisplay = '';
+    if (isCorrectedTab && dialogue.changes && Array.isArray(dialogue.changes) && dialogue.changes.length > 0) {
+      // 解析 changes 数组，格式可能是：
+      // - ["原文--修正文"] 或 ["伊斯特--east"]
+      // - ["原文 → 修正文"]
+      // - ["修改说明"]
+      const changeItems = dialogue.changes
+        .map(change => {
+          if (typeof change === 'string') {
+            // 如果已经是 "原文--修正文" 格式，直接使用
+            if (change.includes('--')) {
+              return change; // 保留完整格式：原文--修正文
+            }
+            // 如果是 "原文 → 修正文" 格式，转换为 "--" 格式
+            if (change.includes('→')) {
+              const parts = change.split('→');
+              if (parts.length === 2) {
+                return `${parts[0].trim()}--${parts[1].trim()}`;
+              }
+            }
+            // 如果是其他格式，直接使用
+            return change;
+          }
+          return String(change);
+        })
+        .filter(c => c && c.trim()); // 过滤空值
+      
+      if (changeItems.length > 0) {
+        // 将所有修改项格式化为 【原文--修正文】 的形式，多个修改用空格分隔
+        const changesStr = changeItems
+          .map(item => `【${item}】`)
+          .join(' ');
+        changesDisplay = ` <span style="color: #ff9800; font-weight: 500;">${escapeHtml(changesStr)}</span>`;
+      }
+    }
+    
     return `
       <div class="dialogue-item" data-index="${index}" data-start="${parseTimeToSeconds(timeRange.split('-')[0])}">
         <div class="dialogue-header">
@@ -1022,7 +2394,7 @@ function renderDialogues(dialogues) {
           <span class="speaker-name">${escapeHtml(speaker)}</span>
           ${roleTag}
           <span style="color: #333;">：</span>
-          <span class="dialogue-text-inline">${escapeHtml(text)}</span>
+          <span class="dialogue-text-inline">${escapeHtml(text)}${changesDisplay}</span>
           <button class="btn btn-sm btn-secondary dialogue-edit-btn" data-index="${index}" style="margin-left: auto;">✏️</button>
         </div>
       </div>
@@ -1032,8 +2404,14 @@ function renderDialogues(dialogues) {
 
 // ==================== 操作功能 ====================
 function copyAllDialogues() {
-  // 修复：使用正确的类名 .dialogue-text-inline 或从对话数据中获取
-  const dialogues = document.querySelectorAll('.dialogue-item');
+  // 根据当前标签页获取对话列表
+  let currentListId = 'st-dialoguesList-original';
+  if (st_currentTab === 'merged') {
+    currentListId = 'st-dialoguesList-merged';
+  } else if (st_currentTab === 'corrected') {
+    currentListId = 'st-dialoguesList-corrected';
+  }
+  const dialogues = document.querySelectorAll(`#${currentListId} .dialogue-item`);
   
   if (dialogues.length === 0) {
     showToast('没有可复制的内容', 'error');
@@ -1088,7 +2466,14 @@ function downloadResult() {
     return;
   }
   
-  const dialogues = document.querySelectorAll('.dialogue-item');
+  // 根据当前标签页获取对话列表
+  let currentListId = 'st-dialoguesList-original';
+  if (st_currentTab === 'merged') {
+    currentListId = 'st-dialoguesList-merged';
+  } else if (st_currentTab === 'corrected') {
+    currentListId = 'st-dialoguesList-corrected';
+  }
+  const dialogues = document.querySelectorAll(`#${currentListId} .dialogue-item`);
   
   if (dialogues.length === 0) {
     showToast('没有可下载的内容', 'error');
@@ -1240,6 +2625,23 @@ async function viewTranscription(id) {
     const result = await response.json();
     
     if (result.success && result.data) {
+      // 后端已经返回了：
+      // - result.data.dialogues: 原始对话（从 transcriptions 表）
+      // - result.data.original_dialogues: 原始对话的备份
+      // - result.data.adjustment.adjusted_dialogues: 合并后的对话（从 dialogue_adjustments 表，如果有）
+      
+      // 确保 original_dialogues 存在（从 transcriptions 表获取的原始对话）
+      if (!result.data.original_dialogues) {
+        result.data.original_dialogues = result.data.dialogues || [];
+      }
+      
+      // 如果有调整记录，标记为已调整
+      if (result.data.adjustment && result.data.adjustment.adjusted_dialogues) {
+        result.data.isAdjusted = true;
+      } else {
+        result.data.isAdjusted = false;
+      }
+      
       displayResult(result.data);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -1249,11 +2651,48 @@ async function viewTranscription(id) {
   }
 }
 
+// 合并对话功能
+async function mergeDialogues(transcriptionId) {
+  if (!window.confirm('确定要合并相邻同一说话人的对话吗？此操作将创建一条调整记录。')) {
+    return;
+  }
+  
+  try {
+    showToast('正在合并对话...', 'info');
+    
+    const response = await fetch(`${ST_API_BASE}/transcription/${transcriptionId}/merge-dialogues`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      showToast('合并成功！', 'success');
+      // 刷新文件列表
+      await loadScanFiles();
+      // 自动打开核查纠偏页面
+      setTimeout(() => {
+        viewTranscription(transcriptionId);
+      }, 500);
+    } else {
+      showToast(result.error || '合并失败', 'error');
+    }
+  } catch (error) {
+    console.error('合并对话失败:', error);
+    showToast('合并失败: ' + error.message, 'error');
+  }
+}
+
 // ==================== 全局函数暴露（供HTML调用）====================
+// 注意：这里只暴露已定义的函数，其他函数在文件末尾统一暴露
 window.saveDialogueEdit = saveDialogueEdit;
 window.cancelDialogueEdit = cancelDialogueEdit;
 window.closeBatchReplaceDialog = closeBatchReplaceDialog;
 window.executeBatchReplace = executeBatchReplace;
+window.mergeDialogues = mergeDialogues;
 
 // ==================== 工具函数 ====================
 function formatDuration(seconds) {
@@ -1441,7 +2880,10 @@ async function loadScanFiles() {
         </td>
         <td>
           ${file.transcribed
-            ? `<button class="btn btn-sm btn-secondary" onclick="viewTranscription('${file.transcriptionId}')">✏️ 核查纠偏</button>`
+            ? `<div style="display: flex; gap: 5px;">
+                <button class="btn btn-sm btn-info" onclick="mergeDialogues('${file.transcriptionId}')" title="合并相邻同一说话人的对话">🔗 合并对话</button>
+                <button class="btn btn-sm btn-secondary" onclick="viewTranscription('${file.transcriptionId}')">✏️ 核查纠偏</button>
+              </div>`
             : `<button class="btn btn-sm btn-primary" data-file-index="${index}">🎤 转录</button>`
           }
         </td>
@@ -1491,4 +2933,13 @@ async function st_transcribeFile(filePath, fileName) {
     showToast('转录失败: ' + error.message, 'error');
   }
 }
+
+// ==================== 全局函数暴露（供HTML调用）====================
+// ✅ 在文件末尾统一暴露所有需要全局访问的函数（确保函数已定义）
+window.st_switchTab = st_switchTab; // ✅ 暴露到全局作用域，供 HTML onclick="st_switchTab('scan')" 使用
+window.switchDialogueTab = switchDialogueTab; // ✅ 暴露到全局作用域，供 HTML onclick 使用
+window.triggerReMerge = triggerReMerge; // ✅ 暴露到全局作用域，供 HTML onclick="triggerReMerge()" 使用
+window.startQAExtraction = startQAExtraction; // ✅ 暴露到全局作用域，供 HTML onclick 使用
+window.playQAAudio = playQAAudio; // ✅ 暴露到全局作用域，供 HTML onclick="playQAAudio(index)" 使用
+window.checkNeedsReMergeLocally = checkNeedsReMergeLocally;
 

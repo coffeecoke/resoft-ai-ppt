@@ -488,6 +488,10 @@
           <span class="danger" id="audio-stat-failed">-</span>
         </div>
       </div>
+      <div class="stat-card">
+        <div class="label">AI错别字修正</div>
+        <div class="value" id="audio-stat-corrected">-</div>
+      </div>
     </div>
 
     <!-- 配置设置 -->
@@ -519,6 +523,17 @@
         <div class="form-row">
           <label></label>
           <div class="helper-text">同时转录的音频文件数量（1-5个）</div>
+        </div>
+        
+        <div class="form-row">
+          <label>
+            <input type="checkbox" id="audio-config-enable-ai-correction" style="margin-right: 8px;">
+            <span>启用AI错别字修正</span>
+          </label>
+        </div>
+        <div class="form-row">
+          <label></label>
+          <div class="helper-text">转录完成后自动使用AI修正错别字（需要配置模型）</div>
         </div>
         
         <div class="form-row">

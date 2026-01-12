@@ -389,7 +389,7 @@ router.put('/audio/config', async (req, res) => {
  */
 router.get('/audio/statistics', async (req, res) => {
   try {
-    const statistics = audioAutoProcessService.getStatistics()
+    const statistics = await audioAutoProcessService.getStatistics()
     
     res.json({
       success: true,

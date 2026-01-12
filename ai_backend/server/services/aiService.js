@@ -39,6 +39,11 @@ class AIService {
     const config = getModelConfig(modelName)
     const client = this.createClient(modelName)
     
+    // ✅ 添加详细的调用日志
+    console.log(`🤖 [AI调用] 模型代码: ${modelName}`)
+    console.log(`📋 [AI调用] 实际模型: ${config.model}, Provider: ${config.provider}, BaseURL: ${config.baseUrl}`)
+    console.log(`📊 [AI调用] 消息数量: ${messages.length}, 温度: ${options.temperature ?? 0.7}, 最大Token: ${options.maxTokens ?? 4096}`)
+    
     const response = await client.chat.completions.create({
       model: config.model,
       messages,
@@ -62,6 +67,9 @@ class AIService {
   async chatStream(modelName, messages, onChunk, options = {}) {
     const config = getModelConfig(modelName)
     const client = this.createClient(modelName)
+    
+    // ✅ 添加调用日志
+    console.log(`🤖 [AI调用-流式] 模型: ${config.model}, Provider: ${config.provider}, BaseURL: ${config.baseUrl}`)
     
     const stream = await client.chat.completions.create({
       model: config.model,
