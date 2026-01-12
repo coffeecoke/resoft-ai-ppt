@@ -10,14 +10,16 @@ let st_audioPlayer = null;
 let st_autoScrollEnabled = true;
 let st_currentDialogues = [];
 let st_originalDialogues = []; // 存储原始对话（从 transcriptions 表）
-let st_mergedDialogues = []; // 存储合并后的对话（从 dialogue_adjustments 表）
+let st_mergedDialogues = []; // 存储第一次合并后的对话（从 dialogue_adjustments 表，note1='合并相邻同一说话人的对话'）
 let st_correctedDialogues = []; // 存储AI修正后的对话（从 dialogue_adjustments 表，note1='AI错别字修正'）
-let st_currentTab = 'original'; // 当前显示的标签页：'original'、'merged' 或 'corrected'
+let st_reMergedDialogues = []; // 存储再次合并后的对话（从 dialogue_adjustments 表，note1='再次合并对话'）
+let st_currentTab = 'original'; // 当前显示的标签页：'original'、'merged'、'corrected'、'remerged' 或 'qa'
 let st_editedDialogues = new Map(); // 存储编辑过的对话
 let st_isEditMode = false;
 let st_currentAudioPath = null;
 let st_speakerRoles = {}; // 存储角色设置，格式：{ "SPEAKER_1": "customer", "SPEAKER_2": "our_side" }
 let st_aiCorrectionResult = null; // 存储 AI 修正结果
+let st_qaPairs = []; // 存储问答对数据
 
 // AI 修正设置（从 localStorage 读取）
 function loadAiCorrectionSettings() {
@@ -55,6 +57,27 @@ function saveRoleJudgmentSettingsToStorage(settings) {
     localStorage.setItem('roleJudgment_promptId', settings.promptId);
   } else {
     localStorage.removeItem('roleJudgment_promptId');
+  }
+}
+
+// ==================== 问答对提取设置管理 ====================
+function loadQAExtractionSettings() {
+  return {
+    modelName: localStorage.getItem('qaExtraction_modelName') || '',
+    promptId: localStorage.getItem('qaExtraction_promptId') || ''
+  };
+}
+
+function saveQAExtractionSettingsToStorage(settings) {
+  if (settings.modelName) {
+    localStorage.setItem('qaExtraction_modelName', settings.modelName);
+  } else {
+    localStorage.removeItem('qaExtraction_modelName');
+  }
+  if (settings.promptId) {
+    localStorage.setItem('qaExtraction_promptId', settings.promptId);
+  } else {
+    localStorage.removeItem('qaExtraction_promptId');
   }
 }
 
@@ -167,6 +190,7 @@ function initEventListeners() {
   // ✅ 编辑功能相关
   document.getElementById('st-roleJudgmentBtn')?.addEventListener('click', startRoleJudgment);
   document.getElementById('st-aiCorrectionBtn')?.addEventListener('click', startAiCorrection);
+  document.getElementById('st-qaExtractionBtn')?.addEventListener('click', startQAExtraction);
   document.getElementById('st-roleSettingsBtn')?.addEventListener('click', showRoleSettings);
   document.getElementById('st-batchReplaceSpeakerBtn')?.addEventListener('click', showBatchReplaceDialog);
   document.getElementById('st-saveEditBtn')?.addEventListener('click', saveEdits);
@@ -184,7 +208,9 @@ function initEventListeners() {
   const dialogueListContainers = [
     'st-dialoguesList-original',
     'st-dialoguesList-merged',
-    'st-dialoguesList-corrected'
+    'st-dialoguesList-corrected',
+    'st-dialoguesList-remerged', // 再次合并后的对话列表
+    'st-dialoguesList-qa' // 问答对列表
   ];
   
   dialogueListContainers.forEach(containerId => {
@@ -303,16 +329,13 @@ function parseTimeToSeconds(timeStr) {
   return 0;
 }
 
-// 将秒数转换为时间字符串 "00:00:12"
+// 将秒数转换为时间字符串 "00:00:12" 或 "01:50:49"（HH:MM:SS格式）
 function formatTimeFromSeconds(seconds) {
-  if (!seconds || isNaN(seconds)) return '00:00';
+  if (!seconds || isNaN(seconds)) return '00:00:00';
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
   const s = Math.floor(seconds % 60);
-  if (h > 0) {
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  }
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
 // ==================== 编辑功能 ====================
@@ -601,6 +624,8 @@ async function saveEdits() {
         currentDialogues = st_mergedDialogues || [];
       } else if (st_currentTab === 'corrected') {
         currentDialogues = st_correctedDialogues || [];
+      } else if (st_currentTab === 'remerged') {
+        currentDialogues = st_reMergedDialogues || []; // ✅ 支持再次合并页签
       }
       
       if (checkNeedsReMergeLocally(currentDialogues)) {
@@ -679,8 +704,8 @@ async function triggerReMerge() {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        tabType: tabType,
-        autoMerge: true // 更新现有合并记录，而不是创建新记录
+        tabType: tabType
+        // ✅ 不再传递 autoMerge 参数，后端总是创建新记录（note1='再次合并对话'）
       })
     });
     
@@ -695,26 +720,37 @@ async function triggerReMerge() {
       throw new Error(result.error || '重新合并失败');
     }
     
-    const { originalCount, mergedCount, updated } = result.data;
+    const { originalCount, mergedCount } = result.data;
     
     showToast(
-      `重新合并成功：${originalCount} 条 → ${mergedCount} 条${updated ? '（已更新合并记录）' : '（已创建新合并记录）'}`,
+      `重新合并成功：${originalCount} 条 → ${mergedCount} 条（已创建再次合并记录）`,
       'success'
     );
     
     // 隐藏重新合并按钮
     document.getElementById('st-reMergeBtn').style.display = 'none';
     
-    // 重新加载当前转录记录，刷新数据
+    // ✅ 重新加载当前转录记录，刷新数据
     if (st_currentTranscriptionId) {
       await loadTranscriptionById(st_currentTranscriptionId);
       
-      // 切换到"合并后的对话"页签，显示合并结果
-      if (st_mergedDialogues && st_mergedDialogues.length > 0) {
-        setTimeout(() => {
-          switchDialogueTab('merged');
-        }, 300);
-      }
+      // ✅ 切换到"再次合并后的对话"页签，显示合并结果
+      setTimeout(() => {
+        if (st_reMergedDialogues && st_reMergedDialogues.length > 0) {
+          // 确保"再次合并"页签显示
+          const reMergedTab = document.getElementById('st-tab-remerged');
+          if (reMergedTab) {
+            reMergedTab.style.display = 'block';
+          }
+          switchDialogueTab('remerged');
+        } else {
+          showToast('⚠️ 未找到再次合并后的对话', 'warning');
+          // 如果再次合并页签不存在，切换到合并页签
+          if (st_mergedDialogues && st_mergedDialogues.length > 0) {
+            switchDialogueTab('merged');
+          }
+        }
+      }, 300);
     }
     
   } catch (error) {
@@ -798,6 +834,8 @@ async function startRoleJudgment() {
         currentDialogues = st_mergedDialogues;
       } else if (st_currentTab === 'corrected') {
         currentDialogues = st_correctedDialogues;
+      } else if (st_currentTab === 'remerged') {
+        currentDialogues = st_reMergedDialogues; // ✅ 支持再次合并页签
       }
       
       if (currentDialogues && currentDialogues.length > 0) {
@@ -813,6 +851,435 @@ async function startRoleJudgment() {
     console.error('角色判断失败:', error);
     showToast('角色判断失败: ' + error.message, 'error');
   }
+}
+
+// ==================== 问答对提取功能 ====================
+async function startQAExtraction() {
+  if (!st_currentTranscriptionId) {
+    showToast('没有当前转录记录', 'error');
+    return;
+  }
+
+  // ✅ 优先使用最后一次合并完成后的内容（再次合并 > AI修正 > 第一次合并 > 原始对话）
+  let dialoguesToSend = [];
+  let dialogueSource = '';
+
+  // 1. 最优先使用再次合并后的对话（最后合并完成的内容）
+  if (st_reMergedDialogues && st_reMergedDialogues.length > 0) {
+    dialoguesToSend = st_reMergedDialogues;
+    dialogueSource = '再次合并后的对话';
+  } 
+  // 2. 其次使用AI修正后的对话
+  else if (st_correctedDialogues && st_correctedDialogues.length > 0) {
+    dialoguesToSend = st_correctedDialogues;
+    dialogueSource = 'AI修正后的对话';
+  } 
+  // 3. 再次使用第一次合并后的对话
+  else if (st_mergedDialogues && st_mergedDialogues.length > 0) {
+    dialoguesToSend = st_mergedDialogues;
+    dialogueSource = '第一次合并后的对话';
+  } 
+  // 4. 最后使用原始对话
+  else if (st_originalDialogues && st_originalDialogues.length > 0) {
+    dialoguesToSend = st_originalDialogues;
+    dialogueSource = '原始对话';
+  }
+
+  if (!dialoguesToSend || dialoguesToSend.length === 0) {
+    showToast(`请先加载对话内容`, 'warning');
+    return;
+  }
+
+  // 检查是否有角色信息
+  if (!st_speakerRoles || Object.keys(st_speakerRoles).length === 0) {
+    if (!window.confirm('未找到角色信息，问答对提取需要先进行角色判断。是否现在进行角色判断？')) {
+      return;
+    }
+    // 触发角色判断
+    await startRoleJudgment();
+    // 角色判断完成后，重新检查角色信息
+    if (!st_speakerRoles || Object.keys(st_speakerRoles).length === 0) {
+      showToast('角色判断未完成或失败，无法进行问答对提取', 'error');
+      return;
+    }
+  }
+
+  // 显示加载提示
+  showToast(`🤖 AI 正在提取问答对（使用${dialogueSource}，优先使用最后一次合并完成的内容）...`, 'info');
+
+  try {
+    // 读取设置
+    const settings = loadQAExtractionSettings();
+
+    const response = await fetch(`${ST_API_BASE}/transcription/${st_currentTranscriptionId}/qa-extraction`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        modelName: settings.modelName || undefined,
+        promptId: settings.promptId || undefined,
+        dialogues: dialoguesToSend
+      })
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP错误: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    
+    if (!result.success) {
+      throw new Error(result.error || '问答对提取失败');
+    }
+    
+    // 更新问答对数据
+    if (result.data && result.data.qaPairs) {
+      st_qaPairs = result.data.qaPairs;
+      
+      // 切换到问答对页签并显示结果
+      switchDialogueTab('qa');
+      renderQAPairs(st_qaPairs, 'st-dialoguesList-qa');
+      
+      const summary = result.summary || {};
+      showToast(
+        `✅ 问答对提取完成！共提取 ${summary.totalPairs || 0} 个问答对（已回答: ${summary.answeredPairs || 0}，待回答: ${summary.pendingPairs || 0}）`,
+        'success'
+      );
+    } else {
+      showToast('⚠️ 未提取到问答对', 'warning');
+    }
+    
+  } catch (error) {
+    console.error('问答对提取失败:', error);
+    showToast('问答对提取失败: ' + error.message, 'error');
+  }
+}
+
+/**
+ * 加载问答对（从 concerns 表查询）
+ */
+async function loadQAPairs(transcriptionId) {
+  if (!transcriptionId) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`${ST_API_BASE}/transcription/${transcriptionId}/qa-pairs`);
+    const result = await response.json();
+    
+    if (result.success && result.data && result.data.qaPairs) {
+      st_qaPairs = result.data.qaPairs;
+      
+      // 调试：输出第一个问答对的数据结构
+      if (st_qaPairs.length > 0) {
+        console.log('📋 加载的问答对数据示例（第一个）:', JSON.stringify(st_qaPairs[0], null, 2));
+        console.log('   - time_range:', st_qaPairs[0].time_range);
+        console.log('   - time_range1:', st_qaPairs[0].time_range1);
+        console.log('   - time_range2:', st_qaPairs[0].time_range2);
+      }
+      
+      // 如果当前在问答对页签，刷新显示
+      if (st_currentTab === 'qa') {
+        renderQAPairs(st_qaPairs, 'st-dialoguesList-qa');
+      }
+    } else {
+      st_qaPairs = [];
+      // 如果当前在问答对页签，显示提示
+      if (st_currentTab === 'qa') {
+        const qaContainer = document.getElementById('st-dialoguesList-qa');
+        if (qaContainer) {
+          qaContainer.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 20px;">暂无问答对，请点击"问答对提取"按钮提取</p>';
+        }
+      }
+    }
+  } catch (error) {
+    console.error('加载问答对失败:', error);
+    st_qaPairs = [];
+  }
+}
+
+/**
+ * 解析时间范围字符串，返回开始时间和结束时间的秒数
+ * 支持格式: "[00:10-00:30]" 或 "01:50:49-01:51:33"
+ */
+function parseTimeRange(timeRangeStr) {
+  if (!timeRangeStr) return { startSeconds: 0, endSeconds: 0, startTime: '', endTime: '' };
+  
+  // 移除方括号（如果有）
+  let cleanStr = timeRangeStr.replace(/[\[\]]/g, '').trim();
+  
+  // 分割开始和结束时间
+  const parts = cleanStr.split('-').map(s => s.trim());
+  if (parts.length !== 2) {
+    return { startSeconds: 0, endSeconds: 0, startTime: '', endTime: '' };
+  }
+  
+  const [startTime, endTime] = parts;
+  
+  // 转换为秒数
+  const startSeconds = parseTimeToSeconds(startTime);
+  const endSeconds = parseTimeToSeconds(endTime);
+  
+  return { startSeconds, endSeconds, startTime, endTime };
+}
+
+/**
+ * 渲染问答对列表
+ */
+function renderQAPairs(qaPairs, containerId = 'st-dialoguesList-qa') {
+  const container = document.getElementById(containerId);
+  if (!container) {
+    console.error(`容器 ${containerId} 不存在`);
+    return;
+  }
+  
+  if (!qaPairs || qaPairs.length === 0) {
+    container.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 20px;">暂无问答对，请点击"问答对提取"按钮提取</p>';
+    return;
+  }
+  
+  container.innerHTML = qaPairs.map((qa, index) => {
+    const qaIndex = index + 1;
+    
+    // ✅ 使用新的格式：time_range1 和 time_range2（问题和回答分别的时间范围）
+    // ✅ 兼容旧格式：time_range（整体时间范围）
+    const questionTimeRangeStr = qa.time_range1 || qa.time_range || null;
+    const answerTimeRangeStr = qa.time_range2 || null;
+    
+    // 调试：输出每个问答对的时间范围
+    if (index === 0) {
+      console.log(`🔍 渲染问答对 ${qaIndex}:`, {
+        'qa.time_range': qa.time_range,
+        'qa.time_range1': qa.time_range1,
+        'qa.time_range2': qa.time_range2,
+        'questionTimeRangeStr': questionTimeRangeStr,
+        'answerTimeRangeStr': answerTimeRangeStr
+      });
+    }
+    
+    // 解析问题时间范围
+    const questionTimeRange = parseTimeRange(questionTimeRangeStr);
+    // 解析回答时间范围
+    const answerTimeRange = parseTimeRange(answerTimeRangeStr);
+    
+    // 格式化时间显示（去掉方括号，转换为标准格式）
+    const formatTimeDisplay = (timeStr) => {
+      if (!timeStr) return '';
+      // 移除方括号（如果有）
+      let cleaned = String(timeStr).replace(/[\[\]]/g, '').trim();
+      // 确保格式正确：应该包含 "-" 分隔符
+      if (cleaned && cleaned.includes('-')) {
+        return cleaned;
+      }
+      // 如果格式不对，尝试修复或返回原始值
+      return cleaned || '';
+    };
+    
+    // 计算问题时间显示（如果存在 time_range1，使用它；否则兼容旧格式）
+    let questionTimeDisplay = '';
+    if (questionTimeRangeStr) {
+      questionTimeDisplay = formatTimeDisplay(questionTimeRangeStr);
+      if (!questionTimeDisplay && index === 0) {
+        console.warn(`⚠️ 问答对 ${qaIndex} 问题时间范围解析失败:`, questionTimeRangeStr);
+      }
+    } else if (index === 0) {
+      console.warn(`⚠️ 问答对 ${qaIndex} 没有问题时间范围字段 (time_range1/time_range 均为空)`);
+    }
+    
+    // 计算回答时间显示（如果存在 time_range2，使用它）
+    let answerTimeDisplay = '';
+    if (answerTimeRangeStr) {
+      answerTimeDisplay = formatTimeDisplay(answerTimeRangeStr);
+      if (!answerTimeDisplay && index === 0 && qa.answer && qa.answer.length > 0) {
+        console.warn(`⚠️ 问答对 ${qaIndex} 回答时间范围解析失败:`, answerTimeRangeStr);
+      }
+    } else if (qa.answer && qa.answer.length > 0 && index === 0) {
+      console.warn(`⚠️ 问答对 ${qaIndex} 有回答但没有回答时间范围字段 (time_range2 为空)`);
+    }
+    
+    // ✅ 计算完整的播放时间范围（从问题开始到回答结束，包含5秒冗余）
+    let playStartSeconds = 0;
+    let playEndSeconds = 0;
+    
+    if (questionTimeRange.startSeconds >= 0) {
+      // 从问题的开始时间播放
+      playStartSeconds = questionTimeRange.startSeconds;
+      
+      // 如果有回答时间范围，播放到回答的结束时间；否则播放到问题的结束时间
+      if (answerTimeRange.endSeconds > 0) {
+        playEndSeconds = answerTimeRange.endSeconds;
+      } else if (questionTimeRange.endSeconds > 0) {
+        playEndSeconds = questionTimeRange.endSeconds;
+      } else {
+        // 默认播放30秒
+        playEndSeconds = playStartSeconds + 30;
+      }
+    } else if (qa.time_range) {
+      // 兼容旧格式：使用整体的 time_range
+      const oldTimeRange = parseTimeRange(qa.time_range);
+      playStartSeconds = oldTimeRange.startSeconds || 0;
+      playEndSeconds = oldTimeRange.endSeconds || (playStartSeconds + 30);
+    }
+    
+    return `
+      <div class="qa-pair-item" data-qa-index="${index}" data-play-start="${playStartSeconds}" data-play-end="${playEndSeconds}" style="margin-bottom: 15px; padding: 12px; border: 1px solid #e0e0e0; border-radius: 6px; background: #fff; cursor: pointer; transition: all 0.2s;" 
+           onmouseover="this.style.background='#f0f7ff'; this.style.borderColor='#1890ff';" 
+           onmouseout="this.style.background='#fff'; this.style.borderColor='#e0e0e0';"
+           onclick="playQAAudio(${index})">
+        <div style="font-weight: bold; color: #1890ff; font-size: 16px; margin-bottom: 10px;">Q${qaIndex}</div>
+        <div style="margin-bottom: ${qa.answer && qa.answer.length > 0 ? '8px' : '0'}; line-height: 1.8; color: #333; font-size: 14px;">
+          ${questionTimeDisplay ? `<span style="color: #666; font-size: 13px; font-family: monospace; margin-right: 8px;">${escapeHtml(questionTimeDisplay)}</span>` : ''}
+          ${qa.question_speaker ? `<span style="color: #1890ff; font-size: 13px; font-weight: 500; margin-right: 8px;">${escapeHtml(qa.question_speaker)}</span>` : ''}
+          <span style="font-weight: 500; color: #333;">问题：</span>
+          <span style="color: #333;">${escapeHtml(qa.question)}</span>
+        </div>
+        ${qa.answer && qa.answer.length > 0 ? `
+          <div style="margin-top: 8px; line-height: 1.8; color: #333; font-size: 14px;">
+            ${answerTimeDisplay ? `<span style="color: #666; font-size: 13px; font-family: monospace; margin-right: 8px;">${escapeHtml(answerTimeDisplay)}</span>` : ''}
+            ${qa.answer_speaker ? `<span style="color: #52c41a; font-size: 13px; font-weight: 500; margin-right: 8px;">${escapeHtml(qa.answer_speaker)}</span>` : ''}
+            <span style="font-weight: 500; color: #333;">回答：</span>
+            <span style="color: #333;">${escapeHtml(qa.answer)}</span>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
+  
+  // 如果容器是问答对列表，确保它在当前页签中显示
+  if (containerId === 'st-dialoguesList-qa' && st_currentTab === 'qa') {
+    container.style.display = 'block';
+  }
+}
+
+/**
+ * 播放问答对的音频片段（包含问题和回答的完整时间段）
+ */
+function playQAAudio(qaIndex) {
+  if (!st_audioPlayer) {
+    showToast('请先加载音频文件', 'warning');
+    return;
+  }
+  
+  const qa = st_qaPairs[qaIndex];
+  if (!qa) {
+    showToast('问答对不存在', 'error');
+    return;
+  }
+  
+  // ✅ 优先使用 time_range1 和 time_range2（新的格式）
+  // ✅ 兼容旧格式：time_range（整体时间范围）
+  let playStartSeconds = 0;
+  let playEndSeconds = 0;
+  
+  const questionTimeRangeStr = qa.time_range1 || qa.time_range || null;
+  const answerTimeRangeStr = qa.time_range2 || null;
+  
+  if (questionTimeRangeStr) {
+    // 解析问题时间范围
+    const questionTimeRange = parseTimeRange(questionTimeRangeStr);
+    playStartSeconds = questionTimeRange.startSeconds || 0;
+    
+    // 如果有回答时间范围，播放到回答的结束时间；否则播放到问题的结束时间
+    if (answerTimeRangeStr) {
+      const answerTimeRange = parseTimeRange(answerTimeRangeStr);
+      playEndSeconds = answerTimeRange.endSeconds || (playStartSeconds + 30);
+    } else if (questionTimeRange.endSeconds > 0) {
+      playEndSeconds = questionTimeRange.endSeconds;
+    } else {
+      playEndSeconds = playStartSeconds + 30;
+    }
+  } else {
+    // 兼容旧格式：从DOM元素获取播放时间范围（如果存在）
+    const qaItem = document.querySelector(`.qa-pair-item[data-qa-index="${qaIndex}"]`);
+    if (qaItem) {
+      playStartSeconds = parseFloat(qaItem.getAttribute('data-play-start')) || 0;
+      playEndSeconds = parseFloat(qaItem.getAttribute('data-play-end')) || 0;
+    }
+    
+    // 如果还是没有，使用默认值
+    if (playStartSeconds === 0 && playEndSeconds === 0) {
+      playEndSeconds = 30;
+    }
+  }
+  
+  // ✅ 添加5秒冗余缓冲（上下各5秒）
+  const BUFFER_SECONDS = 5;
+  const actualStartSeconds = Math.max(0, playStartSeconds - BUFFER_SECONDS); // 开始时间减去5秒，但不能小于0
+  const audioDuration = st_audioPlayer.duration || Infinity;
+  const actualEndSeconds = Math.min(audioDuration, playEndSeconds + BUFFER_SECONDS); // 结束时间加上5秒，但不能超过音频总长度
+  
+  console.log(`播放问答对 Q${qaIndex + 1}: 原始范围 ${playStartSeconds}s-${playEndSeconds}s, 实际播放 ${actualStartSeconds}s-${actualEndSeconds}s`);
+  
+  // 准备显示信息用的时间字符串
+  const questionTimeDisplay = questionTimeRangeStr ? questionTimeRangeStr.replace(/[\[\]]/g, '') : '';
+  const answerTimeDisplay = answerTimeRangeStr ? answerTimeRangeStr.replace(/[\[\]]/g, '') : '';
+  const timeRangeDisplay = questionTimeDisplay && answerTimeDisplay 
+    ? `问题: ${questionTimeDisplay}, 回答: ${answerTimeDisplay}` 
+    : questionTimeDisplay || qa.time_range ? (qa.time_range || questionTimeRangeStr || '').replace(/[\[\]]/g, '') : '';
+  
+  // 移除之前的停止监听器（如果存在）
+  if (st_audioPlayer._qaStopHandler) {
+    st_audioPlayer.removeEventListener('timeupdate', st_audioPlayer._qaStopHandler);
+    st_audioPlayer._qaStopHandler = null;
+  }
+  
+  // 设置播放位置（从缓冲后的开始时间播放）
+  st_audioPlayer.currentTime = actualStartSeconds;
+  
+  // 创建停止监听器（在缓冲后的结束时间停止）
+  const stopAtEnd = () => {
+    if (st_audioPlayer && st_audioPlayer.currentTime >= actualEndSeconds) {
+      st_audioPlayer.pause();
+      st_audioPlayer.removeEventListener('timeupdate', stopAtEnd);
+      st_audioPlayer._qaStopHandler = null;
+      showToast(`问答对 Q${qaIndex + 1} 播放完成（包含问题和回答）`, 'success');
+    }
+  };
+  
+  // 保存监听器引用，方便后续移除
+  st_audioPlayer._qaStopHandler = stopAtEnd;
+  st_audioPlayer.addEventListener('timeupdate', stopAtEnd);
+  
+  // 播放音频
+  st_audioPlayer.play().catch(err => {
+    console.error('播放音频失败:', err);
+    showToast('播放音频失败', 'error');
+    // 移除监听器
+    if (st_audioPlayer._qaStopHandler) {
+      st_audioPlayer.removeEventListener('timeupdate', st_audioPlayer._qaStopHandler);
+      st_audioPlayer._qaStopHandler = null;
+    }
+  });
+  
+  // 高亮当前问答对
+  const qaContainer = document.getElementById('st-dialoguesList-qa');
+  if (qaContainer) {
+    const qaItems = qaContainer.querySelectorAll('.qa-pair-item');
+    qaItems.forEach((item, index) => {
+      if (index === qaIndex) {
+        item.style.background = '#e6f7ff';
+        item.style.borderColor = '#1890ff';
+        item.style.borderWidth = '2px';
+      } else {
+        item.style.background = '#fff';
+        item.style.borderColor = '#e0e0e0';
+        item.style.borderWidth = '1px';
+      }
+    });
+    
+    // 滚动到当前问答对
+    const currentItem = qaItems[qaIndex];
+    if (currentItem) {
+      currentItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
+  
+  // 显示播放信息（使用之前已声明的变量）
+  const startTimeDisplay = formatTimeFromSeconds(actualStartSeconds);
+  const endTimeDisplay = formatTimeFromSeconds(actualEndSeconds);
+  showToast(`正在播放问答对 Q${qaIndex + 1} ${timeRangeDisplay}（缓冲范围：${startTimeDisplay}-${endTimeDisplay}）`, 'info');
 }
 
 // 角色判断设置对话框管理
@@ -1395,6 +1862,8 @@ async function saveRoleSettings() {
       currentDialogues = st_mergedDialogues;
     } else if (st_currentTab === 'corrected') {
       currentDialogues = st_correctedDialogues;
+    } else if (st_currentTab === 'remerged') {
+      currentDialogues = st_reMergedDialogues; // ✅ 支持再次合并页签
     }
     
     if (currentDialogues && currentDialogues.length > 0) {
@@ -1546,6 +2015,13 @@ function displayResult(data) {
   // ✅ 修复字段名匹配（使用数据库字段名 + Python返回的驼峰命名）
   document.getElementById('st-speakerCount').textContent = data.speaker_count || data.speakerCount || '-';
   
+  // ✅ 更新音频名称显示
+  const audioNameDisplay = document.getElementById('st-audioNameDisplay');
+  if (audioNameDisplay) {
+    const audioName = data.name || data.original_file_name || '';
+    audioNameDisplay.textContent = audioName ? `(${audioName})` : '';
+  }
+  
   // 解析原始对话（从 transcriptions 表）
   let originalDialogues = data.original_dialogues || data.dialogues || [];
   if (typeof originalDialogues === 'string') {
@@ -1556,12 +2032,14 @@ function displayResult(data) {
     }
   }
   
-  // 解析合并后的对话（从 dialogue_adjustments 表，note1='合并相邻同一说话人的对话'）
+  // 解析合并后的对话（从 dialogue_adjustments 表，note1='合并相邻同一说话人的对话'）- 第一次合并
   let mergedDialogues = [];
   // 解析AI修正后的对话（从 dialogue_adjustments 表，note1='AI错别字修正'）
   let correctedDialogues = [];
+  // ✅ 解析再次合并后的对话（从 dialogue_adjustments 表，note1='再次合并对话'）
+  let reMergedDialogues = [];
   
-  // ✅ 优先从 mergeAdjustment 字段获取合并记录（如果后端单独返回）
+  // ✅ 优先从 mergeAdjustment 字段获取第一次合并记录（如果后端单独返回）
   if (data.mergeAdjustment && data.mergeAdjustment.adjusted_dialogues) {
     mergedDialogues = Array.isArray(data.mergeAdjustment.adjusted_dialogues)
       ? data.mergeAdjustment.adjusted_dialogues
@@ -1570,18 +2048,38 @@ function displayResult(data) {
         : []);
   }
   
-  // 如果有调整记录，需要区分是合并还是AI修正
+  // ✅ 从 reMergeAdjustment 字段获取再次合并记录（如果后端单独返回）
+  if (data.reMergeAdjustment && data.reMergeAdjustment.adjusted_dialogues) {
+    reMergedDialogues = Array.isArray(data.reMergeAdjustment.adjusted_dialogues)
+      ? data.reMergeAdjustment.adjusted_dialogues
+      : (typeof data.reMergeAdjustment.adjusted_dialogues === 'string'
+        ? JSON.parse(data.reMergeAdjustment.adjusted_dialogues)
+        : []);
+    console.log('✅ 再次合并后的对话已加载，共', reMergedDialogues.length, '条');
+  }
+  
+  // 如果有调整记录，需要区分是合并、AI修正还是再次合并
   if (data.adjustment) {
     const note1 = data.adjustment.note1 || '';
     
     if (note1 === '合并相邻同一说话人的对话' && data.adjustment.adjusted_dialogues) {
-      // 合并后的对话（如果 mergeAdjustment 没有数据，使用 adjustment）
+      // 第一次合并后的对话（如果 mergeAdjustment 没有数据，使用 adjustment）
       if (mergedDialogues.length === 0) {
         mergedDialogues = Array.isArray(data.adjustment.adjusted_dialogues)
           ? data.adjustment.adjusted_dialogues
           : (typeof data.adjustment.adjusted_dialogues === 'string'
             ? JSON.parse(data.adjustment.adjusted_dialogues)
             : []);
+      }
+    } else if (note1 === '再次合并对话' && data.adjustment.adjusted_dialogues) {
+      // ✅ 再次合并后的对话（如果 reMergeAdjustment 没有数据，使用 adjustment）
+      if (reMergedDialogues.length === 0) {
+        reMergedDialogues = Array.isArray(data.adjustment.adjusted_dialogues)
+          ? data.adjustment.adjusted_dialogues
+          : (typeof data.adjustment.adjusted_dialogues === 'string'
+            ? JSON.parse(data.adjustment.adjusted_dialogues)
+            : []);
+        console.log('✅ 再次合并后的对话已从 adjustment 加载，共', reMergedDialogues.length, '条');
       }
     } else if (note1 === 'AI错别字修正' && data.adjustment.adjusted_dialogues) {
       // AI修正后的对话
@@ -1651,6 +2149,7 @@ function displayResult(data) {
   st_originalDialogues = originalDialogues;
   st_mergedDialogues = mergedDialogues;
   st_correctedDialogues = correctedDialogues;
+  st_reMergedDialogues = reMergedDialogues; // ✅ 保存再次合并后的对话
   st_currentDialogues = originalDialogues; // 默认显示原始对话
   
   // 更新对话数量（显示原始对话的数量）
@@ -1666,7 +2165,7 @@ function displayResult(data) {
   // 渲染所有对话列表
   renderDialogues(originalDialogues || [], 'st-dialoguesList-original');
   
-  // 始终显示"合并后的对话"标签页，即使没有数据也显示（显示空状态）
+  // 始终显示"合并后的对话"标签页（第一次合并），即使没有数据也显示（显示空状态）
   renderDialogues(mergedDialogues || [], 'st-dialoguesList-merged');
   document.getElementById('st-tab-merged').style.display = 'block';
   
@@ -1674,11 +2173,28 @@ function displayResult(data) {
   renderDialogues(correctedDialogues || [], 'st-dialoguesList-corrected');
   document.getElementById('st-tab-corrected').style.display = 'block';
   
+  // ✅ 如果有再次合并的记录，显示"再次合并后的对话"标签页
+  if (reMergedDialogues && reMergedDialogues.length > 0) {
+    renderDialogues(reMergedDialogues || [], 'st-dialoguesList-remerged');
+    document.getElementById('st-tab-remerged').style.display = 'block';
+  } else {
+    document.getElementById('st-tab-remerged').style.display = 'none';
+    renderDialogues([], 'st-dialoguesList-remerged'); // 渲染空列表
+  }
+  
   // 默认显示原始对话标签页
   switchDialogueTab('original');
   
   // ✅ 重新绑定按钮事件（确保按钮可用）
   bindResultButtons();
+  
+  // ✅ 加载问答对（异步，不阻塞页面显示）
+  if (st_currentTranscriptionId) {
+    loadQAPairs(st_currentTranscriptionId).catch(error => {
+      console.error('加载问答对失败:', error);
+      // 静默失败，不影响主流程
+    });
+  }
   
   showToast('转录成功！', 'success');
 }
@@ -1714,12 +2230,16 @@ function switchDialogueTab(tab) {
   const originalTab = document.getElementById('st-tab-original');
   const mergedTab = document.getElementById('st-tab-merged');
   const correctedTab = document.getElementById('st-tab-corrected');
+  const reMergedTab = document.getElementById('st-tab-remerged');
+  const qaTab = document.getElementById('st-tab-qa');
   const originalList = document.getElementById('st-dialoguesList-original');
   const mergedList = document.getElementById('st-dialoguesList-merged');
   const correctedList = document.getElementById('st-dialoguesList-corrected');
+  const reMergedList = document.getElementById('st-dialoguesList-remerged');
+  const qaList = document.getElementById('st-dialoguesList-qa');
   
   // 重置所有标签页样式
-  [originalTab, mergedTab, correctedTab].forEach(t => {
+  [originalTab, mergedTab, correctedTab, reMergedTab, qaTab].forEach(t => {
     if (t) {
       t.classList.remove('active');
       t.style.borderBottomColor = 'transparent';
@@ -1728,7 +2248,7 @@ function switchDialogueTab(tab) {
   });
   
   // 隐藏所有列表
-  [originalList, mergedList, correctedList].forEach(list => {
+  [originalList, mergedList, correctedList, reMergedList, qaList].forEach(list => {
     if (list) {
       list.style.display = 'none';
     }
@@ -1764,6 +2284,32 @@ function switchDialogueTab(tab) {
       correctedList.style.display = 'block';
     }
     st_currentDialogues = st_correctedDialogues;
+  } else if (tab === 'remerged') {
+    // ✅ 再次合并后的对话页签
+    if (reMergedTab) {
+      reMergedTab.classList.add('active');
+      reMergedTab.style.borderBottomColor = 'var(--primary)';
+      reMergedTab.style.color = 'var(--primary)';
+    }
+    if (reMergedList) {
+      reMergedList.style.display = 'block';
+    }
+    st_currentDialogues = st_reMergedDialogues;
+  } else if (tab === 'qa') {
+    if (qaTab) {
+      qaTab.classList.add('active');
+      qaTab.style.borderBottomColor = 'var(--primary)';
+      qaTab.style.color = 'var(--primary)';
+    }
+    if (qaList) {
+      qaList.style.display = 'block';
+      // 如果问答对列表为空，重新加载
+      if (!st_qaPairs || st_qaPairs.length === 0) {
+        loadQAPairs(st_currentTranscriptionId);
+      } else {
+        renderQAPairs(st_qaPairs, 'st-dialoguesList-qa');
+      }
+    }
   }
 }
 
@@ -2141,12 +2687,12 @@ async function mergeDialogues(transcriptionId) {
 }
 
 // ==================== 全局函数暴露（供HTML调用）====================
+// 注意：这里只暴露已定义的函数，其他函数在文件末尾统一暴露
 window.saveDialogueEdit = saveDialogueEdit;
 window.cancelDialogueEdit = cancelDialogueEdit;
 window.closeBatchReplaceDialog = closeBatchReplaceDialog;
 window.executeBatchReplace = executeBatchReplace;
 window.mergeDialogues = mergeDialogues;
-window.switchDialogueTab = switchDialogueTab;
 
 // ==================== 工具函数 ====================
 function formatDuration(seconds) {
@@ -2389,7 +2935,11 @@ async function st_transcribeFile(filePath, fileName) {
 }
 
 // ==================== 全局函数暴露（供HTML调用）====================
-// 确保这些函数可以被HTML的onclick调用
-window.triggerReMerge = triggerReMerge;
+// ✅ 在文件末尾统一暴露所有需要全局访问的函数（确保函数已定义）
+window.st_switchTab = st_switchTab; // ✅ 暴露到全局作用域，供 HTML onclick="st_switchTab('scan')" 使用
+window.switchDialogueTab = switchDialogueTab; // ✅ 暴露到全局作用域，供 HTML onclick 使用
+window.triggerReMerge = triggerReMerge; // ✅ 暴露到全局作用域，供 HTML onclick="triggerReMerge()" 使用
+window.startQAExtraction = startQAExtraction; // ✅ 暴露到全局作用域，供 HTML onclick 使用
+window.playQAAudio = playQAAudio; // ✅ 暴露到全局作用域，供 HTML onclick="playQAAudio(index)" 使用
 window.checkNeedsReMergeLocally = checkNeedsReMergeLocally;
 

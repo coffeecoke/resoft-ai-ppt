@@ -99,8 +99,9 @@ class TranscriptionAiService {
         }
       }
 
-      // 3. 按4000字符分批处理（不截断说话人内容）
+      // 3. 按4000字符和90条对话分批处理（不截断说话人内容）
       const MAX_CHARS_PER_BATCH = 4000; // 每批最大字符数
+      const MAX_DIALOGUES_PER_BATCH = 90; // 每批最大对话数量
       const totalDialogues = dialogues.length;
       
       // 计算总字符数
@@ -111,11 +112,11 @@ class TranscriptionAiService {
         totalChars += getTextLength(text);
       }
       
-      logger.info(`📊 开始处理对话: 总数=${totalDialogues}条, 总字符数=${totalChars}, 每批最大=${MAX_CHARS_PER_BATCH}字符`);
+      logger.info(`📊 开始处理对话: 总数=${totalDialogues}条, 总字符数=${totalChars}, 每批最大=${MAX_CHARS_PER_BATCH}字符或${MAX_DIALOGUES_PER_BATCH}条对话`);
       
-      // 如果总字符数不超过限制，直接处理
-      if (totalChars <= MAX_CHARS_PER_BATCH) {
-        logger.info(`📦 总字符数较少（${totalChars}字符 ≤ ${MAX_CHARS_PER_BATCH}字符），直接处理，不分批`);
+      // 如果总字符数不超过限制且对话条数不超过限制，直接处理
+      if (totalChars <= MAX_CHARS_PER_BATCH && totalDialogues <= MAX_DIALOGUES_PER_BATCH) {
+        logger.info(`📦 总字符数和对话条数较少（${totalChars}字符 ≤ ${MAX_CHARS_PER_BATCH}字符，${totalDialogues}条 ≤ ${MAX_DIALOGUES_PER_BATCH}条），直接处理，不分批`);
         const batchResult = await this.processBatch(dialogues, systemPrompt, modelName, modelConfig, options);
         
         // 只返回错别字修正的结果，不包含角色判断
@@ -133,8 +134,8 @@ class TranscriptionAiService {
         };
       }
 
-      // 按4000字符分批处理
-      logger.info(`📦 总字符数较大（${totalChars}字符 > ${MAX_CHARS_PER_BATCH}字符），启用按字符数分批处理`);
+      // 按4000字符和90条对话分批处理
+      logger.info(`📦 总字符数或对话条数较大（${totalChars}字符 > ${MAX_CHARS_PER_BATCH}字符 或 ${totalDialogues}条 > ${MAX_DIALOGUES_PER_BATCH}条），启用按字符数和对话数量分批处理`);
       
       // 内存监控（如果可用）
       const getMemoryUsage = () => {
@@ -159,7 +160,7 @@ class TranscriptionAiService {
       let totalProcessingTime = 0;
       let totalCorrectedCount = 0;
       
-      // 按4000字符分批（不截断说话人内容）
+      // 按4000字符和90条对话分批（不截断说话人内容）
       const batches = [];
       let currentBatch = [];
       let currentBatchChars = 0;
@@ -169,8 +170,10 @@ class TranscriptionAiService {
         const text = dialogue.text || dialogue.correctedText || dialogue.originalText || '';
         const textLength = getTextLength(text);
         
-        // 如果加上当前对话后超过限制，且当前批次不为空，保存当前批次并创建新批次
-        if (currentBatchChars + textLength > MAX_CHARS_PER_BATCH && currentBatch.length > 0) {
+        // ✅ 如果加上当前对话后超过字符数限制或对话数量限制，且当前批次不为空，保存当前批次并创建新批次
+        const wouldExceedChars = currentBatchChars + textLength > MAX_CHARS_PER_BATCH;
+        const wouldExceedCount = currentBatch.length >= MAX_DIALOGUES_PER_BATCH;
+        if ((wouldExceedChars || wouldExceedCount) && currentBatch.length > 0) {
           batches.push([...currentBatch]);
           currentBatch = [];
           currentBatchChars = 0;
@@ -1675,6 +1678,622 @@ ${JSON.stringify(sampleDialogues, null, 2)}
 - 角色值只能是："客户方" 或 "我方"
 - 必须包含所有出现的说话人（SPEAKER_1, SPEAKER_2, ...）
 - 如果某个说话人特征不明显，优先根据一级规则判断`;
+  }
+
+  /**
+   * 获取默认的问答对提取提示词
+   */
+  getDefaultQAExtractionPrompt() {
+    return `你是一位资深的对话分析专家，专注于从客户交流对话中提取问答对。
+
+## 📋 任务说明
+
+从对话内容中提取**客户提问**和**我方回答**的问答对。
+
+### 提取规则
+
+1. **问答对识别**：
+   - **问题**：客户方（customer）提出的问题、咨询、需求询问
+   - **答案**：我方（our_side）对问题的回答、解释、说明
+
+2. **提取原则**：
+   - ✅ 提取完整的问答对（一个问题对应一个或多个回答）
+   - ✅ 保留原意，可以适当精简冗余表达
+   - ✅ 如果一个问题有多个回答，合并为一个完整的答案
+   - ✅ 如果一个问题没有明确回答，answer 字段可以为空字符串
+
+3. **时间范围**：
+   - time_range 格式："[开始时间-结束时间]"
+   - 包含问题和答案的完整时间范围
+   - 例如："[00:10-00:30]"
+
+4. **说话人标识**：
+   - question_speaker：提问者的说话人ID（如 "SPEAKER_1"）
+   - answer_speaker：回答者的说话人ID（如 "SPEAKER_2"）
+
+## 📥 输入格式
+
+输入为 JSON 对象，包含：
+- \`dialogues\`: 对话数组，每个元素包含 timeRange, speaker, text 等字段
+- \`speakerRoles\`: 说话人角色映射，格式：{"SPEAKER_1": "customer", "SPEAKER_2": "our_side"}
+
+## 📤 输出格式（严格JSON）
+
+**必须严格遵循以下JSON数组格式**：
+
+\`\`\`json
+[
+  {
+    "time_range1": "[开始时间-结束时间]",
+    "question_speaker": "提问者ID",
+    "question": "完整问题内容（必须是说话人实际说出的原始内容，不能是AI构造）",
+    "time_range2": "[开始时间-结束时间]",
+    "answer_speaker": "回答者ID",
+    "answer": "完整回答内容（必须是对前面问题的回答）"
+  }
+]
+\`\`\`
+
+**重要规则**：
+1. **只输出JSON数组**：不要有任何其他说明文字
+2. **question_speaker** 必须是 customer 角色的说话人ID（如 "SPEAKER_1"）
+3. **answer_speaker** 必须是 our_side 角色的说话人ID（如 "SPEAKER_2"）
+4. **如果对话中没有问答对，返回空数组**：\`[]\`
+5. **time_range1 格式**：问题的时间范围，必须包含方括号，格式为 "[开始时间-结束时间]"
+6. **time_range2 格式**：回答的时间范围，必须包含方括号，格式为 "[开始时间-结束时间]"
+7. **question 内容**：必须是说话人实际说出的原始内容，不能是AI构造或概括
+8. **answer 内容**：必须是对前面问题的回答，必须是说话人实际说出的原始内容
+9. **如果一个问题没有回答，answer 字段可以为空字符串 ""，time_range2 也可以为空 ""
+`;
+  }
+
+  /**
+   * 处理单批问答对提取（内部方法）
+   * @param {Array} batchDialogues - 单批对话数组
+   * @param {Object} speakerRoles - 说话人角色映射
+   * @param {string} systemPrompt - 系统提示词
+   * @param {Object} modelConfig - 模型配置
+   * @param {Object} options - 选项
+   * @returns {Promise<Object>} 单批问答对提取结果
+   */
+  async processQABatch(batchDialogues, speakerRoles, systemPrompt, modelConfig, options = {}) {
+    const batchStartTime = Date.now();
+    const batchInfo = options.batchContext 
+      ? `[批次 ${options.batchContext.batchIndex + 1}/${options.batchContext.totalBatches}] `
+      : '';
+    
+    // ✅ 过滤对话数据，只保留必要字段（timeRange, speaker, text），text使用correctedText
+    const filteredDialogues = batchDialogues.map(d => ({
+      timeRange: d.timeRange || d.startTime,
+      speaker: d.speaker,
+      text: d.correctedText || d.text || d.originalText || ''
+    }));
+    
+    // 构建用户消息
+    const userMessage = `请从以下对话内容中提取问答对（客户提问，我方回答）：
+
+\`\`\`json
+${JSON.stringify(filteredDialogues, null, 2)}
+\`\`\`
+
+说话人角色信息：
+\`\`\`json
+${JSON.stringify(speakerRoles, null, 2)}
+\`\`\`
+
+请严格按照指定的JSON格式输出结果，只输出JSON数组，不要任何解释文字。`;
+
+    // 调用AI
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userMessage }
+    ];
+
+    // 使用模型配置创建 OpenAI 客户端
+    const { OpenAI } = require('openai');
+    const client = new OpenAI({
+      apiKey: modelConfig.api_key,
+      baseURL: modelConfig.api_url,
+    });
+
+    // 处理模型名称（可能需要转换）
+    const actualModelName = modelConfig.model_name || modelConfig.code;
+    
+    // 限制 max_tokens，防止超过模型限制
+    const MAX_TOKENS_LIMIT = 16384; // 大多数模型的最大支持值
+    const configuredMaxTokens = modelConfig.max_tokens || 4000;
+    const actualMaxTokens = Math.min(configuredMaxTokens, MAX_TOKENS_LIMIT);
+
+    if (configuredMaxTokens > MAX_TOKENS_LIMIT) {
+      logger.warn(`${batchInfo}⚠️ 模型配置的 max_tokens (${configuredMaxTokens}) 超过了建议限制 (${MAX_TOKENS_LIMIT})，已自动调整为 ${actualMaxTokens}`);
+    }
+
+    logger.info(`${batchInfo}🚀 开始调用AI服务进行问答对提取...`);
+    
+    // ✅ 输出发送给AI的内容
+    logger.info(`${batchInfo}📤 ========== 发送给AI的内容 ==========`);
+    // System Prompt只在第一批或单批时输出（通常较长且固定）
+    if (!options.batchContext || options.batchContext.batchIndex === 0) {
+      logger.info(`${batchInfo}📤 System Prompt (${systemPrompt.length} 字符):`);
+      logger.info(`\n${systemPrompt}\n`);
+    }
+    // User Message每次都输出完整内容
+    logger.info(`${batchInfo}📤 User Message (${userMessage.length} 字符):`);
+    logger.info(`\n${userMessage}\n`);
+    logger.info(`${batchInfo}📤 ========================================`);
+
+    const aiResponse = await client.chat.completions.create({
+      model: actualModelName,
+      messages,
+      temperature: modelConfig.temperature || 0.7,
+      max_tokens: actualMaxTokens,
+    });
+
+    const content = aiResponse.choices[0]?.message?.content?.trim() || '';
+    
+    if (!content) {
+      throw new Error('AI返回内容为空');
+    }
+
+    // ✅ 输出AI返回的完整内容
+    logger.info(`${batchInfo}📥 ========== AI返回的内容 ==========`);
+    logger.info(`${batchInfo}📥 返回内容长度: ${content.length} 字符`);
+    logger.info(`${batchInfo}📥 完整返回内容:`);
+    logger.info(`\n${content}\n`);
+    logger.info(`${batchInfo}📥 =====================================`);
+
+    // 解析JSON数组格式
+    let qaPairs = [];
+    try {
+      // 去除可能的代码块标记
+      let jsonContent = content.trim();
+      
+      // 移除代码块标记（如果有）
+      if (jsonContent.startsWith('```json')) {
+        jsonContent = jsonContent.replace(/^```json\n?/, '').replace(/```\n?$/, '').trim();
+      } else if (jsonContent.startsWith('```')) {
+        jsonContent = jsonContent.replace(/^```\n?/, '').replace(/```\n?$/, '').trim();
+      }
+      
+      qaPairs = JSON.parse(jsonContent);
+      
+      if (!Array.isArray(qaPairs)) {
+        throw new Error('AI返回的不是数组格式，期望格式: []');
+      }
+      
+      logger.info(`${batchInfo}✅ 成功解析问答对，共 ${qaPairs.length} 个`);
+    } catch (error) {
+      logger.error(`${batchInfo}❌ 解析问答对失败:`, error);
+      logger.error(`${batchInfo}AI返回内容:`, content.substring(0, 500));
+      throw new Error(`解析AI返回结果失败: ${error.message}。请检查AI返回格式是否为JSON数组。`);
+    }
+
+    // 验证和格式化问答对
+    const validatedPairs = qaPairs.map((pair, index) => {
+      if (!pair.question) {
+        logger.warn(`${batchInfo}问答对 ${index + 1} 缺少 question 字段，已跳过`);
+        return null;
+      }
+      
+      // ✅ 支持新的格式：time_range1 和 time_range2（问题和回答分别的时间范围）
+      // ✅ 兼容旧格式：time_range（整体时间范围）
+      // ⚠️ 使用明确的检查，确保有效值能正确保存
+      let timeRange1 = null;
+      if (pair.time_range1 !== undefined && pair.time_range1 !== null && String(pair.time_range1).trim() !== '') {
+        timeRange1 = String(pair.time_range1).trim();
+      } else if (pair.time_range !== undefined && pair.time_range !== null && String(pair.time_range).trim() !== '') {
+        timeRange1 = String(pair.time_range).trim();
+      }
+      
+      let timeRange2 = null;
+      if (pair.time_range2 !== undefined && pair.time_range2 !== null && String(pair.time_range2).trim() !== '') {
+        timeRange2 = String(pair.time_range2).trim();
+      }
+      
+      // ✅ 调试：输出每个问答对的原始字段（仅第一个）
+      if (index === 0) {
+        logger.info(`${batchInfo}🔍 ========== 原始问答对字段（第一个） ==========`);
+        logger.info(`${batchInfo}📋 完整数据:`, JSON.stringify(pair, null, 2));
+        logger.info(`${batchInfo}   - pair.time_range: ${pair.time_range !== undefined ? JSON.stringify(pair.time_range) : '(undefined)'} (类型: ${typeof pair.time_range})`);
+        logger.info(`${batchInfo}   - pair.time_range1: ${pair.time_range1 !== undefined ? JSON.stringify(pair.time_range1) : '(undefined)'} (类型: ${typeof pair.time_range1})`);
+        logger.info(`${batchInfo}   - pair.time_range2: ${pair.time_range2 !== undefined ? JSON.stringify(pair.time_range2) : '(undefined)'} (类型: ${typeof pair.time_range2})`);
+        logger.info(`${batchInfo}   - question_speaker: ${pair.question_speaker || '(null)'}`);
+        logger.info(`${batchInfo}   - answer_speaker: ${pair.answer_speaker || '(null)'}`);
+        logger.info(`${batchInfo}==================================================`);
+      }
+      
+      const validatedPair = {
+        time_range: timeRange1, // 兼容旧格式，保存问题的时间范围
+        time_range1: timeRange1, // 问题的时间范围
+        time_range2: timeRange2, // 回答的时间范围
+        question_speaker: pair.question_speaker || null,
+        question: String(pair.question).trim(),
+        answer_speaker: pair.answer_speaker || null,
+        answer: pair.answer ? String(pair.answer).trim() : ''
+      };
+      
+      // ✅ 调试：输出验证后的字段（仅第一个）
+      if (index === 0) {
+        logger.info(`${batchInfo}✅ ========== 验证后的字段值（第一个） ==========`);
+        logger.info(`${batchInfo}   - time_range: ${validatedPair.time_range || '(null)'}`);
+        logger.info(`${batchInfo}   - time_range1: ${validatedPair.time_range1 || '(null)'}`);
+        logger.info(`${batchInfo}   - time_range2: ${validatedPair.time_range2 || '(null)'}`);
+        logger.info(`${batchInfo}   - timeRange1 判断逻辑: pair.time_range1=${JSON.stringify(pair.time_range1)}, 结果=${timeRange1}`);
+        logger.info(`${batchInfo}   - timeRange2 判断逻辑: pair.time_range2=${JSON.stringify(pair.time_range2)}, 结果=${timeRange2}`);
+        logger.info(`${batchInfo}==================================================`);
+      }
+      
+      // ✅ 调试：输出验证后的问答对（仅第一个）
+      if (index === 0) {
+        logger.info(`${batchInfo}✅ 验证后的问答对字段（第一个）:`, JSON.stringify(validatedPair, null, 2));
+      }
+      
+      return validatedPair;
+    }).filter(pair => pair !== null);
+
+    // ✅ 过滤掉自问自答的问答对（question_speaker 和 answer_speaker 相同）
+    const beforeFilterCount = validatedPairs.length;
+    const filteredPairs = validatedPairs.filter(pair => {
+      // 如果问题和回答的说话人相同，则过滤掉（自问自答无效）
+      const questionSpeaker = pair.question_speaker ? String(pair.question_speaker).trim() : null;
+      const answerSpeaker = pair.answer_speaker ? String(pair.answer_speaker).trim() : null;
+      if (questionSpeaker && answerSpeaker && questionSpeaker === answerSpeaker) {
+        logger.info(`${batchInfo}⏭️  过滤自问自答的问答对: 问题说话人=${questionSpeaker}, 回答说话人=${answerSpeaker}, 问题="${pair.question.substring(0, 50)}..."`);
+        return false;
+      }
+      return true;
+    });
+    const filteredCount = beforeFilterCount - filteredPairs.length;
+    if (filteredCount > 0) {
+      logger.info(`${batchInfo}🚫 已过滤 ${filteredCount} 个自问自答的问答对（无效数据）`);
+    }
+
+    const processingTime = Date.now() - batchStartTime;
+    logger.info(`${batchInfo}✅ 问答对提取完成: 共提取 ${filteredPairs.length} 个有效问答对（过滤前 ${beforeFilterCount} 个），耗时 ${processingTime}ms`);
+
+    return {
+      success: true,
+      qaPairs: filteredPairs,
+      processingTime
+    };
+  }
+
+  /**
+   * 提取问答对（支持分批处理）
+   * @param {Array} dialogues - 对话数组
+   * @param {Object} speakerRoles - 说话人角色映射 {SPEAKER_1: 'customer', ...}
+   * @param {Object} options - 选项
+   * @param {string} options.modelName - 模型代码（可选）
+   * @param {string} options.promptId - 提示词模板ID（可选）
+   * @param {Function} options.onProgress - 进度回调函数
+   * @returns {Promise<Object>} 问答对提取结果
+   */
+  async extractQAPairs(dialogues, speakerRoles, options = {}) {
+    if (!dialogues || dialogues.length === 0) {
+      throw new Error('对话内容为空');
+    }
+
+    if (!speakerRoles || Object.keys(speakerRoles).length === 0) {
+      throw new Error('角色信息为空，请先进行角色判断');
+    }
+
+    const SCENE_TYPE = 'qa_extraction';
+
+    try {
+      // 1. 获取系统提示词
+      let systemPrompt = options.systemPrompt;
+      if (!systemPrompt) {
+        // 如果指定了 promptId，使用指定的提示词
+        if (options.promptId) {
+          const promptTemplateService = require('./promptTemplateService');
+          const prompt = await promptTemplateService.getTemplateById(options.promptId);
+          if (prompt && prompt.prompt) {
+            systemPrompt = prompt.prompt;
+            logger.info(`📋 使用指定提示词模板: ${prompt.name}`);
+          }
+        }
+        
+        // 如果没有指定或获取失败，尝试从数据库获取场景默认提示词
+        if (!systemPrompt) {
+          const promptTemplateService = require('./promptTemplateService');
+          const templates = await promptTemplateService.getTemplatesByScene(SCENE_TYPE);
+          const activeTemplate = templates.find(t => t.is_active);
+          
+          if (activeTemplate) {
+            systemPrompt = activeTemplate.prompt;
+            logger.info(`📋 使用提示词模板: ${activeTemplate.name}`);
+          } else {
+            // 使用内置默认提示词
+            logger.warn(`⚠️ 未配置问答对提取提示词，使用内置默认模板`);
+            systemPrompt = this.getDefaultQAExtractionPrompt();
+          }
+        }
+      }
+
+      // 2. 获取模型配置
+      let modelName = options.modelName;
+      let modelConfig = null;
+      
+      if (modelName) {
+        // 如果传入的是场景类型，需要转换为实际的模型代码
+        if (modelName === SCENE_TYPE) {
+          modelName = undefined; // 使用默认模型
+        }
+      }
+      
+      if (!modelName) {
+        // 获取场景的默认模型
+        const { modelConfigService } = require('./index');
+        
+        // 优先使用 qa_extraction 场景的模型
+        logger.info(`🔍 正在查找 ${SCENE_TYPE} 场景的模型配置...`);
+        try {
+          // 先尝试获取默认模型
+          modelConfig = await modelConfigService.getDefaultModel(SCENE_TYPE);
+          modelName = modelConfig.code;
+          logger.info(`✅ 找到 ${SCENE_TYPE} 场景的默认模型: ${modelConfig.name} (代码: ${modelName}, ID: ${modelConfig.id})`);
+        } catch (defaultError) {
+          // 如果没有默认模型，尝试获取该场景的所有模型，使用第一个启用的模型
+          logger.warn(`⚠️ ${SCENE_TYPE} 场景未配置默认模型: ${defaultError.message}`);
+          logger.info(`🔍 尝试查找 ${SCENE_TYPE} 场景的其他可用模型...`);
+          
+          try {
+            const qaExtractionModels = await modelConfigService.getModelsByScene(SCENE_TYPE);
+            logger.info(`📊 找到 ${qaExtractionModels ? qaExtractionModels.length : 0} 个 ${SCENE_TYPE} 场景的模型`);
+            
+            if (qaExtractionModels && qaExtractionModels.length > 0) {
+              // 打印所有找到的模型信息（用于调试）
+              qaExtractionModels.forEach((m, index) => {
+                logger.info(`  [${index + 1}] 模型: ${m.name} (代码: ${m.code}, ID: ${m.id}, 启用: ${m.is_active}, 默认: ${m.is_default})`);
+              });
+              
+              // 如果有模型，优先使用第一个启用的模型
+              const activeModel = qaExtractionModels.find(m => m.is_active) || qaExtractionModels[0];
+              if (activeModel) {
+                logger.info(`✅ 选择模型: ${activeModel.name} (ID: ${activeModel.id})`);
+                modelConfig = await modelConfigService.getModelById(activeModel.id);
+                modelName = modelConfig.code;
+                logger.info(`✅ 成功获取 ${SCENE_TYPE} 场景的模型: ${modelConfig.name} (代码: ${modelName}, ID: ${modelConfig.id})`);
+              }
+            }
+            
+            // 如果还是没有找到，尝试使用 transcription_correction 场景作为备选
+            if (!modelConfig) {
+              logger.warn(`⚠️ ${SCENE_TYPE} 场景未找到可用模型，尝试使用 transcription_correction 场景`);
+              try {
+                modelConfig = await modelConfigService.getDefaultModel('transcription_correction');
+                modelName = modelConfig.code;
+                logger.info(`📋 使用 transcription_correction 场景的默认模型: ${modelConfig.name} (代码: ${modelName})`);
+              } catch (fallbackError) {
+                throw new Error(`未找到场景 "${SCENE_TYPE}" 的模型配置。请前往"模型配置"中为"问答对提取"场景添加模型，并设为默认模型。`);
+              }
+            }
+          } catch (error) {
+            logger.error(`❌ 查找 ${SCENE_TYPE} 场景的模型失败:`, error);
+            throw new Error(`未找到场景 "${SCENE_TYPE}" 的模型配置。请前往"模型配置"中为"问答对提取"场景添加模型，并设为默认模型。`);
+          }
+        }
+      } else {
+        // 如果指定了模型代码，直接获取模型配置
+        const { modelConfigService } = require('./index');
+        modelConfig = await modelConfigService.getModelByCode(modelName);
+        if (!modelConfig) {
+          throw new Error(`未找到模型: ${modelName}`);
+        }
+      }
+
+      // 3. 按4000字符和90条对话分批处理（参考错别字修正的逻辑）
+      const MAX_CHARS_PER_BATCH = 4000; // 每批最大字符数
+      const MAX_DIALOGUES_PER_BATCH = 90; // 每批最大对话数量
+      const totalDialogues = dialogues.length;
+      
+      // 计算总字符数（只计算对话内容，角色信息会加到每批中）
+      const getTextLength = (text) => text ? text.length : 0;
+      let totalChars = 0;
+      for (const dialogue of dialogues) {
+        const text = dialogue.text || dialogue.correctedText || dialogue.originalText || '';
+        totalChars += getTextLength(text);
+      }
+      
+      logger.info(`📊 开始处理问答对提取: 总数=${totalDialogues}条, 总字符数=${totalChars}, 每批最大=${MAX_CHARS_PER_BATCH}字符或${MAX_DIALOGUES_PER_BATCH}条对话`);
+      logger.info(`📋 模型配置信息: 代码=${modelConfig.code}, 实际调用模型=${modelConfig.model_name || modelConfig.code}`);
+      logger.info(`📋 提供方=${modelConfig.provider}, API地址=${modelConfig.api_url}`);
+      
+      // 如果总字符数不超过限制，直接处理
+      if (totalChars <= MAX_CHARS_PER_BATCH) {
+        logger.info(`📦 总字符数较少（${totalChars}字符 ≤ ${MAX_CHARS_PER_BATCH}字符），直接处理，不分批`);
+        
+        // ✅ 检查是否所有对话都是同一说话人
+        const speakers = [...new Set(dialogues.map(d => d.speaker).filter(Boolean))];
+        if (speakers.length === 1) {
+          logger.info(`⏭️  同一说话人不需提取（说话人: ${speakers[0]}）`);
+          return {
+            success: true,
+            qaPairs: [],
+            summary: {
+              totalPairs: 0,
+              answeredPairs: 0,
+              pendingPairs: 0,
+              batchCount: 1
+            },
+            processingTime: 0,
+            modelName: modelConfig.name,
+            modelCode: modelConfig.code
+          };
+        }
+        
+        const batchResult = await this.processQABatch(dialogues, speakerRoles, systemPrompt, modelConfig, options);
+        
+        return {
+          success: true,
+          qaPairs: batchResult.qaPairs,
+          summary: {
+            totalPairs: batchResult.qaPairs.length,
+            answeredPairs: batchResult.qaPairs.filter(p => p.answer && p.answer.length > 0).length,
+            pendingPairs: batchResult.qaPairs.filter(p => !p.answer || p.answer.length === 0).length,
+            batchCount: 1
+          },
+          processingTime: batchResult.processingTime,
+          modelName: modelConfig.name,
+          modelCode: modelConfig.code
+        };
+      }
+      
+      // 按4000字符和90条对话分批处理
+      logger.info(`📦 总字符数较大（${totalChars}字符 > ${MAX_CHARS_PER_BATCH}字符），启用按字符数和对话数量分批处理`);
+      
+      const allQAPairs = [];
+      let totalProcessingTime = 0;
+      
+      // 按4000字符和90条对话分批（不截断说话人内容）
+      const batches = [];
+      let currentBatch = [];
+      let currentBatchChars = 0;
+      
+      for (let i = 0; i < dialogues.length; i++) {
+        const dialogue = dialogues[i];
+        const text = dialogue.text || dialogue.correctedText || dialogue.originalText || '';
+        const textLength = getTextLength(text);
+        
+        // ✅ 如果加上当前对话后超过字符数限制或对话数量限制，且当前批次不为空，保存当前批次并创建新批次
+        const wouldExceedChars = currentBatchChars + textLength > MAX_CHARS_PER_BATCH;
+        const wouldExceedCount = currentBatch.length >= MAX_DIALOGUES_PER_BATCH;
+        if ((wouldExceedChars || wouldExceedCount) && currentBatch.length > 0) {
+          batches.push([...currentBatch]);
+          currentBatch = [];
+          currentBatchChars = 0;
+        }
+        
+        // 添加当前对话到批次（即使单条超过限制也要完整保存，不截断）
+        currentBatch.push(dialogue);
+        currentBatchChars += textLength;
+      }
+      
+      // 添加最后一个批次
+      if (currentBatch.length > 0) {
+        batches.push(currentBatch);
+      }
+      
+      const totalBatches = batches.length;
+      logger.info(`📦 已分成 ${totalBatches} 批，将逐批处理`);
+      
+      // 逐批处理
+      for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+        const batch = batches[batchIndex];
+        const batchChars = batch.reduce((sum, d) => {
+          const text = d.text || d.correctedText || d.originalText || '';
+          return sum + getTextLength(text);
+        }, 0);
+        
+        logger.info(`🔄 处理第 ${batchIndex + 1}/${totalBatches} 批（${batch.length}条对话，${batchChars}字符）`);
+        
+        // 计算已处理的对话数量
+        const processedCount = batches.slice(0, batchIndex + 1).reduce((sum, b) => sum + b.length, 0);
+        
+        // 调用进度回调
+        if (options.onProgress) {
+          options.onProgress(processedCount, totalDialogues);
+        }
+        
+        // 处理当前批次
+        try {
+          // ✅ 检查是否所有对话都是同一说话人
+          const batchSpeakers = [...new Set(batch.map(d => d.speaker).filter(Boolean))];
+          if (batchSpeakers.length === 1) {
+            logger.info(`⏭️  同一说话人不需提取（说话人: ${batchSpeakers[0]}）`);
+            
+            // 跳过AI调用，返回空结果（格式与processQABatch一致）
+            const batchResult = {
+              success: true,
+              qaPairs: [],
+              processingTime: 0
+            };
+            
+            // 合并结果（虽然为空，但保持代码结构一致）
+            if (batchResult && batchResult.qaPairs && Array.isArray(batchResult.qaPairs)) {
+              allQAPairs.push(...batchResult.qaPairs);
+              logger.info(`✅ 第 ${batchIndex + 1}/${totalBatches} 批处理完成: 跳过（同一说话人）`);
+            }
+            
+            // 累计处理时间
+            if (batchResult) {
+              totalProcessingTime += batchResult.processingTime || 0;
+            }
+            
+            continue; // 跳过当前批次，继续下一批（循环最后有统一的延迟逻辑）
+          }
+          
+          const batchResult = await this.processQABatch(batch, speakerRoles, systemPrompt, modelConfig, {
+            ...options,
+            batchContext: {
+              batchIndex,
+              batchStartIndex: batches.slice(0, batchIndex).reduce((sum, b) => sum + b.length, 0),
+              totalBatches: totalBatches
+            }
+          });
+          
+          // 合并结果
+          if (batchResult && batchResult.qaPairs && Array.isArray(batchResult.qaPairs)) {
+            allQAPairs.push(...batchResult.qaPairs);
+            logger.info(`✅ 第 ${batchIndex + 1}/${totalBatches} 批提取完成: ${batchResult.qaPairs.length} 个问答对`);
+          }
+          
+          // 累计处理时间
+          if (batchResult) {
+            totalProcessingTime += batchResult.processingTime || 0;
+          }
+        } catch (batchError) {
+          logger.error(`❌ 第 ${batchIndex + 1}/${totalBatches} 批处理失败:`, batchError.message);
+          logger.error(`📋 失败批次: ${batch.length}条对话，${batchChars}字符`);
+          
+          // 批次处理失败，跳过该批次，继续处理下一批
+          logger.warn(`⚠️ 跳过该批次，继续处理下一批`);
+          continue;
+        } finally {
+          // 强制释放批次数据引用（帮助垃圾回收）
+          batch.length = 0;
+        }
+        
+        // 批次间稍作延迟，避免请求过快
+        if (batchIndex < totalBatches - 1) {
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
+      }
+      
+      logger.info(`✅ 所有批次处理完成: 共提取 ${allQAPairs.length} 个问答对，总耗时 ${totalProcessingTime}ms`);
+
+      // ✅ 调试：输出合并后的第一个问答对的字段（检查数据是否正确）
+      if (allQAPairs.length > 0) {
+        logger.info(`🔍 ========== 合并后的问答对数据（第一个） ==========`);
+        logger.info(`📋 完整数据:`, JSON.stringify(allQAPairs[0], null, 2));
+        logger.info(`   - time_range: ${allQAPairs[0].time_range || '(null)'}`);
+        logger.info(`   - time_range1: ${allQAPairs[0].time_range1 || '(null)'}`);
+        logger.info(`   - time_range2: ${allQAPairs[0].time_range2 || '(null)'}`);
+        logger.info(`   - question_speaker: ${allQAPairs[0].question_speaker || '(null)'}`);
+        logger.info(`   - answer_speaker: ${allQAPairs[0].answer_speaker || '(null)'}`);
+        logger.info(`   - question: ${allQAPairs[0].question ? allQAPairs[0].question.substring(0, 50) + '...' : '(null)'}`);
+        logger.info(`   - answer: ${allQAPairs[0].answer ? allQAPairs[0].answer.substring(0, 50) + '...' : '(null)'}`);
+        logger.info(`==================================================`);
+      }
+
+      return {
+        success: true,
+        qaPairs: allQAPairs,
+        summary: {
+          totalPairs: allQAPairs.length,
+          answeredPairs: allQAPairs.filter(p => p.answer && p.answer.length > 0).length,
+          pendingPairs: allQAPairs.filter(p => !p.answer || p.answer.length === 0).length,
+          batchCount: totalBatches
+        },
+        processingTime: totalProcessingTime,
+        modelName: modelConfig.name,
+        modelCode: modelConfig.code
+      };
+
+    } catch (error) {
+      logger.error('❌ 问答对提取失败:', error);
+      throw error;
+    }
   }
 
   /**

@@ -1325,38 +1325,30 @@ router.put('/:id/dialogues', async (req, res) => {
         });
         updatedAdjustments.push(transcriptionService.convertBigIntToNumber(updated));
         
-        // ✅ 检测说话人批量替换：对比修改后的对话和原始对话，找出说话人变化
-        // 如果编辑的是原始对话（tabType === 'original'），对比修改前后的对话
-        // 如果编辑的是其他对话，对比修改后的对话和原始对话，找出共同的说话人变化
+        // ✅ 检测说话人批量替换：对比修改前后的对话，找出说话人变化
+        // ⚠️ 重要：无论编辑哪个标签页，都应该对比修改前后的对话（existingDialogues vs dialogues）
+        // 而不是对比原始对话和修改后的对话，因为合并后的对话中说话人可能已经和原始对话不同了
         const speakerChanges = new Map();
         
-        if (tabType === 'original' && existingDialogues.length === dialogues.length) {
-          // 编辑原始对话：对比修改前后的对话
+        if (existingDialogues.length === dialogues.length) {
+          // ✅ 对比修改前后的对话（适用于所有标签页）
+          // 统计每个原说话人变成了哪些新说话人
+          const speakerMapping = new Map();
+          
           existingDialogues.forEach((oldDialogue, index) => {
             if (dialogues[index] && oldDialogue.speaker !== dialogues[index].speaker) {
-              // 记录说话人变化（可能是批量替换）
-              if (!speakerChanges.has(oldDialogue.speaker) || speakerChanges.get(oldDialogue.speaker) !== dialogues[index].speaker) {
-                speakerChanges.set(oldDialogue.speaker, dialogues[index].speaker);
+              const fromSpeaker = oldDialogue.speaker;
+              const toSpeaker = dialogues[index].speaker;
+              
+              // 记录映射关系
+              if (!speakerMapping.has(fromSpeaker)) {
+                speakerMapping.set(fromSpeaker, new Set());
               }
-            }
-          });
-        } else if (originalDialogues.length > 0) {
-          // 编辑其他对话：对比修改后的对话和原始对话，找出说话人变化模式
-          // 统计原始对话中每个说话人在修改后对话中的对应关系
-          const speakerMapping = new Map();
-          originalDialogues.forEach((originalDialogue, index) => {
-            if (dialogues[index] && originalDialogue.speaker && dialogues[index].speaker) {
-              if (originalDialogue.speaker !== dialogues[index].speaker) {
-                // 如果原始对话中的说话人在修改后对话中发生了变化，记录映射关系
-                if (!speakerMapping.has(originalDialogue.speaker)) {
-                  speakerMapping.set(originalDialogue.speaker, new Set());
-                }
-                speakerMapping.get(originalDialogue.speaker).add(dialogues[index].speaker);
-              }
+              speakerMapping.get(fromSpeaker).add(toSpeaker);
             }
           });
           
-          // 如果某个原始说话人在修改后的对话中全部变成了同一个新说话人，认为是批量替换
+          // 如果某个原说话人在所有对话中都变成了同一个新说话人，认为是批量替换
           speakerMapping.forEach((newSpeakers, fromSpeaker) => {
             if (newSpeakers.size === 1) {
               const toSpeaker = Array.from(newSpeakers)[0];
@@ -1510,7 +1502,7 @@ function replaceSpeakerInDialogues(dialogues, fromSpeaker, toSpeaker) {
 router.post('/:id/re-merge', async (req, res) => {
   try {
     const { id } = req.params;
-    const { tabType = 'original', autoMerge = true } = req.body;
+    const { tabType = 'original' } = req.body; // ✅ 移除 autoMerge 参数，总是创建新记录
 
     // 1. 获取转录记录
     const transcription = await transcriptionService.getTranscriptionById(id);
@@ -1526,76 +1518,76 @@ router.post('/:id/re-merge', async (req, res) => {
     let sourceNote1 = '';
 
     if (tabType === 'corrected') {
-      // 数据来源：dialogue_adjustments 表，note1='AI错别字修正'
-      if (transcription.adjustment && transcription.adjustment.note1 === 'AI错别字修正') {
-        if (transcription.adjustment.adjusted_dialogues) {
-          sourceDialogues = Array.isArray(transcription.adjustment.adjusted_dialogues)
-            ? transcription.adjustment.adjusted_dialogues
-            : (typeof transcription.adjustment.adjusted_dialogues === 'string'
-              ? JSON.parse(transcription.adjustment.adjusted_dialogues)
-              : []);
+      // ✅ 数据来源：dialogue_adjustments 表，note1='AI错别字修正'
+      // ⚠️ 重要：直接从数据库实时查询，确保获取最新的数据（包括保存后的说话人替换）
+      const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client');
+      const prisma = new PrismaClient();
+      try {
+        const aiCorrection = await prisma.dialogue_adjustments.findFirst({
+          where: {
+            transcription_id: id,
+            note1: 'AI错别字修正'
+          },
+          orderBy: { created_at: 'desc' }
+        });
+        
+        if (aiCorrection && aiCorrection.adjusted_dialogues) {
+          sourceDialogues = typeof aiCorrection.adjusted_dialogues === 'string'
+            ? JSON.parse(aiCorrection.adjusted_dialogues)
+            : aiCorrection.adjusted_dialogues;
           sourceNote1 = 'AI错别字修正';
+          console.log(`📥 再次合并：从数据库实时查询AI修正记录（ID: ${aiCorrection.id}），共 ${sourceDialogues?.length || 0} 条对话`);
         }
-      }
-      
-      // 如果没有找到AI修正记录，尝试从数据库直接查询
-      if (!sourceDialogues || sourceDialogues.length === 0) {
-        const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client');
-        const prisma = new PrismaClient();
-        try {
-          const aiCorrection = await prisma.dialogue_adjustments.findFirst({
-            where: {
-              transcription_id: id,
-              note1: 'AI错别字修正'
-            },
-            orderBy: { created_at: 'desc' }
-          });
-          
-          if (aiCorrection && aiCorrection.adjusted_dialogues) {
-            sourceDialogues = typeof aiCorrection.adjusted_dialogues === 'string'
-              ? JSON.parse(aiCorrection.adjusted_dialogues)
-              : aiCorrection.adjusted_dialogues;
-            sourceNote1 = 'AI错别字修正';
-          }
-        } finally {
-          await prisma.$disconnect();
-        }
+      } finally {
+        await prisma.$disconnect();
       }
     } else if (tabType === 'merged') {
-      // 数据来源：dialogue_adjustments 表，note1='合并相邻同一说话人的对话'
-      if (transcription.mergeAdjustment && transcription.mergeAdjustment.note1 === '合并相邻同一说话人的对话') {
-        if (transcription.mergeAdjustment.adjusted_dialogues) {
-          sourceDialogues = Array.isArray(transcription.mergeAdjustment.adjusted_dialogues)
-            ? transcription.mergeAdjustment.adjusted_dialogues
-            : (typeof transcription.mergeAdjustment.adjusted_dialogues === 'string'
-              ? JSON.parse(transcription.mergeAdjustment.adjusted_dialogues)
-              : []);
+      // ✅ 数据来源：dialogue_adjustments 表，note1='合并相邻同一说话人的对话'（第一次合并）
+      // ⚠️ 重要：直接从数据库实时查询，确保获取最新的数据（包括保存后的说话人替换）
+      const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client');
+      const prisma = new PrismaClient();
+      try {
+        const mergeAdjustment = await prisma.dialogue_adjustments.findFirst({
+          where: {
+            transcription_id: id,
+            note1: '合并相邻同一说话人的对话'
+          },
+          orderBy: { created_at: 'desc' }
+        });
+        
+        if (mergeAdjustment && mergeAdjustment.adjusted_dialogues) {
+          sourceDialogues = typeof mergeAdjustment.adjusted_dialogues === 'string'
+            ? JSON.parse(mergeAdjustment.adjusted_dialogues)
+            : mergeAdjustment.adjusted_dialogues;
           sourceNote1 = '合并相邻同一说话人的对话';
+          console.log(`📥 再次合并：从数据库实时查询合并记录（ID: ${mergeAdjustment.id}），共 ${sourceDialogues?.length || 0} 条对话`);
         }
+      } finally {
+        await prisma.$disconnect();
       }
-      
-      // 如果没有找到合并记录，尝试从数据库直接查询
-      if (!sourceDialogues || sourceDialogues.length === 0) {
-        const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client');
-        const prisma = new PrismaClient();
-        try {
-          const mergeAdjustment = await prisma.dialogue_adjustments.findFirst({
-            where: {
-              transcription_id: id,
-              note1: '合并相邻同一说话人的对话'
-            },
-            orderBy: { created_at: 'desc' }
-          });
-          
-          if (mergeAdjustment && mergeAdjustment.adjusted_dialogues) {
-            sourceDialogues = typeof mergeAdjustment.adjusted_dialogues === 'string'
-              ? JSON.parse(mergeAdjustment.adjusted_dialogues)
-              : mergeAdjustment.adjusted_dialogues;
-            sourceNote1 = '合并相邻同一说话人的对话';
-          }
-        } finally {
-          await prisma.$disconnect();
+    } else if (tabType === 'remerged') {
+      // ✅ 数据来源：dialogue_adjustments 表，note1='再次合并对话'（可以从再次合并的记录再次合并）
+      // ⚠️ 重要：直接从数据库实时查询，确保获取最新的数据（包括保存后的说话人替换）
+      const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client');
+      const prisma = new PrismaClient();
+      try {
+        const reMergeAdjustment = await prisma.dialogue_adjustments.findFirst({
+          where: {
+            transcription_id: id,
+            note1: '再次合并对话'
+          },
+          orderBy: { created_at: 'desc' }
+        });
+        
+        if (reMergeAdjustment && reMergeAdjustment.adjusted_dialogues) {
+          sourceDialogues = typeof reMergeAdjustment.adjusted_dialogues === 'string'
+            ? JSON.parse(reMergeAdjustment.adjusted_dialogues)
+            : reMergeAdjustment.adjusted_dialogues;
+          sourceNote1 = '再次合并对话';
+          console.log(`📥 再次合并：从数据库实时查询再次合并记录（ID: ${reMergeAdjustment.id}），共 ${sourceDialogues?.length || 0} 条对话`);
         }
+      } finally {
+        await prisma.$disconnect();
       }
     } else {
       // 数据来源：transcriptions 表，dialogues 字段
@@ -1617,13 +1609,12 @@ router.post('/:id/re-merge', async (req, res) => {
       });
     }
 
-    // 3. 执行重新合并
+    // 3. ✅ 执行重新合并（不再使用 autoMerge，总是创建新记录，note1='再次合并对话'）
     const result = await transcriptionService.reMergeDialogues(
       id,
       sourceDialogues,
       {
-        autoMerge: autoMerge,
-        sourceNote1: sourceNote1
+        sourceNote1: sourceNote1 // ✅ 传入来源标识
       }
     );
 
@@ -1639,6 +1630,422 @@ router.post('/:id/re-merge', async (req, res) => {
     res.status(500).json({
       success: false,
       error: error.message || '重新合并失败'
+    });
+  }
+});
+
+/**
+ * POST /api/transcription/:id/qa-extraction
+ * 提取问答对并保存到 concerns 表
+ */
+router.post('/:id/qa-extraction', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { modelName, promptId, dialogues } = req.body;
+
+    // 1. 获取转录记录
+    const transcription = await transcriptionService.getTranscriptionById(id);
+    if (!transcription) {
+      return res.status(404).json({
+        success: false,
+        error: '转录记录不存在'
+      });
+    }
+
+    // 2. ✅ 确定要分析的对话内容（优先使用最后一次合并完成后的内容：再次合并 > AI修正 > 第一次合并 > 原始对话）
+    let sourceDialogues = dialogues;
+    if (!sourceDialogues || sourceDialogues.length === 0) {
+      const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client');
+      const prisma = new PrismaClient();
+      
+      try {
+        // ✅ 1. 最优先：再次合并后的对话（note1='再次合并对话'）
+        const reMergeAdjustment = await prisma.dialogue_adjustments.findFirst({
+          where: {
+            transcription_id: id,
+            note1: '再次合并对话'
+          },
+          orderBy: { created_at: 'desc' }
+        });
+        
+        if (reMergeAdjustment && reMergeAdjustment.adjusted_dialogues) {
+          sourceDialogues = typeof reMergeAdjustment.adjusted_dialogues === 'string'
+            ? JSON.parse(reMergeAdjustment.adjusted_dialogues)
+            : reMergeAdjustment.adjusted_dialogues;
+          console.log(`📥 问答对提取：使用再次合并后的对话，共 ${sourceDialogues?.length || 0} 条`);
+        }
+        
+        // ✅ 2. 其次：AI修正后的对话（note1='AI错别字修正'）
+        if (!sourceDialogues || sourceDialogues.length === 0) {
+          const aiCorrectionAdjustment = await prisma.dialogue_adjustments.findFirst({
+            where: {
+              transcription_id: id,
+              note1: 'AI错别字修正'
+            },
+            orderBy: { created_at: 'desc' }
+          });
+          
+          if (aiCorrectionAdjustment && aiCorrectionAdjustment.adjusted_dialogues) {
+            sourceDialogues = typeof aiCorrectionAdjustment.adjusted_dialogues === 'string'
+              ? JSON.parse(aiCorrectionAdjustment.adjusted_dialogues)
+              : aiCorrectionAdjustment.adjusted_dialogues;
+            console.log(`📥 问答对提取：使用AI修正后的对话，共 ${sourceDialogues?.length || 0} 条`);
+          }
+        }
+        
+        // ✅ 3. 再次：第一次合并后的对话（note1='合并相邻同一说话人的对话'）
+        if (!sourceDialogues || sourceDialogues.length === 0) {
+          const mergeAdjustment = await prisma.dialogue_adjustments.findFirst({
+            where: {
+              transcription_id: id,
+              note1: '合并相邻同一说话人的对话'
+            },
+            orderBy: { created_at: 'desc' }
+          });
+          
+          if (mergeAdjustment && mergeAdjustment.adjusted_dialogues) {
+            sourceDialogues = typeof mergeAdjustment.adjusted_dialogues === 'string'
+              ? JSON.parse(mergeAdjustment.adjusted_dialogues)
+              : mergeAdjustment.adjusted_dialogues;
+            console.log(`📥 问答对提取：使用第一次合并后的对话，共 ${sourceDialogues?.length || 0} 条`);
+          }
+        }
+        
+        // ✅ 4. 最后：原始对话（从 transcriptions 表）
+        if (!sourceDialogues || sourceDialogues.length === 0) {
+          sourceDialogues = transcription.dialogues || [];
+          if (typeof sourceDialogues === 'string') {
+            try {
+              sourceDialogues = JSON.parse(sourceDialogues);
+            } catch (e) {
+              sourceDialogues = [];
+            }
+          }
+          console.log(`📥 问答对提取：使用原始对话，共 ${sourceDialogues?.length || 0} 条`);
+        }
+      } finally {
+        await prisma.$disconnect();
+      }
+    }
+
+    if (!sourceDialogues || sourceDialogues.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: '对话内容为空，请先加载对话内容'
+      });
+    }
+
+    // 3. 获取角色信息（从 dialogue_adjustments 或 transcriptions）
+    let speakerRoles = {};
+    if (transcription.adjustment && transcription.adjustment.speaker_roles) {
+      speakerRoles = typeof transcription.adjustment.speaker_roles === 'string'
+        ? JSON.parse(transcription.adjustment.speaker_roles)
+        : transcription.adjustment.speaker_roles;
+    } else if (transcription.speaker_roles) {
+      speakerRoles = typeof transcription.speaker_roles === 'string'
+        ? JSON.parse(transcription.speaker_roles)
+        : transcription.speaker_roles;
+    }
+
+    if (!speakerRoles || Object.keys(speakerRoles).length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: '未找到角色信息，请先进行角色判断'
+      });
+    }
+
+    console.log(`🚀 开始提取问答对，对话数量: ${sourceDialogues.length} 条，角色数量: ${Object.keys(speakerRoles).length} 个`);
+
+    // 4. 调用AI提取问答对
+    const result = await transcriptionAiService.extractQAPairs(
+      sourceDialogues,
+      speakerRoles,
+      {
+        modelName: modelName,
+        promptId: promptId,
+        onProgress: (current, total) => {
+          console.log(`📊 问答对提取进度: ${current}/${total} (${Math.round(current/total*100)}%)`);
+        }
+      }
+    );
+
+    if (!result.success || !result.qaPairs || result.qaPairs.length === 0) {
+      return res.json({
+        success: true,
+        message: '未提取到问答对',
+        data: {
+          qaPairs: [],
+          concerns: [],
+          sessionLinked: false,
+          summary: result.summary || { totalPairs: 0, answeredPairs: 0, pendingPairs: 0 }
+        }
+      });
+    }
+
+    // 5. 保存到 concerns 表
+    const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client');
+    const prisma = new PrismaClient();
+    
+    try {
+      const createdConcerns = [];
+      const sessionId = transcription.session_id;
+      
+      for (let i = 0; i < result.qaPairs.length; i++) {
+        const qaPair = result.qaPairs[i];
+        
+        // ✅ 过滤掉自问自答的问答对（question_speaker 和 answer_speaker 相同）
+        const questionSpeaker = qaPair.question_speaker ? String(qaPair.question_speaker).trim() : null;
+        const answerSpeaker = qaPair.answer_speaker ? String(qaPair.answer_speaker).trim() : null;
+        if (questionSpeaker && answerSpeaker && questionSpeaker === answerSpeaker) {
+          console.log(`⏭️  跳过自问自答的问答对（不入库）: 问题说话人=${questionSpeaker}, 回答说话人=${answerSpeaker}, 问题="${qaPair.question ? qaPair.question.substring(0, 50) + '...' : '(无问题)'}"`);
+          continue; // 跳过，不入库
+        }
+        
+        const { v4: uuidv4 } = require('uuid');
+        const concernId = uuidv4();
+        
+        // ✅ 调试：输出第一个问答对的字段
+        if (i === 0) {
+          console.log(`🔍 ========== 保存问答对 ${i + 1} 的原始字段 ==========`);
+          console.log(`📋 完整数据:`, JSON.stringify(qaPair, null, 2));
+          console.log(`   - time_range: ${qaPair.time_range !== undefined ? JSON.stringify(qaPair.time_range) : '(undefined)'} (类型: ${typeof qaPair.time_range})`);
+          console.log(`   - time_range1: ${qaPair.time_range1 !== undefined ? JSON.stringify(qaPair.time_range1) : '(undefined)'} (类型: ${typeof qaPair.time_range1})`);
+          console.log(`   - time_range2: ${qaPair.time_range2 !== undefined ? JSON.stringify(qaPair.time_range2) : '(undefined)'} (类型: ${typeof qaPair.time_range2})`);
+          console.log(`   - question_speaker: ${qaPair.question_speaker || '(null)'}`);
+          console.log(`   - answer_speaker: ${qaPair.answer_speaker || '(null)'}`);
+          console.log(`==================================================`);
+        }
+        
+        // 创建 concerns 记录
+        const now = new Date();
+        // ⚠️ 使用明确的 null/undefined 检查，确保有效值能正确保存
+        // 如果 time_range1 存在且非空字符串，使用它；否则使用 time_range；最后才是 null
+        let timeRange1 = null;
+        if (qaPair.time_range1 !== undefined && qaPair.time_range1 !== null && String(qaPair.time_range1).trim() !== '') {
+          timeRange1 = String(qaPair.time_range1).trim();
+        } else if (qaPair.time_range !== undefined && qaPair.time_range !== null && String(qaPair.time_range).trim() !== '') {
+          timeRange1 = String(qaPair.time_range).trim();
+        }
+        
+        let timeRange2 = null;
+        if (qaPair.time_range2 !== undefined && qaPair.time_range2 !== null && String(qaPair.time_range2).trim() !== '') {
+          timeRange2 = String(qaPair.time_range2).trim();
+        }
+        
+        // ✅ 调试：输出即将保存的字段值
+        if (i === 0) {
+          console.log(`💾 ========== 准备保存到数据库的字段值 ==========`);
+          console.log(`   - time_range: ${timeRange1 || '(null)'}`);
+          console.log(`   - time_range1: ${timeRange1 || '(null)'}`);
+          console.log(`   - time_range2: ${timeRange2 || '(null)'}`);
+          console.log(`   - timeRange1 判断逻辑: qaPair.time_range1=${JSON.stringify(qaPair.time_range1)}, qaPair.time_range=${JSON.stringify(qaPair.time_range)}, 结果=${timeRange1}`);
+          console.log(`   - timeRange2 判断逻辑: qaPair.time_range2=${JSON.stringify(qaPair.time_range2)}, 结果=${timeRange2}`);
+          console.log(`   - 准备保存的数据对象:`, JSON.stringify({
+            id: concernId,
+            question: qaPair.question.substring(0, 50) + '...',
+            time_range: timeRange1,
+            time_range1: timeRange1,
+            time_range2: timeRange2
+          }, null, 2));
+          console.log(`==================================================`);
+        }
+        
+        const createData = {
+          id: concernId,
+          question: qaPair.question,
+          answer: qaPair.answer || null,
+          status: qaPair.answer && qaPair.answer.length > 0 ? 'answered' : 'pending',
+          time_range: timeRange1, // 兼容旧格式，保存问题的时间范围
+          time_range1: timeRange1, // 问题时间范围
+          time_range2: timeRange2, // 回答时间范围
+          question_speaker: qaPair.question_speaker || null,
+          answer_speaker: qaPair.answer_speaker || null,
+          transcription_id: id, // 关联转录ID
+          category: null, // 可选，AI可以自动分类
+          priority: null, // 可选，AI可以评估优先级
+          created_at: now, // ✅ 手动设置创建时间（确保兼容性）
+          updated_at: now  // ✅ 手动设置更新时间（schema 修改后 Prisma 会自动管理，但手动设置更安全）
+        };
+        
+        // ✅ 调试：输出最终要保存的数据对象（仅第一个）
+        if (i === 0) {
+          console.log(`📦 ========== 最终要保存的数据对象（第一个） ==========`);
+          console.log(`   - createData.time_range: ${createData.time_range || '(null)'}`);
+          console.log(`   - createData.time_range1: ${createData.time_range1 || '(null)'}`);
+          console.log(`   - createData.time_range2: ${createData.time_range2 || '(null)'}`);
+          console.log(`==================================================`);
+        }
+        
+        const concern = await prisma.concerns.create({
+          data: createData
+        });
+        
+        // ✅ 调试：输出保存后的字段值（第一个）
+        if (i === 0) {
+          console.log(`✅ ========== 保存成功，数据库中的字段值 ==========`);
+          console.log(`   - time_range: ${concern.time_range || '(null)'}`);
+          console.log(`   - time_range1: ${concern.time_range1 || '(null)'}`);
+          console.log(`   - time_range2: ${concern.time_range2 || '(null)'}`);
+          console.log(`   - concern 完整对象:`, JSON.stringify(concern, null, 2));
+          console.log(`==================================================`);
+        }
+        
+        createdConcerns.push(concern);
+        
+        // 如果转录记录有关联的 session_id，创建 session_concerns 关联记录
+        if (sessionId) {
+          const sessionConcernId = uuidv4();
+          await prisma.session_concerns.create({
+            data: {
+              id: sessionConcernId,
+              session_id: sessionId,
+              concern_id: concernId,
+              sort_order: i + 1, // 按提取顺序排序
+            }
+          });
+          console.log(`✅ 已创建 session_concerns 关联记录 (session_id: ${sessionId}, concern_id: ${concernId}, sort_order: ${i + 1})`);
+        }
+      }
+      
+      console.log(`💾 成功保存 ${createdConcerns.length} 个问答对到 concerns 表`);
+      if (sessionId) {
+        console.log(`✅ 已关联到 session_id: ${sessionId}`);
+      } else {
+        console.log(`⚠️ 转录记录未关联 session_id，未创建 session_concerns 关联记录`);
+      }
+      
+      // 转换 BigInt 字段
+      const convertedConcerns = createdConcerns.map(concern => transcriptionService.convertBigIntToNumber(concern));
+      
+      res.json({
+        success: true,
+        message: `成功提取 ${result.qaPairs.length} 个问答对`,
+        data: {
+          qaPairs: result.qaPairs,
+          concerns: convertedConcerns,
+          sessionLinked: !!sessionId,
+          sessionId: sessionId,
+          transcriptionId: id
+        },
+        summary: result.summary,
+        processingTime: result.processingTime,
+        modelName: result.modelName
+      });
+      
+    } catch (dbError) {
+      console.error('❌ 保存问答对到数据库失败:', dbError);
+      throw dbError;
+    } finally {
+      await prisma.$disconnect();
+    }
+
+  } catch (error) {
+    console.error('问答对提取失败:', error);
+    console.error('错误堆栈:', error.stack);
+    res.status(500).json({
+      success: false,
+      error: error.message || '问答对提取失败',
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+/**
+ * GET /api/transcription/:id/qa-pairs
+ * 获取转录记录关联的问答对
+ * 支持两种查询方式：
+ * 1. 通过 transcription_id 直接查询（如果 concerns 表有 transcription_id 字段）
+ * 2. 通过 session_id 间接查询（通过 session_concerns 关联）
+ */
+router.get('/:id/qa-pairs', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // 1. 获取转录记录
+    const transcription = await transcriptionService.getTranscriptionById(id);
+    if (!transcription) {
+      return res.status(404).json({
+        success: false,
+        error: '转录记录不存在'
+      });
+    }
+
+    const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client');
+    const prisma = new PrismaClient();
+    
+    try {
+      let concernsList = [];
+      
+      // 方式1：通过 transcription_id 直接查询（推荐，如果字段存在）
+      try {
+        concernsList = await prisma.concerns.findMany({
+          where: {
+            transcription_id: id
+          },
+          orderBy: {
+            created_at: 'asc'
+          }
+        });
+        console.log(`📥 通过 transcription_id 查询到 ${concernsList.length} 个问答对`);
+      } catch (error) {
+        // 如果字段不存在，会报错，使用方式2
+        console.log(`⚠️ 通过 transcription_id 查询失败（可能字段不存在），尝试通过 session_id 查询: ${error.message}`);
+      }
+      
+      // 方式2：如果方式1没有结果，通过 session_id 间接查询
+      if (concernsList.length === 0 && transcription.session_id) {
+        const sessionConcerns = await prisma.session_concerns.findMany({
+          where: {
+            session_id: transcription.session_id
+          },
+          include: {
+            concerns: true
+          },
+          orderBy: {
+            sort_order: 'asc'
+          }
+        });
+        
+        concernsList = sessionConcerns.map(sc => sc.concerns).filter(c => c);
+        console.log(`📥 通过 session_id 查询到 ${concernsList.length} 个问答对`);
+      }
+      
+      const qaPairs = concernsList.map(concern => ({
+        id: concern.id,
+        question: concern.question,
+        answer: concern.answer,
+        category: concern.category,
+        priority: concern.priority,
+        status: concern.status,
+        time_range: concern.time_range || concern.time_range1 || null, // 兼容旧格式
+        time_range1: concern.time_range1 || concern.time_range || null, // 问题时间范围
+        time_range2: concern.time_range2 || null, // 回答时间范围
+        question_speaker: concern.question_speaker,
+        answer_speaker: concern.answer_speaker,
+        createdAt: concern.created_at,
+        updatedAt: concern.updated_at
+      }));
+      
+      res.json({
+        success: true,
+        data: {
+          qaPairs: qaPairs,
+          sessionId: transcription.session_id,
+          transcriptionId: id,
+          totalCount: qaPairs.length
+        }
+      });
+      
+    } finally {
+      await prisma.$disconnect();
+    }
+
+  } catch (error) {
+    console.error('查询问答对失败:', error);
+    console.error('错误堆栈:', error.stack);
+    res.status(500).json({
+      success: false,
+      error: error.message || '查询问答对失败'
     });
   }
 });

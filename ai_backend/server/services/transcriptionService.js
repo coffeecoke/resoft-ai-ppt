@@ -226,7 +226,7 @@ class TranscriptionService {
       orderBy: { created_at: 'desc' }
     });
     
-    // 3. 查找合并记录（note1='合并相邻同一说话人的对话'）
+    // 3. 查找合并记录（note1='合并相邻同一说话人的对话'）- 第一次合并
     let mergeAdjustment = await prisma.dialogue_adjustments.findFirst({
       where: { 
         transcription_id: id,
@@ -235,7 +235,16 @@ class TranscriptionService {
       orderBy: { created_at: 'desc' }
     });
     
-    // 4. 优先使用包含 speaker_roles 的记录（角色判断记录或AI修正记录），如果没有则使用合并记录
+    // 4. ✅ 查找再次合并记录（note1='再次合并对话'）- 重新合并后的内容
+    let reMergeAdjustment = await prisma.dialogue_adjustments.findFirst({
+      where: { 
+        transcription_id: id,
+        note1: '再次合并对话'
+      },
+      orderBy: { created_at: 'desc' }
+    });
+    
+    // 5. 优先使用包含 speaker_roles 的记录（角色判断记录或AI修正记录），如果没有则使用合并记录
     // 如果AI修正记录包含 speaker_roles，优先使用它；否则使用角色判断记录
     let latestAdjustment = null;
     if (aiCorrectionAdjustment && aiCorrectionAdjustment.speaker_roles) {
@@ -244,6 +253,8 @@ class TranscriptionService {
       latestAdjustment = roleJudgmentAdjustment; // 使用角色判断记录
     } else if (aiCorrectionAdjustment) {
       latestAdjustment = aiCorrectionAdjustment; // 使用AI修正记录（即使没有角色设置）
+    } else if (reMergeAdjustment) {
+      latestAdjustment = reMergeAdjustment; // ✅ 使用再次合并记录
     } else if (mergeAdjustment) {
       latestAdjustment = mergeAdjustment; // 使用合并记录（兼容旧数据）
     } else {
@@ -273,7 +284,7 @@ class TranscriptionService {
       }
     }
     
-    // ✅ 同时保存合并记录（如果存在且不是最新记录）
+    // ✅ 同时保存合并记录（第一次合并，如果存在且不是最新记录）
     // 前端可以通过这个字段获取合并后的对话（即使后面有AI修正记录）
     if (mergeAdjustment && mergeAdjustment.id !== latestAdjustment?.id) {
       transcription.mergeAdjustment = mergeAdjustment;
@@ -287,6 +298,24 @@ class TranscriptionService {
         } catch (e) {
           console.error('解析合并后的对话失败:', e);
           transcription.mergeAdjustment.adjusted_dialogues = [];
+        }
+      }
+    }
+    
+    // ✅ 同时保存再次合并记录（无论是否是最新记录，都单独返回）
+    // 前端可以通过这个字段获取再次合并后的对话
+    if (reMergeAdjustment) {
+      transcription.reMergeAdjustment = reMergeAdjustment;
+      // 解析再次合并后的对话
+      if (reMergeAdjustment.adjusted_dialogues) {
+        try {
+          const reMergedDialogues = typeof reMergeAdjustment.adjusted_dialogues === 'string'
+            ? JSON.parse(reMergeAdjustment.adjusted_dialogues)
+            : reMergeAdjustment.adjusted_dialogues;
+          transcription.reMergeAdjustment.adjusted_dialogues = reMergedDialogues;
+        } catch (e) {
+          console.error('解析再次合并后的对话失败:', e);
+          transcription.reMergeAdjustment.adjusted_dialogues = [];
         }
       }
     }
@@ -598,12 +627,12 @@ class TranscriptionService {
    * @param {string} transcriptionId - 转录ID
    * @param {Array} sourceDialogues - 源对话数据（从 adjustment 记录读取）
    * @param {Object} options - 选项
-   * @param {boolean} options.autoMerge - 是否自动合并（不创建新记录，更新现有合并记录）
+   * @param {boolean} options.autoMerge - 已废弃，不再使用（为了向后兼容保留）
    * @param {string} options.sourceNote1 - 源记录的 note1（用于标识来源）
    * @returns {Promise<Object>} 合并后的调整记录
    */
   async reMergeDialogues(transcriptionId, sourceDialogues, options = {}) {
-    const { autoMerge = true, sourceNote1 = null } = options;
+    const { sourceNote1 = null } = options;
 
     // 1. 验证数据
     if (!Array.isArray(sourceDialogues) || sourceDialogues.length === 0) {
@@ -618,18 +647,28 @@ class TranscriptionService {
     if (!transcription) {
       throw new Error('转录记录不存在');
     }
-
-    // 4. 查找现有的合并记录
-    let existingMergeAdjustment = null;
-    if (autoMerge) {
-      existingMergeAdjustment = await prisma.dialogue_adjustments.findFirst({
-        where: {
-          transcription_id: transcriptionId,
-          note1: '合并相邻同一说话人的对话'
-        },
-        orderBy: { created_at: 'desc' }
-      });
+    
+    // ✅ 获取最新的 speaker_roles（优先从包含角色设置的 adjustment 记录获取）
+    let latestSpeakerRoles = null;
+    if (transcription.adjustment && transcription.adjustment.speaker_roles) {
+      latestSpeakerRoles = typeof transcription.adjustment.speaker_roles === 'string'
+        ? transcription.adjustment.speaker_roles
+        : JSON.stringify(transcription.adjustment.speaker_roles);
+    } else if (transcription.speaker_roles) {
+      latestSpeakerRoles = typeof transcription.speaker_roles === 'string'
+        ? transcription.speaker_roles
+        : JSON.stringify(transcription.speaker_roles);
     }
+
+    // 4. ✅ 重新合并总是创建新记录，不覆盖第一次合并
+    // 查找是否已有"再次合并"记录（用于判断是更新还是创建）
+    const existingReMergeAdjustment = await prisma.dialogue_adjustments.findFirst({
+      where: {
+        transcription_id: transcriptionId,
+        note1: '再次合并对话'
+      },
+      orderBy: { created_at: 'desc' }
+    });
 
     // 5. 生成完整文本
     const fullText = mergedDialogues.map(d => `${d.speaker}: ${d.text}`).join('\n');
@@ -637,19 +676,22 @@ class TranscriptionService {
     let adjustment;
     const { v4: uuidv4 } = require('uuid');
 
-    if (existingMergeAdjustment && autoMerge) {
-      // 更新现有合并记录
+    // 6. ✅ 如果已有再次合并记录，更新它；否则创建新记录
+    if (existingReMergeAdjustment) {
+      // 更新现有的再次合并记录
       adjustment = await prisma.dialogue_adjustments.update({
-        where: { id: existingMergeAdjustment.id },
+        where: { id: existingReMergeAdjustment.id },
         data: {
           adjusted_dialogues: JSON.stringify(mergedDialogues),
           full_text: fullText,
           speaker_count: [...new Set(mergedDialogues.map(d => d.speaker))].length,
-          note2: `重新合并：${sourceDialogues.length} 条 → ${mergedDialogues.length} 条（基于${sourceNote1 || '调整记录'}）`
+          // ✅ 更新时也更新 speaker_roles（如果有新的）
+          speaker_roles: latestSpeakerRoles || existingReMergeAdjustment.speaker_roles,
+          note2: `再次合并：${sourceDialogues.length} 条 → ${mergedDialogues.length} 条（基于${sourceNote1 || '调整记录'}）`
         }
       });
     } else {
-      // 创建新的合并记录
+      // 创建新的再次合并记录（不覆盖第一次合并）
       const adjustmentId = uuidv4();
       adjustment = await prisma.dialogue_adjustments.create({
         data: {
@@ -666,12 +708,13 @@ class TranscriptionService {
           xfyun_order_id: transcription.xfyun_order_id,
           speaker_count: [...new Set(mergedDialogues.map(d => d.speaker))].length,
           has_role_separation: transcription.has_role_separation,
-          speaker_roles: transcription.speaker_roles,
+          // ✅ 使用获取的最新 speaker_roles
+          speaker_roles: latestSpeakerRoles,
           session_id: transcription.session_id,
           product_id: transcription.product_id,
           customer_name: transcription.customer_name,
-          note1: '合并相邻同一说话人的对话',
-          note2: `重新合并：${sourceDialogues.length} 条 → ${mergedDialogues.length} 条（基于${sourceNote1 || '调整记录'}）`
+          note1: '再次合并对话', // ✅ 使用新的标识，区别于第一次合并
+          note2: `再次合并：${sourceDialogues.length} 条 → ${mergedDialogues.length} 条（基于${sourceNote1 || '调整记录'}）`
         }
       });
     }
@@ -684,7 +727,7 @@ class TranscriptionService {
       adjustment: convertedAdjustment,
       originalCount: sourceDialogues.length,
       mergedCount: mergedDialogues.length,
-      updated: !!existingMergeAdjustment
+      isNewRecord: !existingReMergeAdjustment
     };
   }
 }

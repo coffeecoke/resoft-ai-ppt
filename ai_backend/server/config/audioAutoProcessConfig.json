@@ -1,7 +1,8 @@
 {
-  "scanDirectory": "E:\\已转录\\20250219-侯鹏涛-自贡银行-自贡银行一表通项目",
+  "scanDirectory": "E:\\跑批音频文件",
   "pollingInterval": 300000,
   "maxConcurrent": 1,
+  "enableAiCorrection": true,
   "supportedFormats": [
     "mp3",
     "wav",

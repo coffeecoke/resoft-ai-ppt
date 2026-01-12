@@ -190,7 +190,7 @@
 
     <!-- 音频播放器 -->
     <div class="audio-player-container" style="margin-top: 30px; display: none;" id="st-audioPlayerContainer">
-      <h3>🎵 音频预览</h3>
+      <h3>🎵 音频预览 <span id="st-audioNameDisplay" style="font-size: 14px; font-weight: normal; color: #666; margin-left: 10px;"></span></h3>
       <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-top: 15px;">
         <audio id="st-audioPlayer" controls style="width: 100%; margin-bottom: 15px;">
           <source id="st-audioSource" src="" type="audio/mpeg">
@@ -216,6 +216,7 @@
         <div style="display: flex; gap: 10px;">
           <button class="btn btn-info" id="st-roleJudgmentBtn">👥 角色判断</button>
           <button class="btn btn-success" id="st-aiCorrectionBtn">✏️ 错别字修正</button>
+          <button class="btn btn-warning" id="st-qaExtractionBtn">❓ 问答对提取</button>
           <button class="btn btn-primary" id="st-roleSettingsBtn">👥 角色设置</button>
           <button class="btn btn-primary" id="st-batchReplaceSpeakerBtn">🔄 批量替换说话人</button>
           <button class="btn btn-success" id="st-saveEditBtn" style="display: none;">💾 保存修改</button>
@@ -255,6 +256,12 @@
           <button class="tab-btn" id="st-tab-corrected" onclick="switchDialogueTab('corrected')" style="padding: 10px 20px; border: none; background: transparent; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.3s;">
             ✏️ AI修正后的对话
           </button>
+          <button class="tab-btn" id="st-tab-remerged" onclick="switchDialogueTab('remerged')" style="padding: 10px 20px; border: none; background: transparent; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.3s; display: none;">
+            🔄 再次合并后的对话
+          </button>
+          <button class="tab-btn" id="st-tab-qa" onclick="switchDialogueTab('qa')" style="padding: 10px 20px; border: none; background: transparent; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.3s;">
+            ❓ 问答对
+          </button>
         </div>
         
         <!-- 原始对话列表 -->
@@ -270,6 +277,16 @@
         <!-- AI修正后的对话列表 -->
         <div class="dialogues-list" id="st-dialoguesList-corrected" style="max-height: 600px; overflow-y: auto; display: none;">
           <!-- 动态加载AI修正后的对话 -->
+        </div>
+        
+        <!-- 再次合并后的对话列表 -->
+        <div class="dialogues-list" id="st-dialoguesList-remerged" style="max-height: 600px; overflow-y: auto; display: none;">
+          <!-- 动态加载再次合并后的对话 -->
+        </div>
+        
+        <!-- 问答对列表 -->
+        <div class="dialogues-list" id="st-dialoguesList-qa" style="max-height: 600px; overflow-y: auto; display: none;">
+          <!-- 动态加载问答对 -->
         </div>
       </div>
     </div>

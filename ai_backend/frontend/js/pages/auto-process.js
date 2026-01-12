@@ -701,6 +701,7 @@ async function audioLoadConfig() {
       document.getElementById('audio-config-scan-dir').value = config.scanDirectory || '';
       document.getElementById('audio-config-interval').value = (config.pollingInterval || 300000) / 60000;
       document.getElementById('audio-config-concurrent').value = config.maxConcurrent || 1;
+      document.getElementById('audio-config-enable-ai-correction').checked = config.enableAiCorrection || false;
     }
   } catch (error) {
     console.error('❌ 加载音频跑批配置失败:', error);
@@ -715,6 +716,7 @@ async function audioSaveConfig() {
     const scanDirectory = document.getElementById('audio-config-scan-dir').value.trim();
     const interval = parseInt(document.getElementById('audio-config-interval').value);
     const concurrent = parseInt(document.getElementById('audio-config-concurrent').value);
+    const enableAiCorrection = document.getElementById('audio-config-enable-ai-correction').checked;
     
     if (!scanDirectory) {
       showToast('请输入扫描目录', 'warning');
@@ -729,7 +731,8 @@ async function audioSaveConfig() {
       body: JSON.stringify({
         scanDirectory,
         pollingInterval: interval * 60000,
-        maxConcurrent: concurrent
+        maxConcurrent: concurrent,
+        enableAiCorrection: enableAiCorrection
       })
     });
     
@@ -766,6 +769,7 @@ async function audioLoadStatistics() {
       document.getElementById('audio-stat-total-runs').textContent = stats.totalRuns || 0;
       document.getElementById('audio-stat-success').textContent = stats.successfulRuns || 0;
       document.getElementById('audio-stat-failed').textContent = stats.failedRuns || 0;
+      document.getElementById('audio-stat-corrected').textContent = stats.correctedDialogues || 0;
     }
   } catch (error) {
     console.error('❌ 加载音频跑批统计失败:', error);
