@@ -856,10 +856,10 @@ async function handleTextEditingPolish(context, polishContext, requirement, mode
       })
     }
     
-    // 提取要润色的内容
+    // 提取要润色的内容（优先使用 HTML，如果没有则使用纯文本）
     const contentToPolish = polishContext.hasSelection
-      ? polishContext.selectedText
-      : polishContext.fullContent
+      ? (polishContext.selectedHTML || polishContext.selectedText)
+      : (polishContext.fullHTML || polishContext.fullContent)
     
     if (!contentToPolish) {
       return res.json({
@@ -867,6 +867,16 @@ async function handleTextEditingPolish(context, polishContext, requirement, mode
         error: '未找到可润色的内容'
       })
     }
+    
+    // 判断是否包含 HTML 标签
+    const hasHTML = /<[^>]+>/.test(contentToPolish)
+    
+    console.log('[文本编辑润色] 内容信息:', {
+      hasSelection: polishContext.hasSelection,
+      hasHTML,
+      contentLength: contentToPolish.length,
+      contentPreview: contentToPolish.substring(0, 200)
+    })
     
     // 判断润色策略
     const hasUserRequirement = requirement && requirement !== 'default' && requirement.trim() !== ''
@@ -877,19 +887,41 @@ async function handleTextEditingPolish(context, polishContext, requirement, mode
     
     if (hasUserRequirement) {
       // 用户指定了要求 → 按用户要求来
-      systemPrompt = `你是PPT内容润色专家。请严格按照用户的要求对文字进行润色。
+      if (hasHTML) {
+        systemPrompt = `你是PPT内容润色专家。请严格按照用户的要求对HTML内容进行润色。
 
 关键规则：
 1. 用户说怎么改就怎么改，充分理解用户意图
 2. 如果用户说"可以重写"、"大改"，可以大幅调整
 3. 如果用户说"只改表达"、"微调"，只做小幅优化
-4. 返回JSON格式：{"polished": "润色后的文字", "explanation": "说明优化了哪些方面"}`
+4. **重要**：必须保留所有HTML标签和样式结构（如 <p>、<span>、style属性等）
+5. **重要**：只修改文本内容，不要改变HTML结构、标签属性、样式等
+6. **重要**：必须返回有效的JSON格式，不要包含任何markdown代码块标记
+7. JSON格式：{"polished": "润色后的HTML内容（保留所有标签）", "explanation": "说明优化了哪些方面"}
+8. polished字段中的HTML如果包含引号，必须使用\\"转义
+9. 只返回JSON，不要添加任何其他文字说明`
 
-      userPrompt = `原文：\n${contentToPolish}\n\n用户要求：${requirement}\n\n请按要求润色。`
+        userPrompt = `原文（HTML格式）：\n${contentToPolish}\n\n用户要求：${requirement}\n\n请按要求润色，保留所有HTML标签和样式，只返回JSON格式。`
+      } else {
+        systemPrompt = `你是PPT内容润色专家。请严格按照用户的要求对文字进行润色。
+
+关键规则：
+1. 用户说怎么改就怎么改，充分理解用户意图
+2. 如果用户说"可以重写"、"大改"，可以大幅调整
+3. 如果用户说"只改表达"、"微调"，只做小幅优化
+4. **重要**：必须返回有效的JSON格式，不要包含任何markdown代码块标记
+5. JSON格式：{"polished": "润色后的文字", "explanation": "说明优化了哪些方面"}
+6. polished字段中的文字如果包含引号，必须使用\\"转义
+7. polished字段中的文字如果包含换行符，必须使用\\n转义
+8. 只返回JSON，不要添加任何其他文字说明`
+
+        userPrompt = `原文：\n${contentToPolish}\n\n用户要求：${requirement}\n\n请按要求润色，只返回JSON格式。`
+      }
       temperature = 0.8  // 用户指定时温度更高
     } else {
       // 用户未指定 → 适中策略
-      systemPrompt = `你是PPT内容润色专家。请对文字进行适度优化润色。
+      if (hasHTML) {
+        systemPrompt = `你是PPT内容润色专家。请对HTML内容进行适度优化润色。
 
 润色策略（适中模式）：
 1. 保留核心含义和关键信息，不大幅改写
@@ -897,44 +929,218 @@ async function handleTextEditingPolish(context, polishContext, requirement, mode
 3. 如果是标题，保持简短（不超过15字），不改变核心意思
 4. 如果是正文，适度调整句式，增强可读性
 5. 保持原文风格，不要过度修饰
-6. 返回JSON格式：{"polished": "润色后的文字", "explanation": "说明优化了哪些方面"}`
+6. **重要**：必须保留所有HTML标签和样式结构（如 <p>、<span>、style属性等）
+7. **重要**：只修改文本内容，不要改变HTML结构、标签属性、样式等
+8. **重要**：必须返回有效的JSON格式，不要包含任何markdown代码块标记
+9. JSON格式：{"polished": "润色后的HTML内容（保留所有标签）", "explanation": "说明优化了哪些方面"}
+10. polished字段中的HTML如果包含引号，必须使用\\"转义
+11. 只返回JSON，不要添加任何其他文字说明`
 
-      userPrompt = `请对以下文字进行适度润色：\n\n${contentToPolish}`
+        userPrompt = `请对以下HTML内容进行适度润色，保留所有HTML标签和样式，只返回JSON格式：\n\n${contentToPolish}`
+      } else {
+        systemPrompt = `你是PPT内容润色专家。请对文字进行适度优化润色。
+
+润色策略（适中模式）：
+1. 保留核心含义和关键信息，不大幅改写
+2. 优化表达方式，提升专业性和简洁性
+3. 如果是标题，保持简短（不超过15字），不改变核心意思
+4. 如果是正文，适度调整句式，增强可读性
+5. 保持原文风格，不要过度修饰
+6. **重要**：必须返回有效的JSON格式，不要包含任何markdown代码块标记
+7. JSON格式：{"polished": "润色后的文字", "explanation": "说明优化了哪些方面"}
+8. polished字段中的文字如果包含引号，必须使用\\"转义
+9. polished字段中的文字如果包含换行符，必须使用\\n转义
+10. 只返回JSON，不要添加任何其他文字说明`
+
+        userPrompt = `请对以下文字进行适度润色，只返回JSON格式：\n\n${contentToPolish}`
+      }
     }
     
-    // 调用AI
+    // 调用AI（增加maxTokens避免JSON被截断）
     const result = await aiService.chat(model, [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt }
     ], { 
       temperature, 
-      maxTokens: 800 
+      maxTokens: 1200  // 增加token限制，避免JSON被截断
     })
     
-    console.log('[文本编辑润色] AI原始返回:', result.substring(0, 500))
+    console.log('[文本编辑润色] AI原始返回:', result)
     
-    // 解析结果
-    const jsonMatch = result.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) {
-      console.error('[文本编辑润色] 无法匹配JSON:', result)
-      throw new Error('AI返回格式无效')
+    // 【修复】先清理 markdown 代码块标记
+    let cleanedResult = result
+    // 移除 markdown 代码块标记
+    cleanedResult = cleanedResult.replace(/```json\s*/g, '')
+    cleanedResult = cleanedResult.replace(/```\s*/g, '')
+    cleanedResult = cleanedResult.trim()
+    
+    console.log('[文本编辑润色] 清理后内容:', cleanedResult)
+    
+    // 【改进】更健壮的 JSON 提取逻辑
+    let polishResult = null
+    let jsonString = ''
+    
+    // 方法1: 尝试直接解析整个内容
+    try {
+      polishResult = JSON.parse(cleanedResult)
+      if (polishResult.polished) {
+        console.log('[文本编辑润色] 方法1成功: 直接解析')
+      } else {
+        polishResult = null
+      }
+    } catch (e) {
+      // 直接解析失败，继续尝试其他方法
     }
     
-    console.log('[文本编辑润色] 提取的JSON:', jsonMatch[0].substring(0, 300))
+    // 方法2: 使用正则匹配，找到最完整的 JSON 对象
+    if (!polishResult) {
+      // 匹配从第一个 { 开始到最后一个 } 结束的内容
+      const jsonMatches = cleanedResult.match(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g)
+      if (jsonMatches && jsonMatches.length > 0) {
+        // 尝试解析每个匹配的 JSON，找到第一个有效的
+        for (const match of jsonMatches) {
+          try {
+            const parsed = JSON.parse(match)
+            if (parsed.polished) {
+              polishResult = parsed
+              jsonString = match
+              console.log('[文本编辑润色] 方法2成功: 正则匹配')
+              break
+            }
+          } catch (e) {
+            // 继续尝试下一个
+          }
+        }
+      }
+    }
     
-    // 清理 JSON 字符串中的控制字符，避免解析错误
-    let jsonString = jsonMatch[0]
-    // 移除不可见的控制字符（但保留已转义的 \n, \t 等）
-    jsonString = jsonString.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
+    // 方法3: 使用平衡括号算法，找到最完整的 JSON 对象
+    if (!polishResult) {
+      let startIdx = cleanedResult.indexOf('{')
+      if (startIdx !== -1) {
+        let braceCount = 0
+        let endIdx = startIdx
+        
+        for (let i = startIdx; i < cleanedResult.length; i++) {
+          if (cleanedResult[i] === '{') braceCount++
+          if (cleanedResult[i] === '}') braceCount--
+          if (braceCount === 0) {
+            endIdx = i
+            break
+          }
+        }
+        
+        if (endIdx > startIdx) {
+          jsonString = cleanedResult.substring(startIdx, endIdx + 1)
+          try {
+            // 清理控制字符
+            jsonString = jsonString.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
+            polishResult = JSON.parse(jsonString)
+            if (polishResult.polished) {
+              console.log('[文本编辑润色] 方法3成功: 平衡括号')
+            } else {
+              polishResult = null
+            }
+          } catch (e) {
+            polishResult = null
+          }
+        }
+      }
+    }
     
-    let polishResult
-    try {
-      polishResult = JSON.parse(jsonString)
-    } catch (parseError) {
-      console.error('[文本编辑润色] JSON解析失败:', jsonString.substring(0, 200))
-      console.error('[文本编辑润色] 解析错误:', parseError.message)
+    // 方法4: 如果所有方法都失败，尝试从包含 "polished" 的部分提取
+    if (!polishResult) {
+      // 找到 "polished" 字段的位置
+      const polishedIdx = cleanedResult.indexOf('"polished"')
+      if (polishedIdx !== -1) {
+        // 向前找到最近的 {
+        let startIdx = polishedIdx
+        while (startIdx >= 0 && cleanedResult[startIdx] !== '{') {
+          startIdx--
+        }
+        
+        if (startIdx !== -1) {
+          // 向后找到匹配的 }
+          let braceCount = 0
+          let endIdx = startIdx
+          for (let i = startIdx; i < cleanedResult.length; i++) {
+            if (cleanedResult[i] === '{') braceCount++
+            if (cleanedResult[i] === '}') {
+              braceCount--
+              if (braceCount === 0) {
+                endIdx = i
+                break
+              }
+            }
+          }
+          
+          if (endIdx > startIdx) {
+            jsonString = cleanedResult.substring(startIdx, endIdx + 1)
+            // 清理控制字符（但保留已转义的字符）
+            jsonString = jsonString.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
+            
+            try {
+              polishResult = JSON.parse(jsonString)
+              if (polishResult.polished) {
+                console.log('[文本编辑润色] 方法4成功: 从polished字段提取')
+              } else {
+                polishResult = null
+              }
+            } catch (e) {
+              // 如果还是失败，尝试手动提取字段值（使用更宽松的正则）
+              try {
+                // 匹配 "polished": "..." 或 "polished":"..."
+                const polishedMatch = jsonString.match(/"polished"\s*:\s*"((?:[^"\\]|\\.)*)"/)
+                // 匹配 "explanation": "..." 或 "explanation":"..."
+                const explanationMatch = jsonString.match(/"explanation"\s*:\s*"((?:[^"\\]|\\.)*)"/)
+                
+                if (polishedMatch && polishedMatch[1]) {
+                  // 处理转义字符
+                  let polishedValue = polishedMatch[1]
+                    .replace(/\\n/g, '\n')
+                    .replace(/\\r/g, '\r')
+                    .replace(/\\t/g, '\t')
+                    .replace(/\\"/g, '"')
+                    .replace(/\\\\/g, '\\')
+                  
+                  let explanationValue = ''
+                  if (explanationMatch && explanationMatch[1]) {
+                    explanationValue = explanationMatch[1]
+                      .replace(/\\n/g, '\n')
+                      .replace(/\\r/g, '\r')
+                      .replace(/\\t/g, '\t')
+                      .replace(/\\"/g, '"')
+                      .replace(/\\\\/g, '\\')
+                  }
+                  
+                  polishResult = {
+                    polished: polishedValue,
+                    explanation: explanationValue
+                  }
+                  console.log('[文本编辑润色] 方法5成功: 手动提取字段')
+                }
+              } catch (e2) {
+                console.error('[文本编辑润色] 方法5也失败:', e2.message)
+                polishResult = null
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    // 最终验证
+    if (!polishResult || !polishResult.polished) {
+      console.error('[文本编辑润色] 所有解析方法都失败')
+      console.error('[文本编辑润色] 原始内容:', result)
+      console.error('[文本编辑润色] 清理后内容:', cleanedResult)
       throw new Error('AI返回的JSON格式无效，请重试')
     }
+    
+    console.log('[文本编辑润色] 解析成功:', {
+      polished: polishResult.polished.substring(0, 50),
+      explanation: polishResult.explanation?.substring(0, 50)
+    })
     
     // 返回结果
     return res.json({

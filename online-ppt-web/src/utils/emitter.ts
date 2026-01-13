@@ -26,6 +26,14 @@ export interface SelectionInfo {
   to: number
   fullContent: string
   elementId: string
+  // 新增：HTML 结构信息
+  selectedHTML?: string  // 选中部分的 HTML（如果有选中）
+  fullHTML?: string      // 完整内容的 HTML
+  paragraphStructures?: Array<{  // 段落结构信息
+    text: string
+    html: string
+    styles: string  // 段落的样式字符串
+  }>
 }
 
 export interface GetSelectionInfoPayload {

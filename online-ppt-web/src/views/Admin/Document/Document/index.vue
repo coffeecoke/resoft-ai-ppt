@@ -759,7 +759,7 @@ onMounted(() => {
 
 <style lang="scss" scoped>
 .document-list {
-  max-width: 1240px;
+  // max-width: 1240px;
   margin: 0 auto;
   background: #fff;
   border-radius: 12px;
