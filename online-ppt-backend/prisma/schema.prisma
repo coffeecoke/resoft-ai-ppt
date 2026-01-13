@@ -274,11 +274,38 @@ model sessions {
   @@index([session_date], map: "idx_session_date")
 }
 
+/// 问答对分类表（用于AI分类的问答对）
+model concern_categories {
+  id          String  @id @db.VarChar(50) /// 分类ID
+  code        String  @unique @db.VarChar(50) /// 分类代码（如"1.1", "2.3", "I1"）
+  name        String  @db.VarChar(255) /// 分类名称
+  type        String  @db.VarChar(20) /// 类型：level=分类层面，category=分类类别，intent=问题性质
+  parent_code String? @db.VarChar(50) /// 父级代码（用于层级关系，如"2.3"的父级是"2"）
+  level       Int     @default(1) /// 层级：1=分类层面，2=分类类别，3=问题性质
+  description String? @db.Text /// 类别定义说明
+  keywords    Json? /// 识别关键词（JSON数组）
+  sort_order  Int     @default(0) /// 排序字段
+  is_active   Boolean @default(true) /// 是否启用
+  created_at  DateTime @default(now()) /// 创建时间
+  updated_at  DateTime @updatedAt /// 更新时间
+
+  // 关联
+  concerns concerns[] /// 关联的问答对
+
+  @@index([type], map: "idx_type")
+  @@index([parent_code], map: "idx_parent_code")
+  @@index([level], map: "idx_level")
+  @@index([is_active], map: "idx_is_active")
+  @@index([sort_order], map: "idx_sort_order")
+}
+
 /// 关心的问题表
 model concerns {
   id       String  @id @db.VarChar(50) /// 问题ID
   question String  @db.Text /// 问题内容
-  category String? @db.VarChar(100) /// 问题分类
+  category String? @db.VarChar(100) /// 问题分类（兼容旧数据，存储分类代码如"2.3"）
+  category_id String? @db.VarChar(50) /// 关联分类ID（新字段，关联到concern_categories）
+  intent_code String? @db.VarChar(10) /// 问题性质代码（I1-I5）
   priority String? @db.VarChar(20) /// 优先级：high=高，medium=中，low=低
   answer   String? @db.Text /// 回答内容
   status   String  @default("pending") @db.VarChar(20) /// 状态：pending=待回答，answered=已回答
@@ -295,8 +322,11 @@ model concerns {
   updated_at        DateTime            @updatedAt /// 更新时间（自动更新）
   document_concerns document_concerns[]
   session_concerns  session_concerns[]
+  concern_categories concern_categories? @relation(fields: [category_id], references: [id])
 
   @@index([category], map: "idx_category")
+  @@index([category_id], map: "idx_category_id")
+  @@index([intent_code], map: "idx_intent_code")
   @@index([status], map: "idx_status")
   @@index([transcription_id], map: "idx_transcription_id")
 }

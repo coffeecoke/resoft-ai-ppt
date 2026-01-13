@@ -27,7 +27,7 @@ class AudioAutoProcessService {
       scanDirectory: '', // 扫描目录
       pollingInterval: 5 * 60 * 1000, // 默认5分钟
       maxConcurrent: 1, // 同时处理的音频数量
-      enableAiCorrection: true, // ✅ 是否启用AI错别字修正（默认true，音频跑批自动执行错别字修正）
+      enableAiCorrection: false, // ✅ 是否启用AI错别字修正（默认false，不自动执行错别字修正）
       supportedFormats: ['mp3', 'wav', 'm4a', 'flac', 'aac', 'wma', 'ogg']
     }
     this.statistics = {
@@ -159,10 +159,27 @@ class AudioAutoProcessService {
 
       // 2. 处理待转录的音频
       if (scanResult.pendingFiles.length > 0) {
-        const toProcess = scanResult.pendingFiles.slice(0, this.config.maxConcurrent)
+        // 分批处理，控制并发数
+        const batches = []
+        for (let i = 0; i < scanResult.pendingFiles.length; i += this.config.maxConcurrent) {
+          batches.push(scanResult.pendingFiles.slice(i, i + this.config.maxConcurrent))
+        }
         
-        for (const audioFile of toProcess) {
-          await this.processAudioFile(audioFile)
+        this.addLog('info', `📦 共 ${scanResult.pendingFiles.length} 个待转录文件，分 ${batches.length} 批处理（每批最多 ${this.config.maxConcurrent} 个）`)
+        
+        for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+          if (!this.isRunning) {
+            this.addLog('warning', '⚠️ 服务已停止，中断处理')
+            break // 如果被停止则退出
+          }
+          
+          const batch = batches[batchIndex]
+          this.addLog('info', `📋 开始处理第 ${batchIndex + 1}/${batches.length} 批（${batch.length} 个文件）`)
+          
+          // 并发处理当前批次
+          await Promise.all(batch.map(audioFile => this.processAudioFile(audioFile)))
+          
+          this.addLog('info', `✅ 第 ${batchIndex + 1}/${batches.length} 批处理完成`)
         }
       } else {
         this.addLog('info', '✅ 没有待转录的音频文件')

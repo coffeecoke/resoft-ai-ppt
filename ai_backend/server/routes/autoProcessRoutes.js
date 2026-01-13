@@ -337,7 +337,7 @@ router.get('/audio/config', async (req, res) => {
  */
 router.put('/audio/config', async (req, res) => {
   try {
-    const { scanDirectory, pollingInterval, maxConcurrent } = req.body
+    const { scanDirectory, pollingInterval, maxConcurrent, enableAiCorrection } = req.body
     
     const newConfig = {}
     
@@ -365,6 +365,10 @@ router.put('/audio/config', async (req, res) => {
         })
       }
       newConfig.maxConcurrent = concurrent
+    }
+    
+    if (enableAiCorrection !== undefined) {
+      newConfig.enableAiCorrection = Boolean(enableAiCorrection)
     }
     
     const updatedConfig = await audioAutoProcessService.updateConfig(newConfig)

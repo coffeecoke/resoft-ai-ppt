@@ -51,6 +51,12 @@
         </tbody>
       </table>
     </div>
+    <!-- 分页组件 -->
+    <div class="pagination" id="st-pagination" style="display: none; justify-content: center; align-items: center; gap: 10px; margin-top: 20px; padding: 10px;">
+      <button class="btn btn-secondary" id="st-prev-page" onclick="st_prevPage()">上一页</button>
+      <span id="st-page-info" style="color: var(--text-secondary); font-size: 14px;">第 1 页 / 共 1 页</span>
+      <button class="btn btn-secondary" id="st-next-page" onclick="st_nextPage()">下一页</button>
+    </div>
   </div>
 </div>
 
@@ -203,7 +209,7 @@
           <span id="st-totalTime" style="color: #333;">00:00</span>
           <span style="flex: 1;"></span>
           <button class="btn btn-secondary" id="st-toggleAutoScrollBtn">
-            <span id="st-autoScrollIcon">✅</span> 自动定位
+            <span id="st-autoScrollIcon">⬜</span> 自动定位
           </button>
         </div>
       </div>
@@ -783,6 +789,24 @@
       <div>
         <button class="btn btn-success" id="st-applyCorrectionsBtn" style="display: none;">✅ 应用所有修正</button>
         <button class="btn btn-secondary" onclick="closeAiCorrectionModal()" style="margin-left: 10px;">❌ 取消</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 问答对提取遮罩 -->
+<div class="ai-correction-overlay" id="st-qaExtractionOverlay">
+  <div class="ai-correction-modal" onclick="event.stopPropagation()">
+    <div class="ai-correction-header">
+      <h3 style="margin: 0;">❓ 问答对提取</h3>
+      <button class="btn btn-sm btn-secondary" onclick="closeQAExtractionOverlay()">✖ 关闭</button>
+    </div>
+    
+    <div class="ai-correction-body" id="st-qaExtractionBody">
+      <div class="ai-correction-loading">
+        <div class="ai-correction-spinner"></div>
+        <p>🤖 AI 正在提取问答对...</p>
+        <p style="font-size: 12px; color: #999;">这可能需要一些时间</p>
       </div>
     </div>
   </div>

@@ -492,22 +492,56 @@ router.put('/scan/config', async (req, res) => {
 
 /**
  * GET /api/transcription/scan/files
- * 扫描目录下的音频文件
+ * 扫描目录下的音频文件（支持分页）
+ * 
+ * Query参数：
+ * - page: 页码，默认1
+ * - pageSize: 每页数量，默认20
  */
 router.get('/scan/files', async (req, res) => {
   try {
     console.log('🔍 开始扫描音频文件...');
+    
+    // 获取分页参数
+    const page = parseInt(req.query.page) || 1;
+    const pageSize = parseInt(req.query.pageSize) || 20;
+    
+    // 验证参数
+    if (page < 1) {
+      return res.status(400).json({
+        success: false,
+        error: '页码必须大于0'
+      });
+    }
+    if (pageSize < 1 || pageSize > 100) {
+      return res.status(400).json({
+        success: false,
+        error: '每页数量必须在1-100之间'
+      });
+    }
     
     const files = await audioScanService.scanAudioFiles();
     
     // 批量检查转录状态
     const filesWithStatus = await audioScanService.checkFilesStatus(files);
     
+    // 计算分页
+    const total = filesWithStatus.length;
+    const totalPages = Math.ceil(total / pageSize);
+    const startIndex = (page - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    const paginatedFiles = filesWithStatus.slice(startIndex, endIndex);
+    
     res.json({
       success: true,
-      data: filesWithStatus,
-      total: filesWithStatus.length,
-      message: `找到 ${filesWithStatus.length} 个音频文件`
+      data: paginatedFiles,
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages
+      },
+      message: `找到 ${total} 个音频文件`
     });
   } catch (error) {
     console.error('扫描音频文件失败:', error);

@@ -2,7 +2,7 @@
   "scanDirectory": "E:\\跑批音频文件",
   "pollingInterval": 300000,
   "maxConcurrent": 1,
-  "enableAiCorrection": true,
+  "enableAiCorrection": false,
   "supportedFormats": [
     "mp3",
     "wav",
