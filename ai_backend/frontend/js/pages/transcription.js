@@ -7,7 +7,7 @@ const ST_API_BASE = (window.location.origin || 'http://localhost:3000') + '/api'
 let st_selectedFile = null;
 let st_currentTranscriptionId = null;
 let st_audioPlayer = null;
-let st_autoScrollEnabled = true;
+let st_autoScrollEnabled = false;
 let st_currentDialogues = [];
 let st_originalDialogues = []; // 存储原始对话（从 transcriptions 表）
 let st_mergedDialogues = []; // 存储第一次合并后的对话（从 dialogue_adjustments 表，note1='合并相邻同一说话人的对话'）
@@ -20,6 +20,11 @@ let st_currentAudioPath = null;
 let st_speakerRoles = {}; // 存储角色设置，格式：{ "SPEAKER_1": "customer", "SPEAKER_2": "our_side" }
 let st_aiCorrectionResult = null; // 存储 AI 修正结果
 let st_qaPairs = []; // 存储问答对数据
+// 分页状态
+let st_currentPage = 1; // 当前页码
+let st_pageSize = 20; // 每页数量
+let st_totalPages = 1; // 总页数
+let st_totalFiles = 0; // 总文件数
 
 // AI 修正设置（从 localStorage 读取）
 function loadAiCorrectionSettings() {
@@ -904,8 +909,20 @@ async function startQAExtraction() {
     }
   }
 
-  // 显示加载提示
-  showToast(`🤖 AI 正在提取问答对（使用${dialogueSource}，优先使用最后一次合并完成的内容）...`, 'info');
+  // 显示遮罩
+  const overlay = document.getElementById('st-qaExtractionOverlay');
+  const body = document.getElementById('st-qaExtractionBody');
+  
+  body.innerHTML = `
+    <div class="ai-correction-loading">
+      <div class="ai-correction-spinner"></div>
+      <p>🤖 AI 正在提取问答对（使用${dialogueSource}）...</p>
+      <p style="font-size: 12px; color: #999;">这可能需要一些时间</p>
+      <p style="font-size: 11px; color: #999; margin-top: 10px;">对话数量：${dialoguesToSend.length} 条</p>
+    </div>
+  `;
+  
+  overlay.style.display = 'flex';
 
   try {
     // 读取设置
@@ -934,6 +951,9 @@ async function startQAExtraction() {
       throw new Error(result.error || '问答对提取失败');
     }
     
+    // 隐藏遮罩
+    overlay.style.display = 'none';
+    
     // 更新问答对数据
     if (result.data && result.data.qaPairs) {
       st_qaPairs = result.data.qaPairs;
@@ -952,10 +972,23 @@ async function startQAExtraction() {
     }
     
   } catch (error) {
+    // 隐藏遮罩
+    overlay.style.display = 'none';
     console.error('问答对提取失败:', error);
     showToast('问答对提取失败: ' + error.message, 'error');
   }
 }
+
+// 关闭问答对提取遮罩
+function closeQAExtractionOverlay() {
+  const overlay = document.getElementById('st-qaExtractionOverlay');
+  if (overlay) {
+    overlay.style.display = 'none';
+  }
+}
+
+// 暴露到全局，供HTML调用
+window.closeQAExtractionOverlay = closeQAExtractionOverlay;
 
 /**
  * 加载问答对（从 concerns 表查询）
@@ -2842,23 +2875,43 @@ async function saveScanConfig() {
 
 async function loadScanFiles() {
   const tbody = document.getElementById('st-fileList');
+  const paginationEl = document.getElementById('st-pagination');
   tbody.innerHTML = '<tr><td colspan="6" class="loading">正在扫描...</td></tr>';
   
+  if (paginationEl) {
+    paginationEl.style.display = 'none';
+  }
+  
   try {
-    const response = await fetch(`${ST_API_BASE}/transcription/scan/files`);
+    // 添加分页参数
+    const response = await fetch(`${ST_API_BASE}/transcription/scan/files?page=${st_currentPage}&pageSize=${st_pageSize}`);
     const result = await response.json();
     
     if (!result.success) {
       tbody.innerHTML = `<tr><td colspan="6" class="error">${result.error}</td></tr>`;
       document.getElementById('st-fileCount').textContent = '总计: 0 个文件';
+      if (paginationEl) {
+        paginationEl.style.display = 'none';
+      }
       return;
     }
     
     const files = result.data || [];
-    document.getElementById('st-fileCount').textContent = `总计: ${files.length} 个文件`;
+    const pagination = result.pagination || {};
+    
+    // 更新分页状态
+    st_totalFiles = pagination.total || files.length;
+    st_totalPages = pagination.totalPages || 1;
+    st_currentPage = pagination.page || st_currentPage;
+    
+    // 更新文件总数显示
+    document.getElementById('st-fileCount').textContent = `总计: ${st_totalFiles} 个文件`;
     
     if (files.length === 0) {
       tbody.innerHTML = '<tr><td colspan="6" class="empty">目录中没有找到音频文件</td></tr>';
+      if (paginationEl) {
+        paginationEl.style.display = 'none';
+      }
       return;
     }
     
@@ -2898,10 +2951,62 @@ async function loadScanFiles() {
         st_transcribeFile(file.filePath, file.fileName);
       });
     });
+    
+    // 更新分页UI
+    updateStPagination();
   } catch (error) {
     console.error('加载文件列表失败:', error);
     tbody.innerHTML = `<tr><td colspan="6" class="error">加载失败: ${error.message}</td></tr>`;
     document.getElementById('st-fileCount').textContent = '总计: 0 个文件';
+    if (paginationEl) {
+      paginationEl.style.display = 'none';
+    }
+  }
+}
+
+// 分页控制函数
+function st_prevPage() {
+  if (st_currentPage > 1) {
+    st_currentPage--;
+    loadScanFiles();
+  }
+}
+
+function st_nextPage() {
+  if (st_currentPage < st_totalPages) {
+    st_currentPage++;
+    loadScanFiles();
+  }
+}
+
+function updateStPagination() {
+  const paginationEl = document.getElementById('st-pagination');
+  const pageInfoEl = document.getElementById('st-page-info');
+  const prevBtn = document.getElementById('st-prev-page');
+  const nextBtn = document.getElementById('st-next-page');
+  
+  if (!paginationEl || !pageInfoEl) {
+    return;
+  }
+  
+  // 如果只有一页或没有数据，隐藏分页组件
+  if (st_totalPages <= 1 || st_totalFiles === 0) {
+    paginationEl.style.display = 'none';
+    return;
+  }
+  
+  // 显示分页组件
+  paginationEl.style.display = 'flex';
+  
+  // 更新分页信息
+  pageInfoEl.textContent = `第 ${st_currentPage} 页 / 共 ${st_totalPages} 页`;
+  
+  // 更新按钮状态
+  if (prevBtn) {
+    prevBtn.disabled = st_currentPage === 1;
+  }
+  if (nextBtn) {
+    nextBtn.disabled = st_currentPage === st_totalPages;
   }
 }
 
