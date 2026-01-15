@@ -30,9 +30,10 @@ export function useProductOptions() {
       
       if (res.success && res.data) {
         // 转换为 { label, value } 格式供 el-select 使用
+        // ⚠️ 重要：使用 code 作为 value，name 作为 label
         productOptions.value = res.data.map(product => ({
           label: product.name,
-          value: product.name // 使用 name 作为 value（保持与原 Mock 数据一致）
+          value: product.code || product.name // 使用 code 作为 value，如果没有 code 则降级使用 name
         }))
       }
     } catch (err: any) {
@@ -40,6 +41,7 @@ export function useProductOptions() {
       error.value = err.message || '加载产品选项失败'
       
       // 失败时使用默认产品列表（降级方案）
+      // ⚠️ 注意：降级方案中，如果没有 code，则使用 name 作为 value（向后兼容）
       productOptions.value = [
         { label: '一表通', value: '一表通' },
         { label: '1104', value: '1104' },

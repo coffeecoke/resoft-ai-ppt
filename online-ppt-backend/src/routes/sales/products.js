@@ -91,10 +91,12 @@ router.get('/', async (req, res) => {
  * - tag: 'public' 或 'practical'
  * - status: 文档状态，默认 'published'
  * - filters: JSON字符串，包含筛选条件 {product, customer, industry, audience}
+ * 
+ * ⚠️ 注意：productCode 必须是产品的 code，不是 name
  */
 router.get('/:productCode/documents', async (req, res) => {
   try {
-    const { productCode } = req.params  // productCode 是产品的 code 或 name
+    const { productCode } = req.params  // productCode 必须是产品的 code
     const { tag = 'public', status = 'published', filters: filtersStr } = req.query
     
     // 解析筛选条件
@@ -138,27 +140,28 @@ router.get('/:productCode/documents', async (req, res) => {
       }
     })
     
-    // 根据 product JSON 字段过滤（匹配传入的 productCode）
+    // 根据 product JSON 字段过滤（匹配传入的 productCode，必须是 code）
     let filteredDocuments = documents.filter(doc => {
       try {
         const docProducts = Array.isArray(doc.product) 
           ? doc.product 
           : (doc.product ? [doc.product] : [])
         
-        // 匹配传入的 productCode（可能是 code 或 name）
+        // 匹配传入的 productCode（必须是 code）
         return docProducts.includes(productCode)
       } catch (e) {
         return false
       }
     })
     
-    // 应用JSON字段筛选（如果有）
+    // 应用JSON字段筛选（如果有，filters.product 也必须是 code 数组）
     if (filters.product && Array.isArray(filters.product) && filters.product.length > 0) {
       filteredDocuments = filteredDocuments.filter(doc => {
         try {
           const docProducts = Array.isArray(doc.product) 
             ? doc.product 
             : (doc.product ? [doc.product] : [])
+          // filters.product 中的值必须是 code
           return filters.product.some(p => docProducts.includes(p))
         } catch (e) {
           return false

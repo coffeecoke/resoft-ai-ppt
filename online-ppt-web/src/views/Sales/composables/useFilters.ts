@@ -173,6 +173,7 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
     // 基础筛选：版本和产品
     if (filterVersion.value === 'public') list = list.filter((x: any) => x.tag === '公共版')
     if (filterVersion.value === 'practical') list = list.filter((x: any) => x.tag === '实战版')
+    // ⚠️ 注意：activeProduct.value 是 product code，x.product 也必须是 code（通过数据迁移脚本确保）
     if (activeProduct.value) list = list.filter((x: any) => x.product === activeProduct.value)
     
     // 应用高级筛选条件
@@ -270,6 +271,7 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
     let list = dataSource.videoList
     if (filterVersion.value === 'public') list = list.filter((x: any) => x.tag === '公共版')
     if (filterVersion.value === 'practical') list = list.filter((x: any) => x.tag === '实战版')
+    // ⚠️ 注意：activeProduct.value 是 product code，x.product 也必须是 code
     if (activeProduct.value) list = list.filter((x: any) => x.product === activeProduct.value)
     
     // 应用videoFilters
@@ -323,6 +325,7 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
     let list = dataSource.questions
     
     // 如果选择了产品，按产品筛选
+    // ⚠️ 注意：activeProduct.value 是 product code，x.product 也必须是 code
     if (activeProduct.value) {
       list = list.filter((x: any) => x.product === activeProduct.value)
     }
