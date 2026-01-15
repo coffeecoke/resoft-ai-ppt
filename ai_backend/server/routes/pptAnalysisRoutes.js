@@ -272,20 +272,11 @@ router.post('/analyze-single', async (req, res) => {
       promptId || null
     )
     
-    // 查询分类信息 (🔄 已更新：从 product_catalogs 表读取)
-    const GENERAL_PRODUCT_CODE = 'general_ppt_categories'
-    const generalProduct = await prisma.products.findFirst({
-      where: { code: GENERAL_PRODUCT_CODE }
-    })
-    
-    if (!generalProduct) {
-      throw new Error('未找到通用PPT分类产品')
-    }
-    
+    // 查询分类信息：直接查询 product_catalogs 表（不通过产品）
     const category = await prisma.product_catalogs.findFirst({
       where: { 
-        product_id: generalProduct.id,
-        code: result.category_code 
+        code: result.category_code,
+        is_active: true
       }
     })
     
@@ -360,28 +351,32 @@ router.get('/statistics/:documentId', async (req, res) => {
       }
     }
     
-    // 查询分类名称 (🔄 已更新：从 product_catalogs 表读取)
-    const GENERAL_PRODUCT_CODE = 'general_ppt_categories'
-    const generalProduct = await prisma.products.findFirst({
-      where: { code: GENERAL_PRODUCT_CODE }
+    // 查询分类名称：直接查询 product_catalogs 表（不通过产品）
+    // 批量查询所有分类，建立 code -> name 映射（提高性能）
+    const allCategories = await prisma.product_catalogs.findMany({
+      where: {
+        is_active: true
+      },
+      select: {
+        code: true,
+        name: true
+      }
     })
     
-    if (!generalProduct) {
-      throw new Error('未找到通用PPT分类产品')
-    }
+    const categoryMap = new Map()
+    allCategories.forEach(cat => {
+      if (cat.code) {
+        categoryMap.set(cat.code, cat.name)
+      }
+    })
     
     const categoryStats = []
     for (const [code, data] of Object.entries(stats)) {
-      const category = await prisma.product_catalogs.findFirst({
-        where: { 
-          product_id: generalProduct.id,
-          code 
-        }
-      })
+      const categoryName = categoryMap.get(code)
       
       categoryStats.push({
         categoryCode: code,
-        categoryName: category?.name || '未知分类',
+        categoryName: categoryName || '未知分类',
         count: data.count,
         percentage: Math.round((data.count / analyzedCount) * 100),
         avgConfidence: data.totalConfidence / data.count
@@ -658,20 +653,11 @@ router.post('/correct-single', async (req, res) => {
       })
     }
     
-    // 验证分类是否存在
-    const GENERAL_PRODUCT_CODE = 'general_ppt_categories'
-    const generalProduct = await prisma.products.findFirst({
-      where: { code: GENERAL_PRODUCT_CODE }
-    })
-    
-    if (!generalProduct) {
-      throw new Error('未找到通用PPT分类产品')
-    }
-    
+    // 验证分类是否存在：直接查询 product_catalogs 表（不通过产品）
     const category = await prisma.product_catalogs.findFirst({
       where: {
-        product_id: generalProduct.id,
-        code: categoryCode
+        code: categoryCode,
+        is_active: true
       }
     })
     
