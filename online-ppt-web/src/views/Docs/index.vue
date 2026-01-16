@@ -650,6 +650,7 @@ const handlePPTXFileChange = (files: FileList) => {
 }
 
 const openEditor = (id: string) => {
+  // 直接跳转到编辑器
   router.push(`/ppt/editor?documentId=${id}`)
 }
 
