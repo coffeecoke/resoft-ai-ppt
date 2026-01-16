@@ -86,11 +86,20 @@
     <AIPPTDialog />
   </Modal>
 
-  <!-- 预览图生成进度提示 -->
-  <ThumbnailGenerationProgress
-    :visible="generatingThumbnails"
-    :progress="thumbnailProgress"
-    @close="() => {}"
+  <!-- 缩略图生成进度模态框 -->
+  <ThumbnailProgressModal
+    :visible="showProgressModal"
+    :task="currentTask"
+    @update:visible="showProgressModal = $event"
+    @minimize="minimizeProgress"
+    @close="closeTask"
+  />
+
+  <!-- 缩略图生成Mini进度条 -->
+  <ThumbnailMiniProgress
+    :visible="showMiniProgress"
+    :task="currentTask"
+    @expand="expandProgress"
   />
   </template>
 </template>
@@ -127,7 +136,8 @@ import ImageLibPanel from './ImageLibPanel.vue'
 import AIPPTDialog from './AIPPTDialog.vue'
 import { AIEditPanel } from './AIEdit'
 import Modal from '@/components/Modal.vue'
-import ThumbnailGenerationProgress from '@/components/ThumbnailGenerationProgress.vue'
+import ThumbnailProgressModal from '@/components/ThumbnailProgressModal.vue'
+import ThumbnailMiniProgress from '@/components/ThumbnailMiniProgress.vue'
 
 const mainStore = useMainStore()
 const {
@@ -151,17 +161,20 @@ const remarkHeight = ref(40)
 // 数据加载
 const { loading: dataLoading, loadingMessage } = useEditorDataLoader()
 
-// 获取预览图生成状态
-const { generatingThumbnails, thumbnailProgress } = useEditorSave()
+// 获取缩略图生成状态(新队列系统)
+const {
+  showProgressModal,
+  showMiniProgress,
+  minimizeProgress,
+  expandProgress,
+  currentTask
+} = useEditorSave()
 
-// 调试日志
-watch(generatingThumbnails, (val) => {
-  console.log('[编辑器] generatingThumbnails 变化:', val)
-})
-
-watch(thumbnailProgress, (val) => {
-  console.log('[编辑器] thumbnailProgress 变化:', val)
-}, { deep: true })
+// 关闭任务
+const closeTask = () => {
+  showProgressModal.value = false
+  showMiniProgress.value = false
+}
 
 useGlobalHotkey()
 usePasteEvent()

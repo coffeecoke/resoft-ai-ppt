@@ -4,7 +4,7 @@ import { useSlidesStore } from '@/store'
 import axios from '@/services/config'
 import { SERVER_URL } from '@/services'
 import useSlideChangeTracker from './useSlideChangeTracker'
-import useThumbnailGenerator from './useThumbnailGenerator'
+import useThumbnailQueue from './useThumbnailQueue'
 
 export type EditMode = 'template' | 'document' | 'normal'
 
@@ -46,14 +46,62 @@ export function useEditorSave() {
     clearChangedSlides,
     startTracking,
     stopTracking,
+    detectChanges,
+    createSnapshot,
   } = useSlideChangeTracker()
 
-  // 预览图生成器
-  const { 
-    generateThumbnailsAsync,
-    generating: generatingThumbnails,
-    progress: thumbnailProgress,
-  } = useThumbnailGenerator()
+  // 缩略图队列生成器
+  const {
+    createTask,
+    currentTask,
+    showProgressModal,
+    showMiniProgress,
+    minimizeProgress,
+    expandProgress,
+  } = useThumbnailQueue({
+    onProgress: (progress) => {
+      console.log('[useEditorSave] 缩略图生成进度:', progress)
+    },
+    onCompleted: () => {
+      console.log('[useEditorSave] 缩略图生成完成')
+    },
+    onError: (error) => {
+      console.error('[useEditorSave] 缩略图生成失败:', error)
+    }
+  })
+
+  // 生成状态(兼容旧代码)
+  const generatingThumbnails = ref(false)
+  const thumbnailProgress = ref({ current: 0, total: 0 })
+
+  /**
+   * 异步生成缩略图(使用新队列系统)
+   * @param documentId - 文档ID
+   * @param slides - 要生成的slides数组
+   */
+  const generateThumbnailsAsync = async (documentId: string, slides: any[]) => {
+    if (!slides || slides.length === 0) {
+      console.log('[useEditorSave] 没有需要生成的缩略图')
+      return
+    }
+
+    try {
+      generatingThumbnails.value = true
+      thumbnailProgress.value = { current: 0, total: slides.length }
+
+      const slideIds = slides.map(s => s.id)
+      console.log(`[useEditorSave] 启动缩略图生成任务: ${slideIds.length} 个slides`)
+
+      await createTask(documentId, slideIds)
+
+      console.log('[useEditorSave] 缩略图生成任务已创建')
+    } catch (error: any) {
+      console.error('[useEditorSave] 创建缩略图生成任务失败:', error)
+      throw error
+    } finally {
+      generatingThumbnails.value = false
+    }
+  }
 
   // 获取当前编辑的数据
   const getEditorData = (): EditorData => {
@@ -229,6 +277,12 @@ export function useEditorSave() {
 
   /**
    * 生成预览图（用于发布时调用）
+   * 只生成内容变更页面和缺少缩略图的页面
+   *
+   * 策略：
+   * 1. 重新检测变更（因为保存操作会清空变更记录）
+   * 2. 生成缺少缩略图的页面
+   * 3. 合并去重后生成
    */
   const generateThumbnailsForPublish = async () => {
     const mode = editMode.value
@@ -239,31 +293,49 @@ export function useEditorSave() {
       return
     }
 
-    // 获取变更的幻灯片
+    console.log('[useEditorSave] 开始检测需要生成预览图的幻灯片...')
+
+    // ⚠️ 重要：发布前重新检测变更
+    // 因为保存操作会清空变更记录，所以这里需要重新对比快照
+    console.log('[useEditorSave] 步骤1: 重新检测内容变更...')
+    detectChanges()
+
+    // 获取检测到的变更幻灯片
     const changedSlides = getChangedSlides()
-    
+    console.log(`[useEditorSave] 检测到 ${changedSlides.length} 个内容变更的幻灯片`)
+    if (changedSlides.length > 0) {
+      console.log(`  变更的幻灯片 ID: [${changedSlides.map(s => s.id).join(', ')}]`)
+    }
+
     // 获取所有没有缩略图的幻灯片
+    console.log('[useEditorSave] 步骤2: 检测缺少缩略图的幻灯片...')
     const slidesWithoutThumbnail = slidesStore.slides.filter(slide => !slide.thumbnail)
-    
+    console.log(`[useEditorSave] 检测到 ${slidesWithoutThumbnail.length} 个缺少缩略图的幻灯片`)
+    if (slidesWithoutThumbnail.length > 0) {
+      console.log(`  缺少缩略图的幻灯片 ID: [${slidesWithoutThumbnail.map(s => s.id).join(', ')}]`)
+    }
+
     // 合并两个列表（去重）
     const slidesToGenerate = new Map<string, any>()
     changedSlides.forEach(slide => slidesToGenerate.set(slide.id, slide))
     slidesWithoutThumbnail.forEach(slide => slidesToGenerate.set(slide.id, slide))
-    
+
     const finalSlides = Array.from(slidesToGenerate.values())
-    
+
     if (finalSlides.length > 0) {
-      console.log(`[useEditorSave] 发布文档，需要生成 ${finalSlides.length} 个幻灯片的预览图`)
-      console.log(`  - 变更的幻灯片: ${changedSlides.length} 个`)
-      console.log(`  - 缺少缩略图的幻灯片: ${slidesWithoutThumbnail.length} 个`)
-      
+      console.log(`[useEditorSave] ✅ 最终需要生成 ${finalSlides.length} 个幻灯片的预览图`)
+      console.log(`  最终列表: [${finalSlides.map(s => s.id).join(', ')}]`)
+
       // 异步生成预览图，不阻塞发布流程
-      generateThumbnailsAsync(id, finalSlides)
-      
-      // 清空变更记录
+      await generateThumbnailsAsync(id, finalSlides)
+
+      // 生成完成后，更新快照并清空变更记录
+      createSnapshot()
       clearChangedSlides()
+
+      console.log('[useEditorSave] 预览图生成任务已创建，快照已更新')
     } else {
-      console.log('[useEditorSave] 所有幻灯片都有预览图且无变更，跳过预览图生成')
+      console.log('[useEditorSave] ✅ 所有幻灯片都有预览图且无变更，跳过预览图生成')
     }
   }
 
@@ -278,5 +350,11 @@ export function useEditorSave() {
     generatingThumbnails,
     thumbnailProgress,
     generateThumbnailsForPublish,
+    // 新增: 进度UI相关
+    currentTask,
+    showProgressModal,
+    showMiniProgress,
+    minimizeProgress,
+    expandProgress,
   }
 }

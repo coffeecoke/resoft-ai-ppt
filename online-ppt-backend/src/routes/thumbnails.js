@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url'
 import dotenv from 'dotenv'
 import { thumbnailService } from '../services/thumbnailService.js'
 import { documentModel } from '../models/documentModel.js'
+import thumbnailQueue from '../services/thumbnailQueue.js'
 
 const router = Router()
 
@@ -327,6 +328,123 @@ router.post('/rebuild-index', async (req, res) => {
   } catch (error) {
     console.error('[预览图] 重建索引失败:', error)
     res.status(500).json({ success: false, error: error.message || '重建索引失败' })
+  }
+})
+
+/**
+ * 从队列上传缩略图（由前端队列生成任务调用）
+ * POST /api/thumbnails/upload-from-queue
+ */
+router.post('/upload-from-queue', upload.single('file'), async (req, res) => {
+  try {
+    const { documentId, slideId, taskId } = req.body
+    const file = req.file
+
+    console.log(`[缩略图队列] 收到上传请求: documentId=${documentId}, slideId=${slideId}, taskId=${taskId}`)
+
+    if (!file) {
+      return res.status(400).json({ success: false, error: '没有上传文件' })
+    }
+
+    if (!documentId || !slideId || !taskId) {
+      return res.status(400).json({ success: false, error: '缺少必要参数' })
+    }
+
+    // 生成访问 URL
+    const thumbnailUrl = `/snapshots/${documentId}/${file.filename}`
+    console.log(`[缩略图队列] 文件已保存: ${file.path}, URL: ${thumbnailUrl}`)
+
+    // 获取文档信息
+    const doc = await documentModel.findById(documentId)
+    if (!doc) {
+      console.error(`[缩略图队列] 文档不存在: ${documentId}`)
+
+      // 通知队列上传失败
+      thumbnailQueue.markUploadComplete(taskId, slideId, { success: false, error: '文档不存在' })
+
+      return res.status(404).json({ success: false, error: '文档不存在' })
+    }
+
+    // 找到对应的 slide
+    const slide = doc.slides?.find(s => s.id === slideId)
+    if (!slide) {
+      console.error(`[缩略图队列] 幻灯片不存在: ${slideId}`)
+
+      // 通知队列上传失败
+      thumbnailQueue.markUploadComplete(taskId, slideId, { success: false, error: '幻灯片不存在' })
+
+      return res.status(404).json({ success: false, error: '幻灯片不存在' })
+    }
+
+    // 更新文档 JSON 中的 thumbnail 字段（保留兼容性）
+    const docPath = path.join(DOCUMENTS_DIR, `${documentId}.json`)
+    if (fs.existsSync(docPath)) {
+      try {
+        const docContent = fs.readFileSync(docPath, 'utf-8')
+        const docData = JSON.parse(docContent)
+        const slideIndex = docData.slides.findIndex(s => s.id === slideId)
+        if (slideIndex !== -1) {
+          docData.slides[slideIndex].thumbnail = thumbnailUrl
+          docData.slides[slideIndex].thumbnailUpdatedAt = new Date().toISOString()
+          fs.writeFileSync(docPath, JSON.stringify(docData, null, 2), 'utf-8')
+          console.log(`[缩略图队列] 已更新文档JSON文件: slideIndex=${slideIndex}`)
+        }
+      } catch (error) {
+        console.warn('[缩略图队列] 更新文档文件失败:', error)
+      }
+    }
+
+    // 保存到数据库
+    const thumbnailId = `thumb_${documentId}_${slideId}`
+    const slideIndex = doc.slides.findIndex(s => s.id === slideId)
+
+    console.log(`[缩略图队列] 准备写入数据库: thumbnailId=${thumbnailId}, slideIndex=${slideIndex}`)
+
+    const dbResult = await thumbnailService.upsert({
+      id: thumbnailId,
+      documentId,
+      slideId,
+      slideIndex,
+      url: thumbnailUrl,
+      width: 800,
+      height: Math.round(800 * ((doc.height || 562.5) / (doc.width || 1000))),
+      size: file.size,
+      format: file.mimetype.split('/')[1],
+      metadata: {
+        hasText: slide.elements?.some(el => el.type === 'text') || false,
+        hasImage: slide.elements?.some(el => el.type === 'image') || false,
+        elementCount: slide.elements?.length || 0
+      }
+    })
+
+    console.log(`[缩略图队列] 数据库写入成功: ${documentId}/${slideId}`)
+
+    // 通知队列上传完成
+    thumbnailQueue.markUploadComplete(taskId, slideId, {
+      success: true,
+      url: thumbnailUrl,
+      slideId
+    })
+
+    res.json({
+      success: true,
+      thumbnailUrl,
+      message: '缩略图上传成功'
+    })
+  } catch (error) {
+    console.error('[缩略图队列] 上传失败:', error)
+    console.error('[缩略图队列] 错误堆栈:', error.stack)
+
+    // 通知队列上传失败
+    const { taskId, slideId } = req.body
+    if (taskId && slideId) {
+      thumbnailQueue.markUploadComplete(taskId, slideId, {
+        success: false,
+        error: error.message
+      })
+    }
+
+    res.status(500).json({ success: false, error: '上传失败: ' + error.message })
   }
 })
 

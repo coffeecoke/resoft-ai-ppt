@@ -18,6 +18,7 @@ console.log(`   DATA_DIR 环境变量: ${process.env.DATA_DIR || '(未设置，�
 console.log(`   实际使用路径: ${DATA_DIR}`)
 
 import express from 'express'
+import http from 'http'
 import cors from 'cors'
 import compression from 'compression'
 import toolsRouter from './routes/tools.js'
@@ -28,8 +29,10 @@ import templatesRouter from './routes/templates.js'
 import documentsRouter from './routes/documents.js'
 import salesRouter from './routes/sales.js'
 import thumbnailsRouter from './routes/thumbnails.js'
+import thumbnailTasksRouter from './routes/thumbnailTasks.js'
 import adminRouter from './routes/admin/index.js'
 import scanScheduler from './services/admin/scanScheduler.js'
+import { setupThumbnailProgressWS } from './routes/websocket/thumbnailProgress.js'
 
 const app = express()
 const PORT = process.env.PORT || 5001
@@ -74,6 +77,7 @@ app.use('/translate', translateRouter)      // 翻译服务
 app.use('/templates', templatesRouter)      // 模板管理
 app.use('/documents', documentsRouter)      // 文档管理
 app.use('/thumbnails', thumbnailsRouter)    // 预览图管理
+app.use('/thumbnail-tasks', thumbnailTasksRouter)  // 缩略图生成任务
 app.use('/sales', salesRouter)              // 售前平台接口
 app.use('/admin', adminRouter)          // 管理后台接口
 
@@ -82,8 +86,14 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
 })
 
+// 创建 HTTP 服务器并启动 WebSocket 服务
+const server = http.createServer(app)
+
+// 启动 WebSocket 服务
+setupThumbnailProgressWS(server)
+
 // 启动服务
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log('=========================================')
   console.log(`  AI PPT Server running on port ${PORT}`)
   console.log('=========================================')
@@ -111,8 +121,12 @@ app.listen(PORT, () => {
   console.log(`  - 立即处理: POST /api/admin/file-scan/process`)
   console.log(`  - 手动扫描: POST /api/admin/file-scan/scan`)
   console.log(`  - 处理历史: GET  /api/admin/file-scan/history`)
+  console.log(``)
+  console.log(`  缩略图生成:`)
+  console.log(`  - 创建任务: POST /thumbnail-tasks`)
+  console.log(`  - WebSocket: ws://localhost:${PORT}/ws/thumbnail-progress?taskId=<taskId>`)
   console.log('=========================================')
-  
+
   // 启动定时扫描任务
   try {
     scanScheduler.start()
