@@ -17,6 +17,7 @@ const transcriptionRoutes = require('./routes/transcriptionRoutes')
 const productsRoutes = require('./routes/productsRoutes')
 const sessionsRoutes = require('./routes/sessionsRoutes')
 const autoProcessRoutes = require('./routes/autoProcessRoutes')
+const qaManagementRoutes = require('./routes/qaManagementRoutes')
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -79,6 +80,9 @@ app.use('/api/sessions', sessionsRoutes)
 
 // 路由：自动跑批处理（新增）
 app.use('/api/auto-process', autoProcessRoutes)
+
+// 路由：问答对管理（新增）
+app.use('/api/qa', qaManagementRoutes)
 
 // 路由：文件提取接口
 app.post('/api/extract', upload.single('file'), async (req, res) => {

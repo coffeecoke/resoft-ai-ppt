@@ -5,11 +5,15 @@
 const AUTO_API_BASE = 'http://localhost:3000/api/auto-process';
 let autoRefreshInterval = null;
 let autoCurrentStatus = null;
-let currentAutoProcessTab = 'ppt'; // 'ppt' or 'audio'
+let currentAutoProcessTab = 'ppt'; // 'ppt' or 'audio' or 'qa'
 
 // 音频跑批相关变量
 let audioRefreshInterval = null;
 let audioCurrentStatus = null;
+
+// 问答对提取跑批相关变量
+let qaRefreshInterval = null;
+let qaCurrentStatus = null;
 
 // ✅ 页面加载时清理可能存在的旧定时器
 if (window.autoRefreshInterval) {
@@ -20,10 +24,15 @@ if (window.audioRefreshInterval) {
   clearInterval(window.audioRefreshInterval);
   window.audioRefreshInterval = null;
 }
+if (window.qaRefreshInterval) {
+  clearInterval(window.qaRefreshInterval);
+  window.qaRefreshInterval = null;
+}
 
 // ✅ 将定时器暴露到全局，方便页面切换时清理
 window.autoRefreshInterval = autoRefreshInterval;
 window.audioRefreshInterval = audioRefreshInterval;
+window.qaRefreshInterval = qaRefreshInterval;
 
 // ✅ 页面卸载时清理定时器
 window.addEventListener('beforeunload', () => {
@@ -31,6 +40,16 @@ window.addEventListener('beforeunload', () => {
     console.log('🧹 清理自动刷新定时器');
     clearInterval(autoRefreshInterval);
     autoRefreshInterval = null;
+  }
+  if (audioRefreshInterval) {
+    console.log('🧹 清理音频跑批刷新定时器');
+    clearInterval(audioRefreshInterval);
+    audioRefreshInterval = null;
+  }
+  if (qaRefreshInterval) {
+    console.log('🧹 清理问答对提取跑批刷新定时器');
+    clearInterval(qaRefreshInterval);
+    qaRefreshInterval = null;
   }
 });
 
@@ -497,10 +516,12 @@ window.switchAutoProcessTab = function(tab) {
   // 切换按钮状态
   document.getElementById('ap-ppt-tab').classList.toggle('active', tab === 'ppt');
   document.getElementById('ap-audio-tab').classList.toggle('active', tab === 'audio');
+  document.getElementById('ap-qa-tab').classList.toggle('active', tab === 'qa');
   
   // 切换内容显示
   document.getElementById('ppt-process-content').style.display = tab === 'ppt' ? 'block' : 'none';
   document.getElementById('audio-process-content').style.display = tab === 'audio' ? 'block' : 'none';
+  document.getElementById('qa-process-content').style.display = tab === 'qa' ? 'block' : 'none';
   
   // 清理旧的定时器
   if (autoRefreshInterval) {
@@ -511,6 +532,10 @@ window.switchAutoProcessTab = function(tab) {
     clearInterval(audioRefreshInterval);
     audioRefreshInterval = null;
   }
+  if (qaRefreshInterval) {
+    clearInterval(qaRefreshInterval);
+    qaRefreshInterval = null;
+  }
   
   // 加载对应的数据
   if (tab === 'ppt') {
@@ -519,12 +544,18 @@ window.switchAutoProcessTab = function(tab) {
     autoLoadConfig();
     autoLoadStatistics();
     autoLoadLogs();
-  } else {
+  } else if (tab === 'audio') {
     console.log('🔄 切换到音频跑批');
     audioLoadStatus();
     audioLoadConfig();
     audioLoadStatistics();
     audioLoadLogs();
+  } else if (tab === 'qa') {
+    console.log('🔄 切换到问答对提取跑批');
+    qaLoadStatus();
+    qaLoadConfig();
+    qaLoadStatistics();
+    qaLoadLogs();
   }
 };
 
@@ -852,5 +883,328 @@ window.audioRefreshStatus = audioRefreshStatus;
 window.audioSaveConfig = audioSaveConfig;
 window.audioClearLogs = audioClearLogs;
 
-console.log('✅ 自动跑批监控页面JS已加载（PPT + 音频）');
+// ==================== 问答对提取跑批功能 ====================
+
+/**
+ * 加载问答对提取跑批状态
+ */
+async function qaLoadStatus() {
+  try {
+    // ✅ 检查页面是否还在，如果不在则取消定时器
+    const indicator = document.getElementById('qa-status-indicator');
+    if (!indicator) {
+      console.log('⚠️ 问答对提取跑批页面已离开，停止加载状态');
+      if (qaRefreshInterval) {
+        clearInterval(qaRefreshInterval);
+        qaRefreshInterval = null;
+      }
+      return;
+    }
+    
+    const response = await fetch(`${AUTO_API_BASE}/qa/status`);
+    const result = await response.json();
+    
+    if (result.success) {
+      qaCurrentStatus = result.data;
+      qaUpdateStatusUI(result.data);
+    }
+  } catch (error) {
+    console.error('❌ 加载问答对提取跑批状态失败:', error);
+    const statusText = document.getElementById('qa-status-text');
+    if (statusText) {
+      statusText.textContent = '加载失败';
+    }
+  }
+}
+
+/**
+ * 更新问答对提取跑批状态UI
+ */
+function qaUpdateStatusUI(status) {
+  const indicator = document.getElementById('qa-status-indicator');
+  const statusText = document.getElementById('qa-status-text');
+  const startBtn = document.getElementById('qa-start-btn');
+  const stopBtn = document.getElementById('qa-stop-btn');
+  const currentTask = document.getElementById('qa-current-task');
+  const taskInfo = document.getElementById('qa-task-info');
+
+  if (status.isRunning) {
+    indicator.className = 'status-indicator running';
+    statusText.textContent = '运行中 - 自动扫描并提取问答对';
+    startBtn.disabled = true;
+    stopBtn.disabled = false;
+  } else {
+    indicator.className = 'status-indicator stopped';
+    statusText.textContent = '已停止';
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+  }
+
+  if (status.currentTask) {
+    currentTask.style.display = 'block';
+    taskInfo.textContent = `${status.currentTask.name || status.currentTask.id || '未知'}`;
+  } else {
+    currentTask.style.display = 'none';
+  }
+}
+
+/**
+ * 启动问答对提取跑批
+ */
+async function qaStartProcess() {
+  try {
+    const response = await fetch(`${AUTO_API_BASE}/qa/start`, {
+      method: 'POST'
+    });
+    const result = await response.json();
+
+    if (result.success) {
+      showToast('✅ 问答对提取跑批已启动', 'success');
+      await qaLoadStatus();
+      // 启动定时刷新
+      if (qaRefreshInterval) {
+        clearInterval(qaRefreshInterval);
+      }
+      qaRefreshInterval = setInterval(() => {
+        qaLoadStatus();
+        qaLoadStatistics();
+        qaLoadLogs();
+      }, 3000);
+    } else {
+      showToast('启动失败: ' + result.error, 'error');
+    }
+  } catch (error) {
+    console.error('❌ 启动问答对提取跑批失败:', error);
+    showToast('启动失败: ' + error.message, 'error');
+  }
+}
+
+/**
+ * 停止问答对提取跑批
+ */
+async function qaStopProcess() {
+  try {
+    const response = await fetch(`${AUTO_API_BASE}/qa/stop`, {
+      method: 'POST'
+    });
+    const result = await response.json();
+
+    if (result.success) {
+      showToast('✅ 问答对提取跑批已停止', 'success');
+      if (qaRefreshInterval) {
+        clearInterval(qaRefreshInterval);
+        qaRefreshInterval = null;
+      }
+      await qaLoadStatus();
+    } else {
+      showToast('停止失败: ' + result.error, 'error');
+    }
+  } catch (error) {
+    console.error('❌ 停止问答对提取跑批失败:', error);
+    showToast('停止失败: ' + error.message, 'error');
+  }
+}
+
+/**
+ * 立即执行一次问答对提取跑批
+ */
+async function qaRunOnce() {
+  try {
+    const btn = document.getElementById('qa-run-once-btn');
+    btn.disabled = true;
+    btn.textContent = '⏳ 执行中...';
+
+    const response = await fetch(`${AUTO_API_BASE}/qa/run-once`, {
+      method: 'POST'
+    });
+    const result = await response.json();
+
+    if (result.success) {
+      showToast('✅ 已触发执行', 'success');
+      await qaRefreshStatus();
+    } else {
+      showToast('触发失败: ' + result.error, 'error');
+    }
+  } catch (error) {
+    console.error('❌ 触发问答对提取跑批失败:', error);
+    showToast('触发失败: ' + error.message, 'error');
+  } finally {
+    const btn = document.getElementById('qa-run-once-btn');
+    btn.disabled = false;
+    btn.textContent = '🚀 立即执行一次';
+  }
+}
+
+/**
+ * 刷新问答对提取跑批状态
+ */
+async function qaRefreshStatus() {
+  await qaLoadStatus();
+  await qaLoadStatistics();
+  showToast('✅ 已刷新', 'success');
+}
+
+/**
+ * 加载问答对提取跑批配置
+ */
+async function qaLoadConfig() {
+  try {
+    const response = await fetch(`${AUTO_API_BASE}/qa/config`);
+    const result = await response.json();
+    
+    if (result.success) {
+      const config = result.data;
+      document.getElementById('qa-config-interval').value = (config.pollingInterval || 300000) / 60000;
+      document.getElementById('qa-config-concurrent').value = config.maxConcurrent || 1;
+    }
+  } catch (error) {
+    console.error('❌ 加载问答对提取跑批配置失败:', error);
+  }
+}
+
+/**
+ * 保存问答对提取跑批配置
+ */
+async function qaSaveConfig() {
+  try {
+    const pollingInterval = parseInt(document.getElementById('qa-config-interval').value) * 60000;
+    const maxConcurrent = parseInt(document.getElementById('qa-config-concurrent').value);
+
+    if (isNaN(pollingInterval) || pollingInterval < 60000 || pollingInterval > 86400000) {
+      showToast('轮询间隔必须是1-1440分钟', 'error');
+      return;
+    }
+
+    if (isNaN(maxConcurrent) || maxConcurrent < 1 || maxConcurrent > 5) {
+      showToast('最大并发数必须是1-5', 'error');
+      return;
+    }
+
+    const response = await fetch(`${AUTO_API_BASE}/qa/config`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        pollingInterval,
+        maxConcurrent
+      })
+    });
+
+    const result = await response.json();
+
+    if (result.success) {
+      showToast('✅ 配置已保存', 'success');
+      await qaLoadConfig();
+    } else {
+      showToast('保存失败: ' + result.error, 'error');
+    }
+  } catch (error) {
+    console.error('❌ 保存问答对提取跑批配置失败:', error);
+    showToast('保存失败: ' + error.message, 'error');
+  }
+}
+
+/**
+ * 加载问答对提取跑批统计信息
+ */
+async function qaLoadStatistics() {
+  try {
+    const response = await fetch(`${AUTO_API_BASE}/qa/statistics`);
+    const result = await response.json();
+    
+    if (result.success) {
+      const stats = result.data;
+      document.getElementById('qa-stat-total').textContent = stats.totalTranscriptions || 0;
+      document.getElementById('qa-stat-with-role').textContent = stats.withRoleJudgment || 0;
+      document.getElementById('qa-stat-pending').textContent = stats.pendingExtractions || 0;
+      document.getElementById('qa-stat-processing').textContent = stats.processingExtractions || 0;
+      document.getElementById('qa-stat-last-run').textContent = stats.lastRunTime ? new Date(stats.lastRunTime).toLocaleString('zh-CN') : '-';
+      document.getElementById('qa-stat-next-run').textContent = stats.nextRunTime ? new Date(stats.nextRunTime).toLocaleString('zh-CN') : '-';
+      document.getElementById('qa-stat-total-runs').textContent = stats.totalRuns || 0;
+      document.getElementById('qa-stat-success').textContent = stats.successfulRuns || 0;
+      document.getElementById('qa-stat-failed').textContent = stats.failedRuns || 0;
+    }
+  } catch (error) {
+    console.error('❌ 加载问答对提取跑批统计失败:', error);
+  }
+}
+
+/**
+ * 加载问答对提取跑批日志
+ */
+async function qaLoadLogs() {
+  try {
+    const response = await fetch(`${AUTO_API_BASE}/qa/logs?limit=50`);
+    const result = await response.json();
+    
+    if (result.success) {
+      const logs = result.data;
+      const logList = document.getElementById('qa-log-list');
+      
+      if (logs.length === 0) {
+        logList.innerHTML = `
+          <div class="empty-logs">
+            <div class="icon">📝</div>
+            <div>暂无日志记录</div>
+          </div>
+        `;
+      } else {
+        logList.innerHTML = logs.map(log => {
+          const time = new Date(log.timestamp).toLocaleTimeString('zh-CN');
+          const levelClass = log.level || 'info';
+          const details = log.data && Object.keys(log.data).length > 0 
+            ? `<div class="log-details">${JSON.stringify(log.data, null, 2)}</div>` 
+            : '';
+          
+          return `
+            <div class="log-item ${levelClass}">
+              <span class="log-time">${time}</span>
+              <span class="log-message">${log.message}</span>
+              ${details}
+            </div>
+          `;
+        }).join('');
+      }
+    }
+  } catch (error) {
+    console.error('❌ 加载问答对提取跑批日志失败:', error);
+  }
+}
+
+/**
+ * 清空问答对提取跑批日志
+ */
+async function qaClearLogs() {
+  if (!confirm('确定要清空所有日志吗？')) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`${AUTO_API_BASE}/qa/logs`, {
+      method: 'DELETE'
+    });
+    const result = await response.json();
+
+    if (result.success) {
+      showToast('✅ 日志已清空', 'success');
+      await qaLoadLogs();
+    } else {
+      showToast('清空失败: ' + result.error, 'error');
+    }
+  } catch (error) {
+    console.error('❌ 清空问答对提取跑批日志失败:', error);
+    showToast('清空失败: ' + error.message, 'error');
+  }
+}
+
+// 将问答对提取跑批函数暴露到全局
+window.qaStartProcess = qaStartProcess;
+window.qaStopProcess = qaStopProcess;
+window.qaRunOnce = qaRunOnce;
+window.qaRefreshStatus = qaRefreshStatus;
+window.qaSaveConfig = qaSaveConfig;
+window.qaClearLogs = qaClearLogs;
+
+console.log('✅ 自动跑批监控页面JS已加载（PPT + 音频 + 问答对提取）');
 

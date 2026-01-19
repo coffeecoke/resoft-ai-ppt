@@ -1,0 +1,5 @@
+{
+  "pollingInterval": 300000,
+  "maxConcurrent": 1
+}
+

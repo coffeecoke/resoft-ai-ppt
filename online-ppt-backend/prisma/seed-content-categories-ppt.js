@@ -226,9 +226,32 @@ async function main() {
   console.log('🌱 开始初始化产品目录数据...')
 
   try {
-    // 清空现有数据（可选，根据需求决定）
-    // await prisma.product_catalogs.deleteMany({})
+    // ========== 步骤 1: 获取通用产品 ==========
+    const GENERAL_PRODUCT_CODE = 'general_ppt_categories'
+    const generalProduct = await prisma.products.findFirst({
+      where: { code: GENERAL_PRODUCT_CODE }
+    })
+    
+    if (!generalProduct) {
+      throw new Error('未找到通用产品，请先运行迁移脚本: migrate-content-categories-to-product-catalogs.js')
+    }
+    
+    console.log(`✅ 使用通用产品: ${generalProduct.name} (${generalProduct.id})\n`)
+    
+    // ========== 步骤 2: 检查是否已有数据 ==========
+    const existingCatalogs = await prisma.product_catalogs.findMany({
+      where: { product_id: generalProduct.id }
+    })
+    
+    if (existingCatalogs.length > 0) {
+      console.log(`⚠️  已有 ${existingCatalogs.length} 条分类数据，先清空旧数据...`)
+      await prisma.product_catalogs.deleteMany({
+        where: { product_id: generalProduct.id }
+      })
+      console.log('✅ 旧数据已清空\n')
+    }
 
+    // ========== 步骤 3: 创建分类数据 ==========
     // 遍历所有分类数据
     for (const categoryGroup of categoriesData) {
       const { level1 } = categoryGroup
@@ -238,7 +261,7 @@ async function main() {
       const parentCategory = await prisma.product_catalogs.create({
         data: {
           id: parentId,
-          product_id: null, // 所有产品共用目录，设为 null
+          product_id: generalProduct.id, // 🔧 修复：关联到通用产品
           parent_id: null,
           name: level1.name,
           code: level1.code,
@@ -258,7 +281,7 @@ async function main() {
         await prisma.product_catalogs.create({
           data: {
             id: childId,
-            product_id: null, // 所有产品共用目录，设为 null
+            product_id: generalProduct.id, // 🔧 修复：关联到通用产品
             parent_id: parentId,
             name: child.name,
             code: child.code,
