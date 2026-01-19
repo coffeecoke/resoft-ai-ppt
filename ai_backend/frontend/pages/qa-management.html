@@ -1,0 +1,254 @@
+<!-- 问答对管理页面 -->
+<div class="page-header">
+  <h1>🏷️ 问答对管理</h1>
+  <div class="header-actions">
+    <button class="btn btn-primary" id="qa-batch-classify-btn" onclick="startBatchClassification()">
+      <span class="icon">🤖</span> 批量分类选中项
+    </button>
+    <button class="btn btn-success" id="qa-select-all-btn" onclick="selectAllQAs()">
+      <span class="icon">✅</span> 全选当前页
+    </button>
+    <button class="btn btn-info" id="qa-classify-all-btn" onclick="classifyAllQAs()">
+      <span class="icon">🚀</span> 处理全部（分批）
+    </button>
+    <button class="btn btn-secondary" onclick="loadQAList()">
+      <span class="icon">🔄</span> 刷新
+    </button>
+  </div>
+</div>
+
+<!-- 筛选栏 -->
+<div class="card" style="margin-bottom: 20px;">
+  <div class="filter-bar">
+    <div class="filter-group">
+      <label>音频名称：</label>
+      <input type="text" id="qa-filter-transcription-name" class="form-control" placeholder="输入音频名称" style="width: 200px;">
+    </div>
+    <div class="filter-group">
+      <label>分类状态：</label>
+      <select id="qa-filter-classification-status" class="form-control" style="width: 150px;">
+        <option value="">全部</option>
+        <option value="classified">已分类</option>
+        <option value="unclassified">未分类</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>分类类别：</label>
+      <select id="qa-filter-category" class="form-control" style="width: 200px;">
+        <option value="">全部</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>问题性质：</label>
+      <select id="qa-filter-intent" class="form-control" style="width: 150px;">
+        <option value="">全部</option>
+        <option value="I1">I1 - 明确购买意向</option>
+        <option value="I2">I2 - 信息咨询</option>
+        <option value="I3">I3 - 疑虑与担忧</option>
+        <option value="I4">I4 - 需求确认</option>
+        <option value="I5">I5 - 其他</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label for="qa-filter-question-source">问题发起方：</label>
+      <select id="qa-filter-question-source" class="form-control" style="width: 120px;">
+        <option value="">全部</option>
+        <option value="our_side">我方</option>
+        <option value="customer">客户方</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <button class="btn btn-primary" onclick="applyFilters()">🔍 筛选</button>
+      <button class="btn btn-secondary" onclick="resetFilters()">🔄 重置</button>
+    </div>
+  </div>
+</div>
+
+<!-- 问答对列表 -->
+<div class="card">
+  <div class="table-container">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th style="width: 50px;">
+            <input type="checkbox" id="qa-select-all" onchange="toggleSelectAll()">
+          </th>
+          <th style="width: 60px;">序号</th>
+          <th style="width: 200px;">问题</th>
+          <th style="width: 200px;">回答</th>
+          <th style="width: 120px;">分类类别</th>
+          <th style="width: 100px;">问题性质</th>
+          <th style="width: 200px;">音频名称</th>
+          <th style="width: 120px;">时间范围</th>
+          <th style="width: 150px;">创建时间</th>
+          <th style="width: 100px;">操作</th>
+        </tr>
+      </thead>
+      <tbody id="qa-list-tbody">
+        <tr>
+          <td colspan="10" class="loading">加载中...</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  
+  <!-- 分页 -->
+  <div class="pagination-container" id="qa-pagination" style="margin-top: 20px; display: none;">
+    <div class="pagination-info">
+      <span id="qa-pagination-info">共 0 条，每页 20 条</span>
+    </div>
+    <div class="pagination-controls">
+      <button class="btn btn-sm btn-secondary" id="qa-prev-btn" onclick="changePage(-1)" disabled>上一页</button>
+      <span id="qa-page-info" style="margin: 0 15px;">第 1 页 / 共 1 页</span>
+      <button class="btn btn-sm btn-secondary" id="qa-next-btn" onclick="changePage(1)" disabled>下一页</button>
+      <select id="qa-page-size" class="form-control" style="width: 80px; margin-left: 15px;" onchange="changePageSize()">
+        <option value="20">20</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<!-- 批量分类设置对话框 -->
+<div class="modal" id="qa-classification-settings-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999; align-items: center; justify-content: center;" onclick="if(event.target === this) closeClassificationSettings()">
+  <div class="modal-content" style="max-width: 500px; background: white; border-radius: 8px; padding: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.15);" onclick="event.stopPropagation()">
+    <div class="modal-header" style="padding: 16px 24px; border-bottom: 1px solid #e0e0e0; display: flex; justify-content: space-between; align-items: center;">
+      <h3 style="margin: 0; font-size: 18px;">⚙️ 批量分类设置</h3>
+      <button class="btn btn-sm btn-secondary modal-close" onclick="closeClassificationSettings()" title="关闭" style="border: none; background: none; cursor: pointer; font-size: 20px; color: #999;">✖</button>
+    </div>
+    <div class="modal-body" style="padding: 24px;">
+      <div class="form-group" style="margin-bottom: 16px;">
+        <label for="qa-classification-model" style="display: block; margin-bottom: 8px; font-weight: 500;">AI 模型</label>
+        <select class="form-control" id="qa-classification-model" style="width: 100%; padding: 8px; border: 1px solid #d9d9d9; border-radius: 4px;">
+          <option value="">使用默认模型</option>
+        </select>
+        <small style="color: #8c8c8c; font-size: 12px;">留空则使用系统默认模型（场景：问答对分类）</small>
+      </div>
+      <div class="form-group" style="margin-bottom: 16px;">
+        <label for="qa-classification-prompt" style="display: block; margin-bottom: 8px; font-weight: 500;">提示词模板</label>
+        <select class="form-control" id="qa-classification-prompt" style="width: 100%; padding: 8px; border: 1px solid #d9d9d9; border-radius: 4px;">
+          <option value="">使用默认提示词</option>
+        </select>
+        <small style="color: #8c8c8c; font-size: 12px;">留空则使用系统默认提示词</small>
+      </div>
+      <div class="form-group" style="margin-bottom: 0;">
+        <label for="qa-classification-concurrency" style="display: block; margin-bottom: 8px; font-weight: 500;">并发数</label>
+        <input type="number" class="form-control" id="qa-classification-concurrency" value="3" min="1" max="10" style="width: 100%; padding: 8px; border: 1px solid #d9d9d9; border-radius: 4px;">
+        <small style="color: #8c8c8c; font-size: 12px;">批量分类时的并发数，建议3-5</small>
+      </div>
+    </div>
+    <div class="modal-footer" style="padding: 16px 24px; border-top: 1px solid #e0e0e0; display: flex; justify-content: flex-end; gap: 12px;">
+      <button class="btn btn-primary" onclick="confirmBatchClassification()" style="padding: 8px 16px; background: #1890ff; color: white; border: none; border-radius: 4px; cursor: pointer;">🚀 开始分类</button>
+      <button class="btn btn-secondary" onclick="closeClassificationSettings()" style="padding: 8px 16px; background: #f0f0f0; color: #666; border: none; border-radius: 4px; cursor: pointer;">❌ 取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- 问答对详情弹窗 -->
+<div class="modal" id="qa-detail-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999; align-items: center; justify-content: center; overflow-y: auto; padding: 20px;" onclick="if(event.target === this) closeQADetail()">
+  <div class="modal-content" style="max-width: 800px; width: 90%; background: white; border-radius: 8px; padding: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.15); max-height: 90vh; overflow-y: auto; margin: auto;" onclick="event.stopPropagation()">
+    <div class="modal-header" style="padding: 20px 24px; border-bottom: 1px solid #e0e0e0; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; background: white; z-index: 1;">
+      <h3 style="margin: 0; font-size: 20px;">👁️ 问答对详情</h3>
+      <button onclick="closeQADetail()" title="关闭" style="border: none; background: none; cursor: pointer; font-size: 24px; color: #999; padding: 0; line-height: 1;">✖</button>
+    </div>
+    <div class="modal-body" id="qa-detail-body" style="padding: 24px;">
+      <div style="text-align: center; padding: 40px; color: #999;">加载中...</div>
+    </div>
+  </div>
+</div>
+
+<!-- 分类进度遮罩 -->
+<div class="ai-correction-overlay" id="qa-classification-overlay" style="display: none;">
+  <div class="ai-correction-modal" onclick="event.stopPropagation()">
+    <div class="ai-correction-header">
+      <h3 style="margin: 0;">🤖 批量分类进行中</h3>
+      <button class="btn btn-sm btn-secondary" onclick="closeClassificationOverlay()">✖ 关闭</button>
+    </div>
+    <div class="ai-correction-body" id="qa-classification-body">
+      <div class="ai-correction-loading">
+        <div class="ai-correction-spinner"></div>
+        <p>正在对选中的问答对进行分类...</p>
+        <p style="font-size: 12px; color: #999;">这可能需要一些时间</p>
+        <p id="qa-classification-progress" style="font-size: 11px; color: #999; margin-top: 10px;"></p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  align-items: center;
+  padding: 15px;
+}
+
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filter-group label {
+  font-size: 14px;
+  color: #333;
+  white-space: nowrap;
+}
+
+.qa-pair-row {
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.qa-pair-row:hover {
+  background-color: #f5f5f5;
+}
+
+.qa-pair-row.selected {
+  background-color: #e6f7ff;
+}
+
+.classification-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.badge-category {
+  background: #e6f7ff;
+  color: #1890ff;
+}
+
+.badge-intent {
+  background: #fff7e6;
+  color: #fa8c16;
+}
+
+.badge-unclassified {
+  background: #f0f0f0;
+  color: #999;
+}
+
+.pagination-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.pagination-info {
+  color: #666;
+  font-size: 14px;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+}
+</style>
+

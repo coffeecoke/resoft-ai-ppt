@@ -236,15 +236,18 @@ function getProviderName(provider) {
 }
 
 function getSceneName(scene) {
-  const names = {
-    transcription: '语音转文本',
-    transcription_correction: '语音转录纠错',
-    ppt_analysis: 'PPT分析',
-    document_extract: '文档提取',
-    document_manage: '文档管理',
-    general: '通用',
+  const sceneMap = {
+    'transcription': '语音转文本',
+    'transcription_correction': '语音转录纠错',
+    'role_judgment': '角色判断',
+    'qa_extraction': '问答对提取',
+    'qa_classification': '问答对分类',
+    'ppt_analysis': 'PPT分析',
+    'document_extract': '文档提取',
+    'document_manage': '文档管理',
+    'general': '通用'
   };
-  return names[scene] || scene;
+  return sceneMap[scene] || scene || '未分类';
 }
 
 // 暴露到全局（以便HTML中调用）

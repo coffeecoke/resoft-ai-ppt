@@ -283,6 +283,7 @@
   <div class="tabs" style="margin-bottom: 20px;">
     <button class="tab-btn active" id="ap-ppt-tab" onclick="switchAutoProcessTab('ppt')">📄 PPT跑批</button>
     <button class="tab-btn" id="ap-audio-tab" onclick="switchAutoProcessTab('audio')">🎤 音频跑批</button>
+    <button class="tab-btn" id="ap-qa-tab" onclick="switchAutoProcessTab('qa')">❓ 问答对提取跑批</button>
   </div>
 
   <!-- PPT跑批内容 -->
@@ -550,6 +551,120 @@
         <button class="btn btn-sm btn-secondary" onclick="audioClearLogs()">🗑️ 清空日志</button>
       </h3>
       <div class="log-list" id="audio-log-list">
+        <div class="empty-logs">
+          <div class="icon">📝</div>
+          <div>暂无日志记录</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 问答对提取跑批内容 -->
+  <div class="container" id="qa-process-content" style="display: none;">
+    <!-- 控制面板 -->
+    <div class="control-panel">
+      <h2>
+        <span class="status-indicator" id="qa-status-indicator"></span>
+        <span>❓ 问答对提取自动跑批监控</span>
+      </h2>
+      <div class="status-text" id="qa-status-text">正在加载...</div>
+      <div class="control-buttons">
+        <button class="btn btn-success" id="qa-start-btn" onclick="qaStartProcess()" disabled>
+          ▶️ 启动自动跑批
+        </button>
+        <button class="btn btn-danger" id="qa-stop-btn" onclick="qaStopProcess()" disabled>
+          ⏸️ 停止自动跑批
+        </button>
+        <button class="btn btn-primary" id="qa-run-once-btn" onclick="qaRunOnce()">
+          🚀 立即执行一次
+        </button>
+        <button class="btn btn-secondary" onclick="qaRefreshStatus()">
+          🔄 刷新状态
+        </button>
+      </div>
+    </div>
+
+    <!-- 当前任务 -->
+    <div class="current-task" id="qa-current-task" style="display: none;">
+      <h4>⏳ 当前正在处理</h4>
+      <div class="task-info" id="qa-task-info"></div>
+    </div>
+
+    <!-- 统计数据 -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="label">总转录记录</div>
+        <div class="value" id="qa-stat-total">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">已标记角色</div>
+        <div class="value success" id="qa-stat-with-role">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">待提取</div>
+        <div class="value warning" id="qa-stat-pending">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">正在处理</div>
+        <div class="value info" id="qa-stat-processing">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">上次运行</div>
+        <div class="value" id="qa-stat-last-run">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">下次运行</div>
+        <div class="value" id="qa-stat-next-run">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">总运行次数</div>
+        <div class="value" id="qa-stat-total-runs">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">成功/失败</div>
+        <div class="value">
+          <span class="success" id="qa-stat-success">-</span> / 
+          <span class="danger" id="qa-stat-failed">-</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 配置设置 -->
+    <div class="config-section">
+      <h3>⚙️ 跑批配置</h3>
+      <div class="config-form">
+        <div class="form-row">
+          <label>轮询间隔（分钟）</label>
+          <input type="number" id="qa-config-interval" min="1" max="1440" value="5">
+        </div>
+        <div class="form-row">
+          <label></label>
+          <div class="helper-text">自动扫描的时间间隔（1-1440分钟）</div>
+        </div>
+        
+        <div class="form-row">
+          <label>最大并发数</label>
+          <input type="number" id="qa-config-concurrent" min="1" max="5" value="1">
+        </div>
+        <div class="form-row">
+          <label></label>
+          <div class="helper-text">同时处理的转录记录数量（1-5个）</div>
+        </div>
+        
+        <div class="form-row">
+          <label></label>
+          <button class="btn btn-primary" onclick="qaSaveConfig()">💾 保存配置</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 处理日志 -->
+    <div class="log-section">
+      <h3>
+        <span>📋 处理日志</span>
+        <button class="btn btn-sm btn-secondary" onclick="qaClearLogs()">🗑️ 清空日志</button>
+      </h3>
+      <div class="log-list" id="qa-log-list">
         <div class="empty-logs">
           <div class="icon">📝</div>
           <div>暂无日志记录</div>

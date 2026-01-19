@@ -10,6 +10,7 @@ const fs = require('fs').promises;
 const transcriptionService = require('../services/transcriptionService');
 const transcriptionAiService = require('../services/transcriptionAiService');
 const audioScanService = require('../services/audioScanService');
+const concernClassificationService = require('../services/concernClassificationService');
 
 const router = express.Router();
 
@@ -2016,6 +2017,9 @@ router.get('/:id/qa-pairs', async (req, res) => {
           where: {
             transcription_id: id
           },
+          include: {
+            concern_categories: true // 包含分类信息
+          },
           orderBy: {
             created_at: 'asc'
           }
@@ -2033,7 +2037,11 @@ router.get('/:id/qa-pairs', async (req, res) => {
             session_id: transcription.session_id
           },
           include: {
-            concerns: true
+            concerns: {
+              include: {
+                concern_categories: true // 包含分类信息
+              }
+            }
           },
           orderBy: {
             sort_order: 'asc'
@@ -2048,7 +2056,9 @@ router.get('/:id/qa-pairs', async (req, res) => {
         id: concern.id,
         question: concern.question,
         answer: concern.answer,
-        category: concern.category,
+        category: concern.category, // 兼容旧字段
+        category_id: concern.category_id,
+        intent_code: concern.intent_code,
         priority: concern.priority,
         status: concern.status,
         time_range: concern.time_range || concern.time_range1 || null, // 兼容旧格式
@@ -2057,7 +2067,15 @@ router.get('/:id/qa-pairs', async (req, res) => {
         question_speaker: concern.question_speaker,
         answer_speaker: concern.answer_speaker,
         createdAt: concern.created_at,
-        updatedAt: concern.updated_at
+        updatedAt: concern.updated_at,
+        // 分类信息
+        concern_categories: concern.concern_categories ? {
+          id: concern.concern_categories.id,
+          code: concern.concern_categories.code,
+          name: concern.concern_categories.name,
+          level: concern.concern_categories.level,
+          type: concern.concern_categories.type
+        } : null
       }));
       
       res.json({
@@ -2080,6 +2098,146 @@ router.get('/:id/qa-pairs', async (req, res) => {
     res.status(500).json({
       success: false,
       error: error.message || '查询问答对失败'
+    });
+  }
+});
+
+/**
+ * POST /api/transcription/:id/qa-classification
+ * 对转录记录的所有问答对进行分类
+ * 
+ * @param {string} id - 转录记录ID
+ * @body {string} [modelId] - 模型ID（可选，不传则使用默认模型）
+ * @body {string} [promptCode] - 提示词代码（可选，不传则使用默认提示词）
+ * @body {number} [concurrency=3] - 并发数（可选，默认3）
+ */
+router.post('/:id/qa-classification', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { modelId, promptCode, concurrency } = req.body;
+
+    // 1. 验证转录记录是否存在
+    const transcription = await transcriptionService.getTranscriptionById(id);
+    if (!transcription) {
+      return res.status(404).json({
+        success: false,
+        error: '转录记录不存在'
+      });
+    }
+
+    console.log(`🚀 开始对转录记录进行问答对分类: ${id}`);
+
+    // 2. 调用分类服务
+    const result = await concernClassificationService.classifyConcernsByTranscription(
+      id,
+      {
+        modelId,
+        promptCode,
+        concurrency: concurrency || 3,
+        onProgress: (current, total) => {
+          console.log(`📊 问答对分类进度: ${current}/${total} (${Math.round(current/total*100)}%)`);
+        }
+      }
+    );
+
+    res.json({
+      success: true,
+      data: result,
+      message: `分类完成：成功 ${result.successCount} 个，失败 ${result.errorCount} 个`
+    });
+
+  } catch (error) {
+    console.error('问答对分类失败:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || '问答对分类失败',
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+/**
+ * POST /api/transcription/concern/:concernId/classification
+ * 对单个问答对进行分类
+ * 
+ * @param {string} concernId - 问答对ID
+ * @body {string} [modelId] - 模型ID（可选）
+ * @body {string} [promptCode] - 提示词代码（可选）
+ */
+router.post('/concern/:concernId/classification', async (req, res) => {
+  try {
+    const { concernId } = req.params;
+    const { modelId, promptCode } = req.body;
+
+    console.log(`🚀 开始对问答对进行分类: ${concernId}`);
+
+    // 调用分类服务
+    const result = await concernClassificationService.classifyConcern(concernId, {
+      modelId,
+      promptCode
+    });
+
+    res.json({
+      success: true,
+      data: result,
+      message: '分类成功'
+    });
+
+  } catch (error) {
+    console.error('问答对分类失败:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || '问答对分类失败',
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+/**
+ * POST /api/transcription/concerns/batch-classification
+ * 批量对问答对进行分类
+ * 
+ * @body {Array<string>} concernIds - 问答对ID数组
+ * @body {string} [modelId] - 模型ID（可选）
+ * @body {string} [promptCode] - 提示词代码（可选）
+ * @body {number} [batchSize=50] - 每批处理数量（可选，默认50）
+ * @body {number} [concurrency=3] - 并发数（可选，默认3，已弃用，改用batchSize）
+ */
+router.post('/concerns/batch-classification', async (req, res) => {
+  try {
+    const { concernIds, modelId, promptCode, batchSize, concurrency } = req.body;
+
+    if (!concernIds || !Array.isArray(concernIds) || concernIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: '请提供问答对ID数组'
+      });
+    }
+
+    console.log(`🚀 开始批量分类问答对: 总数=${concernIds.length}, 每批=${batchSize || 50}个`);
+
+    // 调用分类服务（后端自动分批处理）
+    const result = await concernClassificationService.classifyConcerns(concernIds, {
+      modelId,
+      promptCode,
+      batchSize: batchSize || 50,  // 每批处理数量，默认50
+      onProgress: (current, total) => {
+        console.log(`📊 问答对分类进度: ${current}/${total} (${Math.round(current/total*100)}%)`);
+      }
+    });
+
+    res.json({
+      success: true,
+      data: result,
+      message: `批量分类完成：成功 ${result.successCount} 个，失败 ${result.errorCount} 个`
+    });
+
+  } catch (error) {
+    console.error('批量问答对分类失败:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || '批量问答对分类失败',
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });

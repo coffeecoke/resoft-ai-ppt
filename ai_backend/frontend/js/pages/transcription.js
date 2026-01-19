@@ -86,6 +86,29 @@ function saveQAExtractionSettingsToStorage(settings) {
   }
 }
 
+// ==================== 问答对分类设置管理 ====================
+function loadQAClassificationSettings() {
+  return {
+    modelId: localStorage.getItem('qaClassification_modelId') || '',
+    promptCode: localStorage.getItem('qaClassification_promptCode') || '',
+    concurrency: parseInt(localStorage.getItem('qaClassification_concurrency')) || 3
+  };
+}
+
+function saveQAClassificationSettingsToStorage(settings) {
+  if (settings.modelId) {
+    localStorage.setItem('qaClassification_modelId', settings.modelId);
+  } else {
+    localStorage.removeItem('qaClassification_modelId');
+  }
+  if (settings.promptCode) {
+    localStorage.setItem('qaClassification_promptCode', settings.promptCode);
+  } else {
+    localStorage.removeItem('qaClassification_promptCode');
+  }
+  localStorage.setItem('qaClassification_concurrency', settings.concurrency || 3);
+}
+
 // 页面初始化 - 等待DOM完全加载
 (async function() {
   console.log('🎤 语音转文本页面初始化...');
@@ -990,6 +1013,237 @@ function closeQAExtractionOverlay() {
 // 暴露到全局，供HTML调用
 window.closeQAExtractionOverlay = closeQAExtractionOverlay;
 
+// ==================== 问答对分类功能 ====================
+/**
+ * 开始问答对分类
+ */
+async function startQAClassification() {
+  if (!st_currentTranscriptionId) {
+    showToast('没有当前转录记录', 'error');
+    return;
+  }
+
+  // 检查是否有问答对
+  if (!st_qaPairs || st_qaPairs.length === 0) {
+    if (!window.confirm('当前转录记录没有问答对，是否先进行问答对提取？')) {
+      return;
+    }
+    // 触发问答对提取
+    await startQAExtraction();
+    // 等待提取完成后再检查
+    if (!st_qaPairs || st_qaPairs.length === 0) {
+      showToast('问答对提取失败或未提取到问答对', 'error');
+      return;
+    }
+  }
+
+  // 显示设置对话框或直接开始分类
+  const settings = loadQAClassificationSettings();
+  if (!settings.modelId && !settings.promptCode) {
+    // 如果没有设置，先显示设置对话框
+    showQAClassificationSettings();
+    return;
+  }
+
+  // 开始分类
+  await performQAClassification(settings);
+}
+
+/**
+ * 执行问答对分类
+ */
+async function performQAClassification(settings = null) {
+  if (!st_currentTranscriptionId) {
+    showToast('没有当前转录记录', 'error');
+    return;
+  }
+
+  if (!settings) {
+    settings = loadQAClassificationSettings();
+  }
+
+  // 显示遮罩
+  const overlay = document.getElementById('st-qaClassificationOverlay');
+  const body = document.getElementById('st-qaClassificationBody');
+  const progressEl = document.getElementById('st-qaClassificationProgress');
+  
+  body.innerHTML = `
+    <div class="ai-correction-loading">
+      <div class="ai-correction-spinner"></div>
+      <p>🤖 AI 正在对问答对进行分类...</p>
+      <p style="font-size: 12px; color: #999;">这可能需要一些时间</p>
+      <p id="st-qaClassificationProgress" style="font-size: 11px; color: #999; margin-top: 10px;">准备中...</p>
+    </div>
+  `;
+  
+  overlay.style.display = 'flex';
+
+  try {
+    const requestBody = {};
+    if (settings.modelId) requestBody.modelId = settings.modelId;
+    if (settings.promptCode) requestBody.promptCode = settings.promptCode;
+    if (settings.concurrency) requestBody.concurrency = settings.concurrency;
+
+    // 更新进度
+    if (progressEl) {
+      progressEl.textContent = `正在分类 ${st_qaPairs.length} 个问答对...`;
+    }
+
+    const response = await fetch(`${ST_API_BASE}/transcription/${st_currentTranscriptionId}/qa-classification`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP错误: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    
+    if (!result.success) {
+      throw new Error(result.error || '问答对分类失败');
+    }
+
+    // 隐藏遮罩
+    overlay.style.display = 'none';
+    
+    // 显示结果
+    const successCount = result.data?.successCount || 0;
+    const errorCount = result.data?.errorCount || 0;
+    const total = result.data?.total || 0;
+    
+    showToast(`分类完成：成功 ${successCount}/${total} 个${errorCount > 0 ? `，失败 ${errorCount} 个` : ''}`, 'success');
+    
+    // 重新加载问答对数据（包含分类信息）
+    await loadQAPairs(st_currentTranscriptionId);
+    
+  } catch (error) {
+    console.error('问答对分类失败:', error);
+    overlay.style.display = 'none';
+    showToast('问答对分类失败: ' + error.message, 'error');
+  }
+}
+
+/**
+ * 关闭问答对分类遮罩
+ */
+function closeQAClassificationOverlay() {
+  const overlay = document.getElementById('st-qaClassificationOverlay');
+  if (overlay) {
+    overlay.style.display = 'none';
+  }
+}
+
+// 暴露到全局，供HTML调用
+window.closeQAClassificationOverlay = closeQAClassificationOverlay;
+
+/**
+ * 显示问答对分类设置对话框
+ */
+async function showQAClassificationSettings() {
+  const modal = document.getElementById('st-qaClassificationSettingsModal');
+  if (!modal) {
+    showToast('设置对话框不存在', 'error');
+    return;
+  }
+
+  // 加载当前设置
+  const settings = loadQAClassificationSettings();
+  
+  // 加载模型列表
+  try {
+    const modelsResponse = await fetch(`${ST_API_BASE}/admin/models?scene_type=qa_classification`);
+    const modelsResult = await modelsResponse.json();
+    const modelSelect = document.getElementById('st-qaClassificationModel');
+    if (modelSelect && modelsResult.success && modelsResult.data) {
+      modelSelect.innerHTML = '<option value="">使用默认模型</option>';
+      modelsResult.data.forEach(model => {
+        const option = document.createElement('option');
+        option.value = model.id;
+        option.textContent = `${model.name}${model.is_default ? ' (默认)' : ''}`;
+        if (model.id === settings.modelId) {
+          option.selected = true;
+        }
+        modelSelect.appendChild(option);
+      });
+    }
+  } catch (error) {
+    console.error('加载模型列表失败:', error);
+  }
+
+  // 加载提示词列表
+  try {
+    const promptsResponse = await fetch(`${ST_API_BASE}/admin/prompts?scene_type=qa_classification&is_active=true`);
+    const promptsResult = await promptsResponse.json();
+    const promptSelect = document.getElementById('st-qaClassificationPrompt');
+    if (promptSelect && promptsResult.success && promptsResult.data) {
+      promptSelect.innerHTML = '<option value="">使用默认提示词</option>';
+      promptsResult.data.forEach(prompt => {
+        const option = document.createElement('option');
+        option.value = prompt.code;
+        option.textContent = `${prompt.name}${prompt.version ? ` (v${prompt.version})` : ''}`;
+        if (prompt.code === settings.promptCode) {
+          option.selected = true;
+        }
+        promptSelect.appendChild(option);
+      });
+    }
+  } catch (error) {
+    console.error('加载提示词列表失败:', error);
+  }
+
+  // 设置并发数
+  const concurrencyInput = document.getElementById('st-qaClassificationConcurrency');
+  if (concurrencyInput) {
+    concurrencyInput.value = settings.concurrency || 3;
+  }
+
+  modal.style.display = 'flex';
+}
+
+/**
+ * 关闭问答对分类设置对话框
+ */
+function closeQAClassificationSettings() {
+  const modal = document.getElementById('st-qaClassificationSettingsModal');
+  if (modal) {
+    modal.style.display = 'none';
+  }
+}
+
+/**
+ * 保存问答对分类设置
+ */
+function saveQAClassificationSettings() {
+  const modelSelect = document.getElementById('st-qaClassificationModel');
+  const promptSelect = document.getElementById('st-qaClassificationPrompt');
+  const concurrencyInput = document.getElementById('st-qaClassificationConcurrency');
+
+  const settings = {
+    modelId: modelSelect?.value || '',
+    promptCode: promptSelect?.value || '',
+    concurrency: parseInt(concurrencyInput?.value) || 3
+  };
+
+  saveQAClassificationSettingsToStorage(settings);
+  closeQAClassificationSettings();
+  showToast('设置已保存', 'success');
+  
+  // 询问是否立即开始分类
+  if (window.confirm('设置已保存，是否立即开始分类？')) {
+    performQAClassification(settings);
+  }
+}
+
+// 暴露到全局，供HTML调用
+window.showQAClassificationSettings = showQAClassificationSettings;
+window.closeQAClassificationSettings = closeQAClassificationSettings;
+window.saveQAClassificationSettings = saveQAClassificationSettings;
+
 /**
  * 加载问答对（从 concerns 表查询）
  */
@@ -1156,12 +1410,30 @@ function renderQAPairs(qaPairs, containerId = 'st-dialoguesList-qa') {
       playEndSeconds = oldTimeRange.endSeconds || (playStartSeconds + 30);
     }
     
+    // 分类信息显示
+    const categoryInfo = qa.concern_categories ? 
+      `<span style="display: inline-block; padding: 2px 8px; background: #e6f7ff; color: #1890ff; border-radius: 4px; font-size: 12px; margin-right: 6px;">${escapeHtml(qa.concern_categories.code || '')} ${escapeHtml(qa.concern_categories.name || '')}</span>` : 
+      (qa.category ? `<span style="display: inline-block; padding: 2px 8px; background: #f0f0f0; color: #666; border-radius: 4px; font-size: 12px; margin-right: 6px;">${escapeHtml(qa.category)}</span>` : '');
+    
+    const intentInfo = qa.intent_code ? 
+      `<span style="display: inline-block; padding: 2px 8px; background: #fff7e6; color: #fa8c16; border-radius: 4px; font-size: 12px;">${escapeHtml(qa.intent_code)}</span>` : '';
+    
+    const classificationInfo = (categoryInfo || intentInfo) ? 
+      `<div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #f0f0f0;">
+        <span style="font-size: 12px; color: #999; margin-right: 8px;">分类：</span>
+        ${categoryInfo}
+        ${intentInfo}
+      </div>` : '';
+    
     return `
       <div class="qa-pair-item" data-qa-index="${index}" data-play-start="${playStartSeconds}" data-play-end="${playEndSeconds}" style="margin-bottom: 15px; padding: 12px; border: 1px solid #e0e0e0; border-radius: 6px; background: #fff; cursor: pointer; transition: all 0.2s;" 
            onmouseover="this.style.background='#f0f7ff'; this.style.borderColor='#1890ff';" 
            onmouseout="this.style.background='#fff'; this.style.borderColor='#e0e0e0';"
            onclick="playQAAudio(${index})">
-        <div style="font-weight: bold; color: #1890ff; font-size: 16px; margin-bottom: 10px;">Q${qaIndex}</div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <div style="font-weight: bold; color: #1890ff; font-size: 16px;">Q${qaIndex}</div>
+          ${classificationInfo ? '' : '<span style="font-size: 11px; color: #999;">未分类</span>'}
+        </div>
         <div style="margin-bottom: ${qa.answer && qa.answer.length > 0 ? '8px' : '0'}; line-height: 1.8; color: #333; font-size: 14px;">
           ${questionTimeDisplay ? `<span style="color: #666; font-size: 13px; font-family: monospace; margin-right: 8px;">${escapeHtml(questionTimeDisplay)}</span>` : ''}
           ${qa.question_speaker ? `<span style="color: #1890ff; font-size: 13px; font-weight: 500; margin-right: 8px;">${escapeHtml(qa.question_speaker)}</span>` : ''}
@@ -1176,6 +1448,7 @@ function renderQAPairs(qaPairs, containerId = 'st-dialoguesList-qa') {
             <span style="color: #333;">${escapeHtml(qa.answer)}</span>
           </div>
         ` : ''}
+        ${classificationInfo}
       </div>
     `;
   }).join('');

@@ -328,6 +328,18 @@ const categoriesData = [
     sort_order: 23
   },
 
+  // 7. 其他（无法归类的问答对）
+  {
+    code: '0.0',
+    name: '其他',
+    type: 'category',
+    parent_code: null,
+    level: 2,
+    description: '当问答对无法归入上述任何分类类别时，归为本类。包括但不限于：礼节性交流、背景说明、无法明确分类的问题等。',
+    keywords: ['其他', '无法分类', '未归类', '杂项'],
+    sort_order: 24
+  },
+
   // ==================== 问题性质（level=3，intent类型） ====================
   {
     code: 'I1',
@@ -417,7 +429,7 @@ async function seedConcernCategories() {
 
     console.log(`\n✅ 成功初始化 ${categoriesData.length} 条问答对分类数据`)
     console.log(`   - 分类层面: 6个`)
-    console.log(`   - 分类类别: 23个`)
+    console.log(`   - 分类类别: 24个（包含"其他"分类）`)
     console.log(`   - 问题性质: 5个`)
 
     // 验证数据
