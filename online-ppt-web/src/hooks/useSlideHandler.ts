@@ -11,8 +11,11 @@ import message from '@/utils/message'
 import usePasteTextClipboardData from '@/hooks/usePasteTextClipboardData'
 import useHistorySnapshot from '@/hooks/useHistorySnapshot'
 import useAddSlidesOrElements from '@/hooks/useAddSlidesOrElements'
+import { deleteThumbnailsBatch } from '@/services/thumbnailService'
+import { useRoute } from 'vue-router'
 
 export default () => {
+  const route = useRoute()
   const mainStore = useMainStore()
   const slidesStore = useSlidesStore()
   const { selectedSlidesIndex: _selectedSlidesIndex, activeElementIdList } = storeToRefs(mainStore)
@@ -114,7 +117,34 @@ export default () => {
   }
 
   // 删除当前页，若将删除全部页面，则执行重置幻灯片操作
-  const deleteSlide = (targetSlidesId = selectedSlidesId.value) => {
+  const deleteSlide = async (targetSlidesId = selectedSlidesId.value) => {
+    // 获取文档ID（用于删除缩略图）
+    // 文档模式使用 query.documentId，模板模式使用 query.templateId
+    const documentId = (route.query.documentId || route.query.templateId) as string | undefined
+
+    console.log('[删除幻灯片] 开始删除:', {
+      documentId,
+      targetSlidesId,
+      targetSlidesIdLength: targetSlidesId.length
+    })
+
+    // 删除幻灯片缩略图（异步执行，不阻塞删除操作）
+    if (documentId && targetSlidesId.length > 0) {
+      console.log('[删除幻灯片] 调用 deleteThumbnailsBatch API...')
+      deleteThumbnailsBatch(documentId, targetSlidesId).then(result => {
+        if (result.success) {
+          console.log(`[删除幻灯片] 成功删除 ${targetSlidesId.length} 个缩略图`)
+        } else {
+          console.warn('[删除幻灯片] 删除缩略图失败:', result.error)
+        }
+      }).catch(error => {
+        console.warn('[删除幻灯片] 删除缩略图异常:', error)
+      })
+    } else {
+      console.log('[删除幻灯片] 跳过删除缩略图:', { documentId, targetSlidesIdLength: targetSlidesId.length })
+    }
+
+    // 删除幻灯片
     if (slides.value.length === targetSlidesId.length) resetSlides()
     else slidesStore.deleteSlide(targetSlidesId)
 

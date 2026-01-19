@@ -56,8 +56,8 @@ function handleExpand() {
 <style scoped>
 .mini-progress-container {
   position: fixed;
-  top: 70px;
-  right: 20px;
+  bottom: 24px;
+  left: 24px;
   z-index: 2000;
   background: white;
   border-radius: 8px;
@@ -65,7 +65,6 @@ function handleExpand() {
   padding: 12px 16px;
   cursor: pointer;
   transition: all 0.3s ease;
-  position: relative;
 }
 
 .mini-progress-container:hover {
@@ -112,12 +111,12 @@ function handleExpand() {
 }
 
 .slide-fade-enter-from {
-  transform: translateX(100%);
+  transform: translateY(100%);
   opacity: 0;
 }
 
 .slide-fade-leave-to {
-  transform: translateX(100%);
+  transform: translateY(100%);
   opacity: 0;
 }
 </style>

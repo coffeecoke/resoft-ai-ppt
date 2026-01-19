@@ -30,8 +30,9 @@ export function useThumbnailQueue(options: ThumbnailQueueOptions = {}) {
 
   /**
    * 创建生成任务
+   * @param showModal - 是否显示模态框（默认false，显示迷你进度条）
    */
-  async function createTask(documentId: string, slideIds: string[]): Promise<string> {
+  async function createTask(documentId: string, slideIds: string[], showModal = false): Promise<string> {
     const taskId = uuidv4()
 
     // 1. 调用后端创建任务
@@ -49,7 +50,7 @@ export function useThumbnailQueue(options: ThumbnailQueueOptions = {}) {
       // 2. 建立WebSocket连接
       connectWebSocket(taskId)
 
-      // 3. 显示进度模态框
+      // 3. 显示进度提示（模态框或迷你进度条）
       currentTask.value = {
         taskId,
         documentId,
@@ -57,7 +58,13 @@ export function useThumbnailQueue(options: ThumbnailQueueOptions = {}) {
         status: 'processing',
         progress: { total: slideIds.length, completed: 0, failed: 0 }
       }
-      showProgressModal.value = true
+
+      // 根据参数决定显示方式
+      if (showModal) {
+        showProgressModal.value = true
+      } else {
+        showMiniProgress.value = true
+      }
 
       // 4. 开始前端生成并上传
       await processSlides(taskId, documentId, slideIds)
@@ -100,14 +107,17 @@ export function useThumbnailQueue(options: ThumbnailQueueOptions = {}) {
         return { success: false, slideId }
       }
 
-      // 生成Blob
-      const blob = await toJpeg(element, {
+      // 生成dataURL
+      const dataUrl = await toJpeg(element, {
         quality: 0.8,
         canvasWidth: 800,
         canvasHeight: 450,
         fontEmbedCSS: '',
         pixelRatio: 1
       })
+
+      // 将dataURL转换为Blob
+      const blob = await fetch(dataUrl).then(res => res.blob())
 
       // 上传到后端
       const formData = new FormData()
@@ -120,10 +130,51 @@ export function useThumbnailQueue(options: ThumbnailQueueOptions = {}) {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
 
+      // 更新进度
+      updateProgress(true)
+
       return { success: true, slideId }
     } catch (error: any) {
       console.error(`[ThumbnailQueue] 生成失败: ${slideId}`, error)
+
+      // 更新进度
+      updateProgress(false)
+
       return { success: false, slideId }
+    }
+  }
+
+  /**
+   * 更新本地进度（前端生成时使用）
+   */
+  function updateProgress(success: boolean) {
+    if (!currentTask.value) return
+
+    if (success) {
+      currentTask.value.progress.completed++
+    } else {
+      currentTask.value.progress.failed++
+    }
+
+    // 触发进度回调
+    if (options.onProgress) {
+      options.onProgress(currentTask.value.progress)
+    }
+
+    // 检查是否全部完成
+    const { total, completed, failed } = currentTask.value.progress
+    if (completed + failed >= total) {
+      currentTask.value.status = failed > 0 ? 'failed' : 'completed'
+
+      if (failed === 0 && options.onCompleted) {
+        options.onCompleted()
+      } else if (failed > 0 && options.onError) {
+        options.onError(`${failed} 个缩略图生成失败`)
+      }
+
+      setTimeout(() => {
+        closeTask()
+      }, 2000)
     }
   }
 
@@ -158,10 +209,13 @@ export function useThumbnailQueue(options: ThumbnailQueueOptions = {}) {
    * 连接WebSocket
    */
   function connectWebSocket(taskId: string) {
+    // 开发环境下，WebSocket 通过 Vite 代理到后端
+    // 生产环境下，使用当前 host
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
     const host = location.host
     const wsUrl = `${protocol}//${host}/ws/thumbnail-progress?taskId=${taskId}`
 
+    console.log(`[WebSocket] 连接地址: ${wsUrl}`)
     ws.value = new WebSocket(wsUrl)
 
     ws.value.onopen = () => {
@@ -191,9 +245,20 @@ export function useThumbnailQueue(options: ThumbnailQueueOptions = {}) {
               options.onCompleted()
             }
 
+            // 迷你进度条完成后自动隐藏（1秒），模态框需要用户手动关闭（2秒后可关闭）
+            const autoCloseDelay = showMiniProgress.value ? 1000 : 2000
             setTimeout(() => {
-              closeTask()
-            }, 2000)
+              if (showMiniProgress.value) {
+                // 迷你进度条自动完全关闭
+                closeTask()
+              } else {
+                // 模态框只关闭 WebSocket，保留显示让用户手动关闭
+                if (ws.value) {
+                  ws.value.close()
+                  ws.value = null
+                }
+              }
+            }, autoCloseDelay)
           }
 
           // 失败处理

@@ -114,6 +114,8 @@ export default () => {
     watch(
       () => slides.value,
       (newSlides, oldSlides) => {
+        console.log(`[变更追踪] watch 触发 - 新:${newSlides.length}个, 旧:${oldSlides?.length || 0}个`)
+
         // 首次加载数据时（从空数组变为有数据）
         if ((!oldSlides || oldSlides.length === 0) && newSlides.length > 0) {
           console.log(`[变更追踪] 首次加载 ${newSlides.length} 个幻灯片`)
@@ -129,28 +131,34 @@ export default () => {
 
         // 如果已经有数据，正常处理变更
         if (oldSlides && oldSlides.length > 0) {
-          // 检测新增的幻灯片
-          const oldIds = new Set(oldSlides.map(s => s.id))
-          
+          // 使用快照中的 ID 集合（代表上次保存时的状态）
+          const snapshotIds = new Set(lastSnapshot.value.keys())
+          const newSlideIds: string[] = []
+
           newSlides.forEach(slide => {
-            if (!oldIds.has(slide.id)) {
-              // 新增的幻灯片
+            if (!snapshotIds.has(slide.id)) {
+              // 新增的幻灯片（新建或复制）- 快照中没有这个 ID
               markSlideChanged(slide.id)
+              newSlideIds.push(slide.id)
+              console.log(`[变更追踪] 检测到新增幻灯片: ${slide.id}`)
             } else {
-              // 检查是否有内容变更
-              const oldSlide = oldSlides.find(s => s.id === slide.id)
-              if (oldSlide) {
-                const oldContent = JSON.stringify(oldSlide.elements)
-                const newContent = JSON.stringify(slide.elements)
-                if (oldContent !== newContent) {
-                  markSlideChanged(slide.id)
-                }
+              // 使用快照对比内容变更（对比"上次保存"和"当前内容"）
+              const currentContent = JSON.stringify(slide.elements)
+              const snapshotContent = lastSnapshot.value.get(slide.id)
+
+              if (snapshotContent && snapshotContent !== currentContent) {
+                markSlideChanged(slide.id)
+                console.log(`[变更追踪] 检测到内容变更: ${slide.id}`)
               }
             }
           })
 
-          // 更新快照
-          createSnapshot()
+          if (newSlideIds.length > 0) {
+            console.log(`[变更追踪] 共新增 ${newSlideIds.length} 个幻灯片，当前变更列表:`, Array.from(changedSlideIds.value))
+          }
+
+          // ⚠️ 不再自动更新快照
+          // 快照只在保存时手动更新，这样可以用于对比"上次保存"和"当前内容"
         }
       },
       { deep: true, immediate: true }

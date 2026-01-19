@@ -49,13 +49,24 @@ export function useEditorDataLoader() {
       if (stateData) {
         console.log('[编辑器] 使用创建时的缓存数据（秒开）')
         loadingMessage.value = '正在加载文档...'
-        
+
         // 直接应用数据
         slidesStore.setTitle(stateData.title)
         slidesStore.setTheme(stateData.theme)
         slidesStore.setSlides(stateData.slides)
         slidesStore.setViewportSize(stateData.width)
-        
+
+        // 【新增】但仍需要从后端获取最新的 metadata（包括 status）
+        if (documentId) {
+          try {
+            const resp = await getDocument(documentId)
+            slidesStore.setMetadata(resp.metadata)
+            console.log('[编辑器] 已加载文档状态:', resp.metadata.status)
+          } catch (error) {
+            console.warn('[编辑器] 获取文档状态失败，将按草稿处理:', error)
+          }
+        }
+
         return
       }
       
@@ -66,12 +77,15 @@ export function useEditorDataLoader() {
       if (documentId) {
         const resp = await getDocument(documentId)
         const data = resp.documentData
-        
+
+        // 保存 metadata（新增）
+        slidesStore.setMetadata(resp.metadata)
+
         slidesStore.setTitle(data.title)
         slidesStore.setTheme(data.theme)
         slidesStore.setSlides(data.slides)
         slidesStore.setViewportSize(data.width)
-        
+
         // 标记已加载
         loadedIds.add(documentId)
         console.log('[编辑器] 文档数据加载完成，已标记:', documentId)
