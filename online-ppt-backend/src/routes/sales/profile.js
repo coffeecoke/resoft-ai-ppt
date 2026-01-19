@@ -1,7 +1,9 @@
 import express from 'express'
 import { documentService } from '../../services/documentService.js'
+import { PrismaClient } from '@prisma/client'
 
 const router = express.Router()
+const prisma = new PrismaClient()
 
 /**
  * 回传PPT
@@ -34,6 +36,30 @@ router.post('/ppt/upload', async (req, res) => {
       })
     }
     
+    // ⚠️ 重要：将 product name 转换为 code
+    let productCodes = []
+    if (product && Array.isArray(product) && product.length > 0) {
+      // 查询产品表，将 name 转换为 code
+      const products = await prisma.products.findMany({
+        where: {
+          name: { in: product },
+          is_active: true
+        },
+        select: { code: true }
+      })
+      productCodes = products.map(p => p.code).filter(Boolean)
+      
+      // 如果有些 product name 找不到对应的 code，记录警告
+      const foundNames = products.length
+      if (foundNames < product.length) {
+        console.warn(`[Sales Profile] 部分产品名称未找到对应的 code:`, {
+          input: product,
+          found: foundNames,
+          total: product.length
+        })
+      }
+    }
+    
     // 使用 documentService 创建文档
     // documentService 会自动处理封面图（从第一页缩略图获取）
     const meta = await documentService.create({
@@ -42,7 +68,7 @@ router.post('/ppt/upload', async (req, res) => {
       status: 'draft',  // 默认为草稿
       tag: 'practical',  // 自动标记为实战
       customerName: customerName || undefined,
-      product: (Array.isArray(product) && product.length > 0) ? product : undefined,
+      product: productCodes.length > 0 ? productCodes : undefined,  // 存储 code 而不是 name
       industry: (Array.isArray(industry) && industry.length > 0) ? industry : undefined,
       audience: (Array.isArray(audience) && audience.length > 0) ? audience : undefined,
       language: language || undefined,

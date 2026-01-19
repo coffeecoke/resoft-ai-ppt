@@ -232,8 +232,10 @@ const loadProductStats = async () => {
     const res = await getProductList({ isActive: true })
     if (res.success) {
       // 转换API数据为前端需要的格式
+      // ⚠️ 重要：保存 code 用于选择，name 用于显示
       productStats.value = res.data.map(product => ({
-        name: product.name,
+        name: product.name,  // 用于显示
+        code: product.code,  // 用于选择（传递给 selectProduct）
         sessions: product.stats.sessions,
         ppts: product.stats.ppts,
         questions: product.stats.questions

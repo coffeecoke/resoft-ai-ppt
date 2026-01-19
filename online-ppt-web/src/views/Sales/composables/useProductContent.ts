@@ -8,7 +8,7 @@ import { salesData } from '@/configs/salesData'
 
 export function useProductContent() {
   // 产品相关状态
-  const activeProduct = ref('')
+  const activeProduct = ref('')  // 存储 product code
   const catalogMode = ref<'single' | 'multiple'>('single')
   const activeCatalogIds = ref<string[]>([])
   const selectedParentIds = ref<string[]>([])
@@ -17,13 +17,13 @@ export function useProductContent() {
   const publicPPTData = ref<any[]>([])
   const practicalPPTData = ref<any[]>([])
   
-  // 选择/取消选择产品
-  const selectProduct = (productName: string) => {
-    if (activeProduct.value === productName) {
+  // 选择/取消选择产品（使用 product code）
+  const selectProduct = (productCode: string) => {
+    if (activeProduct.value === productCode) {
       activeProduct.value = ''
       activeCatalogIds.value = []
     } else {
-      activeProduct.value = productName
+      activeProduct.value = productCode
       activeCatalogIds.value = []
       updateProductContent()
     }

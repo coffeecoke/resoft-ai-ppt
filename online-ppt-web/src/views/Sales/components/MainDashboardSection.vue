@@ -88,8 +88,9 @@ const handleBrandTabChange = (value: string) => {
   emit('update:activeBrandTab', value)
 }
 
-const handleSelectProduct = (productName: string) => {
-  emit('select-product', productName)
+const handleSelectProduct = (productCode: string) => {
+  // 传递 product code 而不是 name
+  emit('select-product', productCode)
 }
 
 // 打开品牌资料项（内部处理，不向上emit）

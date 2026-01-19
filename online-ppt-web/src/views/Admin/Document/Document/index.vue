@@ -51,6 +51,14 @@
           @click="openEditor(doc.id)"
         >
           <div class="cover-wrapper">
+            <!-- 版本标签（右上角） -->
+            <div 
+              v-if="doc.tag" 
+              class="tag-badge"
+              :class="`tag-${doc.tag}`"
+            >
+              {{ doc.tag === 'public' ? '公共版' : doc.tag === 'practical' ? '实战版' : doc.tag }}
+            </div>
             <img 
               v-if="doc.cover" 
               :src="doc.cover" 
@@ -759,7 +767,7 @@ onMounted(() => {
 
 <style lang="scss" scoped>
 .document-list {
-  max-width: 1240px;
+  // max-width: 1240px;
   margin: 0 auto;
   background: #fff;
   border-radius: 12px;
@@ -911,6 +919,29 @@ onMounted(() => {
     position: relative;
     background: radial-gradient(1200px 400px at 30% 0%, rgba($color: $themeColor, $alpha: 0.10), rgba(15, 23, 42, 0.04));
     padding: 10px;
+
+    .tag-badge {
+      position: absolute;
+      right: 16px;
+      top: 16px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #fff;
+      backdrop-filter: blur(6px);
+      box-shadow: 0 8px 18px rgba(15, 23, 42, 0.15);
+      z-index: 10;
+      white-space: nowrap;
+
+      &.tag-public {
+        background: linear-gradient(135deg, rgba(82, 196, 26, 0.95), rgba(82, 196, 26, 0.70));
+      }
+
+      &.tag-practical {
+        background: linear-gradient(135deg, rgba(250, 173, 20, 0.95), rgba(250, 173, 20, 0.70));
+      }
+    }
 
     .cover {
       width: 100%;

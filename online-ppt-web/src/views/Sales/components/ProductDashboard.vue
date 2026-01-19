@@ -2,10 +2,10 @@
   <div class="dashboard-scroll">
     <div 
       v-for="(item, index) in productStats" 
-      :key="item.name" 
+      :key="item.code || item.name" 
       class="stat-card" 
-      :class="{ 'is-selected': activeProduct === item.name }" 
-      @click="handleSelectProduct(item.name)"
+      :class="{ 'is-selected': activeProduct === (item.code || item.name) }" 
+      @click="handleSelectProduct(item.code || item.name)"
     >
       <span 
         class="stat-number" 
@@ -50,8 +50,9 @@ const props = defineProps({
 
 const emit = defineEmits(['select-product'])
 
-const handleSelectProduct = (productName) => {
-  emit('select-product', productName)
+const handleSelectProduct = (productCode) => {
+  // 传递 product code 而不是 name
+  emit('select-product', productCode)
 }
 </script>
 

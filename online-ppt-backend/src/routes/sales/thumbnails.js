@@ -11,8 +11,9 @@ const prisma = new PrismaClient()
  * Query参数:
  * - pageTypes: 目录code列表，逗号分隔，如 "3.1,3.2"
  * - tag: 'public' 或 'practical'
- * - productCode: 产品code或name（直接用于匹配 documents.product JSON 字段）
+ * - productCode: 产品code（必须，直接用于匹配 documents.product JSON 字段）
  * - filters: JSON字符串，包含筛选条件 {product, customer, industry, audience}
+ *   ⚠️ 注意：filters.product 中的值必须是 code 数组，不是 name
  */
 router.get('/', async (req, res) => {
   try {

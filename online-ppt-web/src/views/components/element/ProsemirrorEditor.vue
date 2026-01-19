@@ -15,6 +15,7 @@ import { useKeyboardStore, useMainStore } from '@/store'
 import type { EditorView } from 'prosemirror-view'
 import { toggleMark, wrapIn, lift } from 'prosemirror-commands'
 import { initProsemirrorEditor, createDocument } from '@/utils/prosemirror'
+import { DOMSerializer } from 'prosemirror-model'
 import { isActiveOfParentNodeType, findNodesWithSameMark, getTextAttrs, autoSelectAll, addMark, markActive, getFontsize } from '@/utils/prosemirror/utils'
 import emitter, { EmitterEvents, type RichTextAction, type RichTextCommand, type GetSelectionInfoPayload, type ReplaceTextRangePayload, type SelectionInfo } from '@/utils/emitter'
 import { alignmentCommand } from '@/utils/prosemirror/commands/setTextAlign'
@@ -313,7 +314,7 @@ const handleGetSelectionInfo = ({ elementId, callback }: GetSelectionInfoPayload
   if (elementId !== props.elementId) return
   if (!editorView) return
   
-  const { selection, doc } = editorView.state
+  const { selection, doc, schema } = editorView.state
   const { from, to, empty } = selection
   
   // 判断是否有选中
@@ -327,6 +328,59 @@ const handleGetSelectionInfo = ({ elementId, callback }: GetSelectionInfoPayload
   // 获取完整内容
   const fullContent = doc.textContent
   
+  // 【新增】提取 HTML 结构
+  const serializer = DOMSerializer.fromSchema(schema)
+  let selectedHTML = ''
+  let fullHTML = ''
+  const paragraphStructures: Array<{ text: string; html: string; styles: string }> = []
+  
+  if (hasSelection) {
+    // 提取选中部分的 HTML
+    try {
+      const selectedSlice = doc.slice(from, to)
+      // slice.content 是 Fragment
+      const selectedFragment = selectedSlice.content
+      const selectedDOM = serializer.serializeFragment(selectedFragment)
+      const tempDiv = document.createElement('div')
+      tempDiv.appendChild(selectedDOM)
+      selectedHTML = tempDiv.innerHTML
+    } catch (error) {
+      console.error('[ProsemirrorEditor] 提取选中HTML失败:', error)
+      // 降级：使用纯文本
+      selectedHTML = selectedText
+    }
+  }
+  
+  // 提取完整内容的 HTML
+  const fullFragment = doc.content
+  const fullDOM = serializer.serializeFragment(fullFragment)
+  const tempDiv2 = document.createElement('div')
+  tempDiv2.appendChild(fullDOM)
+  fullHTML = tempDiv2.innerHTML
+  
+  // 【新增】提取段落结构信息（用于智能保留样式）
+  doc.descendants((node, pos) => {
+    if (node.type.name === 'paragraph') {
+      const paraHTML = serializer.serializeFragment(node.content)
+      const tempParaDiv = document.createElement('div')
+      tempParaDiv.appendChild(paraHTML.cloneNode(true))
+      const paraHTMLStr = tempParaDiv.innerHTML
+      
+      // 提取段落样式（从第一个 span 或 p 标签）
+      const parser = new DOMParser()
+      const paraDoc = parser.parseFromString(`<div>${paraHTMLStr}</div>`, 'text/html')
+      const firstElement = paraDoc.body.querySelector('span, p')
+      const styles = firstElement ? (firstElement as HTMLElement).getAttribute('style') || '' : ''
+      
+      paragraphStructures.push({
+        text: node.textContent,
+        html: paraHTMLStr,
+        styles
+      })
+    }
+    return true
+  })
+  
   const info: SelectionInfo = {
     hasSelection,
     selectedText,
@@ -334,6 +388,9 @@ const handleGetSelectionInfo = ({ elementId, callback }: GetSelectionInfoPayload
     to,
     fullContent,
     elementId: props.elementId,
+    selectedHTML,
+    fullHTML,
+    paragraphStructures,
   }
   
   callback(info)

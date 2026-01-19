@@ -19,6 +19,7 @@ console.log(`   实际使用路径: ${DATA_DIR}`)
 
 import express from 'express'
 import cors from 'cors'
+import compression from 'compression'
 import toolsRouter from './routes/tools.js'
 import aipptChatRouter from './routes/aipptChat.js'
 import imagesRouter from './routes/images.js'
@@ -35,6 +36,24 @@ const PORT = process.env.PORT || 5001
 
 // 中间件
 app.use(cors())
+
+// 启用 gzip 压缩（优化：可减少70-80%的传输大小）
+app.use(compression({
+  // 只压缩超过 1KB 的响应
+  threshold: 1024,
+  // 压缩级别（1-9，6是默认值，平衡压缩率和速度）
+  level: 6,
+  // 过滤函数：决定哪些响应需要压缩
+  filter: (req, res) => {
+    // 如果请求明确不需要压缩，则跳过
+    if (req.headers['x-no-compression']) {
+      return false
+    }
+    // 使用默认的压缩过滤器
+    return compression.filter(req, res)
+  }
+}))
+
 // 增加请求体大小限制到100MB，以支持大文档内容传输（PPT文档可能包含大量图片数据）
 app.use(express.json({ limit: '100mb' }))
 app.use(express.urlencoded({ extended: true, limit: '100mb' }))

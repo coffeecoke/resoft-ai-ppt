@@ -3,9 +3,10 @@ import { SERVER_URL } from './index'
 
 /**
  * 筛选参数接口
+ * ⚠️ 注意：product 数组中的值必须是产品的 code，不是 name
  */
 export interface FilterParams {
-  product?: string[]
+  product?: string[]  // 产品 code 数组
   customer?: string
   industry?: string[]
   audience?: string[]

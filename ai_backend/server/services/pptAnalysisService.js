@@ -387,33 +387,36 @@ ${slideText}
       }
     })
     
-    // 关联分类信息 (🔄 已更新：从 product_catalogs 表读取)
+    // 关联分类信息：直接查询 product_catalogs 表（不通过产品）
     const results = []
     
-    // 获取通用产品ID
-    const GENERAL_PRODUCT_CODE = 'general_ppt_categories'
-    const generalProduct = await prisma.products.findFirst({
-      where: { code: GENERAL_PRODUCT_CODE }
+    // 批量查询所有分类，建立 code -> name 映射（提高性能）
+    const allCategories = await prisma.product_catalogs.findMany({
+      where: {
+        is_active: true
+      },
+      select: {
+        code: true,
+        name: true
+      }
     })
     
-    if (!generalProduct) {
-      throw new Error('未找到通用PPT分类产品')
-    }
+    const categoryMap = new Map()
+    allCategories.forEach(cat => {
+      if (cat.code) {
+        categoryMap.set(cat.code, cat.name)
+      }
+    })
     
     for (const thumb of thumbnails) {
-      const category = await prisma.product_catalogs.findFirst({
-        where: {
-          product_id: generalProduct.id,
-          code: thumb.page_type
-        }
-      })
+      const categoryName = categoryMap.get(thumb.page_type)
       
       results.push({
         thumbnailId: thumb.id,
         slideId: thumb.slide_id,
         slideIndex: thumb.slide_index,
         categoryCode: thumb.page_type,
-        categoryName: category?.name || '未知分类',
+        categoryName: categoryName || '未知分类',
         confidence: thumb.page_type_confidence,
         analyzedAt: thumb.analyzed_at,
         thumbnailUrl: thumb.url || null  // 添加缩略图URL

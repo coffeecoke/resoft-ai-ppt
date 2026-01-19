@@ -1,8 +1,34 @@
 <template>
-  <!-- 数据加载中的遮罩 -->
+  <!-- 数据加载中的骨架屏 -->
   <div v-if="dataLoading" class="editor-loading">
-    <div class="loading-spinner"></div>
-    <div class="loading-text">{{ loadingMessage }}</div>
+    <div class="loading-skeleton">
+      <!-- 顶部工具栏骨架 -->
+      <div class="skeleton-header">
+        <div class="skeleton-bar"></div>
+      </div>
+
+      <!-- 主体内容骨架 -->
+      <div class="skeleton-content">
+        <!-- 左侧缩略图骨架 -->
+        <div class="skeleton-left">
+          <div class="skeleton-thumb" v-for="i in 5" :key="i"></div>
+        </div>
+
+        <!-- 中间画布骨架 -->
+        <div class="skeleton-center">
+          <div class="skeleton-canvas">
+            <div class="loading-spinner"></div>
+            <div class="loading-text">{{ loadingMessage || '正在加载文档...' }}</div>
+            <div class="loading-tip">首次加载可能需要几秒钟</div>
+          </div>
+        </div>
+
+        <!-- 右侧工具栏骨架 -->
+        <div class="skeleton-right">
+          <div class="skeleton-panel"></div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- 编辑器主界面 -->
@@ -145,12 +171,71 @@ usePasteEvent()
 .editor-loading {
   position: fixed;
   inset: 0;
+  background: #f5f5f7;
+  z-index: 9999;
+  overflow: hidden;
+}
+
+.loading-skeleton {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.skeleton-header {
+  height: 40px;
+  background: white;
+  border-bottom: 1px solid #e5e5e5;
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+
+  .skeleton-bar {
+    width: 100%;
+    height: 24px;
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: skeleton-loading 1.5s ease-in-out infinite;
+    border-radius: 4px;
+  }
+}
+
+.skeleton-content {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.skeleton-left {
+  width: 160px;
+  background: white;
+  border-right: 1px solid #e5e5e5;
+  padding: 10px;
+  flex-shrink: 0;
+
+  .skeleton-thumb {
+    width: 100%;
+    height: 80px;
+    margin-bottom: 10px;
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: skeleton-loading 1.5s ease-in-out infinite;
+    border-radius: 4px;
+  }
+}
+
+.skeleton-center {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f5f5f7;
+}
+
+.skeleton-canvas {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  background: #f5f5f5;
-  z-index: 9999;
   gap: 16px;
 
   .loading-spinner {
@@ -163,8 +248,40 @@ usePasteEvent()
   }
 
   .loading-text {
-    font-size: 14px;
-    color: rgba(0, 0, 0, 0.65);
+    font-size: 16px;
+    font-weight: 500;
+    color: rgba(0, 0, 0, 0.85);
+  }
+
+  .loading-tip {
+    font-size: 13px;
+    color: rgba(0, 0, 0, 0.45);
+  }
+}
+
+.skeleton-right {
+  width: 260px;
+  background: white;
+  border-left: 1px solid #e5e5e5;
+  padding: 16px;
+  flex-shrink: 0;
+
+  .skeleton-panel {
+    width: 100%;
+    height: 200px;
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: skeleton-loading 1.5s ease-in-out infinite;
+    border-radius: 4px;
+  }
+}
+
+@keyframes skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
   }
 }
 

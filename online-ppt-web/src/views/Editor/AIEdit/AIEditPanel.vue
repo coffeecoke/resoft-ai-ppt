@@ -345,6 +345,9 @@ const polishContext = ref({
   from: 0,                // 选中起始位置
   to: 0,                  // 选中结束位置
   fullContent: '',        // 完整文本内容
+  selectedHTML: '',       // 选中部分的 HTML（如果有选中）
+  fullHTML: '',           // 完整内容的 HTML
+  paragraphStructures: [] as Array<{ text: string; html: string; styles: string }>,  // 段落结构信息
   
   requirement: '',        // 用户输入的润色要求
   originalContent: null as any,  // 原始内容
@@ -510,12 +513,27 @@ const startTextPolishWithInfo = (selectionInfo: SelectionInfo) => {
     from: selectionInfo.from,
     to: selectionInfo.to,
     fullContent: selectionInfo.fullContent,
+    selectedHTML: selectionInfo.selectedHTML || '',
+    fullHTML: selectionInfo.fullHTML || '',
+    paragraphStructures: selectionInfo.paragraphStructures || [],
     scope: '',
     requirement: '',
     originalContent: null,
     polishedContent: null,
     explanation: '',
   }
+  
+  console.log('[startTextPolishWithInfo] 保存的HTML结构信息:', {
+    hasSelection: selectionInfo.hasSelection,
+    fullHTML: selectionInfo.fullHTML?.substring(0, 200),
+    selectedHTML: selectionInfo.selectedHTML?.substring(0, 200),
+    paragraphStructuresCount: selectionInfo.paragraphStructures?.length || 0,
+    paragraphStructures: selectionInfo.paragraphStructures?.map(p => ({
+      text: p.text.substring(0, 50),
+      html: p.html.substring(0, 100),
+      styles: p.styles
+    }))
+  })
   
   // 显示提示消息（带使用建议）
   const contentDesc = selectionInfo.hasSelection
@@ -976,30 +994,69 @@ const replaceTextContent = (html: string, newText: string): string => {
     const parser = new DOMParser()
     const doc = parser.parseFromString(html, 'text/html')
     
-    // 遍历所有文本节点，替换文本内容
-    const replaceTextNodes = (node: Node) => {
-      if (node.nodeType === Node.TEXT_NODE) {
-        // 找到文本节点，替换内容
-        if (node.textContent?.trim()) {
-          node.textContent = newText
-          return true  // 只替换第一个文本节点
-        }
-      } else if (node.nodeType === Node.ELEMENT_NODE) {
-        // 递归处理子节点
-        for (const child of Array.from(node.childNodes)) {
-          if (replaceTextNodes(child)) {
-            return true  // 已替换，停止
+    // 检测是否有多个段落
+    const paragraphs = doc.body.querySelectorAll('p')
+    const newTextParagraphs = newText.split(/\n+/).filter(p => p.trim())
+    
+    if (paragraphs.length > 1 && newTextParagraphs.length > 1) {
+      // 多段落：按段落替换，保留每个段落的样式
+      paragraphs.forEach((para, index) => {
+        if (index < newTextParagraphs.length) {
+          // 找到第一个有样式的 span
+          const firstStyledSpan = para.querySelector('span[style]') as HTMLElement
+          if (firstStyledSpan) {
+            const style = firstStyledSpan.getAttribute('style') || ''
+            // 清空段落内容，用新文本替换
+            para.innerHTML = `<span style="${style}">${newTextParagraphs[index].trim()}</span>`
+          } else {
+            // 没有样式 span，直接替换文本内容
+            const firstTextNode = Array.from(para.childNodes).find(
+              node => node.nodeType === Node.TEXT_NODE && node.textContent?.trim()
+            ) as Text | undefined
+            if (firstTextNode) {
+              firstTextNode.textContent = newTextParagraphs[index].trim()
+            } else {
+              para.textContent = newTextParagraphs[index].trim()
+            }
           }
         }
+      })
+      
+      // 如果新段落数多于原段落数，添加新段落（使用最后一个段落的样式）
+      if (newTextParagraphs.length > paragraphs.length) {
+        const lastPara = paragraphs[paragraphs.length - 1]
+        const lastStyledSpan = lastPara.querySelector('span[style]') as HTMLElement
+        const defaultStyle = lastStyledSpan ? lastStyledSpan.getAttribute('style') || 'font-size: 12.4px; color: rgb(15, 20, 35);' : 'font-size: 12.4px; color: rgb(15, 20, 35);'
+        
+        for (let i = paragraphs.length; i < newTextParagraphs.length; i++) {
+          const newPara = document.createElement('p')
+          newPara.innerHTML = `<span style="${defaultStyle}">${newTextParagraphs[i].trim()}</span>`
+          doc.body.appendChild(newPara)
+        }
       }
-      return false
+      
+      return doc.body.innerHTML
+    } else {
+      // 单段落：替换第一个文本节点
+      const replaceTextNodes = (node: Node): boolean => {
+        if (node.nodeType === Node.TEXT_NODE) {
+          if (node.textContent?.trim()) {
+            node.textContent = newText
+            return true
+          }
+        } else if (node.nodeType === Node.ELEMENT_NODE) {
+          for (const child of Array.from(node.childNodes)) {
+            if (replaceTextNodes(child)) {
+              return true
+            }
+          }
+        }
+        return false
+      }
+      
+      replaceTextNodes(doc.body)
+      return doc.body.innerHTML
     }
-    
-    // 从 body 开始替换
-    replaceTextNodes(doc.body)
-    
-    // 返回 body 的 innerHTML，保留所有样式标签
-    return doc.body.innerHTML
   } catch (e) {
     console.error('DOM 解析失败，使用降级方案:', e)
   }
@@ -1524,7 +1581,7 @@ const handleSmartPolish = async (requirement: string) => {
       // 范围选择模式需要完整的 slide 元素
       requestData.context.currentSlide = currentSlide.value
     } else if (polishContext.value.mode === 'text_editing') {
-      // 文本编辑模式：传递详细的选中信息
+      // 文本编辑模式：传递详细的选中信息和 HTML 结构
       requestData.polishContext = {
         elementId: polishContext.value.elementId,
         hasSelection: polishContext.value.hasSelection,
@@ -1532,6 +1589,9 @@ const handleSmartPolish = async (requirement: string) => {
         from: polishContext.value.from,
         to: polishContext.value.to,
         fullContent: polishContext.value.fullContent,
+        // 【新增】传递 HTML 结构，让 AI 返回带标签的内容
+        selectedHTML: polishContext.value.selectedHTML || '',
+        fullHTML: polishContext.value.fullHTML || '',
       }
     }
     
@@ -1638,29 +1698,160 @@ const applyPolish = () => {
 }
 
 /**
+ * 【新增】将润色后的纯文本转换为保留样式的 HTML
+ */
+const convertPolishedTextToHTML = (polishedText: string, originalHTML: string, paragraphStructures: Array<{ text: string; html: string; styles: string }>): string => {
+  if (!polishedText) return originalHTML || ''
+  
+  // 如果原 HTML 为空，直接返回新文本包装
+  if (!originalHTML) {
+    return `<p style=""><span style="font-size: 12.4px;"><span style="color: rgb(15, 20, 35);">${polishedText}</span></span></p>`
+  }
+  
+  // 检测润色后的文本是否包含多个段落（通过换行符分割）
+  const polishedParagraphs = polishedText.split(/\n+/).filter(p => p.trim())
+  const originalParagraphCount = paragraphStructures.length
+  
+  console.log('[convertPolishedTextToHTML] 调试信息:', {
+    polishedParagraphsCount: polishedParagraphs.length,
+    originalParagraphCount,
+    originalHTML: originalHTML.substring(0, 200),
+    paragraphStructures: paragraphStructures.map(p => ({
+      text: p.text.substring(0, 50),
+      html: p.html.substring(0, 100),
+      styles: p.styles
+    }))
+  })
+  
+  // 如果只有一个段落，使用简单替换
+  if (polishedParagraphs.length === 1 && originalParagraphCount <= 1) {
+    return replaceTextContent(originalHTML, polishedText)
+  }
+  
+  // 多个段落：智能匹配和保留样式
+  if (polishedParagraphs.length > 1 && originalParagraphCount > 0) {
+    const resultParagraphs: string[] = []
+    
+    polishedParagraphs.forEach((polishedPara, index) => {
+      // 找到对应的原始段落（按顺序匹配）
+      const originalPara = paragraphStructures[Math.min(index, originalParagraphCount - 1)]
+      
+      if (originalPara && originalPara.html) {
+        // 【改进】提取原始段落的完整 HTML 结构，智能替换文本内容
+        const parser = new DOMParser()
+        const paraDoc = parser.parseFromString(`<div>${originalPara.html}</div>`, 'text/html')
+        
+        // 收集所有文本节点（按文档顺序）
+        const textNodes: Text[] = []
+        const collectTextNodes = (node: Node) => {
+          if (node.nodeType === Node.TEXT_NODE) {
+            if (node.textContent?.trim()) {
+              textNodes.push(node as Text)
+            }
+          } else if (node.nodeType === Node.ELEMENT_NODE) {
+            for (const child of Array.from(node.childNodes)) {
+              collectTextNodes(child)
+            }
+          }
+        }
+        collectTextNodes(paraDoc.body)
+        
+        // 替换文本节点：将润色后的文本放到第一个文本节点，清空其他节点
+        // 这样可以保留 HTML 结构（包括多个 span），但文本是连贯的
+        if (textNodes.length > 0) {
+          // 将润色后的文本全部放到第一个文本节点
+          textNodes[0].textContent = polishedPara.trim()
+          // 清空其他文本节点，保留 span 结构
+          for (let i = 1; i < textNodes.length; i++) {
+            textNodes[i].textContent = ''
+          }
+        } else {
+          // 如果没有文本节点，在第一个 span 中插入文本
+          const firstSpan = paraDoc.body.querySelector('span')
+          if (firstSpan) {
+            const textNode = document.createTextNode(polishedPara.trim())
+            firstSpan.insertBefore(textNode, firstSpan.firstChild)
+          }
+        }
+        
+        // 保留完整的 HTML 结构（包括嵌套的 span）
+        const preservedHTML = paraDoc.body.innerHTML
+        resultParagraphs.push(`<p style="">${preservedHTML}</p>`)
+      } else {
+        // 没有对应的原始段落，使用默认样式
+        resultParagraphs.push(`<p style=""><span style="font-size: 12.4px;"><span style="color: rgb(15, 20, 35);">${polishedPara.trim()}</span></span></p>`)
+      }
+    })
+    
+    const result = resultParagraphs.join('')
+    console.log('[convertPolishedTextToHTML] 生成的HTML:', result.substring(0, 500))
+    return result
+  }
+  
+  // 降级：使用简单替换
+  return replaceTextContent(originalHTML, polishedText)
+}
+
+/**
  * 【新增】文本编辑模式：精准替换
  */
 const applyPolishByTextRange = () => {
   const { elementId, hasSelection, from, to, polishedContent } = polishContext.value
   
+  console.log('[applyPolishByTextRange] 调试信息:', {
+    elementId,
+    hasSelection,
+    polishedContent: polishedContent?.substring(0, 200),
+    isHTML: /<[^>]+>/.test(polishedContent || '')
+  })
+  
   if (!currentSlide.value) return
   
+  // 【改进】检测 polishedContent 是否包含 HTML 标签
+  const isHTMLContent = polishedContent && /<[^>]+>/.test(polishedContent)
+  
   if (hasSelection) {
-    // 替换选中部分
-    emitter.emit(EmitterEvents.REPLACE_TEXT_RANGE, {
-      elementId,
-      from,
-      to,
-      newText: polishedContent,
-    })
+    if (isHTMLContent) {
+      // 如果返回的是 HTML，需要提取纯文本用于替换选中部分
+      const parser = new DOMParser()
+      const doc = parser.parseFromString(`<div>${polishedContent}</div>`, 'text/html')
+      const textContent = doc.body.textContent || polishedContent
+      emitter.emit(EmitterEvents.REPLACE_TEXT_RANGE, {
+        elementId,
+        from,
+        to,
+        newText: textContent,
+      })
+    } else {
+      // 纯文本，直接替换
+      emitter.emit(EmitterEvents.REPLACE_TEXT_RANGE, {
+        elementId,
+        from,
+        to,
+        newText: polishedContent,
+      })
+    }
   } else {
     // 替换整个内容
     const element = currentSlide.value.elements.find(el => el.id === elementId)
     if (element) {
+      let newHTML = polishedContent
+      
+      if (isHTMLContent) {
+        // AI 返回的是 HTML，直接使用
+        console.log('[applyPolishByTextRange] 使用AI返回的HTML:', newHTML.substring(0, 500))
+      } else {
+        // AI 返回的是纯文本，需要转换为 HTML（降级处理）
+        console.warn('[applyPolishByTextRange] AI返回的是纯文本，使用降级转换')
+        const originalHTML = polishContext.value.fullHTML || (element.type === 'text' ? element.content : (element as any).text?.content || '')
+        const structures = polishContext.value.paragraphStructures || []
+        newHTML = convertPolishedTextToHTML(polishedContent, originalHTML, structures)
+      }
+      
       if (element.type === 'text') {
         slidesStore.updateElement({
           id: elementId,
-          props: { content: replaceTextContent(element.content || '', polishedContent) }
+          props: { content: newHTML }
         })
       } else if (element.type === 'shape' && (element as any).text) {
         const shapeEl = element as any
@@ -1669,7 +1860,7 @@ const applyPolishByTextRange = () => {
           props: {
             text: {
               ...shapeEl.text,
-              content: replaceTextContent(shapeEl.text.content || '', polishedContent)
+              content: newHTML
             }
           }
         })

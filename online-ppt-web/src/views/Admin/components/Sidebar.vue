@@ -2,7 +2,7 @@
   <div class="sidebar" :class="{ collapsed: isCollapsed }">
     <div class="logo">
       <img v-if="!isCollapsed" src="/logo.png" alt="Logo" class="logo-img" />
-      <span v-if="!isCollapsed" class="logo-text">管理后台</span>
+      <span v-if="!isCollapsed" class="logo-text">售前工作台管理</span>
       <span v-else class="logo-text-mini">管理</span>
     </div>
     
@@ -113,7 +113,7 @@ defineExpose({
     font-weight: 600;
 
     .logo-img {
-      height: 32px;
+      height: 20px;
       margin-right: 8px;
     }
 
