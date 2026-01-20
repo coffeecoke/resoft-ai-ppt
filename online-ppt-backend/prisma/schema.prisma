@@ -151,6 +151,7 @@ model products {
   cover                String?                @db.VarChar(500) /// 产品封面图URL
   sort_order           Int                    @default(0) /// 排序字段
   is_active            Boolean                @default(true) /// 是否启用
+  is_featured          Boolean                @default(false) /// 是否重点产品
   created_at           DateTime               @default(now()) /// 创建时间
   updated_at           DateTime /// 更新时间
   documents            documents[]

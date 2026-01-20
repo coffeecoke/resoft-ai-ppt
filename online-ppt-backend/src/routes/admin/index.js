@@ -10,6 +10,7 @@ import dictRouter from './system/dict.js'
 import roleRouter from './system/role.js'
 import userRouter from './system/user.js'
 import deptRouter from './system/dept.js'
+import productRouter from './system/product.js'
 
 const router = Router()
 
@@ -21,6 +22,7 @@ router.use('/system/dict', dictRouter)
 router.use('/system/role', roleRouter)
 router.use('/system/user', userRouter)
 router.use('/system/dept', deptRouter)
+router.use('/system/product', productRouter)
 
 export default router
 
