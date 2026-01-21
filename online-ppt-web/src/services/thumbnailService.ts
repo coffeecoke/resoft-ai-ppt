@@ -182,8 +182,50 @@ export async function rebuildIndex(): Promise<{
   }
 }
 
+/**
+ * 删除指定幻灯片的缩略图
+ */
+export async function deleteThumbnail(
+  documentId: string,
+  slideId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const response = await axios.delete(`${SERVER_URL}/thumbnails/${documentId}/${slideId}`)
+    return response.data
+  } catch (error: any) {
+    console.error('[预览图服务] 删除缩略图失败:', error)
+    return {
+      success: false,
+      error: error.response?.data?.error || error.message || '删除缩略图失败'
+    }
+  }
+}
 
-
+/**
+ * 批量删除缩略图
+ */
+export async function deleteThumbnailsBatch(
+  documentId: string,
+  slideIds: string[]
+): Promise<{
+  success: boolean
+  message?: string
+  results?: Array<{ slideId: string; success: boolean; error?: string }>
+  error?: string
+}> {
+  try {
+    const response = await axios.delete(`${SERVER_URL}/thumbnails/batch`, {
+      data: { documentId, slideIds }
+    })
+    return response.data
+  } catch (error: any) {
+    console.error('[预览图服务] 批量删除缩略图失败:', error)
+    return {
+      success: false,
+      error: error.response?.data?.error || error.message || '批量删除缩略图失败'
+    }
+  }
+}
 
 
 

@@ -355,6 +355,7 @@ router.post('/:id/publish', async (req, res) => {
 
     res.json({
       success: true,
+      message: '发布成功，缩略图正在后台异步生成中',
       data: {
         id,
         status: 'published',

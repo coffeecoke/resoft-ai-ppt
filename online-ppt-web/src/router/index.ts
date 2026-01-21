@@ -119,6 +119,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/Admin/System/Dict/index.vue'),
         meta: { title: '字典管理' }
       },
+      {
+        path: 'system/product',
+        name: 'SystemProduct',
+        component: () => import('@/views/Admin/System/Product/index.vue'),
+        meta: { title: '产品解决方案' }
+      },
       // 文档管理
       {
         path: 'document/template',

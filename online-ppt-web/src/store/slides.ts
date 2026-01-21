@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { omit } from 'lodash'
 import type { Slide, SlideTheme, PPTElement, PPTAnimation, SlideTemplate } from '@/types/slides'
+import type { DocumentMetadata } from '@/services/documentService'
 
 interface RemovePropData {
   id: string
@@ -26,6 +27,7 @@ export interface SlidesState {
   viewportSize: number
   viewportRatio: number
   templates: SlideTemplate[]
+  metadata: DocumentMetadata | null
 }
 
 export const useSlidesStore = defineStore('slides', {
@@ -52,9 +54,10 @@ export const useSlidesStore = defineStore('slides', {
     slideIndex: 0, // 当前页面索引
     viewportSize: 1000, // 可视区域宽度基数
     viewportRatio: 0.5625, // 可视区域比例，默认16:9
-    // 模板列表不再在前端硬编码，改由后端 /templates 提供，
+    // 模板列表不再在前端硬编码,改由后端 /templates 提供，
     // 这里只保留一个空数组作为占位，避免旧代码访问报错。
     templates: [], // 模板
+    metadata: null, // 文档元信息
   }),
 
   getters: {
@@ -125,11 +128,15 @@ export const useSlidesStore = defineStore('slides', {
     setSlides(slides: Slide[]) {
       this.slides = slides
     },
-  
+
     setTemplates(templates: SlideTemplate[]) {
       this.templates = templates
     },
-  
+
+    setMetadata(metadata: DocumentMetadata | null) {
+      this.metadata = metadata
+    },
+
     addSlide(slide: Slide | Slide[]) {
       const slides = Array.isArray(slide) ? slide : [slide]
       for (const slide of slides) {

@@ -40,6 +40,11 @@ export const adminMenus: MenuItem[] = [
         path: '/admin/system/dict',
         name: '字典管理',
         meta: { title: '字典管理' }
+      },
+      {
+        path: '/admin/system/product',
+        name: '产品解决方案',
+        meta: { title: '产品解决方案' }
       }
     ]
   },

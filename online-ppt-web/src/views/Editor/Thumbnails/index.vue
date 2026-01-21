@@ -1,10 +1,25 @@
 <template>
-  <div 
+  <div
     class="thumbnails"
     @mousedown="() => setThumbnailsFocus(true)"
     v-click-outside="() => setThumbnailsFocus(false)"
     v-contextmenu="contextmenusThumbnails"
   >
+    <!-- 删除确认对话框 -->
+    <Modal v-model:visible="deleteConfirmVisible" :width="400">
+      <div class="delete-confirm-modal">
+        <div class="modal-title">确认删除</div>
+        <div class="modal-content">
+          <p>确定要删除选中的 {{ selectedSlidesIndex.length }} 个幻灯片吗？</p>
+          <p class="warning-text">此操作不可恢复</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-cancel" @click="deleteConfirmVisible = false">取消</button>
+          <button class="btn-confirm" @click="confirmDelete">确定删除</button>
+        </div>
+      </div>
+    </Modal>
+
     <div class="add-slide">
       <div class="btn" @click="createSlide()"><IconPlus class="icon" />添加幻灯片</div>
       <Popover trigger="click" placement="bottom-start" v-model:value="presetLayoutPopoverVisible" center>
@@ -90,6 +105,7 @@ import type { Slide } from '@/types/slides'
 import ThumbnailSlide from '@/views/components/ThumbnailSlide/index.vue'
 import Templates from './Templates.vue'
 import Popover from '@/components/Popover.vue'
+import Modal from '@/components/Modal.vue'
 import Draggable from 'vuedraggable'
 
 const mainStore = useMainStore()
@@ -102,8 +118,12 @@ const { ctrlKeyState, shiftKeyState } = storeToRefs(keyboardStore)
 const { slidesLoadLimit } = useLoadSlides()
 
 const selectedSlidesIndex = computed(() => [..._selectedSlidesIndex.value, slideIndex.value])
+const selectedSlides = computed(() => slides.value.filter((item, index) => selectedSlidesIndex.value.includes(index)))
+const selectedSlidesId = computed(() => selectedSlides.value.map(item => item.id))
 
 const presetLayoutPopoverVisible = ref(false)
+const deleteConfirmVisible = ref(false)
+let pendingDeleteSlidesId: string[] = []
 
 const hasSection = computed(() => {
   return slides.value.some(item => item.sectionTag)
@@ -257,6 +277,19 @@ const insertAllTemplates = (slides: Slide[]) => {
   else addSlidesFromData(slides)
 }
 
+// 显示删除确认对话框
+const showDeleteConfirm = (targetSlidesId = selectedSlidesId.value) => {
+  pendingDeleteSlidesId = [...targetSlidesId]
+  deleteConfirmVisible.value = true
+}
+
+// 确认删除
+const confirmDelete = () => {
+  deleteConfirmVisible.value = false
+  deleteSlide(pendingDeleteSlidesId)
+  pendingDeleteSlidesId = []
+}
+
 const contextmenusSection = (el: HTMLElement): ContextmenuItem[] => {
   const sectionId = el.dataset.sectionId!
 
@@ -346,7 +379,7 @@ const contextmenusThumbnailItem = (): ContextmenuItem[] => {
     {
       text: '删除页面',
       subText: 'Delete',
-      handler: () => deleteSlide(),
+      handler: () => showDeleteConfirm(),
     },
     {
       text: '增加节',
@@ -537,6 +570,63 @@ const contextmenusThumbnailItem = (): ContextmenuItem[] => {
     outline: 0;
     padding: 0;
     font-size: 12px;
+  }
+}
+
+.delete-confirm-modal {
+  .modal-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    color: #333;
+  }
+
+  .modal-content {
+    margin-bottom: 20px;
+    color: #666;
+    line-height: 1.6;
+
+    p {
+      margin: 8px 0;
+    }
+
+    .warning-text {
+      color: #ff4d4f;
+      font-size: 13px;
+    }
+  }
+
+  .modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+
+    button {
+      padding: 8px 20px;
+      border-radius: 4px;
+      font-size: 14px;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+
+      &.btn-cancel {
+        background: #f5f5f5;
+        color: #666;
+
+        &:hover {
+          background: #e8e8e8;
+        }
+      }
+
+      &.btn-confirm {
+        background: #ff4d4f;
+        color: white;
+
+        &:hover {
+          background: #ff7875;
+        }
+      }
+    }
   }
 }
 </style>
