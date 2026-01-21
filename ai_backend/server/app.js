@@ -18,6 +18,7 @@ const productsRoutes = require('./routes/productsRoutes')
 const sessionsRoutes = require('./routes/sessionsRoutes')
 const autoProcessRoutes = require('./routes/autoProcessRoutes')
 const qaManagementRoutes = require('./routes/qaManagementRoutes')
+const presalesAnalysisRoutes = require('./routes/presalesAnalysisRoutes')
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -83,6 +84,9 @@ app.use('/api/auto-process', autoProcessRoutes)
 
 // 路由：问答对管理（新增）
 app.use('/api/qa', qaManagementRoutes)
+
+// 路由：售前交流综合分析（新增）
+app.use('/api/presales-analysis', presalesAnalysisRoutes)
 
 // 路由：文件提取接口
 app.post('/api/extract', upload.single('file'), async (req, res) => {
@@ -346,6 +350,13 @@ app.listen(PORT, () => {
   console.log('  - 处理日志: GET    /api/auto-process/logs')
   console.log('  - 清空日志: DELETE /api/auto-process/logs')
   console.log('  - 立即执行: POST   /api/auto-process/run-once')
+  console.log('')
+  console.log('  [售前交流综合分析 - 新增 🆕]')
+  console.log('  - 分析对话: POST   /api/presales-analysis/analyze')
+  console.log('  - 分析转录: POST   /api/presales-analysis/analyze/transcription/:id')
+  console.log('  - 分析会话: POST   /api/presales-analysis/analyze/session/:id')
+  console.log('  - 流式分析: POST   /api/presales-analysis/analyze/stream')
+  console.log('  - 测试路由: GET    /api/presales-analysis/test')
   console.log('')
   console.log('🤖 支持的AI模型 (20+):')
   console.log('  🔥 推荐: gpt-4o-mini, gpt-4o, deepseek-chat')
