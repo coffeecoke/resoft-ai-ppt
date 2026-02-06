@@ -13,11 +13,12 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
   const documentsFromAPI = ref<DocumentMetadata[]>([])
   const isLoadingDocuments = ref(false)
 
-  // 🆕 加载文档列表（支持筛选参数）
+  // 加载文档列表（支持筛选参数）
   const loadDocuments = async (params?: {
     pageType?: string[]
     industry?: string[]
     audience?: string[]
+    language?: string[]
     keyword?: string
   }) => {
     try {
@@ -40,6 +41,10 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
       if (params?.audience && params.audience.length > 0) {
         queryParams.audience = params.audience.join(',')
         console.log('[Sales首页] 🔍 交流对象筛选:', params.audience)
+      }
+      if (params?.language && params.language.length > 0) {
+        queryParams.language = params.language.join(',')
+        console.log('[Sales首页] 🔍 语言筛选:', params.language)
       }
       if (params?.keyword) {
         queryParams.keyword = params.keyword
@@ -206,11 +211,17 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
       })
     }
     
-    // 4. 语言筛选（多选，满足任一即可）
+    // 4. 语言筛选（多选，满足任一即可；兼容中文/英文与 English/Chinese 等写法）
     if (pptFilters.language && pptFilters.language.length > 0) {
+      const langMap: Record<string, string[]> = { '中文': ['中文', 'Chinese', 'zh'], '英文': ['英文', 'English', 'en'] }
       list = list.filter((x: any) => {
         if (!x.language) return false
-        return pptFilters.language.includes(x.language)
+        const docLang = (x.language || '').trim()
+        return pptFilters.language.some((selected: string) => {
+          if (selected === docLang) return true
+          const aliases = langMap[selected]
+          return aliases && aliases.includes(docLang)
+        })
       })
     }
     
@@ -221,46 +232,23 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
     return list
   })
   
-  // 🆕 监听筛选条件变化，重新加载数据
+  // 根据 pptFilters 构建 API 请求参数（与 watch / 父组件共用）
+  const buildDocumentParams = (pf: typeof pptFilters): Record<string, unknown> => {
+    const params: any = {}
+    if (pf.productIntro && pf.productIntro.length > 0) params.pageType = pf.productIntro
+    if (pf.industry && pf.industry.length > 0) params.industry = pf.industry
+    if (pf.audience && pf.audience.length > 0) params.audience = pf.audience
+    if (pf.language && pf.language.length > 0) params.language = pf.language
+    if (pf.customerName && pf.customerName.trim() !== '') params.keyword = pf.customerName
+    return params
+  }
+
+  // 监听筛选条件变化，重新加载数据（直接深度监听 pptFilters，确保子组件修改能触发）
   watch(
-    () => ({
-      productIntro: pptFilters.productIntro,
-      industry: pptFilters.industry,
-      audience: pptFilters.audience,
-      customerName: pptFilters.customerName
-    }),
-    (newFilters, oldFilters) => {
-      console.log('[Sales首页] 🔄 筛选条件变化，重新加载数据:')
-      console.log('  - 新值:', newFilters)
-      console.log('  - 旧值:', oldFilters)
-      
-      // 检查是否有有效的筛选条件
-      const hasFilters = 
-        (newFilters.productIntro && newFilters.productIntro.length > 0) ||
-        (newFilters.industry && newFilters.industry.length > 0) ||
-        (newFilters.audience && newFilters.audience.length > 0) ||
-        (newFilters.customerName && newFilters.customerName.trim() !== '')
-      
-      console.log('  - 是否有筛选条件:', hasFilters)
-      
-      // 构建请求参数，只传递非空值
-      const params: any = {}
-      if (newFilters.productIntro && newFilters.productIntro.length > 0) {
-        params.pageType = newFilters.productIntro
-      }
-      if (newFilters.industry && newFilters.industry.length > 0) {
-        params.industry = newFilters.industry
-      }
-      if (newFilters.audience && newFilters.audience.length > 0) {
-        params.audience = newFilters.audience
-      }
-      if (newFilters.customerName && newFilters.customerName.trim() !== '') {
-        params.keyword = newFilters.customerName
-      }
-      
-      console.log('  - 实际传递参数:', params)
-      console.log('  - 开始调用 loadDocuments，参数为:', JSON.stringify(params, null, 2))
-      
+    pptFilters,
+    (newVal) => {
+      const params = buildDocumentParams(newVal)
+      console.log('[Sales首页] 🔄 筛选条件变化，重新加载数据:', params)
       loadDocuments(params)
     },
     { deep: true }
@@ -420,6 +408,7 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
     documentsFromAPI,
     isLoadingDocuments,
     loadDocuments,
+    buildDocumentParams,
     
     // 方法
     resetFilters,

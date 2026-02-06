@@ -27,7 +27,12 @@ export function useDialogs() {
   // PDF对话框状态（如果需要）
   const pdfDialogVisible = ref(false)
   const pdfDetail = ref<any>(null)
-  
+
+  // 响应文件对话框状态（Home.vue ResponseFileDialog 使用）
+  const responseFileDialogVisible = ref(false)
+  const responseFileTitle = ref('')
+  const responseFileSlides = ref<any[]>([])
+
   // 打开PPT对话框
   const openPpt = async (item: any) => {
     console.log('[PPT弹框] 点击的卡片数据:', item)
@@ -180,7 +185,12 @@ export function useDialogs() {
     pdfDetail,
     openPdf,
     closePdfDialog,
-    
+
+    // 响应文件对话框
+    responseFileDialogVisible,
+    responseFileTitle,
+    responseFileSlides,
+
     // 统一处理
     openBrandItem,
   }

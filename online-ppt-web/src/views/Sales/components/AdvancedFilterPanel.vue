@@ -1,13 +1,13 @@
 <template>
   <div v-if="visible" class="advanced-filter-panel">
     <div class="advanced-filter-content">
-      <!-- PPT筛选 -->
-      <template v-if="activeTab === 'ppt'">
+      <!-- PPT筛选（含 ppt / ppt-new 标签页） -->
+      <template v-if="activeTab === 'ppt' || activeTab === 'ppt-new'">
         <div class="filter-section filter-section-inline">
           <h4 class="filter-section-title">客户名称</h4>
           <div class="filter-options">
             <el-input
-              :model-value="filters.ppt?.customerName"
+              :model-value="filters.pptFilters?.customerName"
               @update:model-value="updateFilter('ppt', 'customerName', $event)"
               placeholder="请输入客户名称"
               clearable
@@ -19,10 +19,26 @@
           <h4 class="filter-section-title">PPT目录</h4>
           <div class="filter-options">
             <el-checkbox-group 
-              :model-value="filters.ppt?.productIntro"
+              :model-value="filters.pptFilters?.productIntro"
               @update:model-value="updateFilter('ppt', 'productIntro', $event)"
             >
-              <div class="filter-row">
+              <!-- 有后台目录树时按父级分组展示（与 bat 一致：父集 + 二级） -->
+              <template v-if="pptCatalogTree && pptCatalogTree.length > 0">
+                <div v-for="parent in pptCatalogTree" :key="parent.id" class="filter-catalog-group">
+                  <div class="filter-catalog-parent">{{ parent.name }}</div>
+                  <div class="filter-row">
+                    <el-checkbox 
+                      v-for="child in (parent.children || [])" 
+                      :key="child.code" 
+                      :label="child.code"
+                    >
+                      {{ child.name }}
+                    </el-checkbox>
+                  </div>
+                </div>
+              </template>
+              <!-- 无接口数据时用本地字典兜底 -->
+              <div v-else class="filter-row">
                 <el-checkbox 
                   v-for="option in pptCatalogOptions" 
                   :key="option.value" 
@@ -38,7 +54,7 @@
           <h4 class="filter-section-title">行业</h4>
           <div class="filter-options">
             <el-checkbox-group 
-              :model-value="filters.ppt?.industry"
+              :model-value="filters.pptFilters?.industry"
               @update:model-value="updateFilter('ppt', 'industry', $event)"
             >
               <div class="filter-row">
@@ -57,7 +73,7 @@
           <h4 class="filter-section-title">交流对象</h4>
           <div class="filter-options">
             <el-checkbox-group 
-              :model-value="filters.ppt?.audience"
+              :model-value="filters.pptFilters?.audience"
               @update:model-value="updateFilter('ppt', 'audience', $event)"
             >
               <div class="filter-row">
@@ -76,7 +92,7 @@
           <h4 class="filter-section-title">语言</h4>
           <div class="filter-options">
             <el-checkbox-group 
-              :model-value="filters.ppt?.language"
+              :model-value="filters.pptFilters?.language"
               @update:model-value="updateFilter('ppt', 'language', $event)"
             >
               <div class="filter-row">
@@ -99,7 +115,7 @@
           <h4 class="filter-section-title">客户名称</h4>
           <div class="filter-options">
             <el-input
-              :model-value="filters.video?.customerName"
+              :model-value="filters.videoFilters?.customerName"
               @update:model-value="updateFilter('video', 'customerName', $event)"
               placeholder="请输入客户名称"
               clearable
@@ -111,7 +127,7 @@
           <h4 class="filter-section-title">客户属性</h4>
           <div class="filter-options">
             <el-checkbox-group 
-              :model-value="filters.video?.customerType"
+              :model-value="filters.videoFilters?.customerType"
               @update:model-value="updateFilter('video', 'customerType', $event)"
             >
               <div class="filter-row">
@@ -130,7 +146,7 @@
           <h4 class="filter-section-title">会议类型</h4>
           <div class="filter-options">
             <el-checkbox-group 
-              :model-value="filters.video?.meetingType"
+              :model-value="filters.videoFilters?.meetingType"
               @update:model-value="updateFilter('video', 'meetingType', $event)"
             >
               <div class="filter-row">
@@ -149,7 +165,7 @@
           <h4 class="filter-section-title">参会人员</h4>
           <div class="filter-options">
             <el-checkbox-group 
-              :model-value="filters.video?.participants"
+              :model-value="filters.videoFilters?.participants"
               @update:model-value="updateFilter('video', 'participants', $event)"
             >
               <div class="filter-row">
@@ -168,7 +184,7 @@
           <h4 class="filter-section-title">我方参与人员</h4>
           <div class="filter-options">
             <el-select
-              :model-value="filters.video?.ourParticipants"
+              :model-value="filters.videoFilters?.ourParticipants"
               @update:model-value="updateFilter('video', 'ourParticipants', $event)"
               multiple
               filterable
@@ -198,7 +214,7 @@
           <h4 class="filter-section-title">客户名称</h4>
           <div class="filter-options">
             <el-input
-              :model-value="filters.qa?.customerName"
+              :model-value="filters.qaFilters?.customerName"
               @update:model-value="updateFilter('qa', 'customerName', $event)"
               placeholder="请输入客户名称"
               clearable
@@ -210,7 +226,7 @@
           <h4 class="filter-section-title">客户行业</h4>
           <div class="filter-options">
             <el-checkbox-group 
-              :model-value="filters.qa?.customerIndustry"
+              :model-value="filters.qaFilters?.customerIndustry"
               @update:model-value="updateFilter('qa', 'customerIndustry', $event)"
             >
               <div class="filter-row">
@@ -229,7 +245,7 @@
           <h4 class="filter-section-title">提问人</h4>
           <div class="filter-options">
             <el-checkbox-group 
-              :model-value="filters.qa?.questioner"
+              :model-value="filters.qaFilters?.questioner"
               @update:model-value="updateFilter('qa', 'questioner', $event)"
             >
               <div class="filter-row">
@@ -248,7 +264,7 @@
           <h4 class="filter-section-title">交流阶段</h4>
           <div class="filter-options">
             <el-checkbox-group 
-              :model-value="filters.qa?.exchangeStage"
+              :model-value="filters.qaFilters?.exchangeStage"
               @update:model-value="updateFilter('qa', 'exchangeStage', $event)"
             >
               <div class="filter-row">
@@ -267,7 +283,7 @@
           <h4 class="filter-section-title">用户需求</h4>
           <div class="filter-options">
             <el-checkbox-group 
-              :model-value="filters.qa?.userNeeds"
+              :model-value="filters.qaFilters?.userNeeds"
               @update:model-value="updateFilter('qa', 'userNeeds', $event)"
             >
               <div class="filter-row">
@@ -286,7 +302,7 @@
           <h4 class="filter-section-title">问题类型</h4>
           <div class="filter-options">
             <el-checkbox-group 
-              :model-value="filters.qa?.questionType"
+              :model-value="filters.qaFilters?.questionType"
               @update:model-value="updateFilter('qa', 'questionType', $event)"
             >
               <div class="filter-row">
@@ -309,7 +325,7 @@
           <h4 class="filter-section-title">客户名称</h4>
           <div class="filter-options">
             <el-input
-              :model-value="filters.tender?.customerName"
+              :model-value="filters.tenderFilters?.customerName"
               @update:model-value="updateFilter('tender', 'customerName', $event)"
               placeholder="请输入客户名称"
               clearable
@@ -321,7 +337,7 @@
           <h4 class="filter-section-title">采购方式</h4>
           <div class="filter-options">
             <el-checkbox-group 
-              :model-value="filters.tender?.procurementMethod"
+              :model-value="filters.tenderFilters?.procurementMethod"
               @update:model-value="updateFilter('tender', 'procurementMethod', $event)"
             >
               <div class="filter-row">
@@ -340,7 +356,7 @@
           <h4 class="filter-section-title">项目需求概览</h4>
           <div class="filter-options">
             <el-checkbox-group 
-              :model-value="filters.tender?.projectOverview"
+              :model-value="filters.tenderFilters?.projectOverview"
               @update:model-value="updateFilter('tender', 'projectOverview', $event)"
             >
               <div class="filter-row">
@@ -359,7 +375,7 @@
           <h4 class="filter-section-title">技术要求</h4>
           <div class="filter-options">
             <el-checkbox-group 
-              :model-value="filters.tender?.technicalRequirements"
+              :model-value="filters.tenderFilters?.technicalRequirements"
               @update:model-value="updateFilter('tender', 'technicalRequirements', $event)"
             >
               <div class="filter-row">
@@ -378,7 +394,7 @@
           <h4 class="filter-section-title">资格与评审规则</h4>
           <div class="filter-options">
             <el-checkbox-group 
-              :model-value="filters.tender?.qualificationReview"
+              :model-value="filters.tenderFilters?.qualificationReview"
               @update:model-value="updateFilter('tender', 'qualificationReview', $event)"
             >
               <div class="filter-row">
@@ -397,7 +413,7 @@
           <h4 class="filter-section-title">合同与商务</h4>
           <div class="filter-options">
             <el-checkbox-group 
-              :model-value="filters.tender?.contractBusiness"
+              :model-value="filters.tenderFilters?.contractBusiness"
               @update:model-value="updateFilter('tender', 'contractBusiness', $event)"
             >
               <div class="filter-row">
@@ -420,7 +436,7 @@
           <h4 class="filter-section-title">客户名称</h4>
           <div class="filter-options">
             <el-input
-              :model-value="filters.response?.customerName"
+              :model-value="filters.responseFilters?.customerName"
               @update:model-value="updateFilter('response', 'customerName', $event)"
               placeholder="请输入客户名称"
               clearable
@@ -432,7 +448,7 @@
           <h4 class="filter-section-title">报价</h4>
           <div class="filter-options">
             <el-checkbox-group 
-              :model-value="filters.response?.quotation"
+              :model-value="filters.responseFilters?.quotation"
               @update:model-value="updateFilter('response', 'quotation', $event)"
             >
               <div class="filter-row">
@@ -451,7 +467,7 @@
           <h4 class="filter-section-title">投标状态</h4>
           <div class="filter-options">
             <el-checkbox-group 
-              :model-value="filters.response?.bidStatus"
+              :model-value="filters.responseFilters?.bidStatus"
               @update:model-value="updateFilter('response', 'bidStatus', $event)"
             >
               <div class="filter-row">
@@ -470,7 +486,7 @@
           <h4 class="filter-section-title">商务资质</h4>
           <div class="filter-options">
             <el-checkbox-group 
-              :model-value="filters.response?.businessQualification"
+              :model-value="filters.responseFilters?.businessQualification"
               @update:model-value="updateFilter('response', 'businessQualification', $event)"
             >
               <div class="filter-row">
@@ -489,7 +505,7 @@
           <h4 class="filter-section-title">技术方案</h4>
           <div class="filter-options">
             <el-checkbox-group 
-              :model-value="filters.response?.technicalSolution"
+              :model-value="filters.responseFilters?.technicalSolution"
               @update:model-value="updateFilter('response', 'technicalSolution', $event)"
             >
               <div class="filter-row">
@@ -508,7 +524,7 @@
           <h4 class="filter-section-title">实施与保障</h4>
           <div class="filter-options">
             <el-checkbox-group 
-              :model-value="filters.response?.implementationGuarantee"
+              :model-value="filters.responseFilters?.implementationGuarantee"
               @update:model-value="updateFilter('response', 'implementationGuarantee', $event)"
             >
               <div class="filter-row">
@@ -527,7 +543,7 @@
           <h4 class="filter-section-title">案例与证明</h4>
           <div class="filter-options">
             <el-checkbox-group 
-              :model-value="filters.response?.casesProof"
+              :model-value="filters.responseFilters?.casesProof"
               @update:model-value="updateFilter('response', 'casesProof', $event)"
             >
               <div class="filter-row">
@@ -556,13 +572,12 @@
 
 <script setup>
 import { defineProps, defineEmits } from 'vue'
-import { useGlobalCatalogOptions } from '../composables/useGlobalCatalogOptions'
 import {
   productSolutionOptions,
   industryOptions,
   audienceOptions,
   languageOptions,
-  // pptCatalogOptions,  // ❌ 移除静态配置，改用动态加载
+  pptCatalogOptions,
   meetingTypeOptions,
   questionerOptions,
   exchangeStageOptions,
@@ -582,9 +597,6 @@ import {
   companyStructure
 } from '../constants/salesConfig'
 
-// 🆕 使用动态加载的目录选项
-const { catalogOptions: pptCatalogOptions, loading: catalogLoading } = useGlobalCatalogOptions()
-
 const props = defineProps({
   visible: {
     type: Boolean,
@@ -601,21 +613,44 @@ const props = defineProps({
   filters: {
     type: Object,
     default: () => ({})
+  },
+  /** 后台接口返回的 PPT 目录树（一级+二级），用于高级筛选「PPT目录」带父级展示 */
+  pptCatalogTree: {
+    type: Array,
+    default: () => []
   }
 })
 
 const emit = defineEmits(['update:filters'])
 
 const updateFilter = (tab, field, value) => {
-  const newFilters = { ...props.filters }
-  if (!newFilters[tab]) {
-    newFilters[tab] = {}
+  console.log(`[AdvancedFilterPanel] 🎯 筛选更新: tab=${tab}, field=${field}, value=`, value)
+  
+  // 映射 tab 名称到实际的 filter 对象名称
+  const filterMap = {
+    'ppt': 'pptFilters',
+    'video': 'videoFilters',
+    'qa': 'qaFilters',
+    'tender': 'tenderFilters',
+    'response': 'responseFilters'
   }
-  newFilters[tab] = {
-    ...newFilters[tab],
-    [field]: value
+  
+  const filterKey = filterMap[tab]
+  if (!filterKey || !props.filters[filterKey]) {
+    console.warn(`[AdvancedFilterPanel] 未知的 tab 或缺少 filter: ${tab}`)
+    return
   }
-  emit('update:filters', newFilters)
+  
+  console.log(`[AdvancedFilterPanel] ✅ 更新前:`, props.filters[filterKey][field])
+  
+  // 直接更新 reactive 对象（因为传入的是 reactive 对象）
+  props.filters[filterKey][field] = value
+  
+  console.log(`[AdvancedFilterPanel] ✅ 更新后:`, props.filters[filterKey][field])
+  console.log(`[AdvancedFilterPanel] 📤 触发 emit update:filters`)
+  
+  // 触发事件通知父组件（虽然已经直接修改了，但保持事件机制）
+  emit('update:filters', props.filters)
 }
 </script>
 

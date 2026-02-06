@@ -1,11 +1,11 @@
-﻿<template>
+<template>
   <div class="layout">
     <!-- ✅ 已有组件：页面头部 -->
     <Header />
     
     <div class="main">
-      <!-- ✅ 已有组件：搜索栏 -->
-      <SearchBar />
+      <!-- ✅ 已有组件：搜索栏（已隐藏） -->
+      <!-- <SearchBar /> -->
       
       <!-- 🆕 新组件：主推产品数据看板（整合ProductDashboard和BrandMaterials） -->
       <MainDashboardSection
@@ -24,6 +24,7 @@
         v-model:activeTab="activeTab"
         v-model:showAdvancedFilter="showAdvancedFilter"
         @create-ppt="handleCreatePpt"
+        @filter="handleFilterClick"
       />
       
       <!-- ✅ 已有组件：高级筛选面板 -->
@@ -33,50 +34,101 @@
         :activeTab="activeTab"
         :activeProduct="productContent.activeProduct.value"
         :companyStructure="companyStructure"
-        :filters="{ ppt: pptFilters, video: videoFilters, qa: qaFilters, tender: tenderFilters, response: responseFilters }"
+        :filters="filterProps"
+        :pptCatalogTree="pptCatalogTree"
         @update:filters="handleFiltersUpdate"
       />
       
-      <!-- 🆕 新组件：选中产品后的详情视图（仅PPT tab） -->
-      <ProductDetailView
-        v-if="showProductDetail"
-        :activeProduct="productContent.activeProduct.value"
-        v-model:catalogMode="productContent.catalogMode.value"
-        v-model:activeCatalogIds="productContent.activeCatalogIds.value"
-        :publicPPTData="productContent.publicPPTData.value"
-        :practicalPPTData="productContent.practicalPPTData.value"
-        :productCatalog="productCatalog"
-        :mergedSlides="productContent.mergedSlides.value"
-        :getMergedSlidesForGroup="productContent.getMergedSlidesForGroup"
-      />
+      <!-- 🆕 新组件：内容区域和筛选面板的容器（包含选中产品后的详情视图） -->
+      <div v-if="showPptGrid || showContentGrid || showProductDetail" class="content-with-filter">
+        <!-- 🆕 新组件：筛选面板（在左侧） -->
+        <FilterPanel
+          v-if="showFilterPanel && activeTab !== 'concerned' && (activeTab === 'ppt' || activeTab === 'ppt-new' || activeTab === 'video' || activeTab === 'tender' || activeTab === 'response')"
+          v-model:visible="showFilterPanel"
+          :active-tab="activeTab === 'ppt-new' ? 'ppt' : activeTab"
+          :filters="filterProps"
+          :pptCatalogTree="pptCatalogTree"
+          @close="handleFilterClose"
+          @create-ppt="handleCreatePpt"
+          @update:filters="handleFiltersUpdate"
+        />
+        
+        <div class="content-grid-wrapper" :class="{ 'with-filter': showFilterPanel && (activeTab === 'ppt' || activeTab === 'ppt-new' || activeTab === 'video' || activeTab === 'tender' || activeTab === 'response') }">
+          <!-- 🆕 新组件：选中产品后的详情视图（产品介绍PPT tab 与 ppt-new 均使用 ProductDetailView，保留当前项目 PPT 组件） -->
+          <!-- 选中产品后的详情：内部用 useProductCatalogs 按 code 请求公共版/实战版 -->
+          <ProductDetailView
+            v-if="showProductDetail && (activeTab === 'ppt' || activeTab === 'ppt-new')"
+            :activeProduct="productContent.activeProduct.value"
+          />
+          
+          <!-- 🆕 新组件：PPT tab 未选产品时显示PPT网格 -->
+          <ContentGridSection
+            v-if="showPptGrid"
+            :activeTab="activeTab === 'ppt-new' ? 'ppt' : activeTab"
+            :filteredPPT="filters.filteredPPT.value"
+            :filteredVideos="filters.filteredVideos.value"
+            :tenderFiles="filters.tenderFiles.value"
+            :responseFiles="filters.responseFiles.value"
+          />
+          
+          <!-- 🆕 新组件：视频/招标/响应 tab 始终显示内容网格 -->
+          <ContentGridSection
+            v-if="showContentGrid"
+            :activeTab="activeTab"
+            :filteredPPT="filters.filteredPPT.value"
+            :filteredVideos="filters.filteredVideos.value"
+            :tenderFiles="filters.tenderFiles.value"
+            :responseFiles="filters.responseFiles.value"
+          />
+        </div>
+      </div>
       
-      <!-- 🆕 新组件：PPT tab 未选产品时显示PPT网格 -->
-      <ContentGridSection
-        key="ppt-grid"
-        v-if="showPptGrid"
-        :activeTab="activeTab"
-        :filteredPPT="filters.filteredPPT.value"
-        :filteredVideos="filters.filteredVideos.value"
-        :tenderFiles="filters.tenderFiles.value"
-        :responseFiles="filters.responseFiles.value"
-      />
-      
-      <!-- 🆕 新组件：视频/招标/响应 tab 始终显示内容网格 -->
-      <ContentGridSection
-        key="content-grid"
-        v-if="showContentGrid"
-        :activeTab="activeTab"
-        :filteredPPT="filters.filteredPPT.value"
-        :filteredVideos="filters.filteredVideos.value"
-        :tenderFiles="filters.tenderFiles.value"
-        :responseFiles="filters.responseFiles.value"
-      />
+      <!-- 兼容旧布局（当不显示内容网格时） -->
+      <template v-else>
+        <!-- 🆕 新组件：PPT tab 未选产品时显示PPT网格 -->
+        <ContentGridSection
+          v-if="showPptGrid"
+          :activeTab="activeTab"
+          :filteredPPT="filters.filteredPPT.value"
+          :filteredVideos="filters.filteredVideos.value"
+          :tenderFiles="filters.tenderFiles.value"
+          :responseFiles="filters.responseFiles.value"
+        />
+        
+        <!-- 🆕 新组件：视频/招标/响应 tab 始终显示内容网格 -->
+        <ContentGridSection
+          v-if="showContentGrid"
+          :activeTab="activeTab"
+          :filteredPPT="filters.filteredPPT.value"
+          :filteredVideos="filters.filteredVideos.value"
+          :tenderFiles="filters.tenderFiles.value"
+          :responseFiles="filters.responseFiles.value"
+        />
+      </template>
       
       <!-- ✅ 已有组件：QA区域（内部处理点赞/点踩） -->
       <QASection
         v-if="showQASection"
         :questions="filters.filteredQuestions.value"
       />
+      
+      <!-- 🆕 新组件：关心问题页面 -->
+      <div v-if="showConcernedQuestions" class="concerned-questions-wrapper">
+        <!-- 筛选面板（关心问题，在左侧） -->
+        <FilterPanel
+          v-if="showFilterPanel && activeTab === 'concerned'"
+          v-model:visible="showFilterPanel"
+          :active-tab="activeTab"
+          @close="handleFilterClose"
+        />
+        
+        <div class="concerned-questions-content" :class="{ 'with-filter': showFilterPanel && activeTab === 'concerned' }">
+          <ConcernedQuestionsView
+            :show-sidebar="false"
+            :show-filters="false"
+          />
+        </div>
+      </div>
       
       <!-- 🆕 新组件：独立PPT页面 -->
       <PptPageView
@@ -97,7 +149,37 @@
         :filteredVideos="filters.filteredVideosPage.value"
         v-model:fProduct="fProduct"
         v-model:fIndustry="fIndustry"
-                  />
+      />
+      
+      <!-- 🆕 新组件：独立招标文件页面 -->
+      <TenderPageView
+        v-if="activeNav === 'tender'"
+        :tenderFiles="filters.tenderFiles.value"
+      />
+      
+      <!-- 🆕 新组件：独立响应文件页面 -->
+      <ResponsePageView
+        v-if="activeNav === 'response'"
+        :responseFiles="filters.responseFiles.value"
+      />
+      
+      <!-- 🆕 新组件：品牌基础资料页面 -->
+      <BrandMaterials
+        v-if="activeNav === 'materials'"
+        :activeBrandTab="activeBrandTab"
+        :brandTabOptions="brandTabOptions"
+        :brandCompanyItems="brandData.companyItems"
+        :brandProductsItems="brandData.productsItems"
+        :brandRegulationsItems="brandData.regulationsItems"
+        :brandCalendarItems="brandData.calendarItems"
+        :brandComplianceItems="brandData.complianceItems"
+        :brandGeneralItems="brandData.generalItems"
+        :brandXinchuangItems="brandData.xinchuangItems"
+        :brandLocalItems="brandData.localItems"
+        :brandBillItems="brandData.billItems"
+        @update:activeBrandTab="handleBrandTabChange"
+        @open-brand-item="handleOpenBrandItem"
+      />
                 </div>
     
     <!-- ✅ 已有组件：PPT对话框（替换掉内联的el-dialog） -->
@@ -107,15 +189,28 @@
       :title="dialogs.dialogTitle.value"
       :slides="dialogs.slides.value"
       :isResponseDialog="dialogs.isResponseDialog.value"
-      :createdAt="dialogs.dialogCreatedAt.value"
-      :viewCount="dialogs.dialogViewCount.value"
-      :document-id="dialogs.dialogDocumentId.value"
+    />
+    
+    <!-- ✅ 新组件：响应文件对话框 -->
+    <ResponseFileDialog
+      v-model:visible="dialogs.responseFileDialogVisible.value"
+      :title="dialogs.responseFileTitle.value"
+      :slides="dialogs.responseFileSlides.value"
+      :response-toc-sections="responseTocSections"
     />
     
     <!-- ✅ 已有组件：视频对话框（替换掉内联的el-dialog） -->
     <VideoDialog
       v-model:visible="dialogs.videoDialogVisible.value"
       :videoDetail="dialogs.videoDetail.value"
+    />
+    
+    <!-- ✅ 招标文件PDF对话框 -->
+    <PdfDialog
+      v-model:visible="dialogs.pdfDialogVisible.value"
+      :title="dialogs.pdfDetail.value?.title || ''"
+      :pdf-url="dialogs.pdfDetail.value?.pdfUrl || ''"
+      :update-date="dialogs.pdfDetail.value?.updateDate || ''"
     />
                 </div>
                       </template>
@@ -134,6 +229,8 @@ import AdvancedFilterPanel from './components/AdvancedFilterPanel.vue'
 import QASection from './components/QASection.vue'
 import PptDialog from './components/PptDialog.vue'
 import VideoDialog from './components/VideoDialog.vue'
+import ResponseFileDialog from './components/ResponseFileDialog.vue'
+import PdfDialog from './components/PdfDialog.vue'
 
 // ============================================
 // 🆕 新组件导入
@@ -144,15 +241,17 @@ import ProductDetailView from './components/ProductDetailView.vue'
 import ContentGridSection from './components/ContentGridSection.vue'
 import PptPageView from './components/PptPageView.vue'
 import VideoPageView from './components/VideoPageView.vue'
+import TenderPageView from './components/TenderPageView.vue'
+import ResponsePageView from './components/ResponsePageView.vue'
+import FilterPanel from './components/FilterPanel.vue'
+import ConcernedQuestionsView from './components/ConcernedQuestionsView.vue'
+import BrandMaterials from './components/BrandMaterials.vue'
 
 // ============================================
 // 📦 数据配置导入
 // ============================================
-import { salesData } from '@/configs/salesData'
-
-// ============================================
-// 📡 API 服务导入
-// ============================================
+import { salesData, responseTocSections } from '@/configs/salesData'
+import { BRAND_TAB_OPTIONS } from '@/configs/salesConstants'
 import { getProductList } from '@/services/salesService'
 
 // ============================================
@@ -161,6 +260,7 @@ import { getProductList } from '@/services/salesService'
 import { useProductContent } from './composables/useProductContent'
 import { useFilters } from './composables/useFilters'
 import { useDialogs } from './composables/useDialogs'
+import { useGlobalCatalogOptions } from './composables/useGlobalCatalogOptions'
 
 // ============================================
 // 路由
@@ -177,6 +277,9 @@ const productContent = useProductContent()
 // 筛选相关（包含筛选逻辑和结果计算）
 const filters = useFilters(salesData, productContent.activeProduct)
 
+// 全局 PPT 目录树（高级筛选「PPT目录」用，来自后台接口，带父级）
+const { catalogs: pptCatalogTree } = useGlobalCatalogOptions()
+
 // 对话框相关（包含所有打开逻辑：PPT、视频、品牌资料）
 const dialogs = useDialogs()
 
@@ -185,17 +288,7 @@ const dialogs = useDialogs()
 // ============================================
 provide('dialogs', dialogs)
 provide('productContent', productContent)
-
-// ============================================
-// 2.1 高级筛选状态（用于产品目录和文档筛选）
-// ============================================
-const advancedFilters = ref<{
-  product?: string[]
-  customer?: string
-  industry?: string[]
-  audience?: string[]
-}>({})
-provide('advancedFilters', advancedFilters)
+provide('filters', filters)
 
 // ============================================
 // 3. 页面级状态（仅UI状态，无业务逻辑）
@@ -205,6 +298,7 @@ const activeTab = ref('ppt')
 const activeDashboardTab = ref('products')
 const activeBrandTab = ref('company')
 const showAdvancedFilter = ref(false)
+const showFilterPanel = ref(false) // 筛选面板显示状态（独立于高级筛选）
 
 // 独立页面的筛选条件
 const fProduct = ref<string | null>(null)
@@ -216,47 +310,19 @@ const customerName = ref('')
 const sort = ref('综合排序')
 
 // ============================================
-// 4. 数据定义（从API获取或配置）
+// 4. 从配置/接口获取数据
 // ============================================
-const productStats = ref([]) // 从 API 获取
+// 重点关注产品列表：来自产品分类表接口，点击后通过 code 查 PPT
+const productStats = ref<Array<{ name: string; code: string; sessions: number; ppts: number; questions: number; brochures?: number; tenderFiles?: number; responseFiles?: number }>>([])
 const brandData = ref(salesData.brandData)
 const questions = ref(salesData.questions)
 const productCatalog = ref(salesData.productCatalog)
 const companyStructure = ref(salesData.companyStructure)
 
-// ============================================
-// 4.1 加载产品数据
-// ============================================
-const loadProductStats = async () => {
-  try {
-    const res = await getProductList({ isActive: true })
-    if (res.success) {
-      // 转换API数据为前端需要的格式
-      // ⚠️ 重要：保存 code 用于选择，name 用于显示
-      productStats.value = res.data.map(product => ({
-        name: product.name,  // 用于显示
-        code: product.code,  // 用于选择（传递给 selectProduct）
-        sessions: product.stats.sessions,
-        ppts: product.stats.ppts,
-        questions: product.stats.questions
-      }))
-    }
-  } catch (error) {
-    console.error('加载产品数据失败:', error)
-    // 失败时使用Mock数据
-    productStats.value = salesData.productStats
-  }
-}
-
-// ============================================
-// 4.2 组件挂载时加载数据
-// ============================================
-onMounted(() => {
-  loadProductStats()
-})
-
-// 筛选条件（从filters composable中解构）
+// 筛选条件（从filters composable中解构，保持同一引用供 AdvancedFilterPanel 直接写回）
 const { pptFilters, videoFilters, qaFilters, tenderFilters, responseFilters } = filters
+// 稳定引用，便于高级筛选面板直接更新 pptFilters 等触发 useFilters 内 computed 更新
+const filterProps = { pptFilters, videoFilters, qaFilters, tenderFilters, responseFilters }
 
 // ============================================
 // 4.5. 计算属性（优化复杂的显示逻辑）
@@ -273,7 +339,7 @@ const showContentGrid = computed(() => {
 const showProductDetail = computed(() => {
   return activeNav.value === 'recommend'           // ① 在推荐页
     && activeDashboardTab.value === 'products'     // ② 在产品标签
-    && activeTab.value === 'ppt'                   // ③ 在PPT tab
+    && (activeTab.value === 'ppt' || activeTab.value === 'ppt-new')  // ③ 在PPT tab（包括新的PPT标签）
     && !!productContent.activeProduct.value        // ④ 已选中产品
 })
 
@@ -281,7 +347,7 @@ const showProductDetail = computed(() => {
 const showPptGrid = computed(() => {
   return activeNav.value === 'recommend'           // ① 在推荐页
     && activeDashboardTab.value === 'products'     // ② 在产品标签
-    && activeTab.value === 'ppt'                   // ③ 在PPT tab
+    && (activeTab.value === 'ppt' || activeTab.value === 'ppt-new')  // ③ 在PPT tab（包括新的PPT标签）
     && !productContent.activeProduct.value         // ④ 未选中产品
 })
 
@@ -293,6 +359,13 @@ const showQASection = computed(() => {
     // ④ 无论是否选择产品都显示（通过filters自动过滤）
 })
 
+// 是否显示关心问题页面
+const showConcernedQuestions = computed(() => {
+  return activeNav.value === 'recommend'           // ① 在推荐页
+    && activeDashboardTab.value === 'products'     // ② 在产品标签
+    && activeTab.value === 'concerned'             // ③ 在关心问题 tab
+})
+
 // ============================================
 // 5. 事件处理（仅状态同步，无业务逻辑）
 // ============================================
@@ -301,41 +374,35 @@ const handleCreatePpt = () => {
   ElMessage.info('新建PPT功能开发中...')
 }
 
-const handleFiltersUpdate = (newFilters: any) => {
-  // 将 AdvancedFilterPanel 返回的 { ppt: {...}, video: {...} } 格式
-  // 映射回 { pptFilters, videoFilters, ... } 对象
-  if (newFilters.ppt) Object.assign(pptFilters, newFilters.ppt)
-  if (newFilters.video) Object.assign(videoFilters, newFilters.video)
-  if (newFilters.qa) Object.assign(qaFilters, newFilters.qa)
-  if (newFilters.tender) Object.assign(tenderFilters, newFilters.tender)
-  if (newFilters.response) Object.assign(responseFilters, newFilters.response)
-  
-  // 同步PPT筛选条件到advancedFilters（用于产品目录和文档筛选）
-  // ⚠️ 重要：不能直接替换整个对象，否则会导致子组件inject的ref引用失效
-  // 必须逐个更新属性以保持响应式
-  if (newFilters.ppt) {
-    // 先清空所有属性
-    delete advancedFilters.value.customer
-    delete advancedFilters.value.industry
-    delete advancedFilters.value.audience
-    delete advancedFilters.value.product
-    
-    // 再设置新值（只设置有效值）
-    if (newFilters.ppt.customerName) {
-      advancedFilters.value.customer = newFilters.ppt.customerName
-    }
-    if (newFilters.ppt.industry && newFilters.ppt.industry.length > 0) {
-      advancedFilters.value.industry = newFilters.ppt.industry
-    }
-    if (newFilters.ppt.audience && newFilters.ppt.audience.length > 0) {
-      advancedFilters.value.audience = newFilters.ppt.audience
-    }
-    if (newFilters.ppt.product && newFilters.ppt.product.length > 0) {
-      advancedFilters.value.product = newFilters.ppt.product
-    }
-    
-    console.log('[Sales首页] 🔄 更新高级筛选条件:', advancedFilters.value)
-  }
+// 筛选面板相关事件（独立于高级筛选）
+const handleFilterClick = () => {
+  showFilterPanel.value = !showFilterPanel.value
+}
+
+const handleFilterClose = () => {
+  showFilterPanel.value = false
+}
+
+
+const handleFiltersUpdate = () => {
+  console.log('[Home] 📥 收到 AdvancedFilterPanel 的 update:filters 事件')
+  // AdvancedFilterPanel 内部已直接修改了 filters，此处根据当前 pptFilters 主动触发接口拉取，确保筛选生效
+  const params = filters.buildDocumentParams(filters.pptFilters)
+  console.log('[Home] 📤 调用 loadDocuments，参数:', params)
+  filters.loadDocuments(params)
+}
+
+// 品牌Tab选项
+const brandTabOptions = BRAND_TAB_OPTIONS
+
+// 处理品牌Tab切换
+const handleBrandTabChange = (value: string) => {
+  activeBrandTab.value = value
+}
+
+// 处理打开品牌资料项
+const handleOpenBrandItem = (item: any) => {
+  dialogs.openBrandItem(item)
 }
 
 // ============================================
@@ -345,10 +412,33 @@ watch(() => route.query.nav, (newNav) => {
   if (newNav) activeNav.value = newNav as string
 })
 
+// 加载重点关注产品列表（产品分类表接口）
+const loadProductStats = async () => {
+  try {
+    const res = await getProductList({ isActive: true })
+    if (res.success && res.data && Array.isArray(res.data)) {
+      productStats.value = res.data.map((item: any) => ({
+        name: item.name,
+        code: item.code,
+        sessions: item.stats?.sessions ?? 0,
+        ppts: item.stats?.ppts ?? 0,
+        questions: item.stats?.questions ?? 0,
+        brochures: item.stats?.brochures ?? 0,
+        tenderFiles: item.stats?.tenderFiles ?? 0,
+        responseFiles: item.stats?.responseFiles ?? 0
+      }))
+    }
+  } catch (e) {
+    console.error('[Sales首页] 加载产品列表失败:', e)
+    productStats.value = []
+  }
+}
+
 onMounted(() => {
   if (route.query.nav) {
     activeNav.value = route.query.nav as string
   }
+  loadProductStats()
 })
 
 // ============================================

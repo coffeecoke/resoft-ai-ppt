@@ -1,5 +1,6 @@
 <template>
   <div class="brand-content">
+    <h2 class="page-title">品牌基础资料</h2>
     <div class="brand-tabs tabs-row">
       <el-segmented 
         :model-value="activeBrandTab" 

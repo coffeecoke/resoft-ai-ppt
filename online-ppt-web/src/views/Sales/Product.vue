@@ -3,331 +3,180 @@
     <Header />
     
     <div class="main">
-      <SearchBar />
+      <h2 class="page-title">产品介绍PPT</h2>
       
-      <div class="page-title-row">
-        <h2 class="page-title">{{ keyword }}</h2>
-        <el-button @click="showAdvancedFilter = !showAdvancedFilter" type="primary" plain>
-          <el-icon><Filter /></el-icon> 高级检索
-        </el-button>
-      </div>
-
-      <!-- 高级筛选面板 -->
-      <div v-if="showAdvancedFilter" class="advanced-filter-panel">
-        <div class="advanced-filter-content">
-          <div class="filter-section filter-section-inline">
-            <h4 class="filter-section-title">客户名称</h4>
-            <div class="filter-options">
-              <el-input
-                v-model="pptFilters.customerName"
-                placeholder="请输入客户名称"
-                clearable
-                style="width: 200px;"
-              />
-            </div>
-          </div>
-          <div class="filter-section filter-section-inline">
-            <h4 class="filter-section-title">行业</h4>
-            <div class="filter-options">
-              <el-checkbox-group v-model="pptFilters.industry">
-                <div class="filter-row">
-                  <el-checkbox label="全国/股份制/政策性银行">全国/股份制/政策性银行</el-checkbox>
-                  <el-checkbox label="城商行">城商行</el-checkbox>
-                  <el-checkbox label="外资行">外资行</el-checkbox>
-                  <el-checkbox label="农商">农商</el-checkbox>
-                  <el-checkbox label="财务公司">财务公司</el-checkbox>
-                  <el-checkbox label="信托公司">信托公司</el-checkbox>
-                  <el-checkbox label="汽车/消费金融">汽车/消费金融</el-checkbox>
-                  <el-checkbox label="金融租赁">金融租赁</el-checkbox>
-                  <el-checkbox label="其他">其他</el-checkbox>
-                </div>
-              </el-checkbox-group>
-            </div>
-          </div>
-          <div class="filter-section filter-section-inline">
-            <h4 class="filter-section-title">交流对象</h4>
-            <div class="filter-options">
-              <el-checkbox-group v-model="pptFilters.audience">
-                <div class="filter-row">
-                  <el-checkbox label="技术">技术</el-checkbox>
-                  <el-checkbox label="技术负责人">技术负责人</el-checkbox>
-                  <el-checkbox label="业务">业务</el-checkbox>
-                  <el-checkbox label="业务负责人">业务负责人</el-checkbox>
-                </div>
-              </el-checkbox-group>
-            </div>
-          </div>
-          <div class="filter-section filter-section-inline">
-            <h4 class="filter-section-title">语言</h4>
-            <div class="filter-options">
-              <el-checkbox-group v-model="pptFilters.language">
-                <div class="filter-row">
-                  <el-checkbox label="中文">中文</el-checkbox>
-                  <el-checkbox label="英文">英文</el-checkbox>
-                </div>
-              </el-checkbox-group>
-            </div>
-          </div>
+      <!-- 筛选区域 -->
+      <CommonFilters
+        :industry-tags="industryTags"
+        :selected-industry="selectedIndustry"
+        :filter-groups="filterGroups"
+        :filter-values="filterValues"
+        :sort-options="sortOptions"
+        :selected-sort="selectedSort"
+        @update:selected-industry="handleIndustryChange"
+        @update:filter-values="handleFilterValuesChange"
+        @update:selected-sort="handleSortChange"
+        @select-customer="handleSelectCustomer"
+        @select-product="handleSelectProduct"
+      />
+      
+      <!-- 内容区域：左侧目录 + 右侧PPT列表 -->
+      <div class="product-content-layout">
+        <!-- 左侧：目录 -->
+        <div class="product-catalog-sidebar">
+          <ProductCatalogPanel
+            :activeProduct="activeProduct"
+            :catalogMode="catalogMode"
+            :activeCatalogIds="activeCatalogIds"
+            :productCatalog="catalog"
+            @update:catalogMode="handleCatalogModeChange"
+            @update:activeCatalogIds="handleCatalogIdsChange"
+          />
         </div>
-      </div>
-
-      <div class="columns">
-        <div class="product-ppt-section">
-          <div class="product-catalog card-block">
-            <div class="catalog-mode-switch">
-              <div class="mode-switch-container">
-                <div 
-                  class="mode-item" 
-                  :class="{ active: catalogMode === 'single' }"
-                  @click="catalogMode = 'single'"
-                >
-                  <svg class="mode-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M3 3L10.07 10.07L7.5 12.5L3 3Z" fill="currentColor"/>
-                    <path d="M10.07 10.07L12.5 7.5L21 16L16 21L7.5 12.5L10.07 10.07Z" fill="currentColor"/>
-                  </svg>
-                  <span class="mode-text">单选模式</span>
-                </div>
-                <div 
-                  class="mode-item" 
-                  :class="{ active: catalogMode === 'multiple' }"
-                  @click="catalogMode = 'multiple'"
-                >
-                  <svg class="mode-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
-                    <rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
-                    <rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
-                    <rect x="14" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
-                    <line x1="10" y1="6.5" x2="14" y2="6.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                    <line x1="6.5" y1="10" x2="6.5" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                    <line x1="17.5" y1="10" x2="17.5" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                    <line x1="10" y1="17.5" x2="14" y2="17.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                  </svg>
-                  <span class="mode-text">多选模式</span>
-                </div>
-              </div>
+        
+        <!-- 右侧：PPT列表（推荐页效果） -->
+        <div class="product-content-main">
+          <!-- 默认显示所有PPT（与推荐页一致） -->
+          <template v-if="activeCatalogIds.length === 0">
+            <!-- 公共版PPT（默认只显示一行，展开后显示全部） -->
+            <PptGrid
+              :items="displayedPublicPPT"
+              :showBadge="true"
+              @item-click="openPpt"
+            />
+            
+            <!-- 展开按钮 -->
+            <div 
+              v-if="!isExpanded && hasMorePublicPPT" 
+              class="expand-more-btn" 
+              @click="toggleExpand"
+            >
+              <span>展开显示更多</span>
             </div>
-            <ul class="catalog-list">
-              <li v-for="item in catalog" :key="item.id">
-                <div class="cat-title">
-                  <el-checkbox 
-                    v-if="catalogMode === 'multiple'" 
-                    :model-value="isParentSelected(item.id)"
-                    @change="toggleParentCatalog(item.id)"
-                    @click.stop
-                  />
-                  <span>{{ item.text }}</span>
-                </div>
-                <ul class="catalog-sub">
-                  <li 
-                    v-for="c in item.children" 
-                    :key="c.id" 
-                    :class="{active: isCatalogSelected(c.id)}"
-                    @click="selectCatalog(c.id)"
-                  >
-                    <el-checkbox 
-                      v-if="catalogMode === 'multiple'" 
-                      :model-value="activeCatalogIds.includes(c.id)"
-                      @change="toggleCatalog(c.id)"
-                      @click.stop
-                    >
-                      <template #default>
-                        <span>{{ c.text }}</span>
-                      </template>
-                    </el-checkbox>
-                    <el-radio 
-                      v-else
-                      :model-value="activeCatalogIds[0]"
-                      :label="c.id"
-                      @change="selectCatalog(c.id)"
-                      @click.stop
-                    >
-                      <template #default>
-                        <span>{{ c.text }}</span>
-                      </template>
-                    </el-radio>
-                  </li>
-                </ul>
-              </li>
-            </ul>
-          </div>
-
-          <div class="public-block card-block">
-            <div class="section-head"><h3>公共版</h3></div>
-            <div class="ppt-groups" :class="{'ppt-summary-grid': activeCatalogIds.length === 0}">
-              <!-- 概览模式：显示PPT封面卡片 -->
-              <template v-if="activeCatalogIds.length === 0">
-                <div v-for="p in publicPPT" :key="p.id" class="ppt-card" @click="openPpt(p)" style="cursor:pointer;" v-show="p.type === 'ppt-cover'">
-                  <div class="thumb"><img :src="p.thumbnail" :alt="p.title" /></div>
-                  <div class="meta">
-                    <div class="title">{{ p.title }}</div>
-                    <div class="sub">{{ p.date }} · {{ p.author }}</div>
-                  </div>
-                </div>
-              </template>
-              <!-- 选择单个二级目录：显示带标题的幻灯片组 -->
-              <template v-else-if="activeCatalogIds.length === 1">
-                <div v-for="p in publicPPT" :key="p.id" v-show="p.type === 'slides'" class="ppt-group-item">
-                  <div class="ppt-group-header">
-                    <div class="ppt-group-title" @click="openPpt(p)" style="cursor:pointer">
-                      <el-icon><Document /></el-icon> {{ p.title }}
-                    </div>
-                    <div class="ppt-group-meta">{{ p.date }} · {{ p.author }}</div>
-                  </div>
-                  <div class="ppt-slides-scroll">
-                    <div v-for="slide in p.slides" :key="slide.id" class="slide-card" @click="openPpt(p)">
-                      <img :src="slide.img" loading="lazy" />
-                      <div class="slide-page-num">P{{ slide.page }}</div>
-                    </div>
-                  </div>
-                </div>
-              </template>
-              <!-- 选择多个二级目录：合并所有图片，按顺序一行一行排列 -->
-              <template v-else>
-                <div class="ppt-slides-scroll">
-                  <div 
-                    v-for="(slide, index) in mergedSlides" 
-                    :key="slide.id || index" 
-                    class="slide-card" 
-                    @click="openPpt(slide.parent)"
-                  >
-                    <img :src="slide.img" loading="lazy" />
-                    <div class="slide-page-num">P{{ slide.page }}</div>
-                  </div>
-                </div>
-              </template>
+            
+            <!-- 收起按钮（展开后显示） -->
+            <div 
+              v-if="isExpanded" 
+              class="expand-more-btn expanded" 
+              @click="toggleExpand"
+            >
+              <span>收起</span>
             </div>
-          </div>
-
-          <div class="practical-block card-block">
-            <div class="section-head"><h3>实战版</h3></div>
-            <div class="ppt-groups">
-              <div v-if="activeCatalogIds.length === 0" class="customer-group">
-                <template v-for="p in practicalPPT" :key="p.id">
-                  <div v-if="p.type === 'file'" class="ppt-item">
-                    <i class="ri-file-ppt-2-fill" style="color: #FD6330; font-size: 18px;"></i>
-                    <span class="title" style="cursor:pointer;" @click="openPractical(p)">{{ p.title }}</span>
-                    <div class="meta-right">
-                      <span class="author">{{ p.author }}</span>
-                      <span class="date">{{ p.date }}</span>
-                    </div>
-                  </div>
-                </template>
+            
+            <!-- 实战版PPT（默认显示，不随展开状态变化） -->
+            <template v-if="practicalPPTList.length > 0">
+              <div class="practical-ppt-section">
+                <PptGrid
+                  :items="practicalPPTList"
+                  :showBadge="true"
+                  @item-click="openPpt"
+                />
               </div>
-              <template v-else>
-                <div v-for="group in practicalPPT" :key="group.customer" class="customer-group">
-                  <!-- 保留机构信息标题行 -->
-                  <div class="customer-title">
-                    <span>{{ group.customer }}</span>
-                    <span class="customer-meta">{{ group.meta }}</span>
-                  </div>
-                  <!-- 选择单个二级目录：显示带标题的幻灯片组 -->
-                  <template v-if="activeCatalogIds.length === 1">
-                    <div v-for="p in group.items" :key="p.id" v-show="p.type === 'slides'" class="ppt-group-item">
-                      <div class="ppt-group-header">
-                        <div class="ppt-group-title" @click="openPractical(p)" style="cursor:pointer">
-                          <el-icon><Document /></el-icon> {{ p.title }}
-                        </div>
-                        <div class="ppt-group-meta">{{ p.date }} · {{ p.author }}</div>
+            </template>
+          </template>
+          
+          <!-- 选择目录后显示详细内容 -->
+          <template v-else>
+            <div class="ppt-blocks-container">
+              <!-- 公共版 -->
+              <div class="public-block card-block">
+                <div class="section-head"><h3>公共版</h3></div>
+                <div class="ppt-groups">
+                <!-- 选择单个二级目录：显示带标题的幻灯片组 -->
+                <template v-if="activeCatalogIds.length === 1">
+                  <div v-for="p in publicPPT" :key="p.id" v-show="p.type === 'slides'" class="ppt-group-item">
+                    <div class="ppt-group-header">
+                      <div class="ppt-group-title" @click="openPpt(p)" style="cursor:pointer">
+                        <el-icon><Document /></el-icon> {{ p.title }}
                       </div>
-                      <div class="ppt-slides-scroll">
-                        <div v-for="slide in p.slides" :key="slide.id" class="slide-card" @click="openPractical(p)">
-                          <img :src="slide.img" loading="lazy" />
-                          <div class="slide-page-num">P{{ slide.page }}</div>
-                        </div>
-                      </div>
+                      <div class="ppt-group-meta">{{ p.date }} · {{ p.author }}</div>
                     </div>
-                  </template>
-                  <!-- 选择多个二级目录：合并所有图片，按顺序一行一行排列 -->
-                  <template v-else>
                     <div class="ppt-slides-scroll">
-                      <div 
-                        v-for="(slide, index) in getMergedSlidesForGroup(group)" 
-                        :key="slide.id || index" 
-                        class="slide-card" 
-                        @click="openPractical(slide.parent)"
-                      >
+                      <div v-for="slide in p.slides" :key="slide.id" class="slide-card" @click="openPpt(p)">
                         <img :src="slide.img" loading="lazy" />
                         <div class="slide-page-num">P{{ slide.page }}</div>
                       </div>
                     </div>
-                  </template>
-                </div>
-              </template>
-            </div>
-          </div>
-        </div>
-
-        <div class="qa-aside card-block">
-          <div class="section-head">
-            <h3>客户关注问题</h3>
-            <el-link>更多</el-link>
-          </div>
-          <div class="qa-layout-split">
-            <div class="qa-left-panel">
-              <ul class="qa-list-detail" v-infinite-scroll="loadQa" infinite-scroll-distance="10">
-                <li v-for="(q, index) in qaList" :key="index" :class="{active: activeQaIndex === index}">
-                  <div class="qa-question" @click="activeQaIndex = index">
-                    <i class="ri-question-line" v-if="activeQaIndex !== index"></i>
-                    <i class="ri-question-fill" v-else></i>
-                    {{ q.q }}
                   </div>
-                  <div class="qa-answer" v-if="activeQaIndex === index">
-                    <div class="a-text">{{ q.a }}</div>
-                    <div class="a-stats">
-                      <span><i class="ri-eye-line"></i> {{ q.views }}</span>
-                      <span><i class="ri-thumb-up-line"></i> {{ q.likes }}</span>
+                </template>
+                <!-- 选择多个二级目录：合并所有图片，按顺序一行一行排列 -->
+                <template v-else>
+                  <div class="ppt-slides-scroll">
+                    <div 
+                      v-for="(slide, index) in mergedSlides" 
+                      :key="slide.id || index" 
+                      class="slide-card" 
+                      @click="openPpt(slide.parent)"
+                    >
+                      <img :src="slide.img" loading="lazy" />
+                      <div class="slide-page-num">P{{ slide.page }}</div>
                     </div>
                   </div>
-                </li>
-                <li v-if="qaLoading" class="qa-loading"><i class="el-icon-loading"></i> 加载中...</li>
-                <li v-if="qaNoMore" class="qa-no-more">没有更多了</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </div>
+                </template>
+              </div>
+              </div>
 
-      <div class="video-and-aside">
-        <div class="video-main">
-          <div class="section-head video-section-head">
-            <h3>交流会议</h3>
-            <el-radio-group v-model="videosTab" size="small">
-              <el-radio-button label="public">公共版</el-radio-button>
-              <el-radio-button label="practical">实战版</el-radio-button>
-            </el-radio-group>
-          </div>
-          <div class="videos-grid">
-            <div 
-              v-for="v in videos" 
-              :key="v.id" 
-              class="ppt-card" 
-              style="cursor: pointer;"
-            >
-              <div class="thumb is-video">
-                <img :src="v.thumbnail" :alt="v.title" />
-                <span class="badge" :class="v.tag === 'public' ? 'badge-public' : 'badge-practical'">{{ v.tag === 'public' ? '公共版' : '实战版' }}</span>
-                <div class="play-icon"><el-icon><VideoPlay /></el-icon></div>
-                <span class="video-duration">{{ v.duration || '38:54' }}</span>
+              <!-- 实战版 -->
+              <div class="practical-block card-block">
+              <div class="section-head"><h3>实战版</h3></div>
+              <div class="ppt-groups">
+                <div v-if="activeCatalogIds.length === 0" class="customer-group">
+                  <template v-for="p in practicalPPT" :key="p.id">
+                    <div v-if="p.type === 'file'" class="ppt-item">
+                      <i class="ri-file-ppt-2-fill" style="color: #FD6330; font-size: 18px;"></i>
+                      <span class="title" style="cursor:pointer;" @click="openPractical(p)">{{ p.title }}</span>
+                      <div class="meta-right">
+                        <span class="author">{{ p.author }}</span>
+                        <span class="date">{{ p.date }}</span>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+                <template v-else>
+                  <div v-for="group in practicalPPT" :key="group.customer" class="customer-group">
+                    <!-- 保留机构信息标题行 -->
+                    <div class="customer-title">
+                      <span>{{ group.customer }}</span>
+                      <span class="customer-meta">{{ group.meta }}</span>
+                    </div>
+                    <!-- 选择单个二级目录：显示带标题的幻灯片组 -->
+                    <template v-if="activeCatalogIds.length === 1">
+                      <div v-for="p in group.items" :key="p.id" v-show="p.type === 'slides'" class="ppt-group-item">
+                        <div class="ppt-group-header">
+                          <div class="ppt-group-title" @click="openPractical(p)" style="cursor:pointer">
+                            <el-icon><Document /></el-icon> {{ p.title }}
+                          </div>
+                          <div class="ppt-group-meta">{{ p.date }} · {{ p.author }}</div>
+                        </div>
+                        <div class="ppt-slides-scroll">
+                          <div v-for="slide in p.slides" :key="slide.id" class="slide-card" @click="openPractical(p)">
+                            <img :src="slide.img" loading="lazy" />
+                            <div class="slide-page-num">P{{ slide.page }}</div>
+                          </div>
+                        </div>
+                      </div>
+                    </template>
+                    <!-- 选择多个二级目录：合并所有图片，按顺序一行一行排列 -->
+                    <template v-else>
+                      <div class="ppt-slides-scroll">
+                        <div 
+                          v-for="(slide, index) in getMergedSlidesForGroup(group)" 
+                          :key="slide.id || index" 
+                          class="slide-card" 
+                          @click="openPractical(slide.parent)"
+                        >
+                          <img :src="slide.img" loading="lazy" />
+                          <div class="slide-page-num">P{{ slide.page }}</div>
+                        </div>
+                      </div>
+                    </template>
+                  </div>
+                </template>
               </div>
-              <div class="meta">
-                <div class="title">{{ v.title }}</div>
-                <div class="sub">{{ v.date }}</div>
               </div>
             </div>
-          </div>
+          </template>
         </div>
-        <aside class="aside-materials">
-          <div class="section-head aside-section-head">
-            <h3>宣传资料</h3>
-          </div>
-          <div class="aside-cards">
-            <el-card v-for="m in materialsAside" :key="m.id" class="aside-card" shadow="never">
-              <img :src="m.thumbnail" :alt="m.title" />
-              <div class="m-title">{{ m.title }}</div>
-              <div class="m-date">{{ m.date }}</div>
-            </el-card>
-          </div>
-        </aside>
       </div>
 
       <el-dialog 
@@ -477,72 +326,195 @@
           </aside>
         </div>
       </el-dialog>
+      
+      <!-- 使用统一的 PptDialog 组件（推荐使用） -->
+      <PptDialog
+        v-model:visible="dialogs.dialogVisible.value"
+        :type="dialogs.dialogType.value"
+        :title="dialogs.dialogTitle.value"
+        :slides="dialogs.slides.value"
+        :isResponseDialog="dialogs.isResponseDialog.value"
+      />
     </div>
   </div>
 </template>
 
-<script setup>
-import { ref, reactive, computed, onMounted, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { VideoPlay, Filter, MagicStick, Download } from '@element-plus/icons-vue'
+<script setup lang="ts">
+import { ref, reactive, computed, onMounted, watch, inject } from 'vue'
+import { useRoute } from 'vue-router'
+import { MagicStick, Download, Document } from '@element-plus/icons-vue'
 import Header from './components/Header.vue'
-import SearchBar from './components/SearchBar.vue'
-const route = useRoute()
-const router = useRouter()
+import ProductCatalogPanel from './components/ProductCatalogPanel.vue'
+import CommonFilters from './components/CommonFilters.vue'
+import PptGrid from './components/PptGrid.vue'
+import PptDialog from './components/PptDialog.vue'
+import { salesData } from '@/configs/salesData'
+import { AUDIENCES } from '@/configs/salesConstants'
+import { useDialogs } from './composables/useDialogs'
 
-const keyword = ref(route.query.q || '')
-const videosTab = ref('public')
-const activeCatalogIds = ref([])
-const catalogMode = ref('single') // 'single' 或 'multiple'
-const showAdvancedFilter = ref(false)
-const pptFilters = reactive({
-  customerName: '',
-  industry: [],
-  audience: [],
-  language: []
-})
-const activeQaIndex = ref(0)
-const qaLoading = ref(false)
-const qaNoMore = ref(false)
+const route = useRoute()
+// 创建独立的 dialogs 实例（因为 Product.vue 是独立页面）
+const dialogs = useDialogs()
+
+const activeProduct = ref(route.query.product as string || '一表通')
+const activeCatalogIds = ref<string[]>([])
+const catalogMode = ref('single')
 const dialogVisible = ref(false)
 const dialogTitle = ref('')
+const isExpanded = ref(false) // 展开/收起状态
 const activeSlide = ref(0)
 const dialogType = ref('public')
-const selectedSlides = ref([])
+const selectedSlides = ref<number[]>([])
 const aiPanelVisible = ref(false)
 
-const catalog = [
-  { id: '1', text: '企业基本信息', children: [
-    { id: '1.1', text: '公司简介' },
-    { id: '1.2', text: '技术体系' },
-    { id: '1.3', text: '业务体系' },
-    { id: '1.4', text: '监管合作' },
-    { id: '1.5', text: '机构合作' }
-  ]},
-  { id: '2', text: '监管发文与背景分析', children: [
-    { id: '2.1', text: '行业监管发展' },
-    { id: '2.2', text: '监管要求' },
-    { id: '2.3', text: '客户痛点/难点' }
-  ]},
-  { id: '3', text: '产品解决方案', children: [
-    { id: '3.1', text: '解决方案概述' },
-    { id: '3.2', text: '产品架构设计' },
-    { id: '3.3', text: '产品功能详解' },
-    { id: '3.4', text: 'Demo与交互演示' },
-    { id: '3.5', text: '产品优势说明' },
-    { id: '3.6', text: '产品应用场景' }
-  ]},
-  { id: '4', text: '实施计划', children: [
-    { id: '4.1', text: '软硬件资源需求' },
-    { id: '4.2', text: '实施服务流程' },
-    { id: '4.3', text: '联调安排' },
-    { id: '4.4', text: '售后服务保障' }
-  ]},
-  { id: '5', text: '合作案例', children: [] }
+// 筛选状态
+const selectedIndustry = ref<string | null>(null)
+const filterValues = ref<Record<string, string | null>>({
+  version: null, // 版本筛选
+  audience: null // 交流对象筛选
+})
+const selectedSort = ref<string>('latest')
+
+// 行业领域标签
+const industryTags = [
+  { id: 'national', name: '全国/股份制/政策性银行' },
+  { id: 'city', name: '城商行' },
+  { id: 'foreign', name: '外资行' },
+  { id: 'rural', name: '农商' },
+  { id: 'finance', name: '财务公司' },
+  { id: 'trust', name: '信托公司' },
+  { id: 'auto', name: '汽车/消费金融' },
+  { id: 'leasing', name: '金融租赁' }
 ]
 
-const publicPPT = ref([])
-const practicalPPT = ref([])
+// 版本选项
+const versions = [
+  { id: 'public', name: '公共版' },
+  { id: 'practical', name: '实战版' }
+]
+
+// 交流对象选项
+const audiences = [
+  ...AUDIENCES.map(audience => ({ id: audience.value, name: audience.label }))
+]
+
+// 排序选项
+const sortOptions = [
+  { id: 'latest', name: '最新更新' },
+  { id: 'likes', name: '点赞量' },
+  { id: 'usage', name: '使用度' }
+]
+
+// 筛选组配置（版本和交流对象筛选）
+const filterGroups = computed(() => [
+  {
+    key: 'version',
+    label: '版本',
+    icon: 'ri-file-copy-line',
+    options: versions
+  },
+  {
+    key: 'audience',
+    label: '交流对象',
+    icon: 'ri-user-line',
+    options: audiences
+  }
+])
+
+// 处理行业变化
+const handleIndustryChange = (industryId: string | null) => {
+  selectedIndustry.value = industryId
+}
+
+// 处理筛选值变化
+const handleFilterValuesChange = (values: Record<string, string | null>) => {
+  filterValues.value = values
+}
+
+// 处理排序变化
+const handleSortChange = (sortId: string) => {
+  selectedSort.value = sortId
+}
+
+// 处理选择客户
+const handleSelectCustomer = () => {
+  if (dialogs) {
+    dialogs.openCustomerSelect()
+  }
+}
+
+// 处理选择产品
+const handleSelectProduct = () => {
+  if (dialogs) {
+    dialogs.openProductSelect()
+  }
+}
+
+const catalog = [
+  { id: '1', text: '企业信息', children: [
+    { id: '1.1', text: '企业基础信息' },
+    { id: '1.2', text: '企业资质认证' },
+    { id: '1.3', text: '业务条线介绍' },
+    { id: '1.4', text: '业务咨询实力' },
+    { id: '1.5', text: '技术研发实力' },
+    { id: '1.6', text: '工程交付实力' }
+  ]},
+  { id: '2', text: '监管政策与行业背景', children: [
+    { id: '2.1', text: '监管发文与背景分析' },
+    { id: '2.2', text: '行业发展趋势' },
+    { id: '2.3', text: '监管要求' }
+  ]},
+  { id: '3', text: '产品解决方案', children: [
+    { id: '3.1', text: '客户痛点/难点' },
+    { id: '3.2', text: '解决方案概述' },
+    { id: '3.3', text: '产品架构设计' },
+    { id: '3.4', text: '产品功能详解' },
+    { id: '3.5', text: 'Demo 与交互演示' },
+    { id: '3.6', text: '产品优势说明' },
+    { id: '3.7', text: '产品应用场景' }
+  ]},
+  { id: '4', text: '部署实施及售后保障', children: [
+    { id: '4.1', text: '软硬件资源需求' },
+    { id: '4.2', text: '实施服务流程' },
+    { id: '4.3', text: '售后服务保障' }
+  ]},
+  { id: '5', text: '合作案例', children: [
+    { id: '5.1', text: '监管合作' },
+    { id: '5.2', text: '机构合作' }
+  ]},
+  { id: '6', text: '其他', children: [] }
+]
+
+const publicPPT = ref<any[]>([])
+const practicalPPT = ref<any[]>([])
+const allPPTList = ref<any[]>([]) // 所有PPT列表（推荐页效果）
+
+// 分离公共版和实战版 PPT（仅用于默认视图）
+const publicPPTList = computed(() => {
+  return allPPTList.value.filter((ppt: any) => ppt.tag === '公共版')
+})
+
+const practicalPPTList = computed(() => {
+  return allPPTList.value.filter((ppt: any) => ppt.tag === '实战版')
+})
+
+// 默认只显示一行公共版 PPT（5个），展开后显示全部
+const displayedPublicPPT = computed(() => {
+  if (isExpanded.value) {
+    return publicPPTList.value // 展开后显示所有公共版
+  }
+  return publicPPTList.value.slice(0, 5) // 默认只显示前5个
+})
+
+// 是否有更多公共版 PPT
+const hasMorePublicPPT = computed(() => {
+  return publicPPTList.value.length > 5
+})
+
+// 切换展开/收起
+const toggleExpand = () => {
+  isExpanded.value = !isExpanded.value
+}
 
 const slides = [
   { id: 's1', title: '公司介绍', img: 'https://picsum.photos/seed/slide1/1024/640' },
@@ -566,34 +538,6 @@ const sideInfo = {
   ],
 }
 
-const qaList = ref([
-  { q: '数据库适配如何保障兼容与安全？', a: '支持主流国产数据库（达梦、人大金仓）及MySQL/PostgreSQL。通过数据加密传输、细粒度权限控制及审计日志保障数据安全。', views: 1205, likes: 88 },
-  { q: '系统部署需要哪些资源与参数？', a: '建议配置：8核CPU，32G内存，500G SSD硬盘。支持Docker容器化及K8s集群部署，需开放80/443及业务端口。', views: 980, likes: 65 },
-  { q: '成本投入及预算范围如何估算？', a: '根据部署规模（节点数）及功能模块（基础版/高级版）定价。一般包含软件授权费、实施服务费及年度维保费。', views: 1560, likes: 120 },
-  { q: '与现有系统对接的接口策略？', a: '提供标准RESTful API接口，支持Oauth2.0认证。具备ESB集成能力，可快速对接OA、HR及业务核心系统。', views: 890, likes: 45 },
-  { q: '监控告警与运维方案如何落地？', a: '内置Prometheus监控组件，提供可视化运维大屏。支持邮件、短信及钉钉/企微告警推送，具备自动巡检功能。', views: 750, likes: 30 },
-])
-
-const allVideos = Array.from({ length: 16 }, (_, i) => ({ 
-  id: 'v' + i, 
-  title: `${keyword.value} 产品演示视频 ${i + 1}.mp4`, 
-  date: '10-31', 
-  tag: i % 2 ? 'practical' : 'public', 
-  thumbnail: 'https://picsum.photos/seed/vp' + (i + 1) + '/360/200',
-  duration: `${Math.floor(Math.random() * 30) + 10}:${String(Math.floor(Math.random() * 60)).padStart(2, '0')}`
-}))
-
-const materialsAside = [
-  { id: 'm1', title: '一表通宣传册（NUPS-GRDC）', date: '2025/10/20', thumbnail: 'https://picsum.photos/seed/aside1/360/180' },
-  { id: 'm2', title: '公司介绍2025版', date: '2025/10/20', thumbnail: 'https://picsum.photos/seed/aside2/360/180' },
-  { id: 'm3', title: '蓝海方向企业介绍', date: '2025/10/20', thumbnail: 'https://picsum.photos/seed/aside3/360/180' },
-]
-
-const videos = computed(() => 
-  allVideos.filter(v => videosTab.value === 'public' ? v.tag === 'public' : v.tag === 'practical')
-)
-
-// 合并所有选择的二级目录的图片
 const mergedSlides = computed(() => {
   if (activeCatalogIds.value.length <= 1) return []
   const allSlides = []
@@ -602,7 +546,7 @@ const mergedSlides = computed(() => {
       p.slides.forEach(slide => {
         allSlides.push({
           ...slide,
-          parent: p // 保存父级信息，用于点击时打开
+          parent: p
         })
       })
     }
@@ -610,7 +554,6 @@ const mergedSlides = computed(() => {
   return allSlides
 })
 
-// 合并某个机构的所有图片（实战版）
 const getMergedSlidesForGroup = (group) => {
   if (activeCatalogIds.value.length <= 1) return []
   const allSlides = []
@@ -619,7 +562,7 @@ const getMergedSlidesForGroup = (group) => {
       p.slides.forEach(slide => {
         allSlides.push({
           ...slide,
-          parent: p // 保存父级信息，用于点击时打开
+          parent: p
         })
       })
     }
@@ -633,27 +576,101 @@ const generateSlides = (seed, count) => Array.from({length: count}, (_, i) => ({
   page: i + 1
 }))
 
-const updateContent = (catIds) => {
+const updateContent = (catIds: string[]) => {
   const ids = Array.isArray(catIds) ? catIds : (catIds ? [catIds] : [])
   activeCatalogIds.value = ids
   const isOverview = ids.length === 0
+  
+  // 切换目录时重置展开状态
+  if (!isOverview) {
+    isExpanded.value = false
+  }
 
   if (isOverview) {
-    publicPPT.value = catalog.map(c => ({
-      id: 'pub_L1_' + c.id,
-      title: `${c.id} ${c.text} (标准拆分版)`,
-      date: '2025-10-31',
-      author: '公共库',
-      type: 'ppt-cover',
-      thumbnail: `https://picsum.photos/seed/pub_cover_${c.id}/320/180`
+    // 默认显示所有PPT（推荐页效果）- 使用与推荐页相同的数据源
+    const allPPT = salesData.pptList || []
+    allPPTList.value = allPPT.map((ppt: any) => ({
+      ...ppt,
+      author: ppt.creator || '未知',
+      date: ppt.date || '10-31'
     }))
+    
+    // 同时保留原有的公共版和实战版数据（用于选择目录后显示）
+    publicPPT.value = allPPT
+      .filter((ppt: any) => ppt.product === activeProduct.value && ppt.tag === '公共版')
+      .map((ppt: any) => ({
+        ...ppt,
+        author: ppt.creator || '公共库',
+        date: ppt.date || '10-31'
+      }))
+    
+    // 如果没有找到匹配的PPT，使用默认数据
+    if (publicPPT.value.length === 0) {
+      publicPPT.value = [
+        {
+          id: 'pub_full_1',
+          title: `${activeProduct.value} 产品介绍完整版`,
+          date: '10-31',
+          creator: '公共库',
+          author: '公共库',
+          tag: '公共版',
+          product: activeProduct.value,
+          thumbnail: `https://picsum.photos/seed/pub_full_${activeProduct.value}/320/180`
+        },
+        {
+          id: 'pub_full_2',
+          title: `${activeProduct.value} 标准版PPT`,
+          date: '10-30',
+          creator: '公共库',
+          author: '公共库',
+          tag: '公共版',
+          product: activeProduct.value,
+          thumbnail: `https://picsum.photos/seed/pub_std_${activeProduct.value}/320/180`
+        },
+        {
+          id: 'pub_full_3',
+          title: `${activeProduct.value} 产品演示完整版`,
+          date: '10-29',
+          creator: '公共库',
+          author: '公共库',
+          tag: '公共版',
+          product: activeProduct.value,
+          thumbnail: `https://picsum.photos/seed/pub_demo_${activeProduct.value}/320/180`
+        },
+        {
+          id: 'pub_full_4',
+          title: `${activeProduct.value} 功能详解完整版`,
+          date: '10-28',
+          creator: '公共库',
+          author: '公共库',
+          tag: '公共版',
+          product: activeProduct.value,
+          thumbnail: `https://picsum.photos/seed/pub_func_${activeProduct.value}/320/180`
+        }
+      ]
+    }
 
-    practicalPPT.value = [
-      { id: 'file_bh', title: '渤海银行一表通售前交流.ppt', date: '2025-10-28', author: '王总', type: 'file' },
-      { id: 'file_cz', title: '沧州银行一表通售前交流.ppt', date: '2025-10-26', author: '刘经理', type: 'file' },
-      { id: 'file_zs', title: '招商银行一表通售前交流.ppt', date: '2025-10-24', author: '陈工', type: 'file' },
-      { id: 'file_dy', title: '第一银行上海一表通售前交流.ppt', date: '2025-10-20', author: '张工', type: 'file' }
-    ]
+    // 实战版PPT
+    const practicalPPTList = allPPT
+      .filter((ppt: any) => ppt.product === activeProduct.value && ppt.tag === '实战版')
+      .map((ppt: any) => ({
+        ...ppt,
+        author: ppt.creator || '未知',
+        date: ppt.date || '10-31',
+        type: 'file'
+      }))
+    
+    // 如果没有找到匹配的PPT，使用默认数据
+    if (practicalPPTList.length === 0) {
+      practicalPPT.value = [
+        { id: 'file_bh', title: '渤海银行一表通售前交流.ppt', date: '10-28', author: '王总', type: 'file', tag: '实战版', product: activeProduct.value },
+        { id: 'file_cz', title: '沧州银行一表通售前交流.ppt', date: '10-26', author: '刘经理', type: 'file', tag: '实战版', product: activeProduct.value },
+        { id: 'file_zs', title: '招商银行一表通售前交流.ppt', date: '10-24', author: '陈工', type: 'file', tag: '实战版', product: activeProduct.value },
+        { id: 'file_dy', title: '第一银行上海一表通售前交流.ppt', date: '10-20', author: '张工', type: 'file', tag: '实战版', product: activeProduct.value }
+      ]
+    } else {
+      practicalPPT.value = practicalPPTList
+    }
   } else {
     publicPPT.value = []
     const practicalMap = new Map()
@@ -661,7 +678,7 @@ const updateContent = (catIds) => {
     ids.forEach(catId => {
       publicPPT.value.push({ 
         id: 'pb_detail_' + catId, 
-        title: `${keyword.value} 标准介绍 - ${catId}`, 
+        title: `${activeProduct.value} 标准介绍 - ${catId}`, 
         date: '10-31', 
         author: '标准化小组',
         type: 'slides', 
@@ -675,7 +692,7 @@ const updateContent = (catIds) => {
 
       addToMap('某国有大行', {
         id: 'pc1_' + catId, 
-        title: `${keyword.value} 汇报 - ${catId} 相关页`, 
+        title: `${activeProduct.value} 汇报 - ${catId} 相关页`, 
         date: '10-25', 
         author: '赵总',
         type: 'slides',
@@ -684,7 +701,7 @@ const updateContent = (catIds) => {
 
       addToMap('某农商行', {
         id: 'pc2_' + catId, 
-        title: `${keyword.value} 方案 - ${catId} 相关页`, 
+        title: `${activeProduct.value} 方案 - ${catId} 相关页`, 
         date: '10-22', 
         author: '李工',
         type: 'slides',
@@ -700,75 +717,41 @@ const updateContent = (catIds) => {
   }
 }
 
-const isCatalogSelected = (catId) => {
-  return activeCatalogIds.value.includes(catId)
+const handleCatalogModeChange = (mode) => {
+  catalogMode.value = mode
+  activeCatalogIds.value = []
+  updateContent([])
 }
 
-const isParentSelected = (parentId) => {
-  if (catalogMode.value !== 'multiple') return false
-  const parent = catalog.find(p => p.id === parentId)
-  if (!parent) return false
-  return parent.children.every(child => activeCatalogIds.value.includes(child.id))
+const handleCatalogIdsChange = (ids) => {
+  activeCatalogIds.value = ids
+  updateContent(ids)
 }
 
-const toggleParentCatalog = (parentId) => {
-  if (catalogMode.value !== 'multiple') return
-  const parent = catalog.find(p => p.id === parentId)
-  if (!parent) return
-  
-  const allSelected = parent.children.every(child => activeCatalogIds.value.includes(child.id))
-  if (allSelected) {
-    // 取消选择该一级目录下的所有二级目录
-    activeCatalogIds.value = activeCatalogIds.value.filter(id => 
-      !parent.children.some(child => child.id === id)
-    )
+const openPpt = (p: any) => {
+  // 使用统一的 dialogs composable 打开PPT对话框
+  if (dialogs) {
+    dialogs.openPpt(p)
   } else {
-    // 选择该一级目录下的所有二级目录
-    const childIds = parent.children.map(child => child.id)
-    activeCatalogIds.value = [...new Set([...activeCatalogIds.value, ...childIds])]
+    // 降级处理：使用本地dialog
+    dialogTitle.value = p.title || p.name || ''
+    activeSlide.value = 0
+    dialogType.value = p.tag === '公共版' ? 'public' : 'practical'
+    dialogVisible.value = true
   }
-  updateContent(activeCatalogIds.value)
 }
 
-const toggleCatalog = (catId) => {
-  if (catalogMode.value !== 'multiple') return
-  if (activeCatalogIds.value.includes(catId)) {
-    activeCatalogIds.value = activeCatalogIds.value.filter(id => id !== catId)
+const openPractical = (it: any) => {
+  // 使用统一的 dialogs composable 打开PPT对话框
+  if (dialogs) {
+    dialogs.openPpt(it)
   } else {
-    activeCatalogIds.value = [...activeCatalogIds.value, catId]
+    // 降级处理：使用本地dialog
+    dialogTitle.value = it.title || it.name || ''
+    activeSlide.value = 0
+    dialogType.value = 'practical'
+    dialogVisible.value = true
   }
-  updateContent(activeCatalogIds.value)
-}
-
-const selectCatalog = (id) => {
-  if (!id) {
-    activeCatalogIds.value = []
-    updateContent([])
-    return
-  }
-  if (catalogMode.value === 'single') {
-    // 单选模式：只能选择一个
-    activeCatalogIds.value = [id]
-  } else {
-    // 多选模式：可以多选
-    toggleCatalog(id)
-    return
-  }
-  updateContent(activeCatalogIds.value)
-}
-
-const openPpt = (p) => {
-  dialogTitle.value = p.title
-  activeSlide.value = 0
-  dialogType.value = 'public'
-  dialogVisible.value = true
-}
-
-const openPractical = (it) => {
-  dialogTitle.value = it.title
-  activeSlide.value = 0
-  dialogType.value = 'practical'
-  dialogVisible.value = true
 }
 
 const chooseSlide = (i) => { 
@@ -784,10 +767,6 @@ const toggleSlideSelection = (i) => {
   }
 }
 
-const openAiPpt = () => {
-  router.push('/ppt/editor')
-}
-
 const openAiPanel = () => {
   aiPanelVisible.value = !aiPanelVisible.value
 }
@@ -798,65 +777,16 @@ const analyzeSelectedSlide = () => {
   aiPanelVisible.value = true
 }
 
-// Top10 热门问题列表（按浏览量排序）
-const top10List = computed(() => {
-  return [...qaList.value]
-    .sort((a, b) => b.views - a.views)
-    .slice(0, 10)
-})
-
-// 选择Top10问题
-const selectTop10Question = (question) => {
-  const index = qaList.value.findIndex(q => q.q === question.q)
-  if (index !== -1) {
-    activeQaIndex.value = index
-    // 滚动到对应位置
-    const element = document.querySelector(`.qa-list-detail li:nth-child(${index + 1})`)
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    }
-  }
-}
-
-const loadQa = () => {
-  if (qaLoading.value || qaNoMore.value) return
-  qaLoading.value = true
-  
-  setTimeout(() => {
-    if (qaList.value.length >= 20) {
-      qaNoMore.value = true
-      qaLoading.value = false
-      return
-    }
-    const nextIndex = qaList.value.length + 1
-    qaList.value.push({
-      q: `如何解决高并发场景下的性能瓶颈（${nextIndex}）？`,
-      a: '采用分布式缓存（Redis）、消息队列（Kafka）削峰填谷，以及数据库读写分离架构。必要时引入Service Mesh进行微服务治理。',
-      views: 100 + nextIndex,
-      likes: 10 + nextIndex
-    })
-    qaList.value.push({
-      q: `私有化部署的硬件配置要求是什么（${nextIndex+1}）？`,
-      a: '最低配置：8核16G内存，建议配置：16核32G内存。存储空间需根据数据量预留，建议使用SSD提升I/O性能。',
-      views: 90 + nextIndex,
-      likes: 5 + nextIndex
-    })
-    qaLoading.value = false
-  }, 1000)
-}
-
-onMounted(() => {
+watch(catalogMode, () => {
+  activeCatalogIds.value = []
   updateContent([])
 })
 
-// 监听模式切换，清空选择
-watch(catalogMode, () => {
-  activeCatalogIds.value = []
+onMounted(() => {
   updateContent([])
 })
 </script>
 
 <style scoped>
-
+/* 样式继承自 sales.scss */
 </style>
-

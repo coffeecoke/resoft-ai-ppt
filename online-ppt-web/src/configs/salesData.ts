@@ -316,6 +316,146 @@ export const responseTocSections = [
   }
 ]
 
+// ==================== 响应文件右侧栏数据 ====================
+export const responseFileSidebarData = {
+  tenderFile: {
+    id: 'tender_001',
+    title: '北京银行一表通项目建设招标文件',
+    creator: '北京银行',
+    date: '2025-10-15',
+    format: 'PDF',
+    size: '2.5MB',
+    thumbnail: 'https://picsum.photos/seed/tender001/60/80'
+  },
+  projectVideos: [
+    {
+      id: 'video_001',
+      title: '北京银行一表通项目首次交流会议',
+      creator: '张三',
+      date: '2025-09-20',
+      views: 45,
+      likes: 12,
+      duration: '01:23:45',
+      thumbnail: 'https://picsum.photos/seed/video001/120/80'
+    },
+    {
+      id: 'video_002',
+      title: '北京银行一表通项目需求调研会议',
+      creator: '李四',
+      date: '2025-09-25',
+      views: 38,
+      likes: 8,
+      duration: '00:56:12',
+      thumbnail: 'https://picsum.photos/seed/video002/120/80'
+    },
+    {
+      id: 'video_003',
+      title: '北京银行一表通技术方案讲解会议',
+      creator: '王五',
+      date: '2025-10-05',
+      views: 52,
+      likes: 15,
+      duration: '01:15:30',
+      thumbnail: 'https://picsum.photos/seed/video003/120/80'
+    }
+  ],
+  similarResponseFiles: [
+    {
+      id: 'response_002',
+      title: '工商银行一表通项目建设响应文件',
+      creator: '赵六',
+      date: '2025-10-18',
+      views: 128,
+      downloads: 45,
+      likes: 23,
+      thumbnail: 'https://picsum.photos/seed/response002/60/80'
+    },
+    {
+      id: 'response_003',
+      title: '建设银行一表通项目建设响应文件',
+      creator: '孙七',
+      date: '2025-10-12',
+      views: 96,
+      downloads: 32,
+      likes: 18,
+      thumbnail: 'https://picsum.photos/seed/response003/60/80'
+    },
+    {
+      id: 'response_004',
+      title: '中国银行一表通项目建设响应文件',
+      creator: '周八',
+      date: '2025-10-08',
+      views: 112,
+      downloads: 38,
+      likes: 21,
+      thumbnail: 'https://picsum.photos/seed/response004/60/80'
+    }
+  ]
+}
+
+// ==================== 关心问题报告数据 ====================
+const createConcernedReports = () => {
+  const companies = ['中国工商银行', '平安银行', '中信信托']
+  const categories = ['公司类', '产品类', '业务类', '商务类']
+  const products = ['一表通', '1104', '受益所有人', '反洗钱', '金数', '金数数据质量']
+  const tags = [
+    { id: 'national', name: '全国/股份制/政策性银行' },
+    { id: 'city', name: '城商行' },
+    { id: 'foreign', name: '外资行' },
+    { id: 'rural', name: '农商' },
+    { id: 'finance', name: '财务公司' },
+    { id: 'trust', name: '信托公司' }
+  ]
+  const filterTypes = ['资质与案例', '公司规模与背景', '性能与效率', '产品架构']
+  const essenceTypes = ['确认类', '对比类', '顾虑类', '建议类', '其它意图']
+
+  const reports: any[] = []
+  let id = 1
+
+  tags.forEach((tag, tagIndex) => {
+    filterTypes.forEach((filterType, filterIndex) => {
+      const company = companies[tagIndex % companies.length]
+      const category = categories[filterIndex % categories.length]
+
+      const hasExpertAnswer = Math.random() > 0.5
+      const reviewers = ['张明', '李芳', '王强', '陈芳', '赵敏']
+
+      reports.push({
+        id: id++,
+        company,
+        category,
+        date: '2024-03-12',
+        title: `${filterType}专项调研报告 - ${tag.name}场景应用`,
+        description: `针对${tag.name}在${filterType}方面的痛点,本报告详细分析了监管合规性、实施路径以及预期的业务效益收益...`,
+        tag: tag.name,
+        tagId: tag.id,
+        productName: products[(id - 1) % products.length],
+        essenceType: essenceTypes[(id - 1) % essenceTypes.length],
+        likes: Math.floor(Math.random() * 100) + 10,
+        systemAnswer: id % 3 === 0
+          ? `针对${tag.name}在${filterType}方面的痛点，我们建议采用以下方案：1. 加强监管合规性管理，建立完善的合规体系，确保各项业务活动符合监管要求；2. 优化实施路径，通过技术手段提升业务效率，降低运营成本；3. 提升业务效益，通过数据分析和业务创新，实现业务增长和利润提升。此外，还需要关注风险控制、人才培养、技术创新等多个方面，形成全方位的解决方案。`
+          : `针对${tag.name}在${filterType}方面的痛点，我们建议采用以下方案：1. 加强监管合规性管理；2. 优化实施路径；3. 提升业务效益。`,
+        expertAnswer: hasExpertAnswer ? {
+          content: id % 4 === 0
+            ? `作为行业专家，我认为${tag.name}在${filterType}方面需要重点关注以下几个方面：首先，要建立完善的监管合规体系，包括制度建设、流程规范、人员培训等多个维度；其次，要结合实际情况制定个性化的实施路径，充分考虑机构的规模、业务特点、技术能力等因素；最后，要持续跟踪业务效益，及时调整策略，确保方案的有效性和可持续性。同时，还需要关注行业发展趋势、监管政策变化、技术创新应用等外部因素，保持方案的先进性和适应性。`
+            : `作为行业专家，我认为${tag.name}在${filterType}方面需要重点关注以下几个方面：首先，要建立完善的监管合规体系；其次，要结合实际情况制定个性化的实施路径；最后，要持续跟踪业务效益，及时调整策略。`,
+          reviewer: reviewers[Math.floor(Math.random() * reviewers.length)],
+          approved: Math.random() > 0.3
+        } : null,
+        iconType: hasExpertAnswer && Math.random() > 0.3 ? 'shield-check' : 'file',
+        question: `如何提升${tag.name}在${filterType}方面的业务敏捷性和数据安全性？`,
+        meetingName: `${company}${products[(id - 1) % products.length]}售前交流`
+      })
+    })
+  })
+
+  return reports
+}
+
+export const concernedQuestionsData = {
+  reports: createConcernedReports()
+}
+
 // ==================== 导出统一数据对象 ====================
 export const salesData = {
   productStats,

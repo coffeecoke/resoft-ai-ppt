@@ -23,6 +23,24 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '产品介绍PPT' }
       },
       {
+        path: 'product-search',
+        name: 'SalesProductSearch',
+        component: () => import('@/views/Sales/ProductSearchResult.vue'),
+        meta: { title: '产品搜索结果' }
+      },
+      {
+        path: 'customer-search',
+        name: 'SalesCustomerSearch',
+        component: () => import('@/views/Sales/CustomerSearchResult.vue'),
+        meta: { title: '客户搜索结果' }
+      },
+      {
+        path: 'question-search',
+        name: 'SalesQuestionSearch',
+        component: () => import('@/views/Sales/QuestionSearchResult.vue'),
+        meta: { title: '问题搜索结果' }
+      },
+      {
         path: 'qa',
         name: 'SalesQA',
         component: () => import('@/views/Sales/QA.vue'),
