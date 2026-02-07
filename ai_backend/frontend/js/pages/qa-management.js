@@ -143,11 +143,16 @@ window.classifyAllQAs = function() {
  * 初始化
  */
 async function initQAManagement() {
-  // 加载分类映射表（用于显示中文名称）
-  await initCategoryMaps();
+  // 加载分类数据（同时用于映射表和筛选框）
+  const categoriesData = await initCategoryMaps();
   
-  // 加载分类选项
-  await loadCategoryOptions();
+  // 使用已加载的数据填充筛选框（避免重复请求）
+  if (categoriesData) {
+    loadCategoryOptionsFromData(categoriesData);
+  } else {
+    // 如果加载失败，尝试单独加载
+    await loadCategoryOptions();
+  }
   
   // 加载问答对列表
   await loadQAList();
@@ -157,7 +162,8 @@ async function initQAManagement() {
 }
 
 /**
- * 初始化分类映射表
+ * 初始化分类映射表（同时返回数据供筛选框使用）
+ * @returns {Promise<Array|null>} 分类数据数组，失败时返回null
  */
 async function initCategoryMaps() {
   try {
@@ -193,9 +199,13 @@ async function initCategoryMaps() {
     
     console.log(`[分类映射] 加载完成: 类别=${qaState.categoryMap.size}个, 性质=${qaState.intentMap.size}个`);
     
+    // 返回数据供筛选框使用
+    return result.data;
+    
   } catch (error) {
     console.error('[分类映射] 加载失败:', error);
     // 失败时使用空映射表，不影响主流程
+    return null;
   }
 }
 
@@ -330,48 +340,89 @@ function bindEvents() {
 }
 
 /**
- * 加载分类选项
+ * 从已加载的数据填充分类选项（避免重复请求）
+ * @param {Array} categoriesData - 分类数据数组
  */
-async function loadCategoryOptions() {
+function loadCategoryOptionsFromData(categoriesData) {
   try {
-    // 这里可以从API获取分类列表，暂时先硬编码主要分类
     const categorySelect = document.getElementById('qa-filter-category');
     if (!categorySelect) return;
     
-    // 可以后续从API获取
-    const categories = [
-      { code: '1.1', name: '1.1 资质与案例' },
-      { code: '1.2', name: '1.2 公司规模与背景' },
-      { code: '1.3', name: '1.3 合作模式' },
-      { code: '1.4', name: '1.4 监管资源与协作' },
-      { code: '2.1', name: '2.1 性能与效率' },
-      { code: '2.2', name: '2.2 产品架构' },
-      { code: '2.3', name: '2.3 产品功能' },
-      { code: '2.4', name: '2.4 兼容性与接口扩展' },
-      { code: '3.1', name: '3.1 监管政策适配' },
-      { code: '3.2', name: '3.2 数据安全与合规治理' },
-      { code: '3.3', name: '3.3 业务适配与定制化' },
-      { code: '4.1', name: '4.1 预算与报价' },
-      { code: '4.2', name: '4.2 价格竞争力与优惠政策' },
-      { code: '5.1', name: '5.1 POC' },
-      { code: '5.2', name: '5.2 项目周期' },
-      { code: '5.3', name: '5.3 项目团队与管控' },
-      { code: '5.4', name: '5.4 资源配置' },
-      { code: '5.5', name: '5.5 数据迁移' },
-      { code: '6.1', name: '6.1 运维支撑' },
-      { code: '6.2', name: '6.2 培训服务' },
-      { code: '6.3', name: '6.3 安全支撑' },
-      { code: '6.4', name: '6.4 其他售后保障' }
-    ];
+    // 筛选出 level=2 的分类类别（用于筛选框）
+    const categoryOptions = categoriesData
+      .filter(cat => cat.level === 2) // 只显示分类类别
+      .sort((a, b) => {
+        // 按代码排序（确保 1.1, 1.2, 2.1, 2.2 这样的顺序）
+        const codeA = a.code.split('.').map(Number);
+        const codeB = b.code.split('.').map(Number);
+        for (let i = 0; i < Math.max(codeA.length, codeB.length); i++) {
+          const numA = codeA[i] || 0;
+          const numB = codeB[i] || 0;
+          if (numA !== numB) {
+            return numA - numB;
+          }
+        }
+        return 0;
+      });
     
-    categories.forEach(cat => {
+    console.log(`[分类选项] 填充了 ${categoryOptions.length} 个分类类别`);
+    
+    // 清空现有选项（保留"全部"选项）
+    categorySelect.innerHTML = '<option value="">全部</option>';
+    
+    // 添加分类选项
+    categoryOptions.forEach(cat => {
       const option = document.createElement('option');
       option.value = cat.code;
-      option.textContent = cat.name;
+      option.textContent = `${cat.code} ${cat.name}`;
       categorySelect.appendChild(option);
     });
+    
+    console.log('[分类选项] 分类类别选项已更新');
+    
   } catch (error) {
-    console.error('加载分类选项失败:', error);
+    console.error('[分类选项] 填充失败:', error);
+    // 失败时显示错误提示
+    const categorySelect = document.getElementById('qa-filter-category');
+    if (categorySelect) {
+      categorySelect.innerHTML = '<option value="">加载失败，请刷新页面</option>';
+    }
+  }
+}
+
+/**
+ * 加载分类选项（从API获取，作为备用方案）
+ */
+async function loadCategoryOptions() {
+  try {
+    const categorySelect = document.getElementById('qa-filter-category');
+    if (!categorySelect) return;
+    
+    console.log('[分类选项] 开始从API加载分类类别...');
+    
+    // 从API获取分类数据
+    const response = await fetch(`${API_BASE}/qa/categories`);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP错误: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    
+    if (!result.success || !result.data) {
+      throw new Error('获取分类数据失败');
+    }
+    
+    // 使用统一的数据填充函数
+    loadCategoryOptionsFromData(result.data);
+    
+  } catch (error) {
+    console.error('[分类选项] 加载失败:', error);
+    // 失败时显示错误提示，但不影响主流程
+    const categorySelect = document.getElementById('qa-filter-category');
+    if (categorySelect) {
+      categorySelect.innerHTML = '<option value="">加载失败，请刷新页面</option>';
+    }
   }
 }
 

@@ -123,6 +123,7 @@ function renderPromptList(prompts) {
       'qa_extraction': '问答对提取',
       'qa_classification': '问答对分类',
       'ppt_analysis': 'PPT分析',
+      'presales_analysis': '售前交流综合分析',
       'document_extract': '文档提取',
       'document_manage': '文档管理',
       'general': '通用'
@@ -212,7 +213,11 @@ function viewPrompt(prompt) {
   const sceneMap = {
     'transcription': '语音转文本',
     'transcription_correction': '语音转录纠错',
+    'role_judgment': '角色判断',
+    'qa_extraction': '问答对提取',
+    'qa_classification': '问答对分类',
     'ppt_analysis': 'PPT分析',
+    'presales_analysis': '售前交流综合分析',
     'document_extract': '文档提取',
     'document_manage': '文档管理',
     'general': '通用'

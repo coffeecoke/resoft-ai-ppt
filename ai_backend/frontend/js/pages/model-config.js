@@ -243,6 +243,7 @@ function getSceneName(scene) {
     'qa_extraction': '问答对提取',
     'qa_classification': '问答对分类',
     'ppt_analysis': 'PPT分析',
+    'presales_analysis': '售前交流综合分析',
     'document_extract': '文档提取',
     'document_manage': '文档管理',
     'general': '通用'

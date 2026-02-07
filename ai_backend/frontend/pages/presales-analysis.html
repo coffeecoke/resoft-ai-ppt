@@ -1,0 +1,95 @@
+<!-- 售前交流综合分析页面 -->
+<div class="page-header">
+  <h1>💬 售前交流综合分析</h1>
+  <p class="page-description">对已完成转录、合并和角色设置的对话进行综合分析</p>
+  <div class="header-actions">
+    <button class="btn btn-secondary" onclick="loadTranscriptionList()">
+      <span class="icon">🔄</span> 刷新列表
+    </button>
+  </div>
+</div>
+
+<!-- 转录记录列表 -->
+<div class="card">
+  <div class="card-header">
+    <h2>📋 可用转录记录</h2>
+    <div class="header-info">
+      <span id="presales-total-count">共 0 条记录</span>
+    </div>
+  </div>
+  <div class="card-body">
+    <!-- 加载状态 -->
+    <div id="presales-loading" class="loading" style="display: none;">
+      <div class="spinner"></div>
+      <p>加载中...</p>
+    </div>
+
+    <!-- 空状态 -->
+    <div id="presales-empty" class="empty-state" style="display: none;">
+      <p>暂无可用转录记录</p>
+      <small>请先完成语音转录、合并对话和角色设置</small>
+    </div>
+
+    <!-- 列表 -->
+    <div id="presales-list" class="table-container" style="display: none;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th style="width: 200px;">文件名称</th>
+            <th style="width: 150px;">客户名称</th>
+            <th style="width: 150px;">创建时间</th>
+            <th style="width: 100px;">分析状态</th>
+            <th style="width: 200px;">操作</th>
+          </tr>
+        </thead>
+        <tbody id="presales-list-tbody">
+          <!-- 动态生成 -->
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 分页 -->
+    <div id="presales-pagination" class="pagination-container" style="display: none; margin-top: 20px;">
+      <div class="pagination-info">
+        <span id="presales-pagination-info">共 0 条，每页 20 条</span>
+      </div>
+      <div class="pagination-controls">
+        <button class="btn btn-sm" id="presales-prev-btn" onclick="changePage(-1)" disabled>上一页</button>
+        <span id="presales-page-info">第 1 页，共 1 页</span>
+        <button class="btn btn-sm" id="presales-next-btn" onclick="changePage(1)" disabled>下一页</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 分析结果查看对话框 -->
+<dialog id="presales-result-dialog" style="max-width: 900px; width: 90%;">
+  <div class="dialog-content">
+    <div class="dialog-header">
+      <h2>📊 分析结果</h2>
+      <button class="icon-btn" onclick="closeResultDialog()">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+    <div class="dialog-body">
+      <div id="presales-result-content">
+        <!-- 分析结果内容 -->
+      </div>
+    </div>
+    <div class="dialog-actions">
+      <button class="btn btn-secondary" onclick="closeResultDialog()">关闭</button>
+      <button class="btn btn-primary" onclick="copyResult()">📋 复制结果</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- 分析中遮罩 -->
+<div id="presales-analyzing-overlay" class="loading-overlay" style="display: none;">
+  <div class="loading-content">
+    <div class="spinner"></div>
+    <p id="presales-analyzing-text">正在分析中，请稍候...</p>
+  </div>
+</div>
