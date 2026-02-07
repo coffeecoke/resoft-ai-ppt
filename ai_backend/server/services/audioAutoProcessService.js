@@ -15,6 +15,7 @@ const logger = require('../utils/logger')
 const audioScanService = require('./audioScanService')
 const transcriptionService = require('./transcriptionService') // ✅ 导入转录服务
 const transcriptionAiService = require('./transcriptionAiService') // ✅ 导入AI修正服务
+const audioExtractor = require('../utils/audioExtractor') // ✅ 导入音频提取工具
 
 const prisma = new PrismaClient()
 
@@ -28,7 +29,7 @@ class AudioAutoProcessService {
       pollingInterval: 5 * 60 * 1000, // 默认5分钟
       maxConcurrent: 1, // 同时处理的音频数量
       enableAiCorrection: false, // ✅ 是否启用AI错别字修正（默认false，不自动执行错别字修正）
-      supportedFormats: ['mp3', 'wav', 'm4a', 'flac', 'aac', 'wma', 'ogg']
+      supportedFormats: ['mp3', 'wav', 'm4a', 'flac', 'aac', 'wma', 'ogg', 'mp4', 'avi', 'mov', 'mkv', 'flv', 'wmv', 'webm', '3gp', '3g2']
     }
     this.statistics = {
       totalAudios: 0,
@@ -244,22 +245,51 @@ class AudioAutoProcessService {
     this.statistics.processingAudios = this.processingQueue.size
 
     try {
+      // 检测是否为视频文件，如果是则提取音频
+      let actualAudioPath = filePath
+      let extractedAudioPath = null
+      
+      if (audioExtractor.isVideoFile(filePath)) {
+        this.addLog('info', `🎬 检测到视频文件，开始提取音频: ${fileName}`)
+        
+        // 检查 ffmpeg 是否可用
+        const ffmpegAvailable = await audioExtractor.checkFFmpegAvailable()
+        if (!ffmpegAvailable) {
+          this.addLog('error', `❌ 视频文件需要提取音频，但系统未安装 ffmpeg: ${fileName}`)
+          throw new Error('视频文件需要提取音频，但系统未安装 ffmpeg。请安装 ffmpeg 或直接使用音频文件。')
+        }
+        
+        try {
+          // 从视频提取音频（输出为 wav 格式，兼容性最好）
+          extractedAudioPath = await audioExtractor.extractAudioFromVideo(filePath, 'wav')
+          actualAudioPath = extractedAudioPath
+          this.addLog('success', `✅ 音频提取成功: ${fileName}`)
+          logger.info(`✅ 音频提取成功: ${extractedAudioPath}`)
+        } catch (error) {
+          this.addLog('error', `❌ 音频提取失败: ${fileName} - ${error.message}`)
+          logger.error(`❌ 音频提取失败: ${error.message}`)
+          throw new Error(`音频提取失败: ${error.message}`)
+        }
+      }
+      
       this.addLog('info', `🎤 开始转录: ${fileName}`)
 
-      // 调用转录服务
-      const transcribeResult = await this.transcribeAudio(filePath, fileName)
+      // 调用转录服务（使用实际音频路径）
+      const transcribeResult = await this.transcribeAudio(actualAudioPath, fileName)
 
       if (transcribeResult.success) {
         // 保存到数据库
-        const stats = await fs.stat(filePath);
-        const ext = path.extname(filePath).toLowerCase().replace('.', '');
+        // 注意：如果是从视频提取的音频，actualAudioPath 是提取后的音频路径
+        // 但 originalFileName 仍然保留原始视频文件名
+        const stats = await fs.stat(filePath); // 原始文件大小
+        const ext = path.extname(filePath).toLowerCase().replace('.', ''); // 原始文件格式
         
         const savedTranscription = await transcriptionService.saveTranscription({
           name: fileName,
           originalFileName: fileName,
-          audioFilePath: filePath,
-          audioFileSize: stats.size,
-          audioFormat: ext,
+          audioFilePath: actualAudioPath, // 如果是视频，这里是提取后的音频路径
+          audioFileSize: stats.size, // 原始文件大小
+          audioFormat: extractedAudioPath ? 'wav' : ext, // 如果是提取的音频，格式为wav
           audioDuration: transcribeResult.data.audioDuration || null,
           resultFilePath: null,
           dialogues: transcribeResult.data.dialogues || [],
@@ -381,9 +411,25 @@ class AudioAutoProcessService {
     } catch (error) {
       logger.error(`❌ 处理音频失败: ${fileName}`, error)
       this.addLog('error', `❌ 处理失败: ${fileName} - ${error.message}`)
+      
+      // 如果提取了音频文件，在错误时清理临时文件
+      if (extractedAudioPath) {
+        try {
+          await fs.unlink(extractedAudioPath).catch(() => {})
+          logger.info(`🗑️ 已清理临时提取的音频文件: ${extractedAudioPath}`)
+        } catch (cleanupError) {
+          logger.warn(`⚠️ 清理临时音频文件失败: ${extractedAudioPath}`, cleanupError)
+        }
+      }
     } finally {
       this.processingQueue.delete(filePath)
       this.statistics.processingAudios = this.processingQueue.size
+      
+      // 注意：提取的音频文件在成功时保留，以便后续可能需要
+      // 如果需要自动清理，可以在这里添加清理逻辑
+      // if (extractedAudioPath && transcribeResult?.success) {
+      //   await fs.unlink(extractedAudioPath).catch(() => {})
+      // }
     }
   }
 

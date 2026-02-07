@@ -27,9 +27,23 @@
 
   <!-- 文件列表 -->
   <div class="card">
-    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
       <h2>📂 音频文件列表</h2>
-      <div style="display: flex; gap: 10px;">
+      <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+        <input type="text" id="st-fileNameSearch" class="form-control" placeholder="按音频名称模糊查询" style="width: 200px;">
+        <label style="display: flex; align-items: center; gap: 4px; color: var(--text-secondary); font-size: 14px;">是否转录</label>
+        <select id="st-transcribedFilter" class="form-control" style="width: 100px;">
+          <option value="all">全部</option>
+          <option value="yes">已转录</option>
+          <option value="no">待转录</option>
+        </select>
+        <label style="display: flex; align-items: center; gap: 4px; color: var(--text-secondary); font-size: 14px;">角色设置</label>
+        <select id="st-roleSetFilter" class="form-control" style="width: 100px;">
+          <option value="all">全部</option>
+          <option value="yes">已设置</option>
+          <option value="no">未设置</option>
+        </select>
+        <button class="btn btn-primary" id="st-searchFilesBtn">🔍 查询</button>
         <span id="st-fileCount" style="color: var(--text-secondary); padding: 8px;">总计: 0 个文件</span>
         <button class="btn btn-secondary" id="st-refreshFilesBtn">🔄 刷新</button>
       </div>
@@ -42,12 +56,13 @@
             <th>格式</th>
             <th>大小</th>
             <th>修改时间</th>
-            <th>状态</th>
+            <th>是否转录</th>
+            <th>是否角色设置</th>
             <th>操作</th>
           </tr>
         </thead>
         <tbody id="st-fileList">
-          <tr><td colspan="6" class="loading">暂无数据，请先配置扫描目录</td></tr>
+          <tr><td colspan="7" class="loading">暂无数据，请先配置扫描目录</td></tr>
         </tbody>
       </table>
     </div>
@@ -67,9 +82,9 @@
     <div class="upload-area" id="st-uploadArea">
       <div class="upload-icon">🎙️</div>
       <p class="upload-text">点击或拖拽音频文件到此处</p>
-      <p class="upload-hint">支持格式: MP3, WAV, M4A, FLAC, AAC, WMA, OGG</p>
-      <p class="upload-hint">最大文件: 500MB | 最长时长: 5小时</p>
-      <input type="file" id="st-audioInput" accept=".mp3,.wav,.m4a,.flac,.aac,.wma,.ogg" hidden>
+      <p class="upload-hint">支持格式: MP3, WAV, M4A, FLAC, AAC, WMA, OGG, MP4, AVI, MOV, MKV</p>
+      <p class="upload-hint">最大文件: 500MB | 最长时长: 5小时 | 视频文件将自动提取音频</p>
+      <input type="file" id="st-audioInput" accept=".mp3,.wav,.m4a,.flac,.aac,.wma,.ogg,.mp4,.avi,.mov,.mkv,.flv,.wmv,.webm,.3gp,.3g2" hidden>
       <button class="btn btn-primary" id="st-selectFileBtn">选择文件</button>
     </div>
 

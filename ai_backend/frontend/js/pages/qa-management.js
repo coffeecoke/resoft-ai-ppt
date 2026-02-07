@@ -21,7 +21,9 @@ let qaState = {
   allSelected: false,
   // 分类映射表（用于显示中文名称）
   categoryMap: new Map(), // code -> {name, description}
-  intentMap: new Map()    // code -> {name, description}
+  intentMap: new Map(),   // code -> {name, description}
+  categoriesFullList: null, // 完整分类列表（用于重新分类下拉）
+  currentDetailQA: null    // 当前查看详情的问答对（用于重新分类后刷新）
 };
 
 // 先声明全局函数占位符，确保onclick可以调用
@@ -117,12 +119,16 @@ window.classifyAllQAs = function() {
   window.closeQADetail = closeQADetail;
   window.classifySingleQA = classifySingleQA;
   window.viewQADetail = viewQADetail;
+  window.showReclassifyPanel = showReclassifyPanel;
+  window.hideReclassifyPanel = hideReclassifyPanel;
+  window.saveReclassify = saveReclassify;
     window.toggleSelectAll = toggleSelectAll;
     window.toggleSelectQA = toggleSelectQA;
     window.applyFilters = applyFilters;
     window.resetFilters = resetFilters;
     window.changePage = changePage;
     window.changePageSize = changePageSize;
+    window.exportQAList = exportQAList;
     
     // 标记初始化完成
     _qaFunctionsInitialized = true;
@@ -180,7 +186,8 @@ async function initCategoryMaps() {
       throw new Error('获取分类数据失败');
     }
     
-    // 构建映射表
+    // 构建映射表并保存完整列表（供重新分类下拉使用）
+    qaState.categoriesFullList = result.data;
     result.data.forEach(cat => {
       if (cat.level === 2) {
         // 分类类别（level=2）
@@ -626,6 +633,116 @@ resetFilters = function() {
 }
 
 /**
+ * 导出当前筛选条件下的问答对，格式可选 CSV 或 TXT（完整问题与解答）
+ */
+async function exportQAList() {
+  const btn = document.getElementById('qa-export-btn');
+  const formatSelect = document.getElementById('qa-export-format');
+  const format = (formatSelect && formatSelect.value) || 'csv';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '导出中...';
+  }
+  try {
+    const params = new URLSearchParams();
+    if (qaState.filters.transcriptionName) {
+      params.append('transcriptionName', qaState.filters.transcriptionName);
+    }
+    if (qaState.filters.classificationStatus) {
+      params.append('classificationStatus', qaState.filters.classificationStatus);
+    }
+    if (qaState.filters.category) {
+      params.append('category', qaState.filters.category);
+    }
+    if (qaState.filters.intent) {
+      params.append('intent', qaState.filters.intent);
+    }
+    if (qaState.filters.questionSource) {
+      params.append('questionSource', qaState.filters.questionSource);
+    }
+    const response = await fetch(`${API_BASE}/qa/concerns/export?${params.toString()}`);
+    const result = await response.json();
+    if (!result.success) {
+      throw new Error(result.error || '导出失败');
+    }
+    const list = result.data?.list || [];
+    if (list.length === 0) {
+      showToast('当前筛选条件下没有数据可导出', 'warning');
+      return;
+    }
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, '-');
+    if (format === 'txt') {
+      const lines = [];
+      list.forEach((qa, index) => {
+        const categoryName = qa.concern_categories ? (qa.concern_categories.code + ' ' + (qa.concern_categories.name || '')) : (qa.category || '');
+        const intentName = getIntentName(qa.intent_code) || qa.intent_code || '';
+        const timeRange = (qa.time_range1 || qa.time_range || '').replace(/[\[\]]/g, '');
+        const createdAt = qa.createdAt ? new Date(qa.createdAt).toLocaleString('zh-CN') : '';
+        lines.push('======== 问答对 ' + (index + 1) + ' ========');
+        lines.push('问题：' + (qa.question || ''));
+        lines.push('回答：' + (qa.answer || ''));
+        lines.push('分类类别：' + categoryName);
+        lines.push('问题性质：' + intentName);
+        lines.push('音频名称：' + (qa.transcription_name || ''));
+        lines.push('时间范围：' + timeRange);
+        lines.push('创建时间：' + createdAt);
+        lines.push('');
+      });
+      const txtContent = '\uFEFF' + lines.join('\r\n');
+      const blob = new Blob([txtContent], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `问答对导出_${timestamp}.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } else {
+      const escapeCsv = (v) => {
+        const s = (v == null ? '' : String(v)).replace(/\r/g, ' ').replace(/\n/g, ' ');
+        if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+        return s;
+      };
+      const rows = [
+        ['序号', '问题', '回答', '分类类别', '问题性质', '音频名称', '时间范围', '创建时间'].map(escapeCsv).join(',')
+      ];
+      list.forEach((qa, index) => {
+        const categoryName = qa.concern_categories ? (qa.concern_categories.code + ' ' + (qa.concern_categories.name || '')) : (qa.category || '');
+        const intentName = getIntentName(qa.intent_code) || qa.intent_code || '';
+        const timeRange = (qa.time_range1 || qa.time_range || '').replace(/[\[\]]/g, '');
+        const createdAt = qa.createdAt ? new Date(qa.createdAt).toLocaleString('zh-CN') : '';
+        rows.push([
+          index + 1,
+          qa.question || '',
+          qa.answer || '',
+          categoryName,
+          intentName,
+          qa.transcription_name || '',
+          timeRange,
+          createdAt
+        ].map(escapeCsv).join(','));
+      });
+      const csvContent = '\uFEFF' + rows.join('\r\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `问答对导出_${timestamp}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+    showToast(`已导出 ${list.length} 条问答对（${format.toUpperCase()}）`, 'success');
+  } catch (error) {
+    console.error('导出问答对失败:', error);
+    showToast('导出失败: ' + (error.message || '未知错误'), 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<span class="icon">📥</span> 导出';
+    }
+  }
+}
+
+/**
  * 全选/取消全选
  */
 toggleSelectAll = function() {
@@ -1065,7 +1182,7 @@ viewQADetail = async function(concernId) {
       console.log('[详情] 从服务器获取:', qaData);
     }
     
-    // 渲染详情内容
+    qaState.currentDetailQA = qaData;
     renderQADetail(qaData);
     
   } catch (error) {
@@ -1226,7 +1343,7 @@ function renderQADetail(qa) {
     </div>
     
     <div style="margin-top: 24px; padding-top: 20px; border-top: 1px solid #e8e8e8; display: flex; justify-content: flex-end; gap: 12px;">
-      <button onclick="classifySingleQA('${qa.id}')" class="btn btn-primary" style="padding: 8px 20px;">
+      <button onclick="showReclassifyPanel()" class="btn btn-primary" style="padding: 8px 20px;">
         🏷️ 重新分类
       </button>
       <button onclick="closeQADetail()" class="btn btn-secondary" style="padding: 8px 20px;">
@@ -1240,9 +1357,157 @@ function renderQADetail(qa) {
  * 关闭问答对详情弹窗
  */
 closeQADetail = function() {
+  hideReclassifyPanel();
   const modal = document.getElementById('qa-detail-modal');
   if (modal) {
     modal.style.display = 'none';
+  }
+}
+
+/**
+ * 显示重新分类面板（手动纠偏：选择类型后保存，不调用AI）
+ */
+showReclassifyPanel = async function() {
+  const qa = qaState.currentDetailQA;
+  if (!qa) return;
+
+  const body = document.getElementById('qa-detail-body');
+  if (!body) return;
+
+  let list = qaState.categoriesFullList;
+  if (!list || list.length === 0) {
+    const res = await fetch(`${API_BASE}/qa/categories`);
+    const result = await res.json();
+    if (result.success && result.data) {
+      list = result.data;
+      qaState.categoriesFullList = list;
+    }
+  }
+  if (!list || list.length === 0) {
+    showToast('无法加载分类列表，请刷新页面重试', 'error');
+    return;
+  }
+
+  const categoryList = list.filter(c => c.level === 2).sort((a, b) => {
+    const codeA = (a.code || '').split('.').map(Number);
+    const codeB = (b.code || '').split('.').map(Number);
+    for (let i = 0; i < Math.max(codeA.length, codeB.length); i++) {
+      const n = (codeA[i] || 0) - (codeB[i] || 0);
+      if (n !== 0) return n;
+    }
+    return 0;
+  });
+  const intentList = list.filter(c => c.level === 3).sort((a, b) => (a.code || '').localeCompare(b.code || ''));
+
+  const currentCategory = qa.concern_categories ? qa.concern_categories.code : (qa.category || '');
+  const currentIntent = qa.intent_code || '';
+
+  const categoryOptions = categoryList.map(c => `<option value="${escapeHtml(c.code)}" ${c.code === currentCategory ? 'selected' : ''}>${escapeHtml(c.code)} ${escapeHtml(c.name)}</option>`).join('');
+  const intentOptions = intentList.map(c => `<option value="${escapeHtml(c.code)}" ${c.code === currentIntent ? 'selected' : ''}>${escapeHtml(c.code)} ${escapeHtml(c.name)}</option>`).join('');
+
+  const existing = document.getElementById('qa-reclassify-panel');
+  if (existing) {
+    existing.remove();
+  }
+
+  const panel = document.createElement('div');
+  panel.id = 'qa-reclassify-panel';
+  panel.style.cssText = 'margin-top: 20px; padding: 20px; background: #fafafa; border: 1px solid #e8e8e8; border-radius: 8px;';
+  panel.innerHTML = `
+    <h4 style="margin: 0 0 16px 0; font-size: 16px; color: #262626;">✏️ 手动重新分类</h4>
+    <p style="margin: 0 0 16px 0; font-size: 13px; color: #666;">选择分类类别和问题性质后点击保存，不调用AI。</p>
+    <div style="display: grid; gap: 12px; margin-bottom: 16px;">
+      <div>
+        <label style="display: block; margin-bottom: 4px; font-weight: 500; color: #333;">分类类别</label>
+        <select id="qa-reclassify-category" class="form-control" style="width: 100%; max-width: 400px;">
+          <option value="">-- 请选择或留空 --</option>
+          ${categoryOptions}
+        </select>
+      </div>
+      <div>
+        <label style="display: block; margin-bottom: 4px; font-weight: 500; color: #333;">问题性质</label>
+        <select id="qa-reclassify-intent" class="form-control" style="width: 100%; max-width: 400px;">
+          <option value="">-- 请选择或留空 --</option>
+          ${intentOptions}
+        </select>
+      </div>
+    </div>
+    <div style="display: flex; gap: 12px;">
+      <button onclick="saveReclassify()" class="btn btn-primary" style="padding: 8px 20px;">保存</button>
+      <button onclick="hideReclassifyPanel()" class="btn btn-secondary" style="padding: 8px 20px;">取消</button>
+    </div>
+  `;
+  body.appendChild(panel);
+}
+
+/**
+ * 隐藏重新分类面板
+ */
+hideReclassifyPanel = function() {
+  const panel = document.getElementById('qa-reclassify-panel');
+  if (panel) panel.remove();
+}
+
+/**
+ * 保存手动重新分类
+ */
+saveReclassify = async function() {
+  const qa = qaState.currentDetailQA;
+  if (!qa) return;
+
+  const categorySelect = document.getElementById('qa-reclassify-category');
+  const intentSelect = document.getElementById('qa-reclassify-intent');
+  if (!categorySelect || !intentSelect) return;
+
+  const categoryCode = (categorySelect.value != null ? categorySelect.value : '').trim();
+  const intentCode = (intentSelect.value != null ? intentSelect.value : '').trim();
+  if (!categoryCode && !intentCode) {
+    showToast('请至少选择分类类别或问题性质之一', 'warning');
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/qa/concerns/${qa.id}/classification`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        categoryCode: categoryCode || null,
+        intentCode: intentCode || null
+      })
+    });
+    const result = await res.json();
+    if (!result.success) {
+      throw new Error(result.error || '保存失败');
+    }
+    showToast('分类已更新', 'success');
+    hideReclassifyPanel();
+    const categoryVal = categoryCode || null;
+    const intentVal = intentCode || null;
+    qa.intent_code = intentVal;
+    if (categoryVal) {
+      const list = qaState.categoriesFullList || [];
+      const cat = list.find(c => c.level === 2 && c.code === categoryVal);
+      if (cat) {
+        qa.concern_categories = { code: cat.code, name: cat.name, level: cat.level };
+        qa.category = cat.code;
+        qa.category_id = cat.id;
+      }
+    } else {
+      qa.concern_categories = null;
+      qa.category = null;
+      qa.category_id = null;
+    }
+    renderQADetail(qa);
+    // 若列表中有该项，同步更新列表行（下次刷新或翻页会一致）
+    if (qaState.list) {
+      const idx = qaState.list.findIndex(item => item.id === qa.id);
+      if (idx >= 0) {
+        qaState.list[idx] = { ...qaState.list[idx], ...qa };
+      }
+    }
+  } catch (err) {
+    console.error('保存重新分类失败:', err);
+    showToast(err.message || '保存失败', 'error');
   }
 }
 

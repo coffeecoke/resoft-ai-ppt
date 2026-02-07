@@ -24,7 +24,7 @@ class AudioScanService {
       // 返回默认配置
       return {
         scanDirectory: '',
-        supportedFormats: ['.mp3', '.wav', '.m4a', '.flac', '.aac', '.wma', '.ogg'],
+        supportedFormats: ['.mp3', '.wav', '.m4a', '.flac', '.aac', '.wma', '.ogg', '.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.webm', '.3gp', '.3g2'],
         autoScanEnabled: false,
         scanInterval: 300000
       };
@@ -175,7 +175,24 @@ class AudioScanService {
         }
       });
 
-      // 创建映射表
+      // 是否角色设置：以 dialogue_adjustments 表中 speaker_roles 有值为准
+      const transcriptionIds = transcriptions.map(t => t.id);
+      const adjustmentsWithRole = await prisma.dialogue_adjustments.findMany({
+        where: {
+          transcription_id: { in: transcriptionIds },
+          speaker_roles: { not: null }
+        },
+        select: { transcription_id: true, speaker_roles: true }
+      });
+      const transcriptionIdsWithRoleSet = new Set();
+      adjustmentsWithRole.forEach(a => {
+        const roleJson = a.speaker_roles ? String(a.speaker_roles).trim() : '';
+        if (roleJson.length > 0 && roleJson !== '{}') {
+          transcriptionIdsWithRoleSet.add(a.transcription_id);
+        }
+      });
+
+      // 创建映射表（是否转录、是否进行角色设置）
       const statusMap = {};
       transcriptions.forEach(t => {
         statusMap[t.audio_file_path] = {
@@ -183,18 +200,22 @@ class AudioScanService {
           transcriptionId: t.id,
           transcriptionName: t.name,
           status: t.status,
-          transcribedAt: t.created_at
+          transcribedAt: t.created_at,
+          hasRoleSet: transcriptionIdsWithRoleSet.has(t.id)
         };
       });
 
-      // 为每个文件添加状态
-      return files.map(file => ({
-        ...file,
-        ...statusMap[file.filePath] || { transcribed: false }
-      }));
+      // 为每个文件添加状态（未转录的默认未设角色）
+      return files.map(file => {
+        const status = statusMap[file.filePath];
+        if (!status) {
+          return { ...file, transcribed: false, hasRoleSet: false };
+        }
+        return { ...file, ...status };
+      });
     } catch (error) {
       console.error('批量检查转录状态失败:', error);
-      return files.map(file => ({ ...file, transcribed: false }));
+      return files.map(file => ({ ...file, transcribed: false, hasRoleSet: false }));
     } finally {
       await prisma.$disconnect();
     }

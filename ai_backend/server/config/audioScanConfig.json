@@ -7,7 +7,16 @@
     ".flac",
     ".aac",
     ".wma",
-    ".ogg"
+    ".ogg",
+    ".mp4",
+    ".avi",
+    ".mov",
+    ".mkv",
+    ".flv",
+    ".wmv",
+    ".webm",
+    ".3gp",
+    ".3g2"
   ],
   "autoScanEnabled": false,
   "scanInterval": 300000
