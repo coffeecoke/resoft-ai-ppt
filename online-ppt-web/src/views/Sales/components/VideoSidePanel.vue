@@ -9,9 +9,9 @@
           </span>
         </template>
         <div class="side-block">
-          <div class="transcript-content">
+          <div class="transcript-content" v-if="transcriptList.length > 0">
             <div 
-              v-for="(item, index) in videoDetail.transcript" 
+              v-for="(item, index) in transcriptList" 
               :key="index"
               class="transcript-item"
             >
@@ -21,6 +21,10 @@
               </div>
               <div class="transcript-text">{{ item.content }}</div>
             </div>
+          </div>
+          <div v-else class="transcript-empty">
+            <i class="ri-file-text-line"></i>
+            <p>暂无原文内容</p>
           </div>
         </div>
       </el-tab-pane>
@@ -33,9 +37,9 @@
           </span>
         </template>
         <div class="side-block qa-list-container">
-          <div class="question-list" v-if="videoDetail.qa && videoDetail.qa.length > 0">
+          <div class="question-list" v-if="qaList.length > 0">
             <div 
-              v-for="(item, index) in videoDetail.qa" 
+              v-for="(item, index) in qaList" 
               :key="index"
               :id="`qa-item-${index}`"
               class="report-item"
@@ -73,7 +77,7 @@
                       @click.stop="handleToggleLike(index)"
                     >
                       <i :class="localLikedQuestions.includes(index) ? 'ri-heart-fill' : 'ri-heart-line'"></i>
-                      <span>{{ item.likes || 57 }}</span>
+                      <span>{{ item.likes ?? 57 }}</span>
                     </div>
                     <div class="report-item-date">{{ item.date || '03-12' }}</div>
                   </div>
@@ -86,16 +90,16 @@
                 </div>
                 
                 <!-- 系统答案 -->
-                <div class="report-item-answer" v-if="item.summary || item.a">
+                <div class="report-item-answer" v-if="item.answerText">
                   <div class="answer-content-wrapper">
                     <div 
                       class="answer-content"
                       :class="{ 'answer-content-expanded': localAnswerExpanded[`system-${index}`] }"
                     >
-                      {{ item.summary || item.a }}
+                      {{ item.answerText }}
                     </div>
                     <button
-                      v-if="shouldShowExpand(item.summary || item.a)"
+                      v-if="shouldShowExpand(item.answerText)"
                       class="answer-expand-btn"
                       @click.stop="handleToggleAnswer(`system-${index}`)"
                     >
@@ -215,7 +219,7 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import VideoAnalysisReport from './VideoAnalysisReport.vue'
 
 const props = defineProps({
@@ -235,6 +239,36 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:activeTab'])
+
+// 原文列表：归一化 transcript（兼容 content/text、空数组）
+const transcriptList = computed(() => {
+  const raw = props.videoDetail?.transcript
+  if (!raw || !Array.isArray(raw)) return []
+  return raw.map((x) => ({
+    speaker: x.speaker || '',
+    time: x.time || '',
+    content: x.content ?? x.text ?? ''
+  }))
+})
+
+// Q&A 列表：归一化 qa 项（兼容 q/question、summary/a/answer、与 new 一致的结构与样式）
+const qaList = computed(() => {
+  const raw = props.videoDetail?.qa
+  if (!raw || !Array.isArray(raw)) return []
+  return raw.map((item) => ({
+    ...item,
+    q: item.q ?? item.question ?? '',
+    answerText: item.summary ?? item.a ?? item.answer ?? '',
+    company: item.company ?? props.videoDetail?.customerName ?? props.videoDetail?.customer,
+    category: item.category ?? '资质与案例',
+    expertApproved: !!item.expertApproved,
+    likes: item.likes,
+    date: item.date,
+    time: item.time,
+    expertAdvice: item.expertAdvice,
+    expertReviewer: item.expertReviewer
+  }))
+})
 
 // 本地状态，用于双向绑定
 const localActiveTab = ref(props.activeTab)
@@ -731,6 +765,25 @@ const handleToggleLike = (index) => {
     i {
       font-size: 14px;
     }
+  }
+}
+
+/* 原文 tab 空状态 */
+.transcript-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: #9ca3af;
+  
+  i {
+    font-size: 48px;
+    color: #d1d5db;
+    margin-bottom: 12px;
+    display: block;
+  }
+  
+  p {
+    font-size: 0.9rem;
+    margin: 0;
   }
 }
 

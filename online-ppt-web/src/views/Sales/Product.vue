@@ -334,6 +334,7 @@
         :title="dialogs.dialogTitle.value"
         :slides="dialogs.slides.value"
         :isResponseDialog="dialogs.isResponseDialog.value"
+        documentId=""
       />
     </div>
   </div>
@@ -348,15 +349,18 @@ import ProductCatalogPanel from './components/ProductCatalogPanel.vue'
 import CommonFilters from './components/CommonFilters.vue'
 import PptGrid from './components/PptGrid.vue'
 import PptDialog from './components/PptDialog.vue'
-import { salesData } from '@/configs/salesData'
 import { AUDIENCES } from '@/configs/salesConstants'
 import { useDialogs } from './composables/useDialogs'
+import { useProductCatalogs } from './composables/useProductCatalogs'
+import { useFilters } from './composables/useFilters'
+import { useGlobalCatalogOptions } from './composables/useGlobalCatalogOptions'
 
 const route = useRoute()
 // 创建独立的 dialogs 实例（因为 Product.vue 是独立页面）
 const dialogs = useDialogs()
 
-const activeProduct = ref(route.query.product as string || '一表通')
+// 产品 code：优先用 route.query.product，无参数时在 onMounted 里用接口取第一个产品
+const activeProduct = ref((route.query.product as string) || '')
 const activeCatalogIds = ref<string[]>([])
 const catalogMode = ref('single')
 const dialogVisible = ref(false)
@@ -421,73 +425,201 @@ const filterGroups = computed(() => [
   }
 ])
 
-// 处理行业变化
+// 处理行业变化（同步到 useFilters）
 const handleIndustryChange = (industryId: string | null) => {
   selectedIndustry.value = industryId
+  // 同步到 pptFilters
+  if (industryId) {
+    filters.pptFilters.industry = [industryId]
+  } else {
+    filters.pptFilters.industry = []
+  }
 }
 
-// 处理筛选值变化
+// 处理筛选值变化（同步到 useFilters）
 const handleFilterValuesChange = (values: Record<string, string | null>) => {
   filterValues.value = values
+  
+  // 版本筛选
+  if (values.version) {
+    filters.filterVersion.value = values.version
+  } else {
+    filters.filterVersion.value = null
+  }
+  
+  // 交流对象筛选
+  if (values.audience) {
+    filters.pptFilters.audience = [values.audience]
+  } else {
+    filters.pptFilters.audience = []
+  }
 }
 
 // 处理排序变化
 const handleSortChange = (sortId: string) => {
   selectedSort.value = sortId
+  // TODO: 实现排序逻辑（如果需要）
 }
 
-// 处理选择客户
+// 处理选择客户（暂不实现）
 const handleSelectCustomer = () => {
-  if (dialogs) {
-    dialogs.openCustomerSelect()
-  }
+  console.log('[Product.vue] 选择客户功能待实现')
+  // TODO: 实现客户选择逻辑
 }
 
-// 处理选择产品
+// 处理选择产品（暂不实现）
 const handleSelectProduct = () => {
-  if (dialogs) {
-    dialogs.openProductSelect()
-  }
+  console.log('[Product.vue] 选择产品功能待实现')
+  // TODO: 实现产品选择逻辑
 }
 
-const catalog = [
-  { id: '1', text: '企业信息', children: [
-    { id: '1.1', text: '企业基础信息' },
-    { id: '1.2', text: '企业资质认证' },
-    { id: '1.3', text: '业务条线介绍' },
-    { id: '1.4', text: '业务咨询实力' },
-    { id: '1.5', text: '技术研发实力' },
-    { id: '1.6', text: '工程交付实力' }
-  ]},
-  { id: '2', text: '监管政策与行业背景', children: [
-    { id: '2.1', text: '监管发文与背景分析' },
-    { id: '2.2', text: '行业发展趋势' },
-    { id: '2.3', text: '监管要求' }
-  ]},
-  { id: '3', text: '产品解决方案', children: [
-    { id: '3.1', text: '客户痛点/难点' },
-    { id: '3.2', text: '解决方案概述' },
-    { id: '3.3', text: '产品架构设计' },
-    { id: '3.4', text: '产品功能详解' },
-    { id: '3.5', text: 'Demo 与交互演示' },
-    { id: '3.6', text: '产品优势说明' },
-    { id: '3.7', text: '产品应用场景' }
-  ]},
-  { id: '4', text: '部署实施及售后保障', children: [
-    { id: '4.1', text: '软硬件资源需求' },
-    { id: '4.2', text: '实施服务流程' },
-    { id: '4.3', text: '售后服务保障' }
-  ]},
-  { id: '5', text: '合作案例', children: [
-    { id: '5.1', text: '监管合作' },
-    { id: '5.2', text: '机构合作' }
-  ]},
-  { id: '6', text: '其他', children: [] }
-]
+// 🆕 使用 composables 获取数据
+// 初始化筛选器（传入空数据源和当前产品）
+const filters = useFilters({ pptList: [], videoList: [], questions: [], tenderFiles: [], responseFiles: [] }, activeProduct)
 
-const publicPPT = ref<any[]>([])
-const practicalPPT = ref<any[]>([])
-const allPPTList = ref<any[]>([]) // 所有PPT列表（推荐页效果）
+// 获取全局 PPT 目录树（用于目录面板展示）
+const { catalogs: pptCatalogTree } = useGlobalCatalogOptions()
+
+// useProductCatalogs 需要一个空 filters ref（Product 页面的筛选已经通过 CommonFilters 实现）
+const emptyFilters = ref<Record<string, never>>({})
+// 使用 useProductCatalogs 获取当前产品的 PPT 数据
+const catalogState = useProductCatalogs(activeProduct, emptyFilters)
+
+// 目录树：转换 API 树结构为 ProductCatalogPanel 所需格式
+const catalog = computed(() => {
+  if (!pptCatalogTree.value || pptCatalogTree.value.length === 0) {
+    return []
+  }
+  // API 树：[{id, name, children: [{code, name}]}]
+  // 组件需要：[{id, text, children: [{id, text}]}]
+  return pptCatalogTree.value.map((parent: any) => ({
+    id: parent.id,
+    text: parent.name,
+    children: (parent.children || []).map((child: any) => ({
+      id: child.code, // 使用 code 作为 id
+      text: child.name
+    }))
+  }))
+})
+
+// publicPPT：选择目录后显示。有 product= 时带 slides；所有产品时用 filters 结果做卡片列表
+const publicPPT = computed(() => {
+  if (!activeProduct.value) {
+    const raw = (filters.filteredPPT as any)?.value
+    const list = Array.isArray(raw) ? raw : []
+    return list.filter((x: any) => x.tag === '公共版').map((x: any) => ({
+      id: x.id,
+      title: x.title,
+      type: activeCatalogIds.value.length > 0 ? 'ppt-cover' : 'ppt-cover',
+      tag: '公共版',
+      thumbnail: x.thumbnail || x.cover || '',
+      date: x.date || '',
+      author: x.author || '',
+      product: x.product || ''
+    }))
+  }
+  const docs = catalogState.publicDocuments.value || []
+  const thumbnails = catalogState.publicThumbnails.value || []
+  return docs.map((doc: any) => {
+    const docThumbnails = thumbnails.filter((t: any) => t.documentId === doc.id)
+    return {
+      id: doc.id,
+      title: doc.name,
+      type: 'slides',
+      tag: '公共版',
+      date: doc.updatedAt?.split('T')[0] || '',
+      author: doc.createdBy || '',
+      product: doc.product?.[0] || activeProduct.value,
+      slides: docThumbnails.map((t: any) => ({
+        id: t.id,
+        page: t.pageNumber,
+        img: t.url || ''
+      }))
+    }
+  })
+})
+
+// 实战版：概览视图（文件列表）。有 product= 用 catalogState，否则用 filters
+const practicalPPTFiles = computed(() => {
+  if (!activeProduct.value) {
+    const raw = (filters.filteredPPT as any)?.value
+    const list = Array.isArray(raw) ? raw : []
+    return list.filter((x: any) => x.tag === '实战版').map((x: any) => ({
+      id: x.id,
+      title: x.title,
+      type: 'file',
+      tag: '实战版',
+      date: x.date || '',
+      author: x.author || '',
+      product: x.product || ''
+    }))
+  }
+  return catalogState.practicalDocuments.value.map((doc: any) => ({
+    id: doc.id,
+    title: doc.name,
+    type: 'file',
+    tag: '实战版',
+    date: doc.updatedAt?.split('T')[0] || '',
+    author: doc.createdBy || '',
+    product: doc.product?.[0] || activeProduct.value
+  }))
+})
+
+// 实战版：选择目录后（分组格式）。所有产品时无分组接口，返回空或按列表展示
+const practicalPPTGroups = computed(() => {
+  if (!activeProduct.value) return []
+  const groups = catalogState.practicalThumbnailGroups.value || []
+  return groups.map((group: any) => ({
+    customer: group.customerName || '未知客户',
+    meta: `${group.documents?.[0]?.updatedAt?.split('T')[0] || ''} · ${group.documents?.[0]?.createdBy || ''}`,
+    items: group.documents?.map((doc: any) => ({
+      id: doc.id,
+      title: doc.name,
+      type: 'slides',
+      tag: '实战版',
+      date: doc.updatedAt?.split('T')[0] || '',
+      author: doc.createdBy || '',
+      slides: doc.thumbnails?.map((t: any) => ({
+        id: t.id,
+        page: t.pageNumber,
+        img: t.url || ''
+      })) || []
+    })) || []
+  }))
+})
+
+// 为了兼容模板，保留 practicalPPT 作为统一接口（根据 activeCatalogIds 返回不同数据）
+const practicalPPT = computed(() => {
+  return activeCatalogIds.value.length === 0 ? practicalPPTFiles.value : practicalPPTGroups.value
+})
+
+// 所有PPT列表：无 product 参数 = 所有产品（用 getSalesDocumentList）；有 product = 单产品（用 useProductCatalogs）
+const allPPTList = computed(() => {
+  if (activeProduct.value) {
+    const all = [...catalogState.publicDocuments.value, ...catalogState.practicalDocuments.value]
+    return all.map((doc: any) => ({
+      id: doc.id,
+      title: doc.name,
+      tag: doc.tag === 'public' ? '公共版' : '实战版',
+      thumbnail: doc.cover || '',
+      date: doc.updatedAt?.split('T')[0] || '',
+      author: doc.createdBy || '',
+      product: doc.product?.[0] || activeProduct.value
+    }))
+  }
+  // 所有产品：用 useFilters 的 getSalesDocumentList 结果（filteredPPT 是 ref，取 .value）
+  const raw = (filters.filteredPPT as any)?.value
+  const list = Array.isArray(raw) ? raw : []
+  return list.map((item: any) => ({
+    id: item.id,
+    title: item.title,
+    tag: item.tag || '公共版',
+    thumbnail: item.thumbnail || item.cover || '',
+    date: item.date || '',
+    author: item.author || item.createdBy || '',
+    product: item.product || ''
+  }))
+})
 
 // 分离公共版和实战版 PPT（仅用于默认视图）
 const publicPPTList = computed(() => {
@@ -570,162 +702,44 @@ const getMergedSlidesForGroup = (group) => {
   return allSlides
 }
 
+// 🗑️ 旧的 generateSlides 和 updateContent 函数已被 catalogState 替代
+/* 旧代码保留供参考：
 const generateSlides = (seed, count) => Array.from({length: count}, (_, i) => ({
   id: seed + '_' + i,
   img: `https://picsum.photos/seed/${seed}${i}/320/180`,
   page: i + 1
 }))
+*/
 
+/* 旧的 updateContent 函数（已不再需要）：
 const updateContent = (catIds: string[]) => {
   const ids = Array.isArray(catIds) ? catIds : (catIds ? [catIds] : [])
   activeCatalogIds.value = ids
   const isOverview = ids.length === 0
-  
-  // 切换目录时重置展开状态
-  if (!isOverview) {
-    isExpanded.value = false
-  }
-
-  if (isOverview) {
-    // 默认显示所有PPT（推荐页效果）- 使用与推荐页相同的数据源
-    const allPPT = salesData.pptList || []
-    allPPTList.value = allPPT.map((ppt: any) => ({
-      ...ppt,
-      author: ppt.creator || '未知',
-      date: ppt.date || '10-31'
-    }))
-    
-    // 同时保留原有的公共版和实战版数据（用于选择目录后显示）
-    publicPPT.value = allPPT
-      .filter((ppt: any) => ppt.product === activeProduct.value && ppt.tag === '公共版')
-      .map((ppt: any) => ({
-        ...ppt,
-        author: ppt.creator || '公共库',
-        date: ppt.date || '10-31'
-      }))
-    
-    // 如果没有找到匹配的PPT，使用默认数据
-    if (publicPPT.value.length === 0) {
-      publicPPT.value = [
-        {
-          id: 'pub_full_1',
-          title: `${activeProduct.value} 产品介绍完整版`,
-          date: '10-31',
-          creator: '公共库',
-          author: '公共库',
-          tag: '公共版',
-          product: activeProduct.value,
-          thumbnail: `https://picsum.photos/seed/pub_full_${activeProduct.value}/320/180`
-        },
-        {
-          id: 'pub_full_2',
-          title: `${activeProduct.value} 标准版PPT`,
-          date: '10-30',
-          creator: '公共库',
-          author: '公共库',
-          tag: '公共版',
-          product: activeProduct.value,
-          thumbnail: `https://picsum.photos/seed/pub_std_${activeProduct.value}/320/180`
-        },
-        {
-          id: 'pub_full_3',
-          title: `${activeProduct.value} 产品演示完整版`,
-          date: '10-29',
-          creator: '公共库',
-          author: '公共库',
-          tag: '公共版',
-          product: activeProduct.value,
-          thumbnail: `https://picsum.photos/seed/pub_demo_${activeProduct.value}/320/180`
-        },
-        {
-          id: 'pub_full_4',
-          title: `${activeProduct.value} 功能详解完整版`,
-          date: '10-28',
-          creator: '公共库',
-          author: '公共库',
-          tag: '公共版',
-          product: activeProduct.value,
-          thumbnail: `https://picsum.photos/seed/pub_func_${activeProduct.value}/320/180`
-        }
-      ]
-    }
-
-    // 实战版PPT
-    const practicalPPTList = allPPT
-      .filter((ppt: any) => ppt.product === activeProduct.value && ppt.tag === '实战版')
-      .map((ppt: any) => ({
-        ...ppt,
-        author: ppt.creator || '未知',
-        date: ppt.date || '10-31',
-        type: 'file'
-      }))
-    
-    // 如果没有找到匹配的PPT，使用默认数据
-    if (practicalPPTList.length === 0) {
-      practicalPPT.value = [
-        { id: 'file_bh', title: '渤海银行一表通售前交流.ppt', date: '10-28', author: '王总', type: 'file', tag: '实战版', product: activeProduct.value },
-        { id: 'file_cz', title: '沧州银行一表通售前交流.ppt', date: '10-26', author: '刘经理', type: 'file', tag: '实战版', product: activeProduct.value },
-        { id: 'file_zs', title: '招商银行一表通售前交流.ppt', date: '10-24', author: '陈工', type: 'file', tag: '实战版', product: activeProduct.value },
-        { id: 'file_dy', title: '第一银行上海一表通售前交流.ppt', date: '10-20', author: '张工', type: 'file', tag: '实战版', product: activeProduct.value }
-      ]
-    } else {
-      practicalPPT.value = practicalPPTList
-    }
-  } else {
-    publicPPT.value = []
-    const practicalMap = new Map()
-
-    ids.forEach(catId => {
-      publicPPT.value.push({ 
-        id: 'pb_detail_' + catId, 
-        title: `${activeProduct.value} 标准介绍 - ${catId}`, 
-        date: '10-31', 
-        author: '标准化小组',
-        type: 'slides', 
-        slides: generateSlides('pb_det_' + catId, 3) 
-      })
-
-      const addToMap = (customer, item) => {
-        if (!practicalMap.has(customer)) practicalMap.set(customer, [])
-        practicalMap.get(customer).push(item)
-      }
-
-      addToMap('某国有大行', {
-        id: 'pc1_' + catId, 
-        title: `${activeProduct.value} 汇报 - ${catId} 相关页`, 
-        date: '10-25', 
-        author: '赵总',
-        type: 'slides',
-        slides: generateSlides('pc1_' + catId, 2)
-      })
-
-      addToMap('某农商行', {
-        id: 'pc2_' + catId, 
-        title: `${activeProduct.value} 方案 - ${catId} 相关页`, 
-        date: '10-22', 
-        author: '李工',
-        type: 'slides',
-        slides: generateSlides('pc2_' + catId, 1)
-      })
-    })
-
-    practicalPPT.value = Array.from(practicalMap.entries()).map(([customer, items]) => {
-      const first = items && items.length ? items[0] : null
-      const meta = first ? `${first.date} · ${first.author}` : ''
-      return { customer, items, meta }
-    })
-  }
-}
+... (旧的静态数据逻辑已移除，数据现在由 catalogState 自动管理)
+*/
 
 const handleCatalogModeChange = (mode) => {
   catalogMode.value = mode
+  catalogState.catalogMode.value = mode
   activeCatalogIds.value = []
-  updateContent([])
+  catalogState.activeCatalogCodes.value = []
+  if (!activeProduct.value) {
+    filters.pptFilters.productIntro = []
+    filters.loadDocuments(filters.buildDocumentParams(filters.pptFilters))
+  }
 }
 
 const handleCatalogIdsChange = (ids) => {
   activeCatalogIds.value = ids
-  updateContent(ids)
+  if (activeProduct.value) {
+    catalogState.activeCatalogCodes.value = ids
+  } else {
+    // 所有产品模式：按目录筛选文档列表（同步到 useFilters 并重新请求）
+    filters.pptFilters.productIntro = ids || []
+    const params = filters.buildDocumentParams(filters.pptFilters)
+    filters.loadDocuments(params)
+  }
 }
 
 const openPpt = (p: any) => {
@@ -777,13 +791,13 @@ const analyzeSelectedSlide = () => {
   aiPanelVisible.value = true
 }
 
-watch(catalogMode, () => {
-  activeCatalogIds.value = []
-  updateContent([])
-})
+// 路由带 ?product= 时同步为单产品，不带则为所有产品
+watch(() => route.query.product, (code) => {
+  activeProduct.value = code ? (code as string) : ''
+}, { immediate: true })
 
 onMounted(() => {
-  updateContent([])
+  // 无 product 时 useFilters 已会 loadDocuments（所有产品）；有 product 时 useProductCatalogs 会按 product 拉取
 })
 </script>
 
