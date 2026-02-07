@@ -301,8 +301,10 @@ watch(selectedFilters, () => {
 // 监听外部筛选变化，重新加载数据
 watch(() => props.externalFilters, (newFilters) => {
   console.log('[ConcernedQuestionsView] 📥 外部筛选变化:', newFilters)
+  console.log('[ConcernedQuestionsView] 📥 questionCategory:', newFilters?.questionCategory)
+  console.log('[ConcernedQuestionsView] 📥 hasActiveExternalFilters:', allActiveExternalFilters.value.length > 0)
   loadConcerns(true)
-}, { deep: true })
+}, { deep: true, immediate: true })
 
 // 行业选项映射
 const industryOptions: Record<string, string> = {
@@ -330,27 +332,30 @@ const essenceTypeOptions: Record<string, string> = {
 const allActiveExternalFilters = computed(() => {
   const filters: Array<{ id: string; type: 'questionCategory' | 'industry' | 'essenceType' }> = []
 
+  console.log('[ConcernedQuestionsView] 📊 计算 allActiveExternalFilters, externalFilters:', props.externalFilters)
+
   // 问题分类筛选
-  if (props.externalFilters?.questionCategory) {
+  if (props.externalFilters?.questionCategory && props.externalFilters.questionCategory.length > 0) {
     props.externalFilters.questionCategory.forEach(id => {
       filters.push({ id, type: 'questionCategory' })
     })
   }
 
   // 行业筛选
-  if (props.externalFilters?.industry) {
+  if (props.externalFilters?.industry && props.externalFilters.industry.length > 0) {
     props.externalFilters.industry.forEach(id => {
       filters.push({ id, type: 'industry' })
     })
   }
 
   // 本质类型筛选
-  if (props.externalFilters?.essenceType) {
+  if (props.externalFilters?.essenceType && props.externalFilters.essenceType.length > 0) {
     props.externalFilters.essenceType.forEach(id => {
       filters.push({ id, type: 'essenceType' })
     })
   }
 
+  console.log('[ConcernedQuestionsView] 📊 filters结果:', filters)
   return filters
 })
 
