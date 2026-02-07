@@ -10,11 +10,17 @@ import userRouter from './sales/user.js'
 import profileRouter from './sales/profile.js'
 import documentsRouter from './sales/documents.js'
 import batchOperationsRouter from './sales/batch-operations.js'
+import transcriptionsRouter from './sales/transcriptions.js'
+import concernsRouter from './sales/concerns.js'
+import concernCategoriesRouter from './sales/concern-categories.js'
 
 const router = express.Router()
 
 // 注册子路由
 router.use('/products', productsRouter)
+router.use('/transcriptions', transcriptionsRouter)
+router.use('/concerns', concernsRouter)
+router.use('/concern-categories', concernCategoriesRouter)
 router.use('/product-catalogs', productCatalogsRouter)
 router.use('/thumbnails', thumbnailsRouter)
 router.use('/qa', qaRouter)

@@ -6,6 +6,7 @@
 import { reactive, computed, ref, watch } from 'vue'
 import type { Ref } from 'vue'
 import { getSalesDocumentList, type DocumentMetadata, getDocumentCoverUrl } from '@/services/documentService'
+import { getTranscriptionList } from '@/services/salesService'
 import { SERVER_URL } from '@/services'
 
 export function useFilters(dataSource: any, activeProduct: Ref<string>) {
@@ -13,11 +14,12 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
   const documentsFromAPI = ref<DocumentMetadata[]>([])
   const isLoadingDocuments = ref(false)
 
-  // 🆕 加载文档列表（支持筛选参数）
+  // 加载文档列表（支持筛选参数）
   const loadDocuments = async (params?: {
     pageType?: string[]
     industry?: string[]
     audience?: string[]
+    language?: string[]
     keyword?: string
   }) => {
     try {
@@ -41,6 +43,10 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
         queryParams.audience = params.audience.join(',')
         console.log('[Sales首页] 🔍 交流对象筛选:', params.audience)
       }
+      if (params?.language && params.language.length > 0) {
+        queryParams.language = params.language.join(',')
+        console.log('[Sales首页] 🔍 语言筛选:', params.language)
+      }
       if (params?.keyword) {
         queryParams.keyword = params.keyword
         console.log('[Sales首页] 🔍 关键词筛选:', params.keyword)
@@ -62,6 +68,20 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
 
   // 🆕 页面加载时获取数据
   loadDocuments()
+
+  // 🆕 交流会议（transcriptions）列表，用于推荐页下方「交流会议」tab
+  const transcriptionsList = ref<any[]>([])
+  const loadTranscriptions = async () => {
+    try {
+      const res = await getTranscriptionList({ pageSize: 100 })
+      const list = res?.data?.list ?? []
+      transcriptionsList.value = list
+    } catch (e) {
+      console.error('[Sales首页] 加载交流会议列表失败', e)
+      transcriptionsList.value = []
+    }
+  }
+  loadTranscriptions()
 
   // 🆕 将 DocumentMetadata 转换为旧的 PPT 列表格式（保持兼容）
   const pptListFromAPI = computed(() => {
@@ -206,11 +226,17 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
       })
     }
     
-    // 4. 语言筛选（多选，满足任一即可）
+    // 4. 语言筛选（多选，满足任一即可；兼容中文/英文与 English/Chinese 等写法）
     if (pptFilters.language && pptFilters.language.length > 0) {
+      const langMap: Record<string, string[]> = { '中文': ['中文', 'Chinese', 'zh'], '英文': ['英文', 'English', 'en'] }
       list = list.filter((x: any) => {
         if (!x.language) return false
-        return pptFilters.language.includes(x.language)
+        const docLang = (x.language || '').trim()
+        return pptFilters.language.some((selected: string) => {
+          if (selected === docLang) return true
+          const aliases = langMap[selected]
+          return aliases && aliases.includes(docLang)
+        })
       })
     }
     
@@ -221,65 +247,65 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
     return list
   })
   
-  // 🆕 监听筛选条件变化，重新加载数据
+  // 根据 pptFilters 构建 API 请求参数（与 watch / 父组件共用）
+  const buildDocumentParams = (pf: typeof pptFilters): Record<string, unknown> => {
+    const params: any = {}
+    if (pf.productIntro && pf.productIntro.length > 0) params.pageType = pf.productIntro
+    if (pf.industry && pf.industry.length > 0) params.industry = pf.industry
+    if (pf.audience && pf.audience.length > 0) params.audience = pf.audience
+    if (pf.language && pf.language.length > 0) params.language = pf.language
+    if (pf.customerName && pf.customerName.trim() !== '') params.keyword = pf.customerName
+    return params
+  }
+
+  // 监听筛选条件变化，重新加载数据（直接深度监听 pptFilters，确保子组件修改能触发）
   watch(
-    () => ({
-      productIntro: pptFilters.productIntro,
-      industry: pptFilters.industry,
-      audience: pptFilters.audience,
-      customerName: pptFilters.customerName
-    }),
-    (newFilters, oldFilters) => {
-      console.log('[Sales首页] 🔄 筛选条件变化，重新加载数据:')
-      console.log('  - 新值:', newFilters)
-      console.log('  - 旧值:', oldFilters)
-      
-      // 检查是否有有效的筛选条件
-      const hasFilters = 
-        (newFilters.productIntro && newFilters.productIntro.length > 0) ||
-        (newFilters.industry && newFilters.industry.length > 0) ||
-        (newFilters.audience && newFilters.audience.length > 0) ||
-        (newFilters.customerName && newFilters.customerName.trim() !== '')
-      
-      console.log('  - 是否有筛选条件:', hasFilters)
-      
-      // 构建请求参数，只传递非空值
-      const params: any = {}
-      if (newFilters.productIntro && newFilters.productIntro.length > 0) {
-        params.pageType = newFilters.productIntro
-      }
-      if (newFilters.industry && newFilters.industry.length > 0) {
-        params.industry = newFilters.industry
-      }
-      if (newFilters.audience && newFilters.audience.length > 0) {
-        params.audience = newFilters.audience
-      }
-      if (newFilters.customerName && newFilters.customerName.trim() !== '') {
-        params.keyword = newFilters.customerName
-      }
-      
-      console.log('  - 实际传递参数:', params)
-      console.log('  - 开始调用 loadDocuments，参数为:', JSON.stringify(params, null, 2))
-      
+    pptFilters,
+    (newVal) => {
+      const params = buildDocumentParams(newVal)
+      console.log('[Sales首页] 🔄 筛选条件变化，重新加载数据:', params)
       loadDocuments(params)
     },
     { deep: true }
   )
   
-  // 推荐页面 - 筛选视频
+  // 推荐页面 - 交流会议（使用 transcriptions API），映射为 VideoGrid 所需结构
+  const transcriptionsMappedForVideo = computed(() => {
+    const list = transcriptionsList.value
+    const formatDate = (d: string | null) => {
+      if (!d) return ''
+      const date = new Date(d)
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+    }
+    const formatDuration = (s: number | null) => {
+      if (s == null || s < 0) return ''
+      const m = Math.floor(s / 60)
+      const sec = Math.floor(s % 60)
+      return `${m}:${String(sec).padStart(2, '0')}`
+    }
+    return list.map((row: any) => ({
+      id: row.id,
+      title: row.name,
+      date: formatDate(row.completed_at || row.created_at),
+      product: row.productName ?? '',
+      industry: row.industry ?? row.industryName ?? '',
+      thumbnail: 'https://picsum.photos/seed/' + row.id + '/360/200',
+      duration: formatDuration(row.audio_duration),
+      __raw: row
+    }))
+  })
+
+  // 推荐页面 - 筛选视频（数据源改为 transcriptions API，再应用左侧筛选）
   const filteredVideos = computed(() => {
-    let list = dataSource.videoList
-    if (filterVersion.value === 'public') list = list.filter((x: any) => x.tag === '公共版')
-    if (filterVersion.value === 'practical') list = list.filter((x: any) => x.tag === '实战版')
-    // ⚠️ 注意：activeProduct.value 是 product code，x.product 也必须是 code
-    if (activeProduct.value) list = list.filter((x: any) => x.product === activeProduct.value)
-    
-    // 应用videoFilters
+    let list = [...transcriptionsMappedForVideo.value]
+    // ⚠️ 注意：activeProduct.value 是 product code
+    if (activeProduct.value) {
+      list = list.filter((x: any) => x.__raw?.productCode === activeProduct.value || x.__raw?.productName === activeProduct.value)
+    }
     if (videoFilters.customerName) {
       const q = videoFilters.customerName.trim().toLowerCase()
-      list = list.filter((x: any) => x.title.toLowerCase().includes(q))
+      list = list.filter((x: any) => (x.title || '').toLowerCase().includes(q) || (x.__raw?.customer_name || '').toLowerCase().includes(q))
     }
-    
     return list
   })
   
@@ -420,6 +446,7 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
     documentsFromAPI,
     isLoadingDocuments,
     loadDocuments,
+    buildDocumentParams,
     
     // 方法
     resetFilters,

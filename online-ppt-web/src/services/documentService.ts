@@ -321,9 +321,10 @@ export async function getSalesDocumentList(options: {
   status?: 'draft' | 'published' | 'archived'
   tag?: 'public' | 'practical'
   keyword?: string
-  pageType?: string  // 🆕 PPT目录筛选（可传多个，用逗号分隔）
-  industry?: string  // 🆕 行业筛选（可传多个，用逗号分隔）
-  audience?: string  // 🆕 交流对象筛选（可传多个，用逗号分隔）
+  pageType?: string  // PPT目录筛选（可传多个，用逗号分隔）
+  industry?: string  // 行业筛选（可传多个，用逗号分隔）
+  audience?: string  // 交流对象筛选（可传多个，用逗号分隔）
+  language?: string  // 语言筛选（可传多个，用逗号分隔，如 "中文,英文"）
   sortBy?: string
   order?: 'asc' | 'desc'
 } = {}): Promise<{
@@ -343,9 +344,10 @@ export async function getSalesDocumentList(options: {
   
   if (options.tag) params.tag = options.tag
   if (options.keyword) params.keyword = options.keyword
-  if (options.pageType) params.pageType = options.pageType  // 🆕
-  if (options.industry) params.industry = options.industry  // 🆕
-  if (options.audience) params.audience = options.audience  // 🆕
+  if (options.pageType) params.pageType = options.pageType
+  if (options.industry) params.industry = options.industry
+  if (options.audience) params.audience = options.audience
+  if (options.language) params.language = options.language
   if (options.sortBy) params.sortBy = options.sortBy
   if (options.order) params.order = options.order
 

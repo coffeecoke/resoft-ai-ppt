@@ -24,8 +24,11 @@
       <div class="meta">
         <div class="title">{{ item.title }}</div>
         <div class="sub">
-          <template v-if="item.product && item.industry">
-            {{ item.product }} | {{ item.industry }} | {{ item.date }}
+          <template v-if="item.product && item.industry && item.date && item.author">
+            {{ item.product }}<span class="divider"> | </span>{{ item.industry }}<span class="divider"> | </span>{{ item.date }}<span class="divider"> | </span>{{ item.author }}
+          </template>
+          <template v-else-if="item.product && item.industry && item.date">
+            {{ item.product }}<span class="divider"> | </span>{{ item.industry }}<span class="divider"> | </span>{{ item.date }}
           </template>
           <template v-else>
             {{ item.date }}

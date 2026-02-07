@@ -1,0 +1,825 @@
+<template>
+  <div class="video-side-col" :style="{ width }">
+    <el-tabs v-model="localActiveTab" class="video-side-tabs">
+      <el-tab-pane name="record">
+        <template #label>
+          <span class="tab-label">
+            <i class="ri-ai-generate-text"></i>
+            <span>原文</span>
+          </span>
+        </template>
+        <div class="side-block">
+          <div class="transcript-content" v-if="transcriptList.length > 0">
+            <div 
+              v-for="(item, index) in transcriptList" 
+              :key="index"
+              class="transcript-item"
+            >
+              <div class="transcript-header">
+                <span class="transcript-speaker">{{ item.speaker }}</span>
+                <span class="transcript-time">{{ item.time }}</span>
+              </div>
+              <div class="transcript-text">{{ item.content }}</div>
+            </div>
+          </div>
+          <div v-else class="transcript-empty">
+            <i class="ri-file-text-line"></i>
+            <p>暂无原文内容</p>
+          </div>
+        </div>
+      </el-tab-pane>
+      
+      <el-tab-pane name="qa">
+        <template #label>
+          <span class="tab-label">
+            <i class="ri-question-answer-line"></i>
+            <span>Q&A</span>
+          </span>
+        </template>
+        <div class="side-block qa-list-container">
+          <div class="question-list" v-if="qaList.length > 0">
+            <div 
+              v-for="(item, index) in qaList" 
+              :key="index"
+              :id="`qa-item-${index}`"
+              class="report-item"
+            >
+              <!-- 左侧图标 -->
+              <div class="report-item-icon" :class="{ 'expert-approved-icon': item.expertApproved }">
+                <i 
+                  v-if="item.expertApproved"
+                  class="ri-account-pin-circle-line"
+                ></i>
+                <i 
+                  v-else
+                  class="ri-bill-line"
+                ></i>
+              </div>
+              
+              <!-- 右侧内容 -->
+              <div class="report-item-content">
+                <!-- 标题区域 -->
+                <div class="report-item-header">
+                  <div class="report-item-title-row">
+                    <span class="report-company-name">{{ item.company || videoDetail.customerName || videoDetail.customer || '阜新银行' }}</span>
+                    <span class="report-category-name">{{ item.category || '资质与案例' }}</span>
+                    <span 
+                      v-if="item.expertApproved"
+                      class="expert-approved-tag"
+                    >
+                      专家核准
+                    </span>
+                  </div>
+                  <div class="report-item-actions">
+                    <div 
+                      class="report-item-likes"
+                      :class="{ liked: localLikedQuestions.includes(index) }"
+                      @click.stop="handleToggleLike(index)"
+                    >
+                      <i :class="localLikedQuestions.includes(index) ? 'ri-heart-fill' : 'ri-heart-line'"></i>
+                      <span>{{ item.likes ?? 57 }}</span>
+                    </div>
+                    <div class="report-item-date">{{ item.date || '03-12' }}</div>
+                  </div>
+                </div>
+
+                <!-- 问题 -->
+                <div class="report-item-question">
+                  <span class="report-item-time" v-if="item.time">{{ item.time }}</span>
+                  <span class="report-item-question-text">{{ item.q }}</span>
+                </div>
+                
+                <!-- 系统答案 -->
+                <div class="report-item-answer" v-if="item.answerText">
+                  <div class="answer-content-wrapper">
+                    <div 
+                      class="answer-content"
+                      :class="{ 'answer-content-expanded': localAnswerExpanded[`system-${index}`] }"
+                    >
+                      {{ item.answerText }}
+                    </div>
+                    <button
+                      v-if="shouldShowExpand(item.answerText)"
+                      class="answer-expand-btn"
+                      @click.stop="handleToggleAnswer(`system-${index}`)"
+                    >
+                      {{ localAnswerExpanded[`system-${index}`] ? '收起' : '展开' }}
+                      <i :class="localAnswerExpanded[`system-${index}`] ? 'ri-arrow-up-s-line' : 'ri-arrow-down-s-line'"></i>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- 专家答案（如果有） -->
+                <div v-if="item.expertAdvice" class="report-item-expert-answer">
+                  <div class="expert-answer-row">
+                    <div class="answer-label">专家建议：</div>
+                    <div class="answer-content-wrapper">
+                      <div 
+                        class="answer-content"
+                        :class="{ 'answer-content-expanded': localAnswerExpanded[`expert-${index}`] }"
+                      >
+                        {{ item.expertAdvice }}
+                        <span class="expert-reviewer" v-if="item.expertReviewer">审核人：{{ item.expertReviewer }}</span>
+                      </div>
+                      <button 
+                        v-if="shouldShowExpand(item.expertAdvice)"
+                        class="answer-expand-btn"
+                        @click.stop="handleToggleAnswer(`expert-${index}`)"
+                      >
+                        {{ localAnswerExpanded[`expert-${index}`] ? '收起' : '展开' }}
+                        <i :class="localAnswerExpanded[`expert-${index}`] ? 'ri-arrow-up-s-line' : 'ri-arrow-down-s-line'"></i>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div v-else class="qa-empty">
+            <i class="ri-question-line"></i>
+            <p>暂无问答内容</p>
+          </div>
+        </div>
+      </el-tab-pane>
+      
+      <el-tab-pane name="analysis">
+        <template #label>
+          <span class="tab-label">
+            <i class="ri-ai-generate-2"></i>
+            <span>分析</span>
+          </span>
+        </template>
+        <VideoAnalysisReport :video-detail="videoDetail" />
+      </el-tab-pane>
+      
+      <el-tab-pane name="info">
+        <template #label>
+          <span class="tab-label">
+            <i class="ri-file-list-3-line"></i>
+            <span>材料</span>
+          </span>
+        </template>
+        <div class="side-block">
+          <h4 class="sub-head">交流文件</h4>
+          <div v-for="f in videoDetail.files" :key="f.id" class="file-item">
+            <i class="ri-file-pdf-line file-icon"></i>
+            <div class="file-info">
+              <div class="f-name">{{ f.name }}</div>
+              <div class="f-meta">
+                <div class="f-meta-line">{{ f.creator || '郑相宜' }} {{ f.date || '25/09/01' }}</div>
+                <div class="f-meta-stats">
+                  <span class="stat-item">
+                    <i class="ri-fire-line"></i>
+                    <span>{{ f.view || 23 }}</span>
+                  </span>
+                  <span class="stat-item">
+                    <i class="ri-download-line"></i>
+                    <span>{{ f.down || 12 }}</span>
+                  </span>
+                  <span class="stat-item">
+                    <i class="ri-heart-2-line"></i>
+                    <span>{{ f.like || 1 }}</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="side-block">
+          <h4 class="sub-head">相关交流会议</h4>
+          <div v-for="rv in videoDetail.relatedVideos" :key="rv.id" class="rel-video-item">
+            <div class="rv-thumb">
+              <img :src="rv.img" />
+              <span class="rv-dur">{{ rv.duration }}</span>
+            </div>
+            <div class="rv-info">
+              <div class="rv-title">{{ rv.title }}</div>
+              <div class="rv-meta">
+                <div class="rv-meta-row">
+                  <span class="rv-author">{{ rv.author }}</span>
+                  <span class="rv-date">{{ rv.date }}</span>
+                </div>
+                <div class="rv-meta-row">
+                  <span class="rv-stat-item">
+                    <i class="ri-fire-line"></i>
+                    <span>{{ rv.view }}</span>
+                  </span>
+                  <span class="rv-stat-item">
+                    <i class="ri-heart-2-line"></i>
+                    <span>{{ rv.like }}</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </el-tab-pane>
+    </el-tabs>
+  </div>
+</template>
+
+<script setup>
+import { ref, watch, computed } from 'vue'
+import VideoAnalysisReport from './VideoAnalysisReport.vue'
+
+const props = defineProps({
+  videoDetail: {
+    type: Object,
+    required: true,
+    default: () => ({})
+  },
+  width: {
+    type: String,
+    default: 'calc(37% - 0.37px)'
+  },
+  activeTab: {
+    type: String,
+    default: 'record'
+  }
+})
+
+const emit = defineEmits(['update:activeTab'])
+
+// 原文列表：归一化 transcript（兼容 content/text、空数组）
+const transcriptList = computed(() => {
+  const raw = props.videoDetail?.transcript
+  if (!raw || !Array.isArray(raw)) return []
+  return raw.map((x) => ({
+    speaker: x.speaker || '',
+    time: x.time || '',
+    content: x.content ?? x.text ?? ''
+  }))
+})
+
+// Q&A 列表：归一化 qa 项（兼容 q/question、summary/a/answer、与 new 一致的结构与样式）
+const qaList = computed(() => {
+  const raw = props.videoDetail?.qa
+  if (!raw || !Array.isArray(raw)) return []
+  return raw.map((item) => ({
+    ...item,
+    q: item.q ?? item.question ?? '',
+    answerText: item.summary ?? item.a ?? item.answer ?? '',
+    company: item.company ?? props.videoDetail?.customerName ?? props.videoDetail?.customer,
+    category: item.category ?? '资质与案例',
+    expertApproved: !!item.expertApproved,
+    likes: item.likes,
+    date: item.date,
+    time: item.time,
+    expertAdvice: item.expertAdvice,
+    expertReviewer: item.expertReviewer
+  }))
+})
+
+// 本地状态，用于双向绑定
+const localActiveTab = ref(props.activeTab)
+
+// 监听本地状态变化，同步到父组件
+watch(localActiveTab, (newVal) => {
+  emit('update:activeTab', newVal)
+})
+
+// 监听父组件传入的 activeTab 变化
+watch(() => props.activeTab, (newVal) => {
+  localActiveTab.value = newVal
+}, { immediate: true })
+
+// Q&A 相关状态
+const localAnswerExpanded = ref({})
+const localLikedQuestions = ref([])
+
+// 判断是否应该显示展开按钮
+const shouldShowExpand = (text) => {
+  if (!text) return false
+  return text.length > 60
+}
+
+// 切换答案展开/折叠
+const handleToggleAnswer = (key) => {
+  localAnswerExpanded.value[key] = !localAnswerExpanded.value[key]
+}
+
+// 切换点赞
+const handleToggleLike = (index) => {
+  const idx = localLikedQuestions.value.indexOf(index)
+  if (idx > -1) {
+    localLikedQuestions.value.splice(idx, 1)
+  } else {
+    localLikedQuestions.value.push(index)
+  }
+}
+</script>
+
+<style scoped>
+/* 样式继承自 sales.scss */
+.video-side-tabs ::v-deep .el-tabs__content {
+  overflow: auto;
+}
+
+/* 视频对话框：标签页导航区域高度 */
+.video-side-tabs ::v-deep(.el-tabs__nav-scroll) {
+  height: 50px;
+  min-height: 50px;
+  border-bottom: none !important;
+}
+
+/* 视频对话框：去掉标签导航的所有边框线 */
+.video-side-tabs ::v-deep(.el-tabs__nav) {
+  border-bottom: none !important;
+}
+
+.video-side-tabs ::v-deep(.el-tabs__header) {
+  border-bottom: none !important;
+}
+
+.video-side-tabs ::v-deep(.el-tabs__nav-wrap) {
+  border-bottom: none !important;
+}
+
+.video-side-tabs ::v-deep(.el-tabs__nav-wrap::after) {
+  display: none !important;
+}
+
+/* 视频对话框：标签项高度和padding */
+.video-side-tabs ::v-deep(.el-tabs__item) {
+  height: 50px;
+  line-height: 50px;
+  padding: 0 25px 0 0 !important;
+}
+
+/* 视频对话框：标签页活动指示条样式 */
+.video-side-tabs ::v-deep(.el-tabs__active-bar) {
+  height: 5px !important;
+  border-top-left-radius: 9999px;
+  border-top-right-radius: 9999px;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  background-color: rgb(37 99 235 / 1);
+  box-shadow: 0 -2px 8px rgba(37, 99, 235, 0.4);
+}
+
+/* 视频对话框：参与者标签样式（覆盖 Element UI 默认样式） */
+.p-tags ::v-deep(.el-tag) {
+  color: #333 !important;
+  border: none !important;
+  border-color: transparent !important;
+}
+
+/* 第一个标签（"前"）：浅红色背景 */
+.p-tags ::v-deep(.el-tag:nth-child(1)) {
+  background-color: #FEE2E2 !important;
+}
+
+/* 第二个标签（"项"）：浅蓝色背景 */
+.p-tags ::v-deep(.el-tag:nth-child(2)) {
+  background-color: #D9E9FF !important;
+}
+
+/* 第三个标签（"后"）：浅绿色背景 */
+.p-tags ::v-deep(.el-tag:nth-child(3)) {
+  background-color: #DCFCE7 !important;
+}
+
+/* 视频对话框：参与者名称不加粗 */
+.participant-item .p-name {
+  font-weight: normal !important;
+}
+
+/* 视频对话框：信息标签字体大小 */
+.side-info-row .label {
+  font-size: 0.85rem !important;
+}
+
+/* 视频对话框：文件名称字体大小 */
+.file-item .f-name {
+  font-size: 0.85rem !important;
+}
+
+/* 视频对话框：相关视频标题字体大小 */
+.rel-video-item .rv-title {
+  font-size: 0.9rem !important;
+  color: #334155 !important;
+}
+
+/* 视频对话框：相关视频元数据样式 */
+.rel-video-item .rv-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: #999;
+}
+
+.rel-video-item .rv-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+}
+
+.rel-video-item .rv-author {
+  color: #666;
+}
+
+.rel-video-item .rv-date {
+  color: #999;
+}
+
+.rel-video-item .rv-stat-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #999;
+}
+
+.rel-video-item .rv-stat-item i {
+  font-size: 14px;
+  color: #999;
+}
+
+/* Q&A 标签页样式 */
+.qa-list-container {
+  padding: 0;
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+  
+  /* Q&A 标签页下的答案宽度设置为 100% */
+  .report-item-answer {
+    width: 100% !important;
+  }
+  
+  .report-item-expert-answer {
+    width: 100% !important;
+  }
+}
+
+.question-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.report-item {
+  display: flex;
+  gap: 16px;
+  background: #fff;
+  border: 1px solid #e6e8eb;
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  transition: all 0.3s;
+  
+  &:hover {
+    border-color: #2563eb;
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.1);
+    
+    .report-item-question {
+      color: #2563eb;
+      
+      .report-item-question-text {
+        color: #2563eb;
+      }
+      
+      .report-item-time {
+        color: #2563eb;
+      }
+    }
+    
+    .expert-approved-icon {
+      background: #fffbeb;
+    }
+  }
+}
+
+.report-item-icon {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(239 246 255 / var(--tw-bg-opacity, 1));
+  border-radius: 8px;
+  color: rgb(37 99 235 / var(--tw-text-opacity, 1));
+  font-size: 18px;
+  transition: background 0.3s;
+  
+  i {
+    font-weight: normal;
+    color: rgb(37 99 235 / var(--tw-text-opacity, 1));
+  }
+  
+  &.expert-approved-icon {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 5px;
+    background: rgba(255, 251, 235, 0.4);
+    
+    i {
+      color: #d97706;
+      font-weight: normal;
+    }
+  }
+}
+
+.report-item-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.report-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.35rem;
+}
+
+.report-item-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 0.75rem;
+}
+
+.report-company-name {
+  color: #94a3b8;
+  font-weight: 500;
+  font-size: 10px;
+}
+
+.report-category-name {
+  color: #3b82f6;
+  font-weight: 500;
+  font-size: 10px;
+}
+
+.expert-approved-tag {
+  font-size: 10px;
+  color: #d97706;
+  background: #fffbeb;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.report-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.report-item-likes {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  user-select: none;
+  
+  i {
+    font-size: 16px;
+    color: #6b7280;
+    transition: all 0.3s ease;
+  }
+  
+  &:hover {
+    opacity: 0.8;
+  }
+  
+  &.liked {
+    color: #f43f5e;
+    
+    i {
+      color: #f43f5e;
+      transform: scale(1.2);
+      animation: heartBeat 0.6s ease;
+    }
+  }
+}
+
+.report-item-date {
+  font-size: 12px;
+  color: #9ca3af;
+  white-space: nowrap;
+}
+
+.report-item-question {
+  font-size: 0.875rem;
+  color: #1f2937;
+  line-height: 1.6;
+  font-weight: 500;
+  margin-bottom: 5px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.report-item-time {
+  font-size: 10px;
+  color: #64748b;
+  font-weight: normal;
+  flex-shrink: 0;
+}
+
+.report-item-question-text {
+  flex: 1;
+}
+
+.report-item-answer {
+  font-size: 13px;
+  color: #4b5563;
+  line-height: 1.6;
+  width: 80%;
+  
+  .answer-content-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  
+  .answer-content {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    line-height: 1.7;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transition: all 0.3s;
+    
+    &.answer-content-expanded {
+      white-space: normal;
+      overflow: visible;
+      text-overflow: unset;
+      align-self: flex-start;
+    }
+  }
+  
+  .answer-expand-btn {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.75rem;
+    color: #2563eb;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    transition: color 0.2s;
+    align-self: flex-start;
+    
+    &:hover {
+      color: #1d4ed8;
+    }
+    
+    i {
+      font-size: 14px;
+    }
+  }
+}
+
+.report-item-expert-answer {
+  font-size: 13px;
+  color: #4b5563;
+  line-height: 1.6;
+  margin-top: 8px;
+  padding: 0.375rem 0.75rem;
+  background-color: #f9f9f9;
+  width: 80%;
+  
+  .expert-answer-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  
+  .answer-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #d97706;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  
+  .answer-content-wrapper {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  
+  .answer-content {
+    font-size: 0.8rem;
+    color: #666;
+    line-height: 1.7;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transition: all 0.3s;
+    
+    &.answer-content-expanded {
+      white-space: normal;
+      overflow: visible;
+      text-overflow: unset;
+      align-self: flex-start;
+    }
+  }
+  
+  .expert-reviewer {
+    margin-left: 8px;
+    font-size: 10px;
+    color: rgb(217 119 6 / 0.7);
+    display: inline;
+  }
+  
+  .answer-expand-btn {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.75rem;
+    color: #2563eb;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    transition: color 0.2s;
+    align-self: flex-start;
+    
+    &:hover {
+      color: #1d4ed8;
+    }
+    
+    i {
+      font-size: 14px;
+    }
+  }
+}
+
+/* 原文 tab 空状态 */
+.transcript-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: #9ca3af;
+  
+  i {
+    font-size: 48px;
+    color: #d1d5db;
+    margin-bottom: 12px;
+    display: block;
+  }
+  
+  p {
+    font-size: 0.9rem;
+    margin: 0;
+  }
+}
+
+.qa-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: #9ca3af;
+  
+  i {
+    font-size: 48px;
+    color: #d1d5db;
+    margin-bottom: 12px;
+    display: block;
+  }
+  
+  p {
+    font-size: 0.9rem;
+    margin: 0;
+  }
+}
+
+@keyframes heartBeat {
+  0% {
+    transform: scale(1);
+  }
+  25% {
+    transform: scale(1.3);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  75% {
+    transform: scale(1.25);
+  }
+  100% {
+    transform: scale(1.2);
+  }
+}
+</style>

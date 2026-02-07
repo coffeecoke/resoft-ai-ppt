@@ -109,7 +109,7 @@
                 class="session-card"
               >
                 <div class="session-card-layout">
-                  <!-- 左侧：视频播放器 -->
+                  <!-- 左侧：视频缩略图 -->
                   <div class="session-video-section">
                     <div class="video-thumbnail" @click="openSession(session)">
                       <img :src="session.thumbnail" :alt="session.title" />
@@ -122,18 +122,43 @@
                     </div>
                   </div>
 
-                  <!-- 右侧：信息卡片 -->
+                  <!-- 右侧：会话信息 -->
                   <div class="session-info-section">
-                    <h3 class="session-main-title">
-                      {{ session.title }}
-                      <span class="session-date">{{ session.date }}</span>
-                    </h3>
+                    <h3 class="session-title">{{ session.title }}</h3>
+                    <div class="session-meta">
+                      <div class="session-meta-item">
+                        <i class="ri-calendar-line"></i>
+                        <span>{{ session.date }}</span>
+                      </div>
+                      <div class="session-meta-item">
+                        <i class="ri-group-line"></i>
+                        <span>参会人数:{{ session.participantCount || 0 }}</span>
+                      </div>
+                    </div>
+                    <div class="session-tags">
+                      <span 
+                        v-if="session.productName"
+                        class="session-tag"
+                      >
+                        {{ session.productName }}
+                      </span>
+                      <span 
+                        v-if="session.institutionType"
+                        class="session-tag tag-primary"
+                      >
+                        {{ session.institutionType }}
+                      </span>
+                    </div>
+                  </div>
+
+                  <!-- 右侧：信息卡片 -->
+                  <div class="session-cards-section">
                     <div class="info-cards-grid">
-                      <!-- 客户关心 -->
+                      <!-- 客户关心的问题 -->
                       <div class="info-card info-card-concern">
                         <div class="info-card-header">
-                          <span class="info-card-bullet bullet-blue"></span>
-                          <span class="info-card-title">客户关心</span>
+                          <i class="ri-chat-3-line info-card-icon"></i>
+                          <span class="info-card-title">客户关心的问题</span>
                         </div>
                         <ul class="info-card-list">
                           <li v-for="question in getSessionQuestions(session.id)" :key="question.id">
@@ -146,29 +171,37 @@
                       <!-- 潜在需求 -->
                       <div class="info-card info-card-need">
                         <div class="info-card-header">
-                          <span class="info-card-bullet bullet-orange"></span>
+                          <i class="ri-focus-3-line info-card-icon"></i>
                           <span class="info-card-title">潜在需求</span>
                         </div>
-                        <ul class="info-card-list">
-                          <li v-for="need in getSessionNeeds(session.id)" :key="need.id">
-                            {{ need.title }}
-                          </li>
-                          <li v-if="getSessionNeeds(session.id).length === 0" class="empty-item">暂无数据</li>
-                        </ul>
+                        <div class="info-card-content">
+                          <div 
+                            v-for="need in getSessionNeeds(session.id)" 
+                            :key="need.id"
+                            class="info-card-text"
+                          >
+                            {{ need.description || need.title }}
+                          </div>
+                          <div v-if="getSessionNeeds(session.id).length === 0" class="empty-item">暂无数据</div>
+                        </div>
                       </div>
 
                       <!-- 交流洞察 -->
                       <div class="info-card info-card-insight">
                         <div class="info-card-header">
-                          <span class="info-card-bullet bullet-green"></span>
+                          <i class="ri-lightbulb-line info-card-icon"></i>
                           <span class="info-card-title">交流洞察</span>
                         </div>
-                        <ul class="info-card-list">
-                          <li v-for="insight in getSessionInsights(session.id)" :key="insight.id">
-                            {{ insight.description }}
-                          </li>
-                          <li v-if="getSessionInsights(session.id).length === 0" class="empty-item">暂无数据</li>
-                        </ul>
+                        <div class="info-card-content">
+                          <div 
+                            v-for="insight in getSessionInsights(session.id)" 
+                            :key="insight.id"
+                            class="info-card-text insight-quote"
+                          >
+                            "{{ insight.description }}"
+                          </div>
+                          <div v-if="getSessionInsights(session.id).length === 0" class="empty-item">暂无数据</div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -249,6 +282,7 @@
     <!-- PPT详情对话框 -->
     <PptDialog
       v-model:visible="pptDialogVisible"
+      :document-id="currentPpt.id ?? ''"
       :title="currentPpt.title"
       :type="currentPpt.tag === 'public' ? 'public' : 'practical'"
       :slides="currentPptSlides"
@@ -294,8 +328,8 @@
             <template #tip>
               <div class="el-upload__tip">
                 仅支持 .pptx 格式文件
-              </div>
-            </template>
+  </div>
+</template>
           </el-upload>
         </el-form-item>
 
@@ -358,14 +392,6 @@
           </el-select>
         </el-form-item>
 
-        <el-form-item label="交流对象人员姓名">
-          <el-input
-            v-model="uploadForm.audienceNames"
-            placeholder="请输入交流对象人员姓名，多人用逗号分隔（如：张三，李四）"
-            clearable
-          />
-        </el-form-item>
-
         <el-form-item label="语言">
           <el-select
             v-model="uploadForm.language"
@@ -412,8 +438,7 @@ import { salesData } from '@/configs/salesData'
 import { uploadSalesPpt } from '@/services/salesService'
 import type { UploadSalesPptParams } from '@/services/salesService'
 import { parsePPTXToSlides } from '@/utils/pptxParser'
-import { INDUSTRIES, AUDIENCES, LANGUAGES } from '@/configs/salesConstants'
-import { useProductOptions } from '@/composables/useProductOptions'
+import { PRODUCTS, INDUSTRIES, AUDIENCES, LANGUAGES } from '@/configs/salesConstants'
 const router = useRouter()
 
 const activeTab = ref('ppts')
@@ -424,7 +449,7 @@ const pptTypeFilter = ref('all') // 'all' 全部, 'practical' 回传, 'public' A
 
 // PPT详情对话框状态
 const pptDialogVisible = ref(false)
-const currentPpt = ref({ title: '', tag: 'public', slides: [] })
+const currentPpt = ref({ id: '', title: '', tag: 'public', slides: [] })
 const currentPptSlides = ref([])
 const currentCommunicationInfo = ref(null)
 
@@ -449,9 +474,12 @@ const userStats = ref({
 const sessions = ref([
   { 
     id: 's1', 
-    title: '一表通产品演示视频 1.mp4', 
-    date: '2025-10-31', 
-    customer: '某国有大行',
+    title: '渤海银行一表通产品深度交流', 
+    date: '2024-10-21', 
+    customer: '渤海银行',
+    participantCount: 9,
+    productName: '一表通系统',
+    institutionType: '总行级',
     tag: 'public',
     thumbnail: 'https://picsum.photos/seed/v1/360/200',
     duration: '38:54'
@@ -461,6 +489,9 @@ const sessions = ref([
     title: '一表通产品演示视频 2.mp4', 
     date: '2025-10-28', 
     customer: '某农商行',
+    participantCount: 6,
+    productName: '一表通系统',
+    institutionType: '分行级',
     tag: 'practical',
     thumbnail: 'https://picsum.photos/seed/v2/360/200',
     duration: '42:15'
@@ -470,6 +501,9 @@ const sessions = ref([
     title: '一表通产品演示视频 3.mp4', 
     date: '2025-10-25', 
     customer: '某城商行',
+    participantCount: 8,
+    productName: '1104',
+    institutionType: '分行级',
     tag: 'public',
     thumbnail: 'https://picsum.photos/seed/v3/360/200',
     duration: '35:20'
@@ -479,6 +513,9 @@ const sessions = ref([
     title: '一表通产品演示视频 4.mp4', 
     date: '2025-10-20', 
     customer: '某股份制银行',
+    participantCount: 12,
+    productName: '反洗钱',
+    institutionType: '总行级',
     tag: 'practical',
     thumbnail: 'https://picsum.photos/seed/v4/360/200',
     duration: '40:10'
@@ -723,8 +760,9 @@ const openSession = (session) => {
 }
 
 const openPpt = (ppt) => {
-  // 打开PPT详情对话框
+  // 打开PPT详情对话框（id 用于总结/分析/下载等接口的 documentId）
   currentPpt.value = {
+    id: ppt.id ?? ppt.documentId ?? '',
     title: ppt.title,
     tag: ppt.tag || 'public',
     slides: ppt.slides || []
@@ -792,7 +830,6 @@ const uploadForm = reactive({
   product: [] as string[],
   industry: [] as string[],
   audience: [] as string[],
-  audienceNames: '', // 🆕 交流对象人员姓名
   language: ''
 })
 
@@ -803,8 +840,8 @@ const uploadRules = {
   ]
 }
 
-// 选项数据（产品从API获取）
-const { productOptions } = useProductOptions()
+// 选项数据
+const productOptions = PRODUCTS
 const industryOptions = INDUSTRIES
 const audienceOptions = AUDIENCES
 const languageOptions = LANGUAGES
@@ -863,7 +900,6 @@ const handleUploadConfirm = async () => {
       product: uploadForm.product,
       industry: uploadForm.industry,
       audience: uploadForm.audience,
-      audienceNames: uploadForm.audienceNames, // 🆕 交流对象人员姓名
       language: uploadForm.language,
       slides
     }
@@ -1115,14 +1151,15 @@ const optimizePpt = (ppt) => {
 }
 
 .session-card-layout {
-  display: grid;
-  grid-template-columns: 240px 1fr;
-  gap: 24px;
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
 }
 
-/* 左侧视频区域 */
+/* 左侧：视频缩略图区域 */
 .session-video-section {
   flex-shrink: 0;
+  width: 240px;
 }
 
 .video-thumbnail {
@@ -1133,7 +1170,6 @@ const optimizePpt = (ppt) => {
   overflow: hidden;
   background: #f0f3f7;
   cursor: pointer;
-  margin-bottom: 0;
 }
 
 .video-thumbnail img {
@@ -1164,13 +1200,12 @@ const optimizePpt = (ppt) => {
   width: 64px;
   height: 64px;
   border-radius: 50%;
-  background: #006DF9;
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: center;
   color: #fff;
   font-size: 28px;
-  box-shadow: 0 4px 12px rgba(0, 109, 249, 0.4);
   transition: transform 0.2s;
 }
 
@@ -1189,27 +1224,66 @@ const optimizePpt = (ppt) => {
   border-radius: 4px;
 }
 
-
-/* 右侧信息区域 */
+/* 右侧：会话信息区域 */
 .session-info-section {
-  flex: 1;
+  flex: 0 0 auto;
+  width: 400px;
+  display: flex;
+  flex-direction: column;
 }
 
-.session-main-title {
-  font-size: 16px;
+.session-title {
+  font-size: 1.1rem;
   font-weight: 600;
-  color: #006DF9;
-  margin: 0 0 10px 0;
-  line-height: 1.4;
+  color: #1f2937;
+  margin: 0 0 5px 0;
+  line-height: 1.5;
+}
+
+.session-meta {
+  display: flex;
+  flex-direction: row;
+  gap: 16px;
+  align-items: center;
+  font-size: 0.8rem;
+  margin-bottom: 15px;
+}
+
+.session-meta-item {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 6px;
+  color: #6b7280;
+  
+  i {
+    font-size: 16px;
+    color: #9ca3af;
+  }
 }
 
-.session-date {
-  font-size: 14px;
-  font-weight: normal;
-  color: #909399;
+.session-tags {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.session-tag {
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 10px;
+  background: #f3f4f6;
+  color: #4b5563;
+  
+  &.tag-primary {
+    background: #dbeafe;
+    color: #2563eb;
+  }
+}
+
+/* 右侧：信息卡片区域 */
+.session-cards-section {
+  flex: 1;
+  min-width: 0;
 }
 
 .info-cards-grid {
@@ -1219,10 +1293,23 @@ const optimizePpt = (ppt) => {
 }
 
 .info-card {
-  background: #f9fafb;
-  border: 1px solid #eef2f6;
   border-radius: 8px;
-  padding: 10px 16px;
+  padding: 16px;
+}
+
+.info-card-concern {
+  background-color: rgb(255 251 235 / 0.5);
+  border: 1px solid rgb(254 243 199 / 0.5);
+}
+
+.info-card-need {
+  background-color: rgb(239 246 255 / 0.5);
+  border: 1px solid rgb(219 234 254 / 0.5);
+}
+
+.info-card-insight {
+  background-color: rgb(238 242 255 / 0.5);
+  border: 1px solid rgb(224 231 255 / 0.5);
 }
 
 .info-card-header {
@@ -1232,29 +1319,57 @@ const optimizePpt = (ppt) => {
   margin-bottom: 12px;
 }
 
-.info-card-bullet {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+.info-card-icon {
+  font-size: 14px;
   flex-shrink: 0;
 }
 
-.bullet-blue {
-  background: #006DF9;
+.info-card-concern .info-card-icon {
+  color: #d97706;
 }
 
-.bullet-orange {
-  background: #FF6A00;
+.info-card-need .info-card-icon {
+  color: #2563eb;
 }
 
-.bullet-green {
-  background: #67C23A;
+.info-card-insight .info-card-icon {
+  color: #a855f7;
 }
 
 .info-card-title {
   font-size: 14px;
   font-weight: 600;
-  color: #1f2d3d;
+}
+
+.info-card-concern .info-card-title {
+  color: #d97706;
+  font-size: 12px;
+}
+
+.info-card-need .info-card-title {
+  color: #2563eb;
+  font-size: 12px;
+}
+
+.info-card-insight .info-card-title {
+  color: #4f46e5;
+  font-size: 12px;
+}
+
+.info-card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.info-card-text {
+  font-size: 13px;
+  color: #334155;
+  line-height: 1.6;
+}
+
+.insight-quote {
+  font-style: italic;
 }
 
 .info-card-list {
@@ -1264,45 +1379,36 @@ const optimizePpt = (ppt) => {
 }
 
 .info-card-list li {
-  font-size: 13px;
-  color: #4b5563;
-  line-height: 18px;
-  margin-top: 5px;
-  margin-bottom: 5px;
-  padding: 0 0 0 15px;
+  font-size: 12px;
+  color: #334155;
+  line-height: 1.6;
+  margin-bottom: 8px;
+  padding-left: 16px;
   position: relative;
-}
-
-.info-card-list li::before {
-  content: '';
-  position: absolute;
-  left: 5px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
+  
+  &::before {
+    content: '•';
+    position: absolute;
+    left: 0;
+    color: #334155;
+  }
+  
+  &:last-child {
+    margin-bottom: 0;
+  }
+  
+  &.empty-item {
+    color: #9ca3af;
+    font-style: italic;
+    
+    &::before {
+      display: none;
+    }
+  }
 }
 
 .info-card-concern .info-card-list li::before {
-  background: #006DF9;
-}
-
-.info-card-need .info-card-list li::before {
-  background: #FF6A00;
-}
-
-.info-card-insight .info-card-list li::before {
-  background: #67C23A;
-}
-
-.info-card-list li:last-child {
-  margin-bottom: 0;
-}
-
-.info-card-list li.empty-item {
-  color: #909399;
-  font-style: italic;
+  color: #fbbf24;
 }
 
 /* 内联问题列表样式 */

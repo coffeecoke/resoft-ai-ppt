@@ -1,12 +1,9 @@
 <template>
   <section class="product-dashboard">
     <div class="dashboard-header">
-      <el-segmented 
-        :model-value="activeDashboardTab" 
-        :options="dashboardTabOptions" 
-        size="small"
-        @update:model-value="handleDashboardTabChange"
-      />
+      <div class="page-title">
+        <span class="title-text">重点关注产品</span>
+      </div>
     </div>
     
     <!-- 重点关注产品 -->
@@ -70,8 +67,7 @@ const emit = defineEmits(['update:activeDashboardTab', 'update:activeBrandTab', 
 
 // Dashboard Tab选项
 const dashboardTabOptions = [
-  { label: '重点关注产品', value: 'products' },
-  { label: '品牌基础资料', value: 'brand' }
+  { label: '重点关注产品', value: 'products' }
 ]
 
 // 品牌Tab选项
@@ -88,9 +84,8 @@ const handleBrandTabChange = (value: string) => {
   emit('update:activeBrandTab', value)
 }
 
-const handleSelectProduct = (productCode: string) => {
-  // 传递 product code 而不是 name
-  emit('select-product', productCode)
+const handleSelectProduct = (productName: string) => {
+  emit('select-product', productName)
 }
 
 // 打开品牌资料项（内部处理，不向上emit）
