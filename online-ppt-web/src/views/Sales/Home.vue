@@ -120,12 +120,14 @@
           v-model:visible="showFilterPanel"
           :active-tab="activeTab"
           @close="handleFilterClose"
+          @update:questionCategoryFilters="handleQuestionCategoryFiltersUpdate"
         />
-        
+
         <div class="concerned-questions-content" :class="{ 'with-filter': showFilterPanel && activeTab === 'concerned' }">
           <ConcernedQuestionsView
             :show-sidebar="false"
-            :show-filters="false"
+            :show-filters="true"
+            :external-filters="questionCategoryFilters"
           />
         </div>
       </div>
@@ -185,9 +187,12 @@
     <!-- ✅ 已有组件：PPT对话框（替换掉内联的el-dialog） -->
     <PptDialog
       v-model:visible="dialogs.dialogVisible.value"
+      :document-id="dialogs.dialogDocumentId.value"
       :type="dialogs.dialogType.value"
       :title="dialogs.dialogTitle.value"
       :slides="dialogs.slides.value"
+      :created-at="dialogs.dialogCreatedAt.value"
+      :view-count="dialogs.dialogViewCount.value"
       :isResponseDialog="dialogs.isResponseDialog.value"
     />
     
@@ -300,6 +305,19 @@ const activeBrandTab = ref('company')
 const showAdvancedFilter = ref(false)
 const showFilterPanel = ref(false) // 筛选面板显示状态（独立于高级筛选）
 
+// 问题分类筛选条件（关心问题 tab）
+const questionCategoryFilters = ref<{
+  questionCategory: string[]
+  industry: string[]
+  essenceType: string[]
+  customerName: string
+}>({
+  questionCategory: [],
+  industry: [],
+  essenceType: [],
+  customerName: ''
+})
+
 // 独立页面的筛选条件
 const fProduct = ref<string | null>(null)
 const fAudience = ref<string | null>(null)
@@ -381,6 +399,17 @@ const handleFilterClick = () => {
 
 const handleFilterClose = () => {
   showFilterPanel.value = false
+}
+
+// 处理问题分类筛选变化（关心问题 tab）
+const handleQuestionCategoryFiltersUpdate = (newFilters: {
+  questionCategory: string[]
+  industry: string[]
+  essenceType: string[]
+  customerName: string
+}) => {
+  console.log('[Home] 📥 收到 FilterPanel 的问题分类筛选变化:', newFilters)
+  questionCategoryFilters.value = newFilters
 }
 
 

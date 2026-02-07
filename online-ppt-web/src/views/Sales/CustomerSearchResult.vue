@@ -245,9 +245,12 @@
       <!-- 对话框组件 -->
       <PptDialog
         v-model:visible="dialogs.dialogVisible.value"
+        :document-id="dialogs.dialogDocumentId.value"
         :type="dialogs.dialogType.value"
         :title="dialogs.dialogTitle.value"
         :slides="dialogs.slides.value"
+        :created-at="dialogs.dialogCreatedAt.value"
+        :view-count="dialogs.dialogViewCount.value"
         :isResponseDialog="dialogs.isResponseDialog.value"
       />
       <VideoDialog

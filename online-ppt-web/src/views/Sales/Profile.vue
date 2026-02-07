@@ -282,6 +282,7 @@
     <!-- PPT详情对话框 -->
     <PptDialog
       v-model:visible="pptDialogVisible"
+      :document-id="currentPpt.id ?? ''"
       :title="currentPpt.title"
       :type="currentPpt.tag === 'public' ? 'public' : 'practical'"
       :slides="currentPptSlides"
@@ -448,7 +449,7 @@ const pptTypeFilter = ref('all') // 'all' 全部, 'practical' 回传, 'public' A
 
 // PPT详情对话框状态
 const pptDialogVisible = ref(false)
-const currentPpt = ref({ title: '', tag: 'public', slides: [] })
+const currentPpt = ref({ id: '', title: '', tag: 'public', slides: [] })
 const currentPptSlides = ref([])
 const currentCommunicationInfo = ref(null)
 
@@ -759,8 +760,9 @@ const openSession = (session) => {
 }
 
 const openPpt = (ppt) => {
-  // 打开PPT详情对话框
+  // 打开PPT详情对话框（id 用于总结/分析/下载等接口的 documentId）
   currentPpt.value = {
+    id: ppt.id ?? ppt.documentId ?? '',
     title: ppt.title,
     tag: ppt.tag || 'public',
     slides: ppt.slides || []

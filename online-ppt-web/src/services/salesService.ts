@@ -179,3 +179,107 @@ export async function deleteProduct(id: string): Promise<{
 }> {
   return axios.delete(`${SERVER_URL}/sales/products/${id}`)
 }
+
+// ==================== 交流会议（transcriptions）接口 ====================
+
+export interface TranscriptionListItem {
+  id: string
+  name: string
+  customer_name: string | null
+  product_id: string | null
+  productCode: string | null
+  productName: string | null
+  status: string
+  audio_duration: number | null
+  industry: string | null
+  industryName: string | null
+  meeting_type: string | null
+  meetingTypeName: string | null
+  customer_type: string | null
+  customerTypeName: string | null
+  audience: string | null
+  audienceName: string | null
+  language: string | null
+  languageName: string | null
+  created_at: string
+  completed_at: string | null
+}
+
+export interface TranscriptionDetail extends TranscriptionListItem {
+  original_file_name: string
+  audio_file_path: string
+  audio_format: string
+  dialogues: string | null
+  full_text: string | null
+  speaker_roles: string | null
+  error_message: string | null
+  progress: number
+  updated_at: string
+}
+
+export interface TranscriptionListParams {
+  page?: number
+  pageSize?: number
+  customerName?: string
+  productId?: string
+  productCode?: string
+  productName?: string
+  status?: string
+  dateFrom?: string
+  dateTo?: string
+  industry?: string
+  meeting_type?: string
+  customer_type?: string
+  audience?: string
+  language?: string
+}
+
+/**
+ * 交流会议列表（分页+筛选）
+ */
+export async function getTranscriptionList(params: TranscriptionListParams = {}): Promise<{
+  success: boolean
+  data: { list: TranscriptionListItem[]; total: number }
+  error?: string
+}> {
+  return axios.get(`${SERVER_URL}/sales/transcriptions`, { params })
+}
+
+/**
+ * 交流会议详情
+ */
+export async function getTranscriptionDetail(id: string): Promise<{
+  success: boolean
+  data: TranscriptionDetail
+  error?: string
+}> {
+  return axios.get(`${SERVER_URL}/sales/transcriptions/${id}`)
+}
+
+/** 交流会议关联的 QA 项（来自 concerns 表） */
+export interface TranscriptionConcernItem {
+  id: string
+  question: string
+  answer: string | null
+  category: string | null
+  time_range: string | null
+  status: string
+  created_at: string
+  /** 格式化为 MM-DD，供前端展示 */
+  date?: string | null
+  likes?: number
+  expertApproved?: boolean
+  expertAdvice?: string | null
+  expertReviewer?: string | null
+}
+
+/**
+ * 交流会议关联的 QA 列表（concerns 表按 transcription_id 关联）
+ */
+export async function getTranscriptionConcerns(transcriptionId: string): Promise<{
+  success: boolean
+  data: TranscriptionConcernItem[]
+  error?: string
+}> {
+  return axios.get(`${SERVER_URL}/sales/transcriptions/${transcriptionId}/concerns`)
+}

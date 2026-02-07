@@ -12,12 +12,12 @@
 
       <!-- 主内容区域 -->
       <main class="concerned-questions-main">
-        <!-- 当前筛选 -->
+        <!-- 当前筛选（内部筛选，来自 QuestionCategorySidebar） -->
         <div v-if="showFilters && selectedFilters.length > 0" class="current-filters">
           <div class="filter-content">
             <span class="filter-title">当前筛选:</span>
             <div class="filter-tags">
-              <span 
+              <span
                 v-for="filterId in selectedFilters"
                 :key="filterId"
                 class="filter-tag"
@@ -29,6 +29,23 @@
             </div>
           </div>
           <button class="clear-all-btn" @click="clearAllFilters">清空</button>
+        </div>
+
+        <!-- 当前筛选（外部筛选，来自 FilterPanel） -->
+        <div v-if="showFilters && hasActiveExternalFilters" class="current-filters">
+          <div class="filter-content">
+            <span class="filter-title">当前筛选:</span>
+            <div class="filter-tags">
+              <span
+                v-for="filter in allActiveExternalFilters"
+                :key="`${filter.type}-${filter.id}`"
+                class="filter-tag"
+              >
+                <i class="ri-price-tag-3-line filter-tag-icon"></i>
+                {{ getFilterName(filter.id, filter.type) }}
+              </span>
+            </div>
+          </div>
         </div>
 
         <!-- 问题列表 -->
@@ -55,107 +72,203 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { concernedQuestionsData } from '@/configs/salesData'
+import { ref, computed, onMounted, watch } from 'vue'
+import { getConcerns, getConcernCategories, likeConcern, type ConcernItem } from '@/services/concernsApi'
 import QuestionCategorySidebar from './QuestionCategorySidebar.vue'
 import HotSearchPanel from './HotSearchPanel.vue'
 import QuestionReportItem from './QuestionReportItem.vue'
+
+// 定义分类数据类型（匹配 QuestionCategorySidebar 组件需要的格式）
+interface CategoryChild {
+  id: string
+  name: string
+}
+
+interface QuestionCategory {
+  id: string
+  name: string
+  icon: string
+  children: CategoryChild[]
+}
+
+interface ExternalFilters {
+  questionCategory: string[]
+  industry: string[]
+  essenceType: string[]
+  customerName: string
+}
 
 interface Props {
   showSidebar?: boolean
   showFilters?: boolean
   selectedSubFilter?: string | null
   selectedEssenceType?: string | null
+  externalFilters?: ExternalFilters
 }
 
 const props = withDefaults(defineProps<Props>(), {
   showSidebar: true,
   showFilters: true,
   selectedSubFilter: null,
-  selectedEssenceType: null
+  selectedEssenceType: null,
+  externalFilters: () => ({
+    questionCategory: [],
+    industry: [],
+    essenceType: [],
+    customerName: ''
+  })
 })
 
 // 已选中的筛选条件
 const selectedFilters = ref<string[]>([])
 
 // 已点赞的报告ID列表
-const likedReports = ref<number[]>([])
+const likedReports = ref<string[]>([])
 
-// 每个报告的点赞数量（初始值从数据中获取，点击后会更新）
-const reportLikeCounts = ref<Record<number, number>>({})
+// 每个报告的点赞数量
+const reportLikeCounts = ref<Record<string, number>>({})
 
 // 答案展开/折叠状态：key 为 'system-{reportId}' 或 'expert-{reportId}'
 const answerExpanded = ref<Record<string, boolean>>({})
 
-// 问题分类结构
-const questionCategories = ref([
+// ====================== API 数据 ======================
+const concerns = ref<ConcernItem[]>([])
+const loading = ref(false)
+const hasMore = ref(true)
+const nextCursor = ref<string | null>(null)
+
+// 问题分类结构（使用正确的类型）
+const questionCategories = ref<QuestionCategory[]>([])
+
+// 加载分类目录
+const loadCategories = async () => {
+  try {
+    const res = await getConcernCategories()
+    if (res.success && res.data) {
+      // 转换为组件需要的格式
+      questionCategories.value = res.data.map(cat => ({
+        id: cat.code,
+        name: cat.name,
+        icon: getCategoryIcon(cat.code),
+        children: (cat.children || []).map(child => ({
+          id: child.code,
+          name: child.name
+        }))
+      }))
+    }
+  } catch (error) {
+    console.error('加载分类目录失败:', error)
+    // 使用默认分类
+    questionCategories.value = getDefaultCategories()
+  }
+}
+
+// 根据分类代码获取图标
+const getCategoryIcon = (code: string): string => {
+  const iconMap: Record<string, string> = {
+    '1': 'ri-building-line',
+    '2': 'ri-box-3-line',
+    '3': 'ri-briefcase-line',
+    '4': 'ri-money-dollar-circle-line',
+    '5': 'ri-projector-line',
+    '6': 'ri-customer-service-line'
+  }
+  return iconMap[code] || 'ri-folder-line'
+}
+
+// 默认分类（备用）
+const getDefaultCategories = (): QuestionCategory[] => [
   {
-    id: 'company',
-    name: '公司类',
-    icon: 'ri-building-line',
+    id: '1', name: '公司类', icon: 'ri-building-line',
     children: [
-      { id: 'qualifications', name: '资质与案例' },
-      { id: 'scale', name: '公司规模与背景' },
-      { id: 'cooperation', name: '合作模式' },
-      { id: 'regulatory', name: '监管资源与协作' }
+      { id: '1.1', name: '资质与案例' },
+      { id: '1.2', name: '公司规模与背景' },
+      { id: '1.3', name: '合作模式' },
+      { id: '1.4', name: '监管资源与协作' }
     ]
   },
   {
-    id: 'product',
-    name: '产品类',
-    icon: 'ri-box-3-line',
+    id: '2', name: '产品类', icon: 'ri-box-3-line',
     children: [
-      { id: 'performance', name: '性能与效率' },
-      { id: 'architecture', name: '产品架构' },
-      { id: 'features', name: '产品功能' },
-      { id: 'compatibility', name: '兼容性与接口扩展' }
-    ]
-  },
-  {
-    id: 'business',
-    name: '业务类',
-    icon: 'ri-briefcase-line',
-    children: [
-      { id: 'policy', name: '监管政策适配' },
-      { id: 'security', name: '数据安全与合规治理' },
-      { id: 'customization', name: '业务适配与定制化' }
-    ]
-  },
-  {
-    id: 'commerce',
-    name: '商务类',
-    icon: 'ri-money-dollar-circle-line',
-    children: [
-      { id: 'budget', name: '预算与报价' },
-      { id: 'price-competitiveness', name: '价格竞争力与优惠政策' }
-    ]
-  },
-  {
-    id: 'project',
-    name: '项目实施类',
-    icon: 'ri-projector-line',
-    children: [
-      { id: 'poc', name: 'POC' },
-      { id: 'project-cycle', name: '项目周期' },
-      { id: 'project-team', name: '项目团队' },
-      { id: 'project-control', name: '项目管控' },
-      { id: 'resource-allocation', name: '资源配置' },
-      { id: 'data-migration', name: '数据迁移与系统切换' }
-    ]
-  },
-  {
-    id: 'after-sales',
-    name: '售后保障类',
-    icon: 'ri-customer-service-line',
-    children: [
-      { id: 'maintenance-content', name: '运维内容' },
-      { id: 'maintenance-cost', name: '运维费用和周期' },
-      { id: 'training', name: '培训与知识转移' },
-      { id: 'security-support', name: '安全支撑' }
+      { id: '2.1', name: '性能与效率' },
+      { id: '2.2', name: '产品架构' },
+      { id: '2.3', name: '产品功能' },
+      { id: '2.4', name: '兼容性与接口扩展' }
     ]
   }
-])
+]
 
+// 加载问题列表
+const loadConcerns = async (reset = false) => {
+  if (loading.value) return
+  if (!reset && !hasMore.value) return
+
+  loading.value = true
+
+  try {
+    const params: any = {
+      limit: 20,
+      sortBy: 'latest'
+    }
+
+    if (!reset && nextCursor.value) {
+      params.cursor = nextCursor.value
+    }
+
+    // 添加内部分类筛选（来自 QuestionCategorySidebar）
+    if (selectedFilters.value.length > 0) {
+      params.categoryCode = selectedFilters.value
+    }
+
+    // 添加外部筛选条件（来自 FilterPanel）
+    if (props.externalFilters) {
+      // 问题分类筛选
+      if (props.externalFilters.questionCategory && props.externalFilters.questionCategory.length > 0) {
+        params.categoryCode = [
+          ...(params.categoryCode || []),
+          ...props.externalFilters.questionCategory
+        ]
+      }
+      // 行业筛选
+      if (props.externalFilters.industry && props.externalFilters.industry.length > 0) {
+        params.industry = props.externalFilters.industry
+      }
+      // 本质类型筛选
+      if (props.externalFilters.essenceType && props.externalFilters.essenceType.length > 0) {
+        params.intentCode = props.externalFilters.essenceType
+      }
+      // 客户名称筛选
+      if (props.externalFilters.customerName) {
+        params.keyword = props.externalFilters.customerName
+      }
+    }
+
+    console.log('[ConcernedQuestionsView] 📤 加载问题列表，参数:', params)
+
+    const res = await getConcerns(params)
+
+    if (res.success && res.data) {
+      if (reset) {
+        concerns.value = res.data.list
+      } else {
+        concerns.value = [...concerns.value, ...res.data.list]
+      }
+      nextCursor.value = res.data.nextCursor
+      hasMore.value = res.data.hasMore
+
+      // 初始化点赞数
+      res.data.list.forEach(item => {
+        if (!(item.id in reportLikeCounts.value)) {
+          reportLikeCounts.value[item.id] = item.likes
+        }
+      })
+    }
+  } catch (error) {
+    console.error('加载问题列表失败:', error)
+  } finally {
+    loading.value = false
+  }
+}
 
 // 切换筛选条件
 const toggleFilter = (filterId: string) => {
@@ -178,98 +291,129 @@ const removeFilter = (filterId: string) => {
 // 清空所有筛选
 const clearAllFilters = () => {
   selectedFilters.value = []
-  // selectedSubFilter 和 selectedEssenceType 由父组件管理
 }
 
-// 获取筛选条件名称
-const getFilterName = (filterId: string): string => {
+// 监听筛选变化，重新加载数据
+watch(selectedFilters, () => {
+  loadConcerns(true)
+}, { deep: true })
+
+// 监听外部筛选变化，重新加载数据
+watch(() => props.externalFilters, (newFilters) => {
+  console.log('[ConcernedQuestionsView] 📥 外部筛选变化:', newFilters)
+  loadConcerns(true)
+}, { deep: true })
+
+// 行业选项映射
+const industryOptions: Record<string, string> = {
+  'national': '全国/股份制/政策性银行',
+  'city': '城商行',
+  'foreign': '外资行',
+  'rural': '农商',
+  'finance': '财务公司',
+  'trust': '信托公司',
+  'auto': '汽车/消费金融',
+  'leasing': '金融租赁',
+  'other': '其他'
+}
+
+// 本质类型选项映射
+const essenceTypeOptions: Record<string, string> = {
+  'confirm': '确认类',
+  'compare': '对比类',
+  'concern': '顾虑类',
+  'suggestion': '建议类',
+  'other': '其它意图'
+}
+
+// 所有活动的外部筛选（用于显示"当前筛选"栏）
+const allActiveExternalFilters = computed(() => {
+  const filters: Array<{ id: string; type: 'questionCategory' | 'industry' | 'essenceType' }> = []
+
+  // 问题分类筛选
+  if (props.externalFilters?.questionCategory) {
+    props.externalFilters.questionCategory.forEach(id => {
+      filters.push({ id, type: 'questionCategory' })
+    })
+  }
+
+  // 行业筛选
+  if (props.externalFilters?.industry) {
+    props.externalFilters.industry.forEach(id => {
+      filters.push({ id, type: 'industry' })
+    })
+  }
+
+  // 本质类型筛选
+  if (props.externalFilters?.essenceType) {
+    props.externalFilters.essenceType.forEach(id => {
+      filters.push({ id, type: 'essenceType' })
+    })
+  }
+
+  return filters
+})
+
+// 是否有活动的外部筛选
+const hasActiveExternalFilters = computed(() => {
+  return allActiveExternalFilters.value.length > 0
+})
+
+// 获取筛选条件名称（支持多种类型）
+const getFilterName = (filterId: string, filterType?: 'questionCategory' | 'industry' | 'essenceType'): string => {
+  // 如果指定了类型，按类型查找
+  if (filterType === 'industry') {
+    return industryOptions[filterId] || filterId
+  }
+  if (filterType === 'essenceType') {
+    return essenceTypeOptions[filterId] || filterId
+  }
+
+  // 问题分类：从 questionCategories 中查找
   for (const category of questionCategories.value) {
+    if (category.id === filterId) return category.name
     const child = category.children.find(c => c.id === filterId)
     if (child) return child.name
   }
   return filterId
 }
 
-// 显示信息
-const showInfo = (child: any) => {
-  // TODO: 显示详细信息
-  console.log('显示信息:', child)
-}
-
-// 打开报告
-const openReport = (report: any) => {
-  // TODO: 打开报告详情
-  console.log('打开报告:', report)
-}
-
-
 // 过滤后的报告列表
 const filteredReports = computed(() => {
-  let reports = [...concernedQuestionsData.reports]
-  
-  // 根据筛选条件过滤
-  if (selectedFilters.value.length > 0) {
-    // TODO: 实现筛选逻辑
-  }
-  
+  let reports = [...concerns.value]
+
   // 根据子筛选标签过滤
   if (props.selectedSubFilter) {
-    reports = reports.filter(r => r.tagId === props.selectedSubFilter)
+    reports = reports.filter(r => r.categoryCode === props.selectedSubFilter)
   }
-  
-  // 初始化点赞数量（如果还没有设置）
-  reports.forEach(report => {
-    if (!(report.id in reportLikeCounts.value)) {
-      reportLikeCounts.value[report.id] = report.likes || 0
-    }
-  })
-  
+
   return reports
 })
 
 // 切换点赞状态
-const toggleLike = (reportId: number) => {
+const toggleLike = async (reportId: string) => {
   const index = likedReports.value.indexOf(reportId)
   if (index > -1) {
-    // 取消点赞
+    // 已点赞，取消（前端本地处理，API暂不支持取消）
     likedReports.value.splice(index, 1)
     reportLikeCounts.value[reportId] = (reportLikeCounts.value[reportId] || 0) - 1
   } else {
     // 点赞
-    likedReports.value.push(reportId)
-    reportLikeCounts.value[reportId] = (reportLikeCounts.value[reportId] || 0) + 1
+    try {
+      const res = await likeConcern(reportId)
+      if (res.success) {
+        likedReports.value.push(reportId)
+        reportLikeCounts.value[reportId] = res.data.likes
+      }
+    } catch (error) {
+      console.error('点赞失败:', error)
+    }
   }
 }
 
 // 获取点赞数量
-const getLikeCount = (reportId: number): number => {
+const getLikeCount = (reportId: string): number => {
   return reportLikeCounts.value[reportId] || 0
-}
-
-// 格式化日期
-const formatDate = (dateStr: string): string => {
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diff = now.getTime() - date.getTime()
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24))
-  
-  if (days === 0) {
-    return '刚刚'
-  } else if (days < 7) {
-    return `${days}天前`
-  } else {
-    const month = date.getMonth() + 1
-    const day = date.getDate()
-    return `${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`
-  }
-}
-
-// 判断是否需要显示展开按钮（根据容器宽度和字体大小，大约一行可显示60-70个中文字符）
-const shouldShowExpand = (content: string): boolean => {
-  if (!content) return false
-  // 考虑容器宽度约350px，字体大小0.75rem（约12px），一行大约可以显示60-70个中文字符
-  // 超过70个字符才显示展开按钮
-  return content.length > 70
 }
 
 // 切换答案展开/折叠状态
@@ -277,81 +421,11 @@ const toggleAnswer = (key: string) => {
   answerExpanded.value[key] = !answerExpanded.value[key]
 }
 
-// 热搜榜已移至 HotSearchPanel 组件
-
-// 最热问题Top10数据（已废弃，保留用于兼容）
-const hotTopics = ref([
-  {
-    id: 1,
-    title: '针对监管要求,汽车/消费金融在合作模式模块的技术路径选择。',
-    category: '合作模式',
-    likes: 997,
-    similarCount: 156
-  },
-  {
-    id: 2,
-    title: '全国/股份制/政策性银行如何通过资源配置提升业务敏捷度并确保数据资产安全?',
-    category: '资源配置',
-    likes: 996,
-    similarCount: 142
-  },
-  {
-    id: 3,
-    title: '全国/股份制/政策性银行如何通过业务适配与定制化提升业务敏捷度并确保数据资产安全?',
-    category: '业务适配与定制化',
-    likes: 980,
-    similarCount: 128
-  },
-  {
-    id: 4,
-    title: '全国/股份制/政策性银行如何通过POC提升业务敏捷度并确保数据资产安全?',
-    category: 'POC',
-    likes: 978,
-    similarCount: 115
-  },
-  {
-    id: 5,
-    title: '针对监管要求,汽车/消费金融在资质与案例模块的技术路径选择。',
-    category: '资质与案例',
-    likes: 951,
-    similarCount: 98
-  },
-  {
-    id: 6,
-    title: '全国/股份制/政策性银行如何通过公司规模与背景提升业务敏捷度并确保数据资产安全?',
-    category: '公司规模与背景',
-    likes: 950,
-    similarCount: 87
-  },
-  {
-    id: 7,
-    title: '全国/股份制/政策性银行如何通过项目周期提升业务敏捷度并确保数据资产安全?',
-    category: '项目周期',
-    likes: 945,
-    similarCount: 76
-  },
-  {
-    id: 8,
-    title: '针对监管要求,汽车/消费金融在数据安全与合规治理模块的技术路径选择。',
-    category: '数据安全与合规治理',
-    likes: 932,
-    similarCount: 65
-  },
-  {
-    id: 9,
-    title: '全国/股份制/政策性银行如何通过产品功能提升业务敏捷度并确保数据资产安全?',
-    category: '产品功能',
-    likes: 920,
-    similarCount: 54
-  },
-  {
-    id: 10,
-    title: '针对监管要求,汽车/消费金融在监管政策适配模块的技术路径选择。',
-    category: '监管政策适配',
-    likes: 915,
-    similarCount: 43
-  }
-])
+// 初始化
+onMounted(() => {
+  loadCategories()
+  loadConcerns(true)
+})
 </script>
 
 <style scoped lang="scss">

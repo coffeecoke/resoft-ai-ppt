@@ -7,6 +7,7 @@ import { ref } from 'vue'
 import { salesData } from '@/configs/salesData'
 import { getDocumentThumbnails } from '@/services/thumbnailService'
 import { recordDocumentView } from '@/services/documentService'
+import { getTranscriptionDetail, getTranscriptionConcerns } from '@/services/salesService'
 
 export function useDialogs() {
   // PPT对话框状态
@@ -123,10 +124,74 @@ export function useDialogs() {
     }
   }
   
-  // 打开视频对话框
-  const openVideo = (item: any) => {
-    // 可以根据item更新videoDetail，这里暂时使用默认数据
-    videoDetail.value = { ...salesData.videoDetail }
+  const formatDateForVideo = (d: string | null) => {
+    if (!d) return ''
+    const date = new Date(d)
+    if (Number.isNaN(date.getTime())) return ''
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+  }
+
+  // 打开视频对话框（支持从推荐页/独立页点击交流会议卡片，按 __raw.id 拉取详情）
+  const openVideo = async (itemOrDetail: any) => {
+    if (itemOrDetail?.__raw?.id) {
+      try {
+        const res = await getTranscriptionDetail(itemOrDetail.__raw.id) as { data?: any }
+        const d = res?.data
+        if (d) {
+          let transcript: { speaker: string; time: string; content: string }[] = []
+          try {
+            const arr = d.dialogues ? JSON.parse(d.dialogues) : []
+            transcript = arr.map((x: any) => ({
+              speaker: x.speaker ?? '',
+              time: x.start_time != null ? `${Math.floor(x.start_time / 60)}:${String(x.start_time % 60).padStart(2, '0')}` : '',
+              content: x.content ?? ''
+            }))
+          } catch (_) {}
+          let qa: any[] = []
+          try {
+            const qaRes = await getTranscriptionConcerns(d.id) as { data?: any[] }
+            const list = qaRes?.data ?? []
+            qa = list.map((c: any) => ({
+              q: c.question ?? '',
+              question: c.question ?? '',
+              answerText: c.answer ?? '',
+              summary: c.answer ?? '',
+              answer: c.answer ?? '',
+              category: c.category ?? '资质与案例',
+              time: c.time_range ?? '',
+              date: c.date ?? '',
+              likes: c.likes ?? 0,
+              expertApproved: !!c.expertApproved,
+              expertAdvice: c.expertAdvice ?? '',
+              expertReviewer: c.expertReviewer ?? ''
+            }))
+          } catch (_) {}
+          videoDetail.value = {
+            ...salesData.videoDetail,
+            project: d.name,
+            customerName: d.customer_name,
+            customer: d.customer_name,
+            customerType: d.customerTypeName ?? d.customer_type,
+            exchangeTime: formatDateForVideo(d.completed_at || d.created_at),
+            productSolution: d.productName ?? '',
+            exchangeTheme: d.name,
+            transcript,
+            qa,
+            host: '-',
+            time: formatDateForVideo(d.created_at)
+          }
+          videoDialogVisible.value = true
+          return
+        }
+      } catch (e) {
+        console.error('加载交流会议详情失败', e)
+      }
+    }
+    if (itemOrDetail && (itemOrDetail.transcript || itemOrDetail.customerName || itemOrDetail.exchangeTheme)) {
+      videoDetail.value = { ...salesData.videoDetail, ...itemOrDetail }
+    } else {
+      videoDetail.value = { ...salesData.videoDetail }
+    }
     videoDialogVisible.value = true
   }
   

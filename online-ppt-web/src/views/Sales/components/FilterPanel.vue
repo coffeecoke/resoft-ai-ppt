@@ -199,6 +199,7 @@
 import { ref, reactive, computed, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
 import { ElInput } from 'element-plus'
 import { salesData } from '../../../configs/salesData'
+import { getConcernCategories } from '@/services/concernsApi'
 
 const props = defineProps({
   visible: {
@@ -219,7 +220,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['update:visible', 'close', 'create-ppt', 'update:filters'])
+const emit = defineEmits(['update:visible', 'close', 'create-ppt', 'update:filters', 'update:questionCategoryFilters'])
 
 // 当前激活的筛选类别（用于导航栏高亮）
 const activeCategory = ref('customerName')
@@ -330,73 +331,101 @@ const responseFileCatalogData = [
   }
 ]
 
-// 关心问题的问题分类数据
-const questionCategoryData = [
+// 关心问题的问题分类数据（从API获取）
+const questionCategoryData = ref<Array<{
+  id: string
+  name: string
+  children: Array<{ id: string; name: string }>
+}>>([])
+
+// 默认问题分类数据（备用）
+const defaultQuestionCategoryData = [
   {
-    id: 'company',
+    id: '1',
     name: '公司类',
     children: [
-      { id: 'qualifications', name: '资质与案例' },
-      { id: 'scale', name: '公司规模与背景' },
-      { id: 'cooperation', name: '合作模式' },
-      { id: 'regulatory', name: '监管资源与协作' }
+      { id: '1.1', name: '资质与案例' },
+      { id: '1.2', name: '公司规模与背景' },
+      { id: '1.3', name: '合作模式' },
+      { id: '1.4', name: '监管资源与协作' }
     ]
   },
   {
-    id: 'product',
+    id: '2',
     name: '产品类',
     children: [
-      { id: 'performance', name: '性能与效率' },
-      { id: 'architecture', name: '产品架构' },
-      { id: 'features', name: '产品功能' },
-      { id: 'compatibility', name: '兼容性与接口扩展' }
+      { id: '2.1', name: '性能与效率' },
+      { id: '2.2', name: '产品架构' },
+      { id: '2.3', name: '产品功能' },
+      { id: '2.4', name: '兼容性与接口扩展' }
     ]
   },
   {
-    id: 'business',
+    id: '3',
     name: '业务类',
     children: [
-      { id: 'policy', name: '监管政策适配' },
-      { id: 'security', name: '数据安全与合规治理' },
-      { id: 'customization', name: '业务适配与定制化' }
+      { id: '3.1', name: '监管政策适配' },
+      { id: '3.2', name: '数据安全与合规治理' },
+      { id: '3.3', name: '业务适配与定制化' }
     ]
   },
   {
-    id: 'commerce',
+    id: '4',
     name: '商务类',
     children: [
-      { id: 'budget', name: '预算与报价' },
-      { id: 'price-competitiveness', name: '价格竞争力与优惠政策' }
+      { id: '4.1', name: '预算与报价' },
+      { id: '4.2', name: '价格竞争力与优惠政策' }
     ]
   },
   {
-    id: 'project',
+    id: '5',
     name: '项目实施类',
     children: [
-      { id: 'poc', name: 'POC' },
-      { id: 'project-cycle', name: '项目周期' },
-      { id: 'project-team', name: '项目团队' },
-      { id: 'project-control', name: '项目管控' },
-      { id: 'resource-allocation', name: '资源配置' },
-      { id: 'data-migration', name: '数据迁移与系统切换' }
+      { id: '5.1', name: 'POC' },
+      { id: '5.2', name: '项目周期' },
+      { id: '5.3', name: '项目团队' },
+      { id: '5.4', name: '项目管控' },
+      { id: '5.5', name: '资源配置' },
+      { id: '5.6', name: '数据迁移与系统切换' }
     ]
   },
   {
-    id: 'after-sales',
+    id: '6',
     name: '售后保障类',
     children: [
-      { id: 'maintenance-content', name: '运维内容' },
-      { id: 'maintenance-cost', name: '运维费用和周期' },
-      { id: 'training', name: '培训与知识转移' },
-      { id: 'security-support', name: '安全支撑' }
+      { id: '6.1', name: '运维内容' },
+      { id: '6.2', name: '运维费用和周期' },
+      { id: '6.3', name: '培训与知识转移' },
+      { id: '6.4', name: '安全支撑' }
     ]
   }
 ]
 
+// 加载问题分类数据
+const loadQuestionCategories = async () => {
+  try {
+    const res = await getConcernCategories()
+    if (res.success && res.data) {
+      questionCategoryData.value = res.data.map(cat => ({
+        id: cat.code,
+        name: cat.name,
+        children: (cat.children || []).map(child => ({
+          id: child.code,
+          name: child.name
+        }))
+      }))
+      console.log('[FilterPanel] 📋 加载问题分类成功:', questionCategoryData.value)
+    }
+  } catch (error) {
+    console.error('[FilterPanel] 加载问题分类失败:', error)
+    questionCategoryData.value = defaultQuestionCategoryData
+  }
+}
+
 // 根据 activeTab 获取目录数据
 const catalogData = computed(() => {
   if (props.activeTab === 'concerned') {
-    return questionCategoryData
+    return questionCategoryData.value
   } else if (props.activeTab === 'response') {
     return responseFileCatalogData
   } else {
@@ -856,6 +885,9 @@ const scrollNavRight = () => {
 
 // 监听导航栏滚动
 onMounted(() => {
+  // 加载问题分类数据
+  loadQuestionCategories()
+
   nextTick(() => {
     if (navContentRef.value) {
       navContentRef.value.addEventListener('scroll', checkNavScroll)
@@ -936,6 +968,31 @@ watch(
       // 触发事件通知父组件（Home.vue 会调用 loadDocuments）
       emit('update:filters', props.filters)
     }
+  },
+  { deep: true }
+)
+
+// 🆕 监听问题分类筛选变化（关心问题 tab）
+watch(
+  () => ({
+    questionCategory: selectedOptions.questionCategory,
+    industry: selectedOptions.industry,
+    essenceType: selectedOptions.essenceType,
+    customerName: customerNameInput.value
+  }),
+  (newVal) => {
+    if (!isInitialized.value) return
+    if (props.activeTab !== 'concerned') return
+
+    console.log('[FilterPanel] 🔄 关心问题筛选条件变化:', newVal)
+
+    // 发射筛选变化事件给父组件
+    emit('update:questionCategoryFilters', {
+      questionCategory: newVal.questionCategory || [],
+      industry: newVal.industry || [],
+      essenceType: newVal.essenceType || [],
+      customerName: newVal.customerName || ''
+    })
   },
   { deep: true }
 )

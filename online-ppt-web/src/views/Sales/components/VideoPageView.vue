@@ -18,20 +18,23 @@
       @select-product="handleSelectProduct"
     />
     
-    
-    <!-- 视频卡片网格 -->
+    <!-- 加载中 -->
+    <div v-if="loading" class="video-loading">加载中...</div>
+    <!-- 视频卡片网格（交流会议来自 API） -->
     <VideoGrid
-      :items="filteredVideosList"
+      v-else
+      :items="gridItems"
       @video-click="handleVideoClick"
     />
   </section>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { defineProps, defineEmits, inject } from 'vue'
 import VideoGrid from './VideoGrid.vue'
 import CommonFilters from './CommonFilters.vue'
+import { getTranscriptionList, getTranscriptionDetail, getTranscriptionConcerns } from '@/services/salesService'
 
 const props = defineProps({
   filteredVideos: {
@@ -55,6 +58,14 @@ const emit = defineEmits([
 
 // 注入dialogs composable
 const dialogs: any = inject('dialogs')
+
+// 列表来自 API
+const loading = ref(false)
+const apiList = ref<any[]>([])
+const total = ref(0)
+const page = ref(1)
+const pageSize = ref(20)
+const customerNameQuery = ref('')
 
 // 筛选状态
 const selectedIndustry = ref<string | null>(null)
@@ -148,7 +159,7 @@ const hiddenFilterGroups = computed(() => [
   }
 ])
 
-// 行业领域映射（将筛选标签ID映射到实际行业值）
+// 行业领域映射（将筛选标签ID映射到中文，用于请求 API）
 const industryMap: Record<string, string> = {
   'national': '全国/股份制/政策性银行',
   'city': '城商行',
@@ -160,62 +171,99 @@ const industryMap: Record<string, string> = {
   'leasing': '金融租赁'
 }
 
-// 根据筛选条件筛选视频列表
-const filteredVideosList = computed(() => {
-  let list = [...(props.filteredVideos as any[])]
-  
-  // 行业筛选
-  if (selectedIndustry.value) {
-    const industryName = industryMap[selectedIndustry.value]
-    if (industryName) {
-      list = list.filter((video: any) => {
-        // 如果视频有 industry 字段，直接匹配
-        if (video.industry) {
-          return video.industry === industryName || video.industry?.includes(industryName)
-        }
-        // 如果没有 industry 字段，可以根据其他字段推断（这里暂时保留所有）
-        return true
-      })
-    }
+// 将筛选选项 id 转为中文（API 使用中文）
+function filterValueToName(key: string, id: string | null): string | undefined {
+  if (!id) return undefined
+  const map: Record<string, { id: string; name: string }[]> = {
+    meetingType: meetingTypes,
+    customerType: customerTypes,
+    audience: audiences,
+    language: languages
   }
-  
-  // 会议类型筛选（如果视频数据有 meetingType 字段）
-  if (filterValues.value.meetingType) {
-    list = list.filter((video: any) => video.meetingType === filterValues.value.meetingType)
-  }
-  
-  // 客户类型筛选（如果视频数据有 customerType 字段）
-  if (filterValues.value.customerType) {
-    list = list.filter((video: any) => video.customerType === filterValues.value.customerType)
-  }
-  
-  // 交流对象筛选（如果视频数据有 audience 字段）
-  if (filterValues.value.audience) {
-    list = list.filter((video: any) => video.audience === filterValues.value.audience)
-  }
-  
-  // 语言筛选（如果视频数据有 language 字段）
-  if (filterValues.value.language) {
-    list = list.filter((video: any) => video.language === filterValues.value.language)
-  }
-  
-  // 排序
-  if (selectedSort.value === 'latest') {
-    // 按日期排序（最新的在前）
-    list.sort((a: any, b: any) => {
-      const dateA = new Date(a.date || 0).getTime()
-      const dateB = new Date(b.date || 0).getTime()
-      return dateB - dateA
+  const opts = map[key]
+  return opts?.find((o) => o.id === id)?.name
+}
+
+function formatDuration(seconds: number | null): string {
+  if (seconds == null || seconds < 0) return ''
+  const m = Math.floor(seconds / 60)
+  const s = Math.floor(seconds % 60)
+  return `${m}:${String(s).padStart(2, '0')}`
+}
+
+function formatDate(d: string | null): string {
+  if (!d) return ''
+  const date = new Date(d)
+  if (Number.isNaN(date.getTime())) return ''
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+// 请求列表（筛选参数传中文）
+async function fetchList() {
+  loading.value = true
+  try {
+    const industry = selectedIndustry.value ? industryMap[selectedIndustry.value] : undefined
+    // 同时传递 productCode 和 productName，后端优先使用 productCode
+    const productFilter = props.fProduct || undefined
+    const res = await getTranscriptionList({
+      page: page.value,
+      pageSize: pageSize.value,
+      customerName: customerNameQuery.value || undefined,
+      productCode: productFilter,
+      productName: productFilter,
+      industry,
+      meeting_type: filterValueToName('meetingType', filterValues.value.meetingType),
+      customer_type: filterValueToName('customerType', filterValues.value.customerType),
+      audience: filterValueToName('audience', filterValues.value.audience),
+      language: filterValueToName('language', filterValues.value.language)
     })
-  } else if (selectedSort.value === 'likes') {
-    // 按点赞量排序
-    list.sort((a: any, b: any) => (b.likes || 0) - (a.likes || 0))
-  } else if (selectedSort.value === 'usage') {
-    // 按使用度排序
-    list.sort((a: any, b: any) => (b.usage || 0) - (a.usage || 0))
+    if (res?.data?.list) {
+      apiList.value = res.data.list
+      total.value = res.data.total ?? 0
+    } else {
+      apiList.value = []
+      total.value = 0
+    }
+  } catch (e) {
+    console.error('加载交流会议列表失败', e)
+    apiList.value = []
+    total.value = 0
+  } finally {
+    loading.value = false
   }
-  
+}
+
+// 映射为 VideoGrid 所需结构
+const gridItems = computed(() => {
+  let list = apiList.value.map((row: any) => ({
+    id: row.id,
+    title: row.name,
+    date: formatDate(row.completed_at || row.created_at),
+    product: row.productName ?? '',
+    industry: row.industry ?? row.industryName ?? '',
+    thumbnail: 'https://picsum.photos/seed/' + row.id + '/360/200',
+    duration: formatDuration(row.audio_duration),
+    __raw: row
+  }))
+  if (selectedSort.value === 'latest') {
+    list = [...list].sort((a: any, b: any) => {
+      const ra = a.__raw
+      const rb = b.__raw
+      const tA = new Date(ra?.completed_at || ra?.created_at || 0).getTime()
+      const tB = new Date(rb?.completed_at || rb?.created_at || 0).getTime()
+      return tB - tA
+    })
+  }
   return list
+})
+
+onMounted(() => { fetchList() })
+watch([selectedIndustry, filterValues, page], () => { fetchList() }, { deep: true })
+
+// 监听产品筛选变化
+watch(() => props.fProduct, () => {
+  page.value = 1  // 重置页码
+  fetchList()
 })
 
 // 处理筛选变化
@@ -241,14 +289,75 @@ const handleSelectProduct = () => {
   console.log('选择产品与解决方案')
 }
 
-const handleVideoClick = (item: any) => {
-  if (dialogs) {
+const handleVideoClick = async (item: any) => {
+  if (!dialogs) return
+  const raw = item.__raw
+  if (raw?.id) {
+    try {
+      const res = await getTranscriptionDetail(raw.id) as { data?: any }
+      const d = res?.data
+      if (d) {
+        let transcript: { speaker: string; time: string; content: string }[] = []
+        try {
+          const arr = d.dialogues ? JSON.parse(d.dialogues) : []
+          transcript = arr.map((x: any) => ({
+            speaker: x.speaker ?? '',
+            time: x.start_time != null ? `${Math.floor(x.start_time / 60)}:${String(x.start_time % 60).padStart(2, '0')}` : '',
+            content: x.content ?? ''
+          }))
+        } catch (_) {}
+        let qa: any[] = []
+        try {
+          const qaRes = await getTranscriptionConcerns(d.id) as { data?: any[] }
+          const list = qaRes?.data ?? []
+          qa = list.map((c: any) => ({
+            q: c.question ?? '',
+            question: c.question ?? '',
+            answerText: c.answer ?? '',
+            summary: c.answer ?? '',
+            answer: c.answer ?? '',
+            category: c.category ?? '资质与案例',
+            time: c.time_range ?? '',
+            date: c.date ?? '',
+            likes: c.likes ?? 0,
+            expertApproved: !!c.expertApproved,
+            expertAdvice: c.expertAdvice ?? '',
+            expertReviewer: c.expertReviewer ?? ''
+          }))
+        } catch (_) {}
+        const videoDetail = {
+          project: d.name,
+          customerName: d.customer_name,
+          customer: d.customer_name,
+          customerType: d.customerTypeName ?? d.customer_type,
+          exchangeTime: formatDate(d.completed_at || d.created_at),
+          productSolution: d.productName ?? '',
+          exchangeTheme: d.name,
+          transcript,
+          qa,
+          host: '-',
+          time: formatDate(d.created_at)
+        }
+        dialogs.openVideo(videoDetail)
+      } else {
+        dialogs.openVideo(item)
+      }
+    } catch (e) {
+      console.error('加载交流会议详情失败', e)
+      dialogs.openVideo(item)
+    }
+  } else {
     dialogs.openVideo(item)
   }
 }
 </script>
 
 <style scoped>
+.video-loading {
+  padding: 24px;
+  text-align: center;
+  color: var(--el-text-color-secondary);
+}
 /* 样式已移至 CommonFilters 组件 */
 </style>
 
