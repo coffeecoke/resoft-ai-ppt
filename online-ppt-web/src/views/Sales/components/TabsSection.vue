@@ -9,10 +9,13 @@
       <div class="filters-inline">
         <button class="new-ppt-btn" type="button" @click="handleCreatePpt">
           <i class="ri-file-ppt-2-line"></i>
-          新建PPT
+          新建
         </button>
-        <el-button @click="handleToggleFilter" type="primary" plain>
+        <el-button @click="handleToggleFilter" type="primary" plain style="display: none;">
           <el-icon><Filter /></el-icon> 高级筛选
+        </el-button>
+        <el-button @click="handleFilter" type="primary" plain>
+          <el-icon><Filter /></el-icon> 筛选
         </el-button>
       </div>
     </div>
@@ -20,7 +23,6 @@
 </template>
 
 <script setup lang="ts">
-import { defineProps, defineEmits } from 'vue'
 import { Filter } from '@element-plus/icons-vue'
 
 const props = defineProps({
@@ -34,13 +36,15 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['update:activeTab', 'update:showAdvancedFilter', 'create-ppt'])
+const emit = defineEmits(['update:activeTab', 'update:showAdvancedFilter', 'create-ppt', 'filter'])
 
 // Tab选项
 const tabOptions = [
   { label: '产品介绍PPT', value: 'ppt' },
+  { label: 'PPT', value: 'ppt-new' },
   { label: '交流会议', value: 'video' },
-  { label: '客户关心问题', value: 'qa' },
+  // { label: '客户问题', value: 'qa' }, // 已隐藏
+  { label: '客户问题', value: 'concerned' },
   { label: '招标文件', value: 'tender' },
   { label: '响应文件', value: 'response' }
 ]
@@ -56,9 +60,25 @@ const handleToggleFilter = () => {
 const handleCreatePpt = () => {
   emit('create-ppt')
 }
+
+const handleFilter = () => {
+  emit('filter')
+}
 </script>
 
-<style scoped>
-/* 样式继承自 sales.scss */
+<style scoped lang="scss">
+.filters-inline {
+  :deep(.el-button.el-button--primary.is-plain) {
+    margin: 0;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+    padding-left: 1rem;
+    padding-right: 1rem;
+    background-color: rgb(248 250 252 / var(--tw-bg-opacity, 1));
+    border-color: rgb(226 232 240 / var(--tw-border-opacity, 1));
+    border-radius: 8px;
+    color: #475569;
+  }
+}
 </style>
 

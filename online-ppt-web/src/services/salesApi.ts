@@ -2,8 +2,9 @@ import axios from 'axios'
 import { ElMessage } from 'element-plus'
 
 // 售前平台 API 配置
+// 使用空的 baseURL，让请求使用相对路径，这样 Vite 代理可以正确处理
 const salesApi = axios.create({
-  baseURL: import.meta.env.VITE_SALES_API_URL || 'http://localhost:3001',
+  baseURL: import.meta.env.VITE_SALES_API_URL || '',
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json'

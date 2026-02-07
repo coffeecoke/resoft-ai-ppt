@@ -1,19 +1,14 @@
 <template>
-  <div class="product-catalog card-block">
-    <div class="section-head">
-      <h3>产品介绍PPT</h3>
-    </div>
-    <div class="catalog-mode-switch">
+  <div class="product-catalog-toc">
+    <div class="toc-header">
+      <h3 class="sidebar-title">{{ title || '目录' }}</h3>
       <div class="mode-switch-container">
         <div 
           class="mode-item" 
           :class="{ active: catalogMode === 'single' }"
           @click="handleModeChange('single')"
         >
-          <svg class="mode-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M3 3L10.07 10.07L7.5 12.5L3 3Z" fill="currentColor"/>
-            <path d="M10.07 10.07L12.5 7.5L21 16L16 21L7.5 12.5L10.07 10.07Z" fill="currentColor"/>
-          </svg>
+          <i class="ri-check-line mode-icon"></i>
           <span class="mode-text">单选模式</span>
         </div>
         <div 
@@ -21,64 +16,42 @@
           :class="{ active: catalogMode === 'multiple' }"
           @click="handleModeChange('multiple')"
         >
-          <svg class="mode-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
-            <rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
-            <rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
-            <rect x="14" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
-            <line x1="10" y1="6.5" x2="14" y2="6.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            <line x1="6.5" y1="10" x2="6.5" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            <line x1="17.5" y1="10" x2="17.5" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            <line x1="10" y1="17.5" x2="14" y2="17.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-          </svg>
+          <i class="ri-grid-fill mode-icon"></i>
           <span class="mode-text">多选模式</span>
         </div>
       </div>
     </div>
-    <div v-if="loading" class="loading">加载中...</div>
-    <ul v-else class="catalog-list">
-      <li v-for="item in catalogs" :key="item.id">
-        <div class="cat-title">
-          <el-checkbox 
-            v-if="catalogMode === 'multiple'" 
-            :model-value="isParentSelected(item.id)"
-            @change="handleToggleParent(item.id)"
-            @click.stop
-          />
-          <span>{{ item.name }}</span>
+    <div class="toc-content">
+      <div 
+        v-for="item in productCatalog" 
+        :key="item.id"
+        class="category-group"
+      >
+        <div 
+          class="category-title"
+          :class="{ 'clickable': catalogMode === 'multiple' }"
+          @click="catalogMode === 'multiple' ? handleToggleParent(item.id) : null"
+        >
+          <i :class="getCategoryIcon(item.text)" class="category-icon"></i>
+          <span>{{ item.text }}</span>
         </div>
-        <ul class="catalog-sub">
-          <li 
+        <div class="category-children">
+          <div 
             v-for="c in item.children" 
             :key="c.id" 
-            :class="{active: isCatalogSelected(c.code)}"
-            @click="handleSelectCatalog(c.code)"
+            class="category-child-item"
+            :class="{ active: isCatalogSelected(c.id) }"
+            @click="handleSelectCatalog(c.id)"
           >
-            <el-checkbox 
-              v-if="catalogMode === 'multiple'" 
-              :model-value="activeCatalogCodes.includes(c.code || '')"
-              @change="handleToggleCatalog(c.code)"
-              @click.stop
-            >
-              <template #default>
-                <span>{{ c.name }}</span>
-              </template>
-            </el-checkbox>
-            <el-radio 
-              v-else
-              :model-value="activeCatalogCodes[0]"
-              :label="c.code || ''"
-              @change="handleSelectCatalog(c.code)"
-              @click.stop
-            >
-              <template #default>
-                <span>{{ c.name }}</span>
-              </template>
-            </el-radio>
-          </li>
-        </ul>
-      </li>
-    </ul>
+            <span class="child-name">{{ c.text }}</span>
+            <i 
+              v-if="isCatalogSelected(c.id)" 
+              class="ri-check-line check-icon"
+            ></i>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -86,124 +59,269 @@
 import { defineProps, defineEmits } from 'vue'
 
 const props = defineProps({
-  catalogs: {
+  title: {
+    type: String,
+    default: '目录'
+  },
+  activeProduct: {
+    type: String,
+    default: ''
+  },
+  productCatalog: {
     type: Array,
     default: () => []
   },
-  activeCatalogCodes: {
+  activeCatalogIds: {
     type: Array,
     default: () => []
   },
   catalogMode: {
     type: String,
     default: 'single'
-  },
-  loading: {
-    type: Boolean,
-    default: false
   }
 })
 
 const emit = defineEmits([
   'update:catalogMode',
-  'update:activeCatalogCodes',
-  'select-catalog'
+  'update:activeCatalogIds'
 ])
 
-// 判断目录是否选中（通过code）
-const isCatalogSelected = (code: string | null) => {
-  if (!code) return false
-  return props.activeCatalogCodes.includes(code)
+// 判断目录是否选中
+const isCatalogSelected = (catId: string) => {
+  return props.activeCatalogIds.includes(catId)
 }
 
 // 判断父级目录是否全选
 const isParentSelected = (parentId: string) => {
   if (props.catalogMode !== 'multiple') return false
-  const parent = props.catalogs.find((p: any) => p.id === parentId)
+  const parent = props.productCatalog.find((p: any) => p.id === parentId)
   if (!parent) return false
-  return parent.children.every((child: any) => {
-    const code = child.code
-    return code && props.activeCatalogCodes.includes(code)
-  })
+  return parent.children.every((child: any) => props.activeCatalogIds.includes(child.id))
 }
 
 // 事件处理
-const handleModeChange = (mode: 'single' | 'multiple') => {
+const handleModeChange = (mode: string) => {
   emit('update:catalogMode', mode)
-  
-  // 切换模式时，如果是单选模式且当前多选，只保留第一个
-  if (mode === 'single' && props.activeCatalogCodes.length > 1) {
-    emit('update:activeCatalogCodes', [props.activeCatalogCodes[0]])
-  }
 }
 
-const handleSelectCatalog = (code: string | null) => {
-  if (!code) return
-  
+const handleSelectCatalog = (catId: string) => {
   if (props.catalogMode === 'single') {
-    // 单选模式：替换当前选择
-    emit('update:activeCatalogCodes', [code])
+    emit('update:activeCatalogIds', catId ? [catId] : [])
   } else {
-    // 多选模式：切换选择状态
-    handleToggleCatalog(code)
+    handleToggleCatalog(catId)
   }
-  
-  emit('select-catalog', code)
 }
 
-const handleToggleCatalog = (code: string | null) => {
-  if (!code || props.catalogMode !== 'multiple') return
-  
-  const newCodes = [...props.activeCatalogCodes]
-  const index = newCodes.indexOf(code)
-  
+const handleToggleCatalog = (catId: string) => {
+  if (props.catalogMode !== 'multiple') return
+  const newIds = [...props.activeCatalogIds]
+  const index = newIds.indexOf(catId)
   if (index > -1) {
-    newCodes.splice(index, 1)
+    newIds.splice(index, 1)
   } else {
-    newCodes.push(code)
+    newIds.push(catId)
   }
-  
-  emit('update:activeCatalogCodes', newCodes)
+  emit('update:activeCatalogIds', newIds)
+}
+
+// 获取一级目录的图标
+const getCategoryIcon = (title: string) => {
+  if (title.includes('企业') || title.includes('公司')) {
+    return 'ri-building-line'
+  } else if (title.includes('监管') || title.includes('政策')) {
+    return 'ri-government-line'
+  } else if (title.includes('产品') || title.includes('解决方案')) {
+    return 'ri-stack-line'
+  } else if (title.includes('部署') || title.includes('实施') || title.includes('售后')) {
+    return 'ri-settings-3-line'
+  } else if (title.includes('合作') || title.includes('案例')) {
+    return 'ri-handshake-line'
+  }
+  return 'ri-folder-line'
 }
 
 const handleToggleParent = (parentId: string) => {
   if (props.catalogMode !== 'multiple') return
-  
-  const parent = props.catalogs.find((p: any) => p.id === parentId)
+  const parent = props.productCatalog.find((p: any) => p.id === parentId)
   if (!parent) return
   
-  const childCodes = parent.children
-    .map((child: any) => child.code)
-    .filter((code: string | null) => code !== null)
-  
-  const allSelected = childCodes.every((code: string) => props.activeCatalogCodes.includes(code))
-  let newCodes = [...props.activeCatalogCodes]
+  const allSelected = parent.children.every((child: any) => props.activeCatalogIds.includes(child.id))
+  let newIds = [...props.activeCatalogIds]
   
   if (allSelected) {
     // 取消选择该一级目录下的所有二级目录
-    newCodes = newCodes.filter((code: string) => !childCodes.includes(code))
+    newIds = newIds.filter((id: string) => !parent.children.some((child: any) => child.id === id))
   } else {
     // 选择该一级目录下的所有二级目录
-    newCodes = [...new Set([...newCodes, ...childCodes])]
+    const childIds = parent.children.map((child: any) => child.id)
+    newIds = [...new Set([...newIds, ...childIds])]
   }
-  
-  emit('update:activeCatalogCodes', newCodes)
+  emit('update:activeCatalogIds', newIds)
 }
 </script>
 
-<style scoped>
-.catalog-stats {
-  font-size: 12px;
-  color: #999;
-  margin-left: 4px;
+<style scoped lang="scss">
+.product-catalog-toc {
+  width: 100%;
+  flex-shrink: 0;
+  background: #fff;
+  border-radius: 8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
 }
-.loading {
-  padding: 20px;
-  text-align: center;
-  color: #999;
-}
-</style>
 
-<style scoped>
-/* 样式继承自 sales.scss */
+.toc-header {
+  flex-shrink: 0;
+  padding: 0 0 16px 0;
+}
+
+.sidebar-title {
+  font-size: 1.125rem;
+  line-height: 1.75rem;
+  color: #1e293b;
+  font-weight: 600;
+  margin: 0 0 16px 0;
+  padding: 0;
+  border-bottom: none;
+}
+
+.mode-switch-container {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 0;
+  padding: 0;
+}
+
+.toc-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0;
+}
+
+.mode-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #666;
+  background: transparent;
+  transition: all 0.2s;
+  
+  &:hover {
+    background: #f5f5f5;
+  }
+  
+  &.active {
+    background: #fff;
+    color: #006DF9;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  }
+  
+  .mode-icon {
+    font-size: 14px;
+  }
+  
+  .mode-text {
+    font-size: 12px;
+  }
+}
+
+.category-group {
+  margin-bottom: 15px;
+  background: rgba(252, 252, 253, 1);
+  border-radius: 10px;
+  border: 1px solid #FCFCFD;
+}
+
+.category-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.25rem;
+  font-weight: 500;
+  color: #3b82f6;
+  border-radius: 4px;
+  background-color: rgb(241 245 249 / 0.5);
+  
+  &.clickable {
+    cursor: pointer;
+    transition: all 0.2s;
+    
+    &:hover {
+      background-color: rgb(241 245 249 / 0.8);
+    }
+  }
+}
+
+.category-icon {
+  font-size: 16px;
+  color: #334155;
+}
+
+.category-children {
+  padding: 10px;
+  margin-top: 0;
+}
+
+.category-child-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  margin-bottom: 4px;
+  cursor: pointer;
+  border-radius: 10px;
+  border: 1px solid rgb(252, 252, 253);
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+  
+  &:hover {
+    background: #fff;
+    border: 1px solid rgb(226 232 240 / 1);
+  }
+  
+  &.active {
+    background: rgba(0, 109, 249, 1);
+    color: #fff;
+    border: 1px solid #006DF9;
+    
+    .check-icon {
+      color: #fff;
+    }
+    
+    .child-name {
+      color: #fff;
+    }
+  }
+}
+
+.child-name {
+  font-size: 12px;
+  flex: 1;
+  color: #64748b;
+}
+
+.check-icon {
+  width: 12px;
+  height: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #fff;
+  border-radius: 50%;
+  font-size: 8px;
+  color: #006DF9;
+  flex-shrink: 0;
+}
 </style>

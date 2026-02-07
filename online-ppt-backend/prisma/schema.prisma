@@ -305,8 +305,8 @@ model concern_categories {
 model concerns {
   id       String  @id @db.VarChar(50) /// 问题ID
   question String  @db.Text /// 问题内容
-  category String? @db.VarChar(100) /// 问题分类（兼容旧数据，存储分类代码如"2.3"）
-  category_id String? @db.VarChar(50) /// 关联分类ID（新字段，关联到concern_categories）
+  category String? @db.VarChar(100) /// 问题分类（兼容旧数据/降级，存储分类代码或名称）
+  category_code String? @db.VarChar(50) /// 关联分类代码（关联 concern_categories.code，稳定不变）
   intent_code String? @db.VarChar(10) /// 问题性质代码（I1-I5）
   priority String? @db.VarChar(20) /// 优先级：high=高，medium=中，low=低
   answer   String? @db.Text /// 回答内容
@@ -320,14 +320,20 @@ model concerns {
   answer_speaker   String? @db.VarChar(50) /// 回答者ID "SPEAKER_2"
   transcription_id String? @db.VarChar(50) /// 关联的转录ID（用于直接查询）
 
+  /// 前端 QA 展示用
+  likes           Int     @default(0) /// 点赞数
+  expert_approved Boolean @default(false) /// 是否专家核准
+  expert_advice   String? @db.Text /// 专家建议内容
+  expert_reviewer String? @db.VarChar(100) /// 专家审核人
+
   created_at        DateTime            @default(now()) /// 创建时间
   updated_at        DateTime            @updatedAt /// 更新时间（自动更新）
   document_concerns document_concerns[]
   session_concerns  session_concerns[]
-  concern_categories concern_categories? @relation(fields: [category_id], references: [id])
+  concern_categories concern_categories? @relation(fields: [category_code], references: [code])
 
   @@index([category], map: "idx_category")
-  @@index([category_id], map: "idx_category_id")
+  @@index([category_code], map: "idx_category_code")
   @@index([intent_code], map: "idx_intent_code")
   @@index([status], map: "idx_status")
   @@index([transcription_id], map: "idx_transcription_id")
@@ -390,6 +396,11 @@ model transcriptions {
   session_id    String? @db.VarChar(50) /// 关联交流场次ID（可选）
   product_id    String? @db.VarChar(50) /// 关联产品ID（可选）
   customer_name String? @db.VarChar(255) /// 客户名称
+  industry      String? @db.VarChar(50) /// 行业（中文，如城商行、农商）
+  meeting_type  String? @db.VarChar(50) /// 会议类型（中文，如首次交流、需求调研）
+  customer_type String? @db.VarChar(50) /// 客户类型（中文，如新客户新产品）
+  audience      String? @db.VarChar(50) /// 交流对象（中文，如业务、科技）
+  language      String? @db.VarChar(20) /// 语言（中文、英文）
 
   // 状态管理
   status        String  @default("pending") @db.VarChar(20) /// 状态：pending=待处理，uploading=上传中，processing=转录中，completed=已完成，failed=失败
@@ -412,6 +423,11 @@ model transcriptions {
   @@index([product_id], map: "idx_product_id")
   @@index([customer_name], map: "idx_customer_name")
   @@index([created_at], map: "idx_created_at")
+  @@index([industry], map: "idx_industry")
+  @@index([meeting_type], map: "idx_meeting_type")
+  @@index([customer_type], map: "idx_customer_type")
+  @@index([audience], map: "idx_audience")
+  @@index([language], map: "idx_language")
   @@fulltext([full_text], map: "ft_full_text")
 }
 

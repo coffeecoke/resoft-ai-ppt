@@ -29,7 +29,7 @@ const handleSearch = () => {
   if (!q) return
   
   if (t === '产品') {
-    router.push({ path: '/product', query: { q } })
+    router.push({ path: '/sales/product-search', query: { q } })
   } else {
     router.push({ path: '/search', query: { type: t, q } })
   }
