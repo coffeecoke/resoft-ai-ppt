@@ -154,92 +154,14 @@ router.get('/concerns', async (req, res) => {
     }
 
     // 问题发起方筛选（根据question_speaker和speaker_roles判断）
+    // 注意：这个筛选需要在内存中处理，因为需要关联transcriptions表的speaker_roles
+    // 所以先不在这里筛选，标记为后处理
     if (questionSource) {
-      // 先获取所有符合条件的转录记录
-      const transcriptionsWithRoles = await prisma.transcriptions.findMany({
-        where: {
-          has_role_separation: true,
-          speaker_roles: { not: null }
-        },
-        select: {
-          id: true,
-          speaker_roles: true
-        }
-      });
-
-      // 筛选出符合条件的转录记录ID
-      const matchedTranscriptionIds = [];
+      // 标记需要后处理（根据question_speaker和speaker_roles进一步筛选）
+      // 不提前筛选转录记录，避免遗漏数据
+      where._needQuestionSourceFilter = questionSource;
       
-      for (const transcription of transcriptionsWithRoles) {
-        try {
-          const roles = JSON.parse(transcription.speaker_roles);
-          
-          // 遍历角色映射，找出对应的说话人
-          for (const [speakerId, role] of Object.entries(roles)) {
-            if (questionSource === 'our_side' && role === 'our_side') {
-              // 筛选我方提问的：question_speaker是our_side角色的
-              matchedTranscriptionIds.push(transcription.id);
-              break;
-            } else if (questionSource === 'customer' && role === 'customer') {
-              // 筛选客户方提问的：question_speaker是customer角色的
-              matchedTranscriptionIds.push(transcription.id);
-              break;
-            }
-          }
-        } catch (e) {
-          // JSON解析失败，跳过
-          console.warn(`转录记录 ${transcription.id} 的 speaker_roles 解析失败`);
-        }
-      }
-
-      // 如果找到了符合条件的转录记录
-      if (matchedTranscriptionIds.length > 0) {
-        // 需要进一步筛选：从这些转录记录中，找出question_speaker符合要求的问答对
-        // 这需要在内存中处理，或者使用复杂的查询
-        // 为了简化，我们先筛选出这些转录记录的所有问答对，然后在后处理中过滤
-        
-        // 构建transcription_id筛选条件
-        if (where.transcription_id && where.transcription_id.in) {
-          // 如果已有transcription_id筛选（来自音频名称），求交集
-          const existingIds = new Set(where.transcription_id.in);
-          where.transcription_id.in = matchedTranscriptionIds.filter(id => existingIds.has(id));
-          
-          if (where.transcription_id.in.length === 0) {
-            // 交集为空，返回空结果
-            res.json({
-              success: true,
-              data: {
-                list: [],
-                total: 0,
-                page: parseInt(page),
-                pageSize: parseInt(pageSize),
-                totalPages: 0
-              }
-            });
-            await prisma.$disconnect();
-            return;
-          }
-        } else {
-          where.transcription_id = { in: matchedTranscriptionIds };
-        }
-        
-        // 标记需要后处理（根据question_speaker进一步筛选）
-        where._needQuestionSourceFilter = questionSource;
-      } else {
-        // 没有符合条件的转录记录，返回空结果
-        res.json({
-          success: true,
-          data: {
-            list: [],
-            total: 0,
-            page: parseInt(page),
-            pageSize: parseInt(pageSize),
-            totalPages: 0
-          }
-        });
-        await prisma.$disconnect();
-        return;
-      }
+      console.log(`[问题发起方筛选] 已标记需要后处理，筛选条件: ${questionSource}`);
     }
 
     // 分类类别筛选（使用category_id或兼容旧字段category）
@@ -295,7 +217,7 @@ router.get('/concerns', async (req, res) => {
     // 获取所有相关的转录记录ID
     const transcriptionIds = [...new Set(concerns.map(c => c.transcription_id).filter(id => id))];
     
-    // 批量查询转录记录
+    // 批量查询转录记录（用于获取音频名称）
     let transcriptionsMap = {};
     if (transcriptionIds.length > 0) {
       const transcriptions = await prisma.transcriptions.findMany({
@@ -305,74 +227,146 @@ router.get('/concerns', async (req, res) => {
         select: {
           id: true,
           name: true, // 音频名称
-          speaker_roles: true, // 角色信息（用于后处理）
+          speaker_roles: true, // 兼容旧数据（已废弃，优先使用 dialogue_adjustments）
           has_role_separation: true
         }
       });
       
       console.log(`\n[转录记录查询] 查询到 ${transcriptions.length} 条转录记录`);
-      transcriptions.forEach(t => {
-        console.log(`[转录记录查询] ID: ${t.id}`);
-        console.log(`  - name: ${t.name}`);
-        console.log(`  - has_role_separation: ${t.has_role_separation}`);
-        console.log(`  - speaker_roles: ${t.speaker_roles}`);
-      });
       
+      // 先构建基础映射（音频名称）
       transcriptionsMap = transcriptions.reduce((map, t) => {
-        map[t.id] = { name: t.name, speaker_roles: t.speaker_roles };
+        map[t.id] = { name: t.name, speaker_roles: null }; // 初始化为null，后续从dialogue_adjustments获取
         return map;
       }, {});
+      
+      // 批量查询 dialogue_adjustments 表获取 speaker_roles（优先使用）
+      const adjustments = await prisma.dialogue_adjustments.findMany({
+        where: {
+          transcription_id: { in: transcriptionIds },
+          speaker_roles: { not: null }
+        },
+        select: {
+          transcription_id: true,
+          speaker_roles: true
+        },
+        orderBy: {
+          created_at: 'desc' // 使用最新的调整记录
+        }
+      });
+      
+      console.log(`[角色信息查询] 从 dialogue_adjustments 表查询到 ${adjustments.length} 条记录`);
+      
+      // 为每个转录记录分配 speaker_roles（使用最新的记录）
+      const roleMap = {};
+      adjustments.forEach(adj => {
+        // 如果该转录记录还没有角色信息，或者这是更新的记录，则更新
+        if (!roleMap[adj.transcription_id]) {
+          roleMap[adj.transcription_id] = adj.speaker_roles;
+        }
+      });
+      
+      // 更新 transcriptionsMap，优先使用 dialogue_adjustments 中的角色信息
+      Object.keys(transcriptionsMap).forEach(transcriptionId => {
+        if (roleMap[transcriptionId]) {
+          transcriptionsMap[transcriptionId].speaker_roles = roleMap[transcriptionId];
+        } else if (transcriptionsMap[transcriptionId] && transcriptions.find(t => t.id === transcriptionId)?.speaker_roles) {
+          // 兼容旧数据：如果 dialogue_adjustments 中没有，尝试使用 transcriptions 表中的（已废弃）
+          transcriptionsMap[transcriptionId].speaker_roles = transcriptions.find(t => t.id === transcriptionId).speaker_roles;
+          console.warn(`[角色信息查询] 转录记录 ${transcriptionId} 使用 transcriptions 表中的角色信息（旧数据，建议迁移）`);
+        }
+      });
+      
+      // 输出统计信息
+      const withRolesCount = Object.values(transcriptionsMap).filter(t => t.speaker_roles).length;
+      const withoutRolesCount = Object.values(transcriptionsMap).filter(t => !t.speaker_roles).length;
+      console.log(`[角色信息查询] 统计: 有角色信息=${withRolesCount}, 无角色信息=${withoutRolesCount}`);
     }
 
     // 后处理：根据 question_speaker 和 speaker_roles 进一步筛选
     if (needQuestionSourceFilter) {
-      console.log(`[问题发起方筛选] 开始后处理，筛选条件: ${needQuestionSourceFilter}`);
+      console.log(`\n[问题发起方筛选] ========== 开始后处理 ==========`);
+      console.log(`[问题发起方筛选] 筛选条件: ${needQuestionSourceFilter}`);
       console.log(`[问题发起方筛选] 初始问答对数量: ${concerns.length}`);
+      console.log(`[问题发起方筛选] 转录记录数量: ${Object.keys(transcriptionsMap).length}`);
+      
+      // 统计信息
+      let matchedCount = 0;
+      let skippedNoQuestionSpeaker = 0;
+      let skippedNoTranscriptionId = 0;
+      let skippedNoTranscriptionData = 0;
+      let skippedNoSpeakerRoles = 0;
+      let skippedParseError = 0;
+      let skippedNoRoleMapping = 0;
+      let skippedNotMatched = 0;
       
       concerns = concerns.filter(concern => {
-        console.log(`\n[问题发起方筛选] 检查问答对: ${concern.id}`);
-        console.log(`[问题发起方筛选] - question_speaker: ${concern.question_speaker}`);
-        console.log(`[问题发起方筛选] - transcription_id: ${concern.transcription_id}`);
+        // 检查必要字段
+        if (!concern.question_speaker) {
+          skippedNoQuestionSpeaker++;
+          return false;
+        }
         
-        if (!concern.question_speaker || !concern.transcription_id || !transcriptionsMap[concern.transcription_id]) {
-          console.log(`[问题发起方筛选] - 缺少必要字段，排除`);
-          return false; // 缺少必要字段，排除
+        if (!concern.transcription_id) {
+          skippedNoTranscriptionId++;
+          return false;
+        }
+        
+        if (!transcriptionsMap[concern.transcription_id]) {
+          skippedNoTranscriptionData++;
+          return false;
         }
 
         const transcription = transcriptionsMap[concern.transcription_id];
-        console.log(`[问题发起方筛选] - speaker_roles: ${transcription.speaker_roles}`);
         
         if (!transcription.speaker_roles) {
-          console.log(`[问题发起方筛选] - speaker_roles为空，排除`);
+          skippedNoSpeakerRoles++;
           return false;
         }
 
         try {
           const roles = JSON.parse(transcription.speaker_roles);
-          console.log(`[问题发起方筛选] - 解析后的roles:`, roles);
           
+          // 查找提问者的角色
           const questionSpeakerRole = roles[concern.question_speaker];
-          console.log(`[问题发起方筛选] - questionSpeakerRole: ${questionSpeakerRole}`);
-          console.log(`[问题发起方筛选] - 筛选条件: ${needQuestionSourceFilter}`);
+          
+          if (questionSpeakerRole === undefined) {
+            // question_speaker 在 roles 中找不到
+            skippedNoRoleMapping++;
+            console.warn(`[问题发起方筛选] 问答对 ${concern.id}: question_speaker "${concern.question_speaker}" 在 roles 中不存在`);
+            console.warn(`[问题发起方筛选] 可用的 roles:`, Object.keys(roles));
+            return false;
+          }
           
           // 判断提问者角色是否匹配筛选条件
           if (needQuestionSourceFilter === 'our_side' && questionSpeakerRole === 'our_side') {
-            console.log(`[问题发起方筛选] - ✓ 匹配（我方提问）`);
+            matchedCount++;
             return true; // 我方提问
           } else if (needQuestionSourceFilter === 'customer' && questionSpeakerRole === 'customer') {
-            console.log(`[问题发起方筛选] - ✓ 匹配（客户方提问）`);
+            matchedCount++;
             return true; // 客户方提问
           }
           
-          console.log(`[问题发起方筛选] - ✗ 不匹配，排除`);
+          skippedNotMatched++;
           return false;
         } catch (e) {
-          console.warn(`[问题发起方筛选] - 解析 speaker_roles 失败: ${concern.transcription_id}`, e);
+          skippedParseError++;
+          console.warn(`[问题发起方筛选] 解析 speaker_roles 失败 (转录ID: ${concern.transcription_id}):`, e.message);
           return false;
         }
       });
 
-      console.log(`\n[问题发起方筛选] 筛选后问答对数量: ${concerns.length}`);
+      console.log(`\n[问题发起方筛选] ========== 筛选结果统计 ==========`);
+      console.log(`[问题发起方筛选] ✓ 匹配数量: ${matchedCount}`);
+      console.log(`[问题发起方筛选] ✗ 排除统计:`);
+      console.log(`  - 缺少 question_speaker: ${skippedNoQuestionSpeaker}`);
+      console.log(`  - 缺少 transcription_id: ${skippedNoTranscriptionId}`);
+      console.log(`  - 缺少转录记录数据: ${skippedNoTranscriptionData}`);
+      console.log(`  - 缺少 speaker_roles: ${skippedNoSpeakerRoles}`);
+      console.log(`  - JSON解析失败: ${skippedParseError}`);
+      console.log(`  - question_speaker 在 roles 中不存在: ${skippedNoRoleMapping}`);
+      console.log(`  - 角色不匹配: ${skippedNotMatched}`);
+      console.log(`[问题发起方筛选] 筛选后问答对数量: ${concerns.length}`);
 
       // 更新总数
       total = concerns.length;
@@ -381,6 +375,7 @@ router.get('/concerns', async (req, res) => {
       console.log(`[问题发起方筛选] 开始分页: skip=${skip}, take=${take}`);
       concerns = concerns.slice(skip, skip + take);
       console.log(`[问题发起方筛选] 分页后问答对数量: ${concerns.length}`);
+      console.log(`[问题发起方筛选] ======================================\n`);
     }
 
     // 格式化返回数据

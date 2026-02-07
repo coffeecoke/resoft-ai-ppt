@@ -407,22 +407,59 @@ function startEditDialogue(index) {
     return;
   }
   
+  // 获取当前说话人的角色
+  const currentSpeaker = dialogue.speaker || '';
+  const currentRole = st_speakerRoles[currentSpeaker] || '';
+  
   // 切换为编辑模式
   dialogueItem.classList.add('editing');
   dialogueItem.innerHTML = `
     <div class="edit-controls">
       <label style="font-weight: 500; margin-bottom: 5px; display: block;">说话人</label>
-      <input type="text" class="edit-input" value="${escapeHtml(dialogue.speaker)}" style="width: 150px; margin-bottom: 10px;" data-field="speaker">
+      <input type="text" class="edit-input" id="edit-speaker-${index}" value="${escapeHtml(dialogue.speaker)}" style="width: 150px; margin-bottom: 10px;" data-field="speaker" data-original-speaker="${escapeHtml(dialogue.speaker)}">
       
       <label style="font-weight: 500; margin-bottom: 5px; display: block;">对话内容</label>
       <textarea class="edit-textarea" data-field="text" style="margin-bottom: 10px;">${escapeHtml(dialogue.text)}</textarea>
       
-      <div style="display: flex; gap: 10px;">
+      <div style="margin-bottom: 10px; padding: 10px; background: #f5f5f5; border-radius: 4px;">
+        <label style="font-weight: 500; margin-bottom: 5px; display: block;">角色设置</label>
+        <div style="display: flex; gap: 10px; align-items: center;">
+          <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+            <input type="radio" name="edit-role-${index}" value="customer" ${currentRole === 'customer' ? 'checked' : ''}>
+            <span>👤 客户方</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+            <input type="radio" name="edit-role-${index}" value="our_side" ${currentRole === 'our_side' ? 'checked' : ''}>
+            <span>👔 我方</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+            <input type="radio" name="edit-role-${index}" value="" ${!currentRole ? 'checked' : ''}>
+            <span style="color: #999;">未设置</span>
+          </label>
+          <button class="btn btn-sm btn-info" onclick="saveSpeakerRole(${index})" style="margin-left: auto;">💾 保存角色</button>
+        </div>
+      </div>
+      
+      <div style="display: flex; gap: 10px; flex-wrap: wrap;">
         <button class="btn btn-sm btn-success" onclick="saveDialogueEdit(${index})">💾 保存</button>
+        <button class="btn btn-sm btn-warning" id="batch-replace-btn-${index}" onclick="batchReplaceSpeaker(${index})" style="display: none;">🔄 批量替换说话人</button>
         <button class="btn btn-sm btn-secondary" onclick="cancelDialogueEdit(${index})">❌ 取消</button>
       </div>
     </div>
   `;
+  
+  // 监听说话人输入框变化，显示/隐藏批量替换按钮
+  const speakerInput = document.getElementById(`edit-speaker-${index}`);
+  const originalSpeaker = dialogue.speaker;
+  speakerInput.addEventListener('input', function() {
+    const newSpeaker = this.value.trim();
+    const batchReplaceBtn = document.getElementById(`batch-replace-btn-${index}`);
+    if (newSpeaker && newSpeaker !== originalSpeaker) {
+      batchReplaceBtn.style.display = 'inline-block';
+    } else {
+      batchReplaceBtn.style.display = 'none';
+    }
+  });
   
   // 显示全局保存按钮
   document.getElementById('st-saveEditBtn').style.display = 'inline-block';
@@ -471,6 +508,167 @@ function saveDialogueEdit(index) {
 
 function cancelDialogueEdit(index) {
   renderSingleDialogue(index);
+}
+
+/**
+ * 保存说话人角色设置
+ * @param {number} index - 对话索引
+ */
+async function saveSpeakerRole(index) {
+  const dialogue = st_currentDialogues[index];
+  if (!dialogue) {
+    showToast('对话不存在', 'error');
+    return;
+  }
+  
+  // 获取当前说话人和选中的角色
+  const speakerInput = document.getElementById(`edit-speaker-${index}`);
+  const currentSpeaker = speakerInput ? speakerInput.value.trim() : dialogue.speaker;
+  
+  if (!currentSpeaker) {
+    showToast('说话人不能为空', 'error');
+    return;
+  }
+  
+  const roleRadio = document.querySelector(`input[name="edit-role-${index}"]:checked`);
+  const selectedRole = roleRadio ? roleRadio.value : '';
+  
+  // 更新角色设置
+  if (selectedRole) {
+    st_speakerRoles[currentSpeaker] = selectedRole;
+  } else {
+    // 如果选择"未设置"，删除角色
+    delete st_speakerRoles[currentSpeaker];
+  }
+  
+  // 保存到后端
+  if (!st_currentTranscriptionId) {
+    showToast('没有当前转录记录', 'error');
+    return;
+  }
+  
+  try {
+    const response = await fetch(`${ST_API_BASE}/transcription/${st_currentTranscriptionId}/role-settings`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        speaker_roles: st_speakerRoles
+      })
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP错误: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    
+    if (!result.success) {
+      throw new Error(result.error || '保存失败');
+    }
+    
+    // 重新渲染对话列表，显示角色标签
+    renderDialogues(st_currentDialogues, `st-dialoguesList-${st_currentTab || 'original'}`);
+    
+    showToast(`角色设置已保存：${currentSpeaker} → ${selectedRole === 'customer' ? '客户方' : selectedRole === 'our_side' ? '我方' : '未设置'}`, 'success');
+  } catch (error) {
+    console.error('保存角色设置失败:', error);
+    showToast('保存角色设置失败: ' + error.message, 'error');
+  }
+}
+
+/**
+ * 批量替换说话人
+ * @param {number} index - 对话索引
+ */
+function batchReplaceSpeaker(index) {
+  const dialogue = st_currentDialogues[index];
+  if (!dialogue) {
+    showToast('对话不存在', 'error');
+    return;
+  }
+  
+  // 获取原始说话人和新说话人
+  const speakerInput = document.getElementById(`edit-speaker-${index}`);
+  const originalSpeaker = dialogue.speaker;
+  const newSpeaker = speakerInput ? speakerInput.value.trim() : '';
+  
+  if (!newSpeaker) {
+    showToast('新说话人不能为空', 'error');
+    return;
+  }
+  
+  if (newSpeaker === originalSpeaker) {
+    showToast('新旧说话人相同，无需替换', 'warning');
+    return;
+  }
+  
+  // 确认替换
+  const count = st_currentDialogues.filter(d => d.speaker === originalSpeaker).length;
+  if (!window.confirm(`确定要将所有 "${originalSpeaker}" 替换为 "${newSpeaker}" 吗？\n共 ${count} 条对话将被替换。`)) {
+    return;
+  }
+  
+  // 执行批量替换
+  let replacedCount = 0;
+  st_currentDialogues.forEach((d, i) => {
+    if (d.speaker === originalSpeaker) {
+      st_currentDialogues[i].speaker = newSpeaker;
+      // 更新编辑记录
+      if (st_editedDialogues.has(i)) {
+        const edited = st_editedDialogues.get(i);
+        edited.speaker = newSpeaker;
+        st_editedDialogues.set(i, edited);
+      } else {
+        st_editedDialogues.set(i, { ...d, speaker: newSpeaker });
+      }
+      replacedCount++;
+    }
+  });
+  
+  // 如果原说话人有角色设置，迁移到新说话人
+  if (st_speakerRoles[originalSpeaker]) {
+    st_speakerRoles[newSpeaker] = st_speakerRoles[originalSpeaker];
+    // 可以选择是否删除原说话人的角色设置
+    // delete st_speakerRoles[originalSpeaker];
+  }
+  
+  // 重新渲染所有对话
+  renderDialogues(st_currentDialogues, `st-dialoguesList-${st_currentTab || 'original'}`);
+  
+  // 显示保存按钮
+  document.getElementById('st-saveEditBtn').style.display = 'inline-block';
+  document.getElementById('st-cancelEditBtn').style.display = 'inline-block';
+  
+  // 更新当前编辑对话框中的说话人显示（如果还在编辑状态）
+  const currentContainerId = `st-dialoguesList-${st_currentTab || 'original'}`;
+  const container = document.getElementById(currentContainerId);
+  if (container) {
+    const dialogueItem = container.querySelector(`.dialogue-item[data-index="${index}"].editing`);
+    if (dialogueItem) {
+      // 更新编辑对话框中的说话人输入框
+      const speakerInput = document.getElementById(`edit-speaker-${index}`);
+      if (speakerInput) {
+        speakerInput.setAttribute('data-original-speaker', newSpeaker);
+        // 隐藏批量替换按钮（因为已经替换完成）
+        const batchReplaceBtn = document.getElementById(`batch-replace-btn-${index}`);
+        if (batchReplaceBtn) {
+          batchReplaceBtn.style.display = 'none';
+        }
+      }
+    }
+  }
+  
+  // 检测是否需要重新合并
+  if (checkNeedsReMergeLocally(st_currentDialogues)) {
+    document.getElementById('st-reMergeBtn').style.display = 'inline-block';
+    showToast(`已替换 ${replacedCount} 条对话的说话人。检测到相邻的相同说话人，可以点击"重新合并"按钮进行合并`, 'success');
+  } else {
+    document.getElementById('st-reMergeBtn').style.display = 'none';
+    showToast(`已替换 ${replacedCount} 条对话的说话人，请点击"保存修改"提交`, 'success');
+  }
 }
 
 function renderSingleDialogue(index) {
@@ -2996,6 +3194,8 @@ async function mergeDialogues(transcriptionId) {
 // 注意：这里只暴露已定义的函数，其他函数在文件末尾统一暴露
 window.saveDialogueEdit = saveDialogueEdit;
 window.cancelDialogueEdit = cancelDialogueEdit;
+window.saveSpeakerRole = saveSpeakerRole;
+window.batchReplaceSpeaker = batchReplaceSpeaker;
 window.closeBatchReplaceDialog = closeBatchReplaceDialog;
 window.executeBatchReplace = executeBatchReplace;
 window.mergeDialogues = mergeDialogues;
