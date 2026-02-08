@@ -448,21 +448,29 @@ class PresalesAnalysisService {
         }
       }
 
-      // 保存分析结果
-      await prisma.presales_analysis_results.create({
-        data: {
-          id: resultId,
-          transcription_id: transcriptionId,
-          model_id: options.modelId || null,
-          model_name: modelName,
-          prompt_code: options.promptCode || null,
-          prompt_name: promptName,
-          analysis_result: JSON.stringify(analysisResult),
-          dialogue_count: options.dialogueCount || 0,
-          analysis_time: options.analysisTime || null,
-          confidence: analysisResult.confidence || null,
-          status: 'completed'
+      // 同一转录只保留最新一条：先删除该转录下的所有历史分析结果，再插入新结果
+      await prisma.$transaction(async (tx) => {
+        const deleted = await tx.presales_analysis_results.deleteMany({
+          where: { transcription_id: transcriptionId }
+        })
+        if (deleted.count > 0) {
+          logger.info(`[售前分析] 已删除转录 ${transcriptionId} 的 ${deleted.count} 条历史分析结果，仅保留本次结果`)
         }
+        await tx.presales_analysis_results.create({
+          data: {
+            id: resultId,
+            transcription_id: transcriptionId,
+            model_id: options.modelId || null,
+            model_name: modelName,
+            prompt_code: options.promptCode || null,
+            prompt_name: promptName,
+            analysis_result: JSON.stringify(analysisResult),
+            dialogue_count: options.dialogueCount || 0,
+            analysis_time: options.analysisTime || null,
+            confidence: analysisResult.confidence || null,
+            status: 'completed'
+          }
+        })
       })
 
       logger.success(`分析结果已保存: ${resultId}`)
