@@ -65,6 +65,246 @@ router.get('/categories', async (req, res) => {
 });
 
 /**
+ * PATCH /api/qa/concerns/:id/classification
+ * 手动更新单个问答对的分类（人为纠偏，不调用AI）
+ * Body: { categoryCode?: string, intentCode?: string } 至少传一个
+ */
+router.patch('/concerns/:id/classification', async (req, res) => {
+  const prisma = new PrismaClient();
+  try {
+    const { id: concernId } = req.params;
+    const { categoryCode, intentCode } = req.body || {};
+
+    if (!concernId) {
+      return res.status(400).json({
+        success: false,
+        error: '问答对ID不能为空'
+      });
+    }
+
+    if (!categoryCode && !intentCode) {
+      return res.status(400).json({
+        success: false,
+        error: '请至少选择分类类别或问题性质之一'
+      });
+    }
+
+    const updateData = {};
+
+    if (categoryCode !== undefined) {
+      if (categoryCode === '' || categoryCode === null) {
+        updateData.category_id = null;
+        updateData.category = null; // 兼容旧字段
+      } else {
+        const categoryRecord = await prisma.concern_categories.findFirst({
+          where: { code: categoryCode, level: 2, is_active: true }
+        });
+        if (!categoryRecord) {
+          return res.status(400).json({
+            success: false,
+            error: `分类类别代码不存在: ${categoryCode}`
+          });
+        }
+        updateData.category_id = categoryRecord.id;
+        updateData.category = categoryRecord.code; // 兼容旧字段
+      }
+    }
+
+    if (intentCode !== undefined) {
+      if (intentCode === '' || intentCode === null) {
+        updateData.intent_code = null;
+      } else {
+        const intentRecord = await prisma.concern_categories.findFirst({
+          where: { code: intentCode, level: 3, is_active: true }
+        });
+        if (!intentRecord) {
+          return res.status(400).json({
+            success: false,
+            error: `问题性质代码不存在: ${intentCode}`
+          });
+        }
+        updateData.intent_code = intentRecord.code;
+      }
+    }
+
+    await prisma.concerns.update({
+      where: { id: concernId },
+      data: updateData
+    });
+
+    res.json({
+      success: true,
+      message: '分类已更新'
+    });
+  } catch (error) {
+    if (error.code === 'P2025') {
+      return res.status(404).json({
+        success: false,
+        error: '问答对不存在'
+      });
+    }
+    console.error('更新问答对分类失败:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || '更新失败'
+    });
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+const MAX_EXPORT_SIZE = 10000;
+
+/**
+ * GET /api/qa/concerns/export
+ * 导出问答对（当前筛选条件下的全部数据，仅限最多 MAX_EXPORT_SIZE 条）
+ * Query 与 /concerns 一致（除 page/pageSize 外），返回完整问题与解答，供前端生成 CSV/Excel
+ */
+router.get('/concerns/export', async (req, res) => {
+  const prisma = new PrismaClient();
+  try {
+    const {
+      transcriptionName,
+      classificationStatus,
+      category,
+      intent,
+      questionSource
+    } = req.query;
+
+    const where = {};
+    if (transcriptionName) {
+      const transcriptions = await prisma.transcriptions.findMany({
+        where: { name: { contains: transcriptionName } },
+        select: { id: true }
+      });
+      const transcriptionIds = transcriptions.map(t => t.id);
+      if (transcriptionIds.length === 0) {
+        return res.json({ success: true, data: { list: [] } });
+      }
+      where.transcription_id = { in: transcriptionIds };
+    }
+    if (classificationStatus === 'classified') {
+      where.OR = [
+        { category_id: { not: null } },
+        { intent_code: { not: null } }
+      ];
+    } else if (classificationStatus === 'unclassified') {
+      where.category_id = null;
+      where.intent_code = null;
+    }
+    let categoryId = null;
+    if (category) {
+      const categoryRecord = await prisma.concern_categories.findUnique({
+        where: { code: category }
+      });
+      if (categoryRecord) categoryId = categoryRecord.id;
+    }
+    if (intent) where.intent_code = intent;
+    if (questionSource) {
+      where._needQuestionSourceFilter = questionSource;
+    }
+    if (categoryId || category) {
+      const categoryCondition = categoryId
+        ? [{ category_id: categoryId }, { category: category }]
+        : [{ category: category }];
+      if (where.OR) {
+        where.AND = [{ OR: where.OR }, { OR: categoryCondition }];
+        delete where.OR;
+      } else {
+        where.OR = categoryCondition;
+      }
+    }
+    const needQuestionSourceFilter = where._needQuestionSourceFilter;
+    delete where._needQuestionSourceFilter;
+
+    let concerns = await prisma.concerns.findMany({
+      where,
+      include: { concern_categories: true },
+      orderBy: { created_at: 'desc' },
+      take: needQuestionSourceFilter ? 99999 : MAX_EXPORT_SIZE
+    });
+
+    const transcriptionIds = [...new Set(concerns.map(c => c.transcription_id).filter(Boolean))];
+    let transcriptionsMap = {};
+    if (transcriptionIds.length > 0) {
+      const transcriptions = await prisma.transcriptions.findMany({
+        where: { id: { in: transcriptionIds } },
+        select: { id: true, name: true, speaker_roles: true }
+      });
+      transcriptionsMap = transcriptions.reduce((map, t) => {
+        map[t.id] = { name: t.name, speaker_roles: t.speaker_roles };
+        return map;
+      }, {});
+      const adjustments = await prisma.dialogue_adjustments.findMany({
+        where: {
+          transcription_id: { in: transcriptionIds },
+          speaker_roles: { not: null }
+        },
+        select: { transcription_id: true, speaker_roles: true },
+        orderBy: { created_at: 'desc' }
+      });
+      const roleMap = {};
+      adjustments.forEach(adj => {
+        if (!roleMap[adj.transcription_id]) {
+          roleMap[adj.transcription_id] = adj.speaker_roles;
+        }
+      });
+      Object.keys(transcriptionsMap).forEach(tid => {
+        if (roleMap[tid]) transcriptionsMap[tid].speaker_roles = roleMap[tid];
+      });
+    }
+
+    if (needQuestionSourceFilter) {
+      concerns = concerns.filter(concern => {
+        if (!concern.question_speaker || !concern.transcription_id) return false;
+        const trans = transcriptionsMap[concern.transcription_id];
+        if (!trans || !trans.speaker_roles) return false;
+        try {
+          const roles = JSON.parse(trans.speaker_roles);
+          const role = roles[concern.question_speaker];
+          if (role === undefined) return false;
+          return needQuestionSourceFilter === 'our_side' ? role === 'our_side' : role === 'customer';
+        } catch (e) {
+          return false;
+        }
+      });
+      concerns = concerns.slice(0, MAX_EXPORT_SIZE);
+    }
+
+    const list = concerns.map(concern => {
+      const transcriptionData = concern.transcription_id && transcriptionsMap[concern.transcription_id];
+      return {
+        id: concern.id,
+        question: concern.question,
+        answer: concern.answer,
+        category: concern.category,
+        category_id: concern.category_id,
+        intent_code: concern.intent_code,
+        time_range: concern.time_range || concern.time_range1 || null,
+        time_range1: concern.time_range1 || concern.time_range || null,
+        time_range2: concern.time_range2 || null,
+        transcription_name: transcriptionData ? transcriptionData.name : '-',
+        createdAt: concern.created_at,
+        concern_categories: concern.concern_categories ? {
+          code: concern.concern_categories.code,
+          name: concern.concern_categories.name
+        } : null
+      };
+    });
+
+    res.json({ success: true, data: { list } });
+  } catch (error) {
+    console.error('导出问答对失败:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || '导出失败'
+    });
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+/**
  * GET /api/qa/concerns
  * 获取问答对列表（支持分页和筛选）
  * 

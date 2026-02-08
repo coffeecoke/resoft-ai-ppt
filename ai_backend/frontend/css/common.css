@@ -510,3 +510,125 @@ dialog form {
   }
 }
 
+/* =================================================
+   售前交流综合分析页面样式
+   ================================================= */
+
+/* 分析结果展示 */
+.analysis-section {
+  margin-bottom: 24px;
+  padding: 16px;
+  background: var(--bg-color);
+  border-radius: var(--radius-md);
+}
+
+.analysis-section h4 {
+  margin-bottom: 16px;
+  color: var(--primary-color);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.analysis-item {
+  margin-bottom: 16px;
+}
+
+.analysis-item:last-child {
+  margin-bottom: 0;
+}
+
+.analysis-item strong {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.analysis-item p {
+  margin: 8px 0;
+  line-height: 1.8;
+  color: var(--text-primary);
+}
+
+.analysis-item ul {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.analysis-item li {
+  margin-bottom: 6px;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+/* 标签 */
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.tag {
+  display: inline-block;
+  padding: 4px 12px;
+  background: var(--primary-color);
+  color: #ffffff;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+
+/* 置信度徽章 */
+.confidence-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  background: linear-gradient(135deg, var(--success-color) 0%, var(--primary-color) 100%);
+  color: #ffffff;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+/* 加载遮罩 */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.loading-content {
+  background: var(--card-bg);
+  padding: 32px;
+  border-radius: var(--radius-md);
+  text-align: center;
+  box-shadow: var(--shadow-lg);
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid var(--border-color);
+  border-top-color: var(--primary-color);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 16px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-content p {
+  color: var(--text-primary);
+  font-size: 14px;
+}
+

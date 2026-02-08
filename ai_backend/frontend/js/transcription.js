@@ -119,9 +119,11 @@ function handleFileSelect(e) {
 }
 
 function isValidAudioFile(file) {
-  const validExtensions = ['.mp3', '.wav', '.m4a', '.flac', '.aac', '.wma', '.ogg'];
+  const validAudioExtensions = ['.mp3', '.wav', '.m4a', '.flac', '.aac', '.wma', '.ogg'];
+  const validVideoExtensions = ['.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.webm', '.3gp', '.3g2'];
   const fileName = file.name.toLowerCase();
-  return validExtensions.some(ext => fileName.endsWith(ext));
+  return validAudioExtensions.some(ext => fileName.endsWith(ext)) || 
+         validVideoExtensions.some(ext => fileName.endsWith(ext));
 }
 
 function displayFileInfo(file) {

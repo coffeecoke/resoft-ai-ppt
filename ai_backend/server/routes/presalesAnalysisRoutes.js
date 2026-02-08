@@ -69,7 +69,7 @@ router.post('/analyze', async (req, res) => {
 router.post('/analyze/transcription/:id', async (req, res) => {
   try {
     const { id } = req.params
-    const { modelId, promptCode } = req.body
+    const { modelId, promptCode, prependContent } = req.body
 
     // 验证转录记录是否存在
     const transcription = await prisma.transcriptions.findUnique({
@@ -90,7 +90,8 @@ router.post('/analyze/transcription/:id', async (req, res) => {
       id,
       {
         modelId,
-        promptCode
+        promptCode,
+        prependContent: prependContent || ''
       }
     )
 

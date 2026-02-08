@@ -12,8 +12,137 @@ from pathlib import Path
 # 添加SDK路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
+# ⭐ 修复大文件上传超时问题：设置 httpx 默认超时时间
+# 讯飞SDK内部使用 httpx，需要增加超时时间以支持大文件上传
+def _configure_httpx_timeout():
+    """配置 httpx 的超时时间，解决大文件上传超时问题"""
+    try:
+        import httpx
+        
+        # 方法1：通过 monkey patch 修改 httpx.Client 和 httpx.AsyncClient 的默认超时
+        # 保存原始的 Client 和 AsyncClient
+        _original_client_init = httpx.Client.__init__
+        _original_async_client_init = None
+        if hasattr(httpx, 'AsyncClient'):
+            _original_async_client_init = httpx.AsyncClient.__init__
+        
+        def _patched_client_init(self, *args, **kwargs):
+            # 如果没有指定 timeout，使用默认的大超时时间
+            if 'timeout' not in kwargs:
+                kwargs['timeout'] = httpx.Timeout(
+                    connect=30.0,      # 连接超时：30秒
+                    read=1800.0,       # 读取超时：30分钟
+                    write=1800.0,      # 写入超时：30分钟（关键：解决 write operation timed out）
+                    pool=30.0          # 连接池超时：30秒
+                )
+            return _original_client_init(self, *args, **kwargs)
+        
+        def _patched_async_client_init(self, *args, **kwargs):
+            if 'timeout' not in kwargs:
+                kwargs['timeout'] = httpx.Timeout(
+                    connect=30.0,
+                    read=1800.0,
+                    write=1800.0,
+                    pool=30.0
+                )
+            return _original_async_client_init(self, *args, **kwargs)
+        
+        # 应用 monkey patch
+        httpx.Client.__init__ = _patched_client_init
+        if _original_async_client_init:
+            httpx.AsyncClient.__init__ = _patched_async_client_init
+        
+        # 方法2：通过环境变量设置（如果SDK支持）
+        os.environ.setdefault('HTTPX_DEFAULT_TIMEOUT', '1800')  # 30分钟
+        os.environ.setdefault('HTTPX_WRITE_TIMEOUT', '1800')     # 写入超时30分钟
+        
+        return True
+    except Exception as e:
+        # 如果设置失败，记录警告但不影响运行
+        logging.warning(f"⚠️ 无法设置 httpx 超时配置: {e}")
+        return False
+
+# 在模块加载时配置超时
+_configure_httpx_timeout()
+
+# ⭐ 关键修复：Monkey patch 讯飞SDK的HttpClient类，将数字timeout转换为httpx.Timeout对象
+def _patch_xfyun_http_client():
+    """修复讯飞SDK的HttpClient，支持大文件上传的超时配置"""
+    try:
+        from xfyunsdkcore import http_client
+        import httpx
+        
+        # 保存原始方法
+        _original_http_client_init = http_client.HttpClient.__init__
+        _original_sync_request = http_client.HttpClient._sync_request
+        
+        def _patched_http_client_init(self, *args, **kwargs):
+            # 调用原始初始化
+            _original_http_client_init(self, *args, **kwargs)
+            
+            # 如果timeout是数字，转换为httpx.Timeout对象
+            # 默认使用大超时时间以支持大文件上传
+            if isinstance(self.timeout, (int, float)):
+                # 如果是默认的30秒或小于等于60秒，使用大超时时间（30分钟）
+                if self.timeout <= 60:
+                    self.timeout = httpx.Timeout(
+                        connect=30.0,      # 连接超时：30秒
+                        read=1800.0,       # 读取超时：30分钟
+                        write=1800.0,       # 写入超时：30分钟（关键！）
+                        pool=30.0          # 连接池超时：30秒
+                    )
+                else:
+                    # 如果已经设置了较大的超时，转换为httpx.Timeout对象
+                    timeout_seconds = float(self.timeout)
+                    self.timeout = httpx.Timeout(
+                        connect=30.0,
+                        read=timeout_seconds,
+                        write=timeout_seconds,  # 关键：写入超时
+                        pool=30.0
+                    )
+            # 如果已经是httpx.Timeout对象，保持不变
+        
+        def _patched_sync_request(self, method, url, **kwargs):
+            """修复_sync_request方法，确保使用httpx.Timeout对象"""
+            # 确保timeout是httpx.Timeout对象
+            if isinstance(self.timeout, (int, float)):
+                if self.timeout <= 60:
+                    self.timeout = httpx.Timeout(
+                        connect=30.0,
+                        read=1800.0,
+                        write=1800.0,
+                        pool=30.0
+                    )
+                else:
+                    timeout_seconds = float(self.timeout)
+                    self.timeout = httpx.Timeout(
+                        connect=30.0,
+                        read=timeout_seconds,
+                        write=timeout_seconds,
+                        pool=30.0
+                    )
+            # 调用原始方法（它会使用self.timeout，现在已经是httpx.Timeout对象）
+            return _original_sync_request(self, method, url, **kwargs)
+        
+        # 应用monkey patch
+        http_client.HttpClient.__init__ = _patched_http_client_init
+        http_client.HttpClient._sync_request = _patched_sync_request
+        
+        logger_temp = logging.getLogger(__name__)
+        logger_temp.info("✅ 已修复讯飞SDK HttpClient的超时配置")
+        return True
+    except Exception as e:
+        logging.warning(f"⚠️ 无法修复讯飞SDK HttpClient: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+# 先导入SDK模块
 from xfyunsdkspeech.lfasr_client import LFasrClient
 from xfyunsdkcore.model.lfasr_model import UploadParam
+
+# 然后应用patch（必须在导入后）
+_patch_xfyun_http_client()
 
 # 配置日志
 logging.basicConfig(
@@ -30,11 +159,49 @@ API_SECRET = "704fdea92fb9c8cec33d9f5705a06b69"
 def transcribe_audio(audio_file):
     """转录音频文件"""
     
-    # 初始化客户端（讯飞语音转写使用 secret_key，对应 APISecret）
+    # ⭐ 根据文件大小动态调整超时时间
+    file_size_mb = os.path.getsize(audio_file) / (1024 * 1024)
+    
+    import httpx
+    
+    # 对于大文件（>100MB），需要更长的超时时间
+    if file_size_mb > 100:
+        # 计算超时时间：每MB需要约5秒，最小30分钟，最大60分钟
+        timeout_minutes = max(30, min(60, int(file_size_mb * 5 / 60)))
+        timeout_seconds = timeout_minutes * 60
+        
+        logger.info(f"📦 检测到大文件 ({file_size_mb:.1f} MB)，设置超时时间为 {timeout_minutes} 分钟")
+        
+        # 为大文件创建httpx.Timeout对象
+        custom_timeout = httpx.Timeout(
+            connect=30.0,
+            read=timeout_seconds,
+            write=timeout_seconds,  # 关键：写入超时
+            pool=30.0
+        )
+        timeout_param = timeout_seconds  # 传入秒数，monkey patch会转换为httpx.Timeout
+    else:
+        # 小文件使用默认超时（30分钟）
+        timeout_seconds = 1800
+        custom_timeout = httpx.Timeout(
+            connect=30.0,
+            read=1800.0,
+            write=1800.0,
+            pool=30.0
+        )
+        timeout_param = 1800
+    
+    # ⭐ 初始化客户端，传入超时参数
+    # monkey patch会将数字timeout转换为httpx.Timeout对象
     client = LFasrClient(
         app_id=APP_ID,
         secret_key=API_SECRET,  # 使用 APISecret 作为 secret_key（不是 APIKey）
+        timeout=timeout_param,  # 传入秒数，monkey patch会转换为httpx.Timeout
     )
+    
+    # ⭐ 直接修改客户端的timeout属性为httpx.Timeout对象（确保生效）
+    # 这样可以绕过SDK可能的问题，直接设置正确的超时对象
+    client.timeout = custom_timeout
 
     try:
         # 1. 上传文件
@@ -42,9 +209,8 @@ def transcribe_audio(audio_file):
         logger.info("开始上传音频文件...")
         logger.info("=" * 80)
         
-        file_size = os.path.getsize(audio_file) / (1024 * 1024)
         logger.info(f"文件: {os.path.basename(audio_file)}")
-        logger.info(f"大小: {file_size:.1f} MB")
+        logger.info(f"大小: {file_size_mb:.1f} MB")
         
         # 参数准备 - 启用角色分离配置
         param = UploadParam(
@@ -61,8 +227,26 @@ def transcribe_audio(audio_file):
         
         logger.info("⚙️  转录配置: 角色分离模式（has_seperate=true, speaker_number=0, roleType=1）")
         
-        upload_resp = client.upload(param_dict, audio_file)
-        upload_data = json.loads(upload_resp)
+        # ⭐ 上传文件（大文件可能需要较长时间）
+        logger.info("📤 开始上传文件到讯飞服务器...")
+        logger.info("💡 提示：大文件上传可能需要几分钟，请耐心等待...")
+        
+        try:
+            upload_resp = client.upload(param_dict, audio_file)
+            upload_data = json.loads(upload_resp)
+        except Exception as upload_error:
+            error_msg = str(upload_error)
+            logger.error(f"❌ 上传过程中发生错误: {error_msg}")
+            
+            # 检查是否是超时错误
+            if "timeout" in error_msg.lower() or "timed out" in error_msg.lower():
+                logger.error("⏱️  上传超时！可能的原因：")
+                logger.error("   1. 文件太大，网络上传速度较慢")
+                logger.error("   2. 网络连接不稳定")
+                logger.error("   3. 讯飞服务器响应较慢")
+                logger.error(f"💡 建议：文件大小 {file_size_mb:.1f} MB，请检查网络连接或稍后重试")
+            
+            raise  # 重新抛出异常，让外层处理
         
         if upload_data["code"] != "000000":
             logger.error(f"❌ 上传失败: {upload_data}")
@@ -127,8 +311,21 @@ def transcribe_audio(audio_file):
             time.sleep(5)
             
     except Exception as e:
-        logger.error(f"❌ 发生错误: {str(e)}")
+        error_msg = str(e)
+        logger.error(f"❌ 发生错误: {error_msg}")
+        
+        # 特殊处理超时错误
+        if "timeout" in error_msg.lower() or "timed out" in error_msg.lower():
+            logger.error("=" * 80)
+            logger.error("⏱️  上传超时错误处理建议：")
+            logger.error("   1. 检查网络连接是否稳定")
+            logger.error("   2. 如果文件很大（>300MB），可能需要更长时间")
+            logger.error("   3. 可以尝试在网络较好的时段重试")
+            logger.error("   4. 或者考虑压缩音频文件后重试")
+            logger.error("=" * 80)
+        
         import traceback
+        logger.error("详细错误堆栈：")
         traceback.print_exc()
         return None
 

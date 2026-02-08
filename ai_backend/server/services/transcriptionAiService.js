@@ -372,7 +372,16 @@ ${batchJsonStr}
       : (modelConfig.max_tokens ? '数据库模型配置' : '默认值8000');
     
     // ⚠️ 获取模型的最大 tokens 限制
+    // 豆包模型（doubao）不限制 max_tokens
+    const isDoubao = modelConfig?.provider?.toLowerCase() === 'doubao' || 
+                     (actualModelName || '').toLowerCase().includes('doubao');
+    
     const getModelMaxTokens = (modelName) => {
+      // 豆包模型不限制
+      if (isDoubao) {
+        return Infinity; // 不限制
+      }
+      
       const modelLower = (modelName || '').toLowerCase();
       // OpenAI 模型限制
       if (modelLower.includes('gpt-4o-mini') || modelLower.includes('gpt-4o') || modelLower.includes('gpt-4-turbo')) {
@@ -386,9 +395,9 @@ ${batchJsonStr}
     };
     
     const modelMaxTokens = getModelMaxTokens(actualModelName);
-    const actualMaxTokens = Math.min(configuredMaxTokens, modelMaxTokens);
+    const actualMaxTokens = isDoubao ? configuredMaxTokens : Math.min(configuredMaxTokens, modelMaxTokens);
     
-    if (configuredMaxTokens > modelMaxTokens) {
+    if (!isDoubao && configuredMaxTokens > modelMaxTokens) {
       logger.warn(`${batchInfo}⚠️ max_tokens ${configuredMaxTokens} 超过模型 ${actualModelName} 的限制 ${modelMaxTokens}，已自动调整为 ${modelMaxTokens}`);
     }
     
@@ -1464,12 +1473,15 @@ ${JSON.stringify(sampleDialogues, null, 2)}
       logger.info(`🔧 实际调用: 模型=${actualModelName}, API_URL=${modelConfig.api_url}`);
       
       // 限制 max_tokens，确保不超过模型支持的最大值（大多数模型最大支持 16384 或 8192）
-      // 角色判断任务不需要太长的输出，限制在合理范围内
+      // 豆包模型（doubao）不限制 max_tokens
+      const isDoubao = modelConfig?.provider?.toLowerCase() === 'doubao' || 
+                       (actualModelName || '').toLowerCase().includes('doubao');
+      
       const MAX_TOKENS_LIMIT = 16384; // 大多数模型的最大支持值
       const configuredMaxTokens = modelConfig.max_tokens || 4000;
-      const actualMaxTokens = Math.min(configuredMaxTokens, MAX_TOKENS_LIMIT);
+      const actualMaxTokens = isDoubao ? configuredMaxTokens : Math.min(configuredMaxTokens, MAX_TOKENS_LIMIT);
       
-      if (configuredMaxTokens > MAX_TOKENS_LIMIT) {
+      if (!isDoubao && configuredMaxTokens > MAX_TOKENS_LIMIT) {
         logger.warn(`⚠️ 模型配置的 max_tokens (${configuredMaxTokens}) 超过限制，已调整为 ${actualMaxTokens}`);
       }
       
@@ -1800,11 +1812,15 @@ ${JSON.stringify(speakerRoles, null, 2)}
     const actualModelName = modelConfig.model_name || modelConfig.code;
     
     // 限制 max_tokens，防止超过模型限制
+    // 豆包模型（doubao）不限制 max_tokens
+    const isDoubao = modelConfig?.provider?.toLowerCase() === 'doubao' || 
+                     (actualModelName || '').toLowerCase().includes('doubao');
+    
     const MAX_TOKENS_LIMIT = 16384; // 大多数模型的最大支持值
     const configuredMaxTokens = modelConfig.max_tokens || 4000;
-    const actualMaxTokens = Math.min(configuredMaxTokens, MAX_TOKENS_LIMIT);
+    const actualMaxTokens = isDoubao ? configuredMaxTokens : Math.min(configuredMaxTokens, MAX_TOKENS_LIMIT);
 
-    if (configuredMaxTokens > MAX_TOKENS_LIMIT) {
+    if (!isDoubao && configuredMaxTokens > MAX_TOKENS_LIMIT) {
       logger.warn(`${batchInfo}⚠️ 模型配置的 max_tokens (${configuredMaxTokens}) 超过了建议限制 (${MAX_TOKENS_LIMIT})，已自动调整为 ${actualMaxTokens}`);
     }
 

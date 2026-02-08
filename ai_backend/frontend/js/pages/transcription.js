@@ -25,6 +25,7 @@ let st_currentPage = 1; // 当前页码
 let st_pageSize = 20; // 每页数量
 let st_totalPages = 1; // 总页数
 let st_totalFiles = 0; // 总文件数
+let st_searchName = ''; // 音频名称模糊查询关键字
 
 // AI 修正设置（从 localStorage 读取）
 function loadAiCorrectionSettings() {
@@ -153,6 +154,64 @@ async function initSpeechToText() {
 }
 
 function initEventListeners() {
+  // ✅ 核查纠偏区域按钮使用事件委托，避免动态注入/显示时点击无反应（目录扫描→核查纠偏→问答对提取）
+  if (!window.__stResultSectionClickDelegateBound) {
+    document.addEventListener('click', function stResultSectionClickDelegate(e) {
+      const id = e.target && e.target.id;
+      if (id === 'st-qaExtractionBtn') {
+        e.preventDefault();
+        startQAExtraction();
+        return;
+      }
+      if (id === 'st-roleJudgmentBtn') {
+        e.preventDefault();
+        startRoleJudgment();
+        return;
+      }
+      if (id === 'st-aiCorrectionBtn') {
+        e.preventDefault();
+        startAiCorrection();
+        return;
+      }
+      if (id === 'st-roleSettingsBtn') {
+        e.preventDefault();
+        showRoleSettings();
+        return;
+      }
+      if (id === 'st-batchReplaceSpeakerBtn') {
+        e.preventDefault();
+        showBatchReplaceDialog();
+        return;
+      }
+      if (id === 'st-saveEditBtn') {
+        e.preventDefault();
+        saveEdits();
+        return;
+      }
+      if (id === 'st-cancelEditBtn') {
+        e.preventDefault();
+        cancelEdits();
+        return;
+      }
+      if (id === 'st-saveRoleSettingsBtn') {
+        e.preventDefault();
+        saveRoleSettings();
+        return;
+      }
+      if (id === 'st-cancelRoleSettingsBtn') {
+        e.preventDefault();
+        hideRoleSettings();
+        return;
+      }
+      if (id === 'st-applyCorrectionsBtn') {
+        e.preventDefault();
+        applyAiCorrections();
+        return;
+      }
+    });
+    window.__stResultSectionClickDelegateBound = true;
+  }
+
   // 文件选择
   const selectFileBtn = document.getElementById('st-selectFileBtn');
   const audioInput = document.getElementById('st-audioInput');
@@ -215,21 +274,7 @@ function initEventListeners() {
   
   document.getElementById('st-toggleAutoScrollBtn')?.addEventListener('click', toggleAutoScroll);
   
-  // ✅ 编辑功能相关
-  document.getElementById('st-roleJudgmentBtn')?.addEventListener('click', startRoleJudgment);
-  document.getElementById('st-aiCorrectionBtn')?.addEventListener('click', startAiCorrection);
-  document.getElementById('st-qaExtractionBtn')?.addEventListener('click', startQAExtraction);
-  document.getElementById('st-roleSettingsBtn')?.addEventListener('click', showRoleSettings);
-  document.getElementById('st-batchReplaceSpeakerBtn')?.addEventListener('click', showBatchReplaceDialog);
-  document.getElementById('st-saveEditBtn')?.addEventListener('click', saveEdits);
-  document.getElementById('st-cancelEditBtn')?.addEventListener('click', cancelEdits);
-  
-  // ✅ 角色设置相关
-  document.getElementById('st-saveRoleSettingsBtn')?.addEventListener('click', saveRoleSettings);
-  document.getElementById('st-cancelRoleSettingsBtn')?.addEventListener('click', hideRoleSettings);
-  
-  // ✅ AI 修正相关
-  document.getElementById('st-applyCorrectionsBtn')?.addEventListener('click', applyAiCorrections);
+  // ✅ 编辑/角色/问答对提取等按钮已通过 document 事件委托统一处理（见 initEventListeners 开头），避免动态显示时点击无反应
   
   // ✅ 对话列表的事件委托（点击定位、编辑按钮）
   // 为所有页签的对话列表容器绑定点击事件
@@ -2412,9 +2457,11 @@ function handleFileSelect(e) {
 }
 
 function isValidAudioFile(file) {
-  const validExtensions = ['.mp3', '.wav', '.m4a', '.flac', '.aac', '.wma', '.ogg'];
+  const validAudioExtensions = ['.mp3', '.wav', '.m4a', '.flac', '.aac', '.wma', '.ogg'];
+  const validVideoExtensions = ['.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.webm', '.3gp', '.3g2'];
   const fileName = file.name.toLowerCase();
-  return validExtensions.some(ext => fileName.endsWith(ext));
+  return validAudioExtensions.some(ext => fileName.endsWith(ext)) || 
+         validVideoExtensions.some(ext => fileName.endsWith(ext));
 }
 
 function displayFileInfo(file) {
@@ -3302,6 +3349,26 @@ function initScanEventListeners() {
   
   // 刷新文件列表
   document.getElementById('st-refreshFilesBtn').addEventListener('click', loadScanFiles);
+
+  // 按名称查询
+  const searchInput = document.getElementById('st-fileNameSearch');
+  const searchBtn = document.getElementById('st-searchFilesBtn');
+  if (searchBtn) {
+    searchBtn.addEventListener('click', function() {
+      st_searchName = (searchInput && searchInput.value) ? searchInput.value.trim() : '';
+      st_currentPage = 1;
+      loadScanFiles();
+    });
+  }
+  if (searchInput) {
+    searchInput.addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        st_searchName = this.value ? this.value.trim() : '';
+        st_currentPage = 1;
+        loadScanFiles();
+      }
+    });
+  }
 }
 
 async function loadScanConfig() {
@@ -3347,21 +3414,47 @@ async function saveScanConfig() {
 }
 
 async function loadScanFiles() {
+  // 每次加载都从输入框和筛选项同步，避免“刷新”或分页时未带上当前条件
+  const searchEl = document.getElementById('st-fileNameSearch');
+  st_searchName = (searchEl && searchEl.value != null) ? String(searchEl.value).trim() : '';
+  const transcribedEl = document.getElementById('st-transcribedFilter');
+  const roleSetEl = document.getElementById('st-roleSetFilter');
+  const transcribedFilter = (transcribedEl && transcribedEl.value) ? transcribedEl.value : 'all';
+  const roleSetFilter = (roleSetEl && roleSetEl.value) ? roleSetEl.value : 'all';
+
   const tbody = document.getElementById('st-fileList');
   const paginationEl = document.getElementById('st-pagination');
-  tbody.innerHTML = '<tr><td colspan="6" class="loading">正在扫描...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="7" class="loading">正在扫描...</td></tr>';
   
   if (paginationEl) {
     paginationEl.style.display = 'none';
   }
   
+  const queryPayload = {
+    page: st_currentPage,
+    pageSize: st_pageSize,
+    name: st_searchName,
+    transcribed: transcribedFilter,
+    roleSet: roleSetFilter
+  };
+
   try {
-    // 添加分页参数
-    const response = await fetch(`${ST_API_BASE}/transcription/scan/files?page=${st_currentPage}&pageSize=${st_pageSize}`);
+    let response;
+    if (st_searchName) {
+      // 有搜索词时用 POST，避免长文件名导致 GET URL 过长被截断
+      response = await fetch(`${ST_API_BASE}/transcription/scan/files`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(queryPayload)
+      });
+    } else {
+      const params = new URLSearchParams(queryPayload);
+      response = await fetch(`${ST_API_BASE}/transcription/scan/files?${params.toString()}`);
+    }
     const result = await response.json();
     
     if (!result.success) {
-      tbody.innerHTML = `<tr><td colspan="6" class="error">${result.error}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" class="error">${result.error}</td></tr>`;
       document.getElementById('st-fileCount').textContent = '总计: 0 个文件';
       if (paginationEl) {
         paginationEl.style.display = 'none';
@@ -3381,7 +3474,7 @@ async function loadScanFiles() {
     document.getElementById('st-fileCount').textContent = `总计: ${st_totalFiles} 个文件`;
     
     if (files.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" class="empty">目录中没有找到音频文件</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="empty">目录中没有找到音频文件</td></tr>';
       if (paginationEl) {
         paginationEl.style.display = 'none';
       }
@@ -3402,6 +3495,14 @@ async function loadScanFiles() {
           ${file.transcribed 
             ? `<span class="badge badge-success">✅ 已转录</span>` 
             : `<span class="badge badge-secondary">⏳ 待转录</span>`
+          }
+        </td>
+        <td>
+          ${file.transcribed && file.hasRoleSet
+            ? `<span class="badge badge-success">✅ 已设置</span>`
+            : file.transcribed
+              ? `<span class="badge badge-warning">未设置</span>`
+              : `<span class="badge badge-secondary">—</span>`
           }
         </td>
         <td>
@@ -3429,7 +3530,7 @@ async function loadScanFiles() {
     updateStPagination();
   } catch (error) {
     console.error('加载文件列表失败:', error);
-    tbody.innerHTML = `<tr><td colspan="6" class="error">加载失败: ${error.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="error">加载失败: ${error.message}</td></tr>`;
     document.getElementById('st-fileCount').textContent = '总计: 0 个文件';
     if (paginationEl) {
       paginationEl.style.display = 'none';

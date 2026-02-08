@@ -11,6 +11,7 @@ const transcriptionService = require('../services/transcriptionService');
 const transcriptionAiService = require('../services/transcriptionAiService');
 const audioScanService = require('../services/audioScanService');
 const concernClassificationService = require('../services/concernClassificationService');
+const audioExtractor = require('../utils/audioExtractor');
 
 const router = express.Router();
 
@@ -75,14 +76,15 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage,
   fileFilter: (req, file, cb) => {
-    // 支持的音频格式
-    const allowedExtensions = ['.mp3', '.wav', '.m4a', '.flac', '.aac', '.wma', '.ogg'];
+    // 支持的音频格式和视频格式
+    const allowedAudioExtensions = ['.mp3', '.wav', '.m4a', '.flac', '.aac', '.wma', '.ogg'];
+    const allowedVideoExtensions = ['.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.webm', '.3gp', '.3g2'];
     const ext = path.extname(file.originalname).toLowerCase();
 
-    if (allowedExtensions.includes(ext)) {
+    if (allowedAudioExtensions.includes(ext) || allowedVideoExtensions.includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error(`不支持的音频格式: ${ext}，支持的格式: ${allowedExtensions.join(', ')}`));
+      cb(new Error(`不支持的文件格式: ${ext}，支持的格式: ${[...allowedAudioExtensions, ...allowedVideoExtensions].join(', ')}`));
     }
   },
   limits: {
@@ -125,9 +127,43 @@ router.post('/upload', upload.single('audio'), async (req, res) => {
       console.log('关联场次ID:', req.body.sessionId);
     }
 
-    const audioFilePath = req.file.path;
+    const uploadedFilePath = req.file.path;
     const originalFileName = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
     const customName = req.body.name ? req.body.name.trim() : null;
+
+    // 检测是否为视频文件，如果是则提取音频
+    let audioFilePath = uploadedFilePath;
+    let extractedAudioPath = null;
+    
+    if (audioExtractor.isVideoFile(uploadedFilePath)) {
+      console.log('🎬 检测到视频文件，开始提取音频...');
+      
+      // 检查 ffmpeg 是否可用
+      const ffmpegAvailable = await audioExtractor.checkFFmpegAvailable();
+      if (!ffmpegAvailable) {
+        // 删除已上传的文件
+        await fs.unlink(uploadedFilePath).catch(() => {});
+        return res.status(400).json({
+          success: false,
+          error: '视频文件需要提取音频，但系统未安装 ffmpeg。请安装 ffmpeg 或直接上传音频文件。'
+        });
+      }
+      
+      try {
+        // 从视频提取音频（输出为 wav 格式，兼容性最好）
+        extractedAudioPath = await audioExtractor.extractAudioFromVideo(uploadedFilePath, 'wav');
+        audioFilePath = extractedAudioPath;
+        console.log('✅ 音频提取成功:', extractedAudioPath);
+      } catch (error) {
+        console.error('❌ 音频提取失败:', error);
+        // 删除已上传的文件
+        await fs.unlink(uploadedFilePath).catch(() => {});
+        return res.status(500).json({
+          success: false,
+          error: `音频提取失败: ${error.message}`
+        });
+      }
+    }
 
     // 调用转录服务
     console.log('🎯 开始转录...');
@@ -138,12 +174,14 @@ router.post('/upload', upload.single('audio'), async (req, res) => {
     console.log('说话人数:', result.speakerCount);
 
     // 保存到数据库
+    // 注意：如果是从视频提取的音频，audioFilePath 保存提取后的音频路径
+    // 但 originalFileName 仍然保留原始视频文件名
     const transcription = await transcriptionService.saveTranscription({
       name: customName || originalFileName,
       originalFileName: originalFileName,
-      audioFilePath: audioFilePath,
-      audioFileSize: req.file.size,
-      audioFormat: result.audioFormat,
+      audioFilePath: audioFilePath, // 如果是视频，这里是提取后的音频路径
+      audioFileSize: req.file.size, // 原始文件大小
+      audioFormat: result.audioFormat, // 转录后的音频格式（wav）
       audioDuration: result.audioDuration,
       resultFilePath: result.resultFilePath,
       dialogues: result.dialogues,
@@ -153,6 +191,10 @@ router.post('/upload', upload.single('audio'), async (req, res) => {
       sessionId: req.body.sessionId || null,
       productId: req.body.productId || null
     });
+    
+    // 如果提取了音频，可以选择删除临时提取的音频文件（可选）
+    // 这里保留提取的音频文件，以便后续可能需要
+    // 如果需要清理，可以在这里添加删除逻辑
 
     console.log('💾 已保存到数据库, ID:', transcription.id);
 
@@ -173,9 +215,13 @@ router.post('/upload', upload.single('audio'), async (req, res) => {
   } catch (error) {
     console.error('❌ 转录失败:', error);
 
-    // 删除已上传的文件
+    // 删除已上传的文件和提取的音频文件
     if (req.file) {
       await fs.unlink(req.file.path).catch(() => {});
+    }
+    // 如果提取了音频，也删除提取的音频文件
+    if (extractedAudioPath) {
+      await fs.unlink(extractedAudioPath).catch(() => {});
     }
 
     res.status(500).json({
@@ -492,64 +538,112 @@ router.put('/scan/config', async (req, res) => {
 });
 
 /**
+ * 扫描目录下的音频文件（内部逻辑，GET/POST 共用）
+ * @param {object} opts - { page, pageSize, nameKeyword, transcribed?, roleSet? }
+ *   transcribed: 'all' | 'yes' | 'no' — 是否转录
+ *   roleSet: 'all' | 'yes' | 'no' — 是否进行角色设置
+ */
+async function handleScanFiles(opts) {
+  const { page, pageSize, nameKeyword, transcribed: transcribedFilter, roleSet: roleSetFilter } = opts;
+  const files = await audioScanService.scanAudioFiles();
+  let filesWithStatus = await audioScanService.checkFilesStatus(files);
+
+  if (nameKeyword) {
+    const keyword = nameKeyword.toLowerCase();
+    filesWithStatus = filesWithStatus.filter(f => {
+      const matchFileName = f.fileName && f.fileName.toLowerCase().includes(keyword);
+      const matchRelativePath = f.relativePath && f.relativePath.toLowerCase().includes(keyword);
+      return matchFileName || matchRelativePath;
+    });
+    console.log(`🔍 按名称过滤 "${nameKeyword}"，剩余 ${filesWithStatus.length} 个文件`);
+  }
+
+  if (transcribedFilter === 'yes') {
+    filesWithStatus = filesWithStatus.filter(f => f.transcribed === true);
+    console.log(`🔍 筛选「已转录」，剩余 ${filesWithStatus.length} 个文件`);
+  } else if (transcribedFilter === 'no') {
+    filesWithStatus = filesWithStatus.filter(f => f.transcribed !== true);
+    console.log(`🔍 筛选「待转录」，剩余 ${filesWithStatus.length} 个文件`);
+  }
+
+  if (roleSetFilter === 'yes') {
+    filesWithStatus = filesWithStatus.filter(f => f.hasRoleSet === true);
+    console.log(`🔍 筛选「已设角色」，剩余 ${filesWithStatus.length} 个文件`);
+  } else if (roleSetFilter === 'no') {
+    filesWithStatus = filesWithStatus.filter(f => f.hasRoleSet !== true);
+    console.log(`🔍 筛选「未设角色」，剩余 ${filesWithStatus.length} 个文件`);
+  }
+
+  const total = filesWithStatus.length;
+  const totalPages = Math.ceil(total / pageSize);
+  const startIndex = (page - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
+  const paginatedFiles = filesWithStatus.slice(startIndex, endIndex);
+
+  return {
+    data: paginatedFiles,
+    pagination: { page, pageSize, total, totalPages },
+    message: `找到 ${total} 个音频文件`
+  };
+}
+
+/**
  * GET /api/transcription/scan/files
- * 扫描目录下的音频文件（支持分页）
- * 
- * Query参数：
- * - page: 页码，默认1
- * - pageSize: 每页数量，默认20
+ * 扫描目录下的音频文件（支持分页、按名称/是否转录/是否角色设置查询）
+ * Query参数：page, pageSize, name?, transcribed?, roleSet?
+ *   transcribed: all|yes|no  是否转录
+ *   roleSet: all|yes|no      是否进行角色设置
  */
 router.get('/scan/files', async (req, res) => {
   try {
     console.log('🔍 开始扫描音频文件...');
-    
-    // 获取分页参数
     const page = parseInt(req.query.page) || 1;
     const pageSize = parseInt(req.query.pageSize) || 20;
+    const nameKeyword = (req.query.name || '').trim();
+    const transcribed = (req.query.transcribed || 'all').toLowerCase();
+    const roleSet = (req.query.roleSet || 'all').toLowerCase();
     
-    // 验证参数
     if (page < 1) {
-      return res.status(400).json({
-        success: false,
-        error: '页码必须大于0'
-      });
+      return res.status(400).json({ success: false, error: '页码必须大于0' });
     }
     if (pageSize < 1 || pageSize > 100) {
-      return res.status(400).json({
-        success: false,
-        error: '每页数量必须在1-100之间'
-      });
+      return res.status(400).json({ success: false, error: '每页数量必须在1-100之间' });
     }
-    
-    const files = await audioScanService.scanAudioFiles();
-    
-    // 批量检查转录状态
-    const filesWithStatus = await audioScanService.checkFilesStatus(files);
-    
-    // 计算分页
-    const total = filesWithStatus.length;
-    const totalPages = Math.ceil(total / pageSize);
-    const startIndex = (page - 1) * pageSize;
-    const endIndex = startIndex + pageSize;
-    const paginatedFiles = filesWithStatus.slice(startIndex, endIndex);
-    
-    res.json({
-      success: true,
-      data: paginatedFiles,
-      pagination: {
-        page,
-        pageSize,
-        total,
-        totalPages
-      },
-      message: `找到 ${total} 个音频文件`
-    });
+
+    const result = await handleScanFiles({ page, pageSize, nameKeyword, transcribed, roleSet });
+    res.json({ success: true, ...result });
   } catch (error) {
     console.error('扫描音频文件失败:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * POST /api/transcription/scan/files
+ * 扫描目录下的音频文件（支持分页、按名称/是否转录/是否角色设置查询）
+ * Body: { page?, pageSize?, name?, transcribed?, roleSet? }
+ */
+router.post('/scan/files', async (req, res) => {
+  try {
+    console.log('🔍 开始扫描音频文件 (POST)...');
+    const page = parseInt(req.body?.page) || 1;
+    const pageSize = parseInt(req.body?.pageSize) || 20;
+    const nameKeyword = (req.body?.name != null) ? String(req.body.name).trim() : '';
+    const transcribed = ((req.body?.transcribed != null) ? String(req.body.transcribed) : 'all').toLowerCase();
+    const roleSet = ((req.body?.roleSet != null) ? String(req.body.roleSet) : 'all').toLowerCase();
+
+    if (page < 1) {
+      return res.status(400).json({ success: false, error: '页码必须大于0' });
+    }
+    if (pageSize < 1 || pageSize > 100) {
+      return res.status(400).json({ success: false, error: '每页数量必须在1-100之间' });
+    }
+
+    const result = await handleScanFiles({ page, pageSize, nameKeyword, transcribed, roleSet });
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error('扫描音频文件失败:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 

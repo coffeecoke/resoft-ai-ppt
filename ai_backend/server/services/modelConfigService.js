@@ -11,12 +11,14 @@ const { v4: uuidv4 } = require('uuid');
 class ModelConfigService {
   /**
    * 获取指定场景的默认模型配置
+   * 优先取 is_default=true 的；若没有，则取该场景下第一个启用且按 sort_order 排序的模型（兜底）
    * @param {string} sceneType - 场景类型
    * @returns {Promise<Object>} 模型配置
    */
   async getDefaultModel(sceneType) {
     try {
-      const config = await prisma.ai_model_configs.findFirst({
+      // 1. 优先：该场景下 is_default=true 且 is_active=true
+      let config = await prisma.ai_model_configs.findFirst({
         where: {
           scene_type: sceneType,
           is_default: true,
@@ -24,8 +26,22 @@ class ModelConfigService {
         },
       });
 
+      // 2. 兜底：未设置默认时，使用该场景下第一个启用的模型（按 sort_order）
       if (!config) {
-        throw new Error(`未找到场景 ${sceneType} 的默认模型配置`);
+        config = await prisma.ai_model_configs.findFirst({
+          where: {
+            scene_type: sceneType,
+            is_active: true,
+          },
+          orderBy: [{ sort_order: 'asc' }],
+        });
+        if (config) {
+          logger.warn(`场景 [${sceneType}] 未设置默认模型，将使用首个可用模型: ${config.name}（建议在模型配置中勾选「默认」）`);
+        }
+      }
+
+      if (!config) {
+        throw new Error(`未找到场景 ${sceneType} 的默认模型配置（请在该场景下添加并启用至少一个模型，或勾选为默认）`);
       }
 
       // 解密敏感信息
