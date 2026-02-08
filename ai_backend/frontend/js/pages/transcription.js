@@ -154,6 +154,64 @@ async function initSpeechToText() {
 }
 
 function initEventListeners() {
+  // ✅ 核查纠偏区域按钮使用事件委托，避免动态注入/显示时点击无反应（目录扫描→核查纠偏→问答对提取）
+  if (!window.__stResultSectionClickDelegateBound) {
+    document.addEventListener('click', function stResultSectionClickDelegate(e) {
+      const id = e.target && e.target.id;
+      if (id === 'st-qaExtractionBtn') {
+        e.preventDefault();
+        startQAExtraction();
+        return;
+      }
+      if (id === 'st-roleJudgmentBtn') {
+        e.preventDefault();
+        startRoleJudgment();
+        return;
+      }
+      if (id === 'st-aiCorrectionBtn') {
+        e.preventDefault();
+        startAiCorrection();
+        return;
+      }
+      if (id === 'st-roleSettingsBtn') {
+        e.preventDefault();
+        showRoleSettings();
+        return;
+      }
+      if (id === 'st-batchReplaceSpeakerBtn') {
+        e.preventDefault();
+        showBatchReplaceDialog();
+        return;
+      }
+      if (id === 'st-saveEditBtn') {
+        e.preventDefault();
+        saveEdits();
+        return;
+      }
+      if (id === 'st-cancelEditBtn') {
+        e.preventDefault();
+        cancelEdits();
+        return;
+      }
+      if (id === 'st-saveRoleSettingsBtn') {
+        e.preventDefault();
+        saveRoleSettings();
+        return;
+      }
+      if (id === 'st-cancelRoleSettingsBtn') {
+        e.preventDefault();
+        hideRoleSettings();
+        return;
+      }
+      if (id === 'st-applyCorrectionsBtn') {
+        e.preventDefault();
+        applyAiCorrections();
+        return;
+      }
+    });
+    window.__stResultSectionClickDelegateBound = true;
+  }
+
   // 文件选择
   const selectFileBtn = document.getElementById('st-selectFileBtn');
   const audioInput = document.getElementById('st-audioInput');
@@ -216,21 +274,7 @@ function initEventListeners() {
   
   document.getElementById('st-toggleAutoScrollBtn')?.addEventListener('click', toggleAutoScroll);
   
-  // ✅ 编辑功能相关
-  document.getElementById('st-roleJudgmentBtn')?.addEventListener('click', startRoleJudgment);
-  document.getElementById('st-aiCorrectionBtn')?.addEventListener('click', startAiCorrection);
-  document.getElementById('st-qaExtractionBtn')?.addEventListener('click', startQAExtraction);
-  document.getElementById('st-roleSettingsBtn')?.addEventListener('click', showRoleSettings);
-  document.getElementById('st-batchReplaceSpeakerBtn')?.addEventListener('click', showBatchReplaceDialog);
-  document.getElementById('st-saveEditBtn')?.addEventListener('click', saveEdits);
-  document.getElementById('st-cancelEditBtn')?.addEventListener('click', cancelEdits);
-  
-  // ✅ 角色设置相关
-  document.getElementById('st-saveRoleSettingsBtn')?.addEventListener('click', saveRoleSettings);
-  document.getElementById('st-cancelRoleSettingsBtn')?.addEventListener('click', hideRoleSettings);
-  
-  // ✅ AI 修正相关
-  document.getElementById('st-applyCorrectionsBtn')?.addEventListener('click', applyAiCorrections);
+  // ✅ 编辑/角色/问答对提取等按钮已通过 document 事件委托统一处理（见 initEventListeners 开头），避免动态显示时点击无反应
   
   // ✅ 对话列表的事件委托（点击定位、编辑按钮）
   // 为所有页签的对话列表容器绑定点击事件
