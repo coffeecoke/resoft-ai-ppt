@@ -33,31 +33,22 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
       // 添加筛选参数
       if (params?.pageType && params.pageType.length > 0) {
         queryParams.pageType = params.pageType.join(',')
-        console.log('[Sales首页] 🔍 PPT目录筛选:', params.pageType)
       }
       if (params?.industry && params.industry.length > 0) {
         queryParams.industry = params.industry.join(',')
-        console.log('[Sales首页] 🔍 行业筛选:', params.industry)
       }
       if (params?.audience && params.audience.length > 0) {
         queryParams.audience = params.audience.join(',')
-        console.log('[Sales首页] 🔍 交流对象筛选:', params.audience)
       }
       if (params?.language && params.language.length > 0) {
         queryParams.language = params.language.join(',')
-        console.log('[Sales首页] 🔍 语言筛选:', params.language)
       }
       if (params?.keyword) {
         queryParams.keyword = params.keyword
-        console.log('[Sales首页] 🔍 关键词筛选:', params.keyword)
       }
-      
-      console.log('[Sales首页] 📤 加载文档请求参数:', queryParams)
       
       const result = await getSalesDocumentList(queryParams)
       documentsFromAPI.value = result.documents
-      console.log('[Sales首页] 📦 从API加载文档数量:', result.documents.length)
-      console.log('[Sales首页] 📦 加载的文档:', result.documents)
     } catch (error) {
       console.error('[Sales首页] 加载文档失败:', error)
       documentsFromAPI.value = []
@@ -69,7 +60,9 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
   // 🆕 页面加载时获取数据
   loadDocuments()
 
-  // 🆕 交流会议（transcriptions）列表，用于推荐页下方「交流会议」tab
+  // 🆕 交流会议（transcriptions）列表
+  // 注意：推荐页和独立视频页现在都使用 VideoPageView 组件，它有自己的 API 调用逻辑
+  // 这里保留 transcriptionsList 以便兼容，但不再在初始化时加载
   const transcriptionsList = ref<any[]>([])
   const loadTranscriptions = async () => {
     try {
@@ -81,7 +74,7 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
       transcriptionsList.value = []
     }
   }
-  loadTranscriptions()
+  // 不再在初始化时调用，VideoPageView 组件会自己加载数据
 
   // 🆕 将 DocumentMetadata 转换为旧的 PPT 列表格式（保持兼容）
   const pptListFromAPI = computed(() => {
@@ -98,9 +91,6 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
           // 兼容旧格式
           coverUrl = `${SERVER_URL}${doc.cover}`
         }
-        console.log('[Sales首页] 📷 封面URL:', doc.id, coverUrl)
-      } else {
-        console.warn('[Sales首页] ⚠️ 文档缺少封面:', doc.id, doc.name)
       }
       
       return {
@@ -120,8 +110,6 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
         updatedAt: doc.updatedAt,
       }
     })
-    console.log('[Sales首页] 🔄 转换后的PPT列表数量:', result.length)
-    console.log('[Sales首页] 📦 转换后的PPT列表:', result)
     return result
   })
 
@@ -181,14 +169,8 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
   
   // 推荐页面 - 筛选PPT（只使用API数据）
   const filteredPPT = computed(() => {
-    // 🔍 调试信息
-    console.log('[Sales首页] 🎯 filteredPPT 计算:')
-    console.log('  - pptListFromAPI 数量:', pptListFromAPI.value.length)
-    
     // ✅ 只使用API数据，不再使用Mock数据作为fallback
     let list = pptListFromAPI.value
-    console.log('  - 使用数据源: API')
-    console.log('  - 初始列表数量:', list.length)
     
     // 基础筛选：版本和产品
     if (filterVersion.value === 'public') list = list.filter((x: any) => x.tag === '公共版')
@@ -243,7 +225,6 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
     // 5. PPT目录筛选（productIntro）- 暂时保留，等待后续实现
     // TODO: 需要后端支持目录筛选或者通过其他方式实现
     
-    console.log('  - 筛选后数量:', list.length)
     return list
   })
   
@@ -263,7 +244,6 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
     pptFilters,
     (newVal) => {
       const params = buildDocumentParams(newVal)
-      console.log('[Sales首页] 🔄 筛选条件变化，重新加载数据:', params)
       loadDocuments(params)
     },
     { deep: true }

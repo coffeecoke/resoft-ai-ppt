@@ -29,51 +29,86 @@
     </template>
     <div class="video-layout assistant-split-pane-container">
       <div class="video-main-col" :style="{ width: leftWidth }">
-        <div class="video-player-placeholder">
-          <div class="play-btn"><el-icon size="64"><VideoPlay /></el-icon></div>
-          <div class="video-controls">
-            <div class="progress-bar"></div>
-            <div class="ctrl-row">
-              <el-icon><VideoPlay /></el-icon>
-              <span>00:00 / 38:54</span>
-            </div>
+        <!-- 视频播放器 -->
+        <div v-if="isVideoFormat" class="video-player-container">
+          <!-- 占位背景（视频加载失败时显示） -->
+          <div v-if="mediaError || !mediaSrc" class="video-placeholder">
+            <i class="ri-video-line"></i>
+            <span>{{ mediaError || '暂无视频文件' }}</span>
+          </div>
+          <video
+            v-else
+            ref="videoPlayer"
+            :src="mediaSrc"
+            controls
+            preload="metadata"
+            class="video-player"
+            @timeupdate="onTimeUpdate"
+            @loadedmetadata="onLoadedMetadata"
+            @error="onMediaError"
+          >
+            您的浏览器不支持视频播放
+          </video>
+        </div>
+
+        <!-- 音频播放器 -->
+        <div v-else class="audio-player-container">
+          <div class="audio-player-header">
+            <i class="ri-headphone-line"></i>
+            <span>音频播放</span>
+          </div>
+          <audio
+            ref="audioPlayer"
+            :src="mediaSrc"
+            controls
+            preload="metadata"
+            class="audio-player"
+            @timeupdate="onTimeUpdate"
+            @loadedmetadata="onLoadedMetadata"
+            @error="onMediaError"
+          >
+            您的浏览器不支持音频播放
+          </audio>
+          <div v-if="mediaError" class="audio-error">
+            <i class="ri-error-warning-line"></i>
+            {{ mediaError }}
           </div>
         </div>
-        
+
         <div class="video-segments">
           <!-- 交流基本信息 -->
           <div class="exchange-info-block">
-            <h3 class="exchange-info-head">
+            <h3 v-if="videoDetail.customerName" class="exchange-info-head">
               <div class="title-vertical-line"></div>
-              {{ videoDetail.customerName || '阜新银行' }}
+              {{ videoDetail.customerName }}
             </h3>
             <div class="exchange-info-row">
               <span class="exchange-info-label">客户类型：</span>
-              <span class="exchange-info-value">{{ videoDetail.customerType || '老客户新产品' }}</span>
+              <span class="exchange-info-value">{{ videoDetail.customerType || '' }}</span>
             </div>
             <div class="exchange-info-row">
               <span class="exchange-info-label">交流时间：</span>
-              <span class="exchange-info-value">{{ videoDetail.exchangeTime || '2025 年 5 月 15 日' }}</span>
+              <span class="exchange-info-value">{{ parsedExchangeTime || '' }}</span>
             </div>
             <div class="exchange-info-row">
               <span class="exchange-info-label">交流次数：</span>
-              <span class="exchange-info-value">{{ videoDetail.exchangeCount || '首次' }}</span>
+              <span class="exchange-info-value">{{ videoDetail.exchangeCount || '' }}</span>
             </div>
             <div class="exchange-info-row">
               <span class="exchange-info-label">产品解决方案：</span>
-              <span class="exchange-info-value">{{ videoDetail.productSolution || '一表通' }}</span>
+              <span class="exchange-info-value">{{ videoDetail.productSolution || '' }}</span>
             </div>
             <div class="exchange-info-row">
               <span class="exchange-info-label">交流人员：</span>
-              <span class="exchange-info-value">{{ videoDetail.exchangePersonnel || '我方（刘佳、杨毅等）；客户方（业务、科技等部门相关人员）' }}</span>
+              <span class="exchange-info-value">{{ videoDetail.exchangePersonnel || '' }}</span>
             </div>
             <div class="exchange-info-row">
               <span class="exchange-info-label">交流主题：</span>
-              <span class="exchange-info-value">{{ videoDetail.exchangeTheme || '阜新银行一表通建设方案介绍与需求对接' }}</span>
+              <span class="exchange-info-value">{{ videoDetail.exchangeTheme || '' }}</span>
             </div>
             <div class="exchange-info-row">
               <span class="exchange-info-label">交流目标：</span>
-              <span class="exchange-info-value">{{ videoDetail.exchangeGoal || '向客户解读一表通监管政策与建设要求，展示我方产品方案与案例优势，挖掘客户核心需求，推进项目合作意向' }}</span>
+              <span class="exchange-info-value">{{ videoDetail.exchangeGoal || '' }}</span>
             </div>
           </div>
           
@@ -177,18 +212,20 @@
       >
         <i class="ri-arrow-left-right-fill divider-icon"></i>
       </div>
-      <VideoSidePanel 
+      <VideoSidePanel
         :video-detail="videoDetail"
         :width="rightWidth"
         :active-tab="activeTab"
+        :current-time="currentTime"
         @update:active-tab="activeTab = $event"
+        @seek-to="handleSeekTo"
       />
     </div>
   </el-dialog>
 </template>
 
 <script setup>
-import { ref, defineProps, defineEmits, nextTick, onMounted, watch } from 'vue'
+import { ref, computed, defineProps, defineEmits, nextTick, onMounted, watch } from 'vue'
 import { VideoPlay, Star } from '@element-plus/icons-vue'
 import VideoSidePanel from './VideoSidePanel.vue'
 
@@ -275,12 +312,80 @@ const emit = defineEmits(['update:visible', 'close'])
 // Tab切换
 const activeTab = ref('record')
 
+// 播放器相关
+const audioPlayer = ref(null)
+const videoPlayer = ref(null)
+const mediaError = ref('')
+const currentTime = ref(0)
+const duration = ref(0)
+
+// 判断是否为视频格式
+const videoFormats = ['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv']
+const isVideoFormat = computed(() => {
+  const format = (props.videoDetail?.audioFormat || '').toLowerCase()
+  return videoFormats.includes(format)
+})
+
+// 媒体源 URL
+const mediaSrc = computed(() => {
+  if (!props.videoDetail?.id) return ''
+  return `/api/sales/transcriptions/${props.videoDetail.id}/audio`
+})
+
+// 媒体事件处理
+const onTimeUpdate = () => {
+  const player = isVideoFormat.value ? videoPlayer.value : audioPlayer.value
+  if (player) {
+    currentTime.value = player.currentTime
+  }
+}
+
+const onLoadedMetadata = () => {
+  const player = isVideoFormat.value ? videoPlayer.value : audioPlayer.value
+  if (player) {
+    duration.value = player.duration
+  }
+  mediaError.value = ''
+}
+
+const onMediaError = (e) => {
+  console.error('媒体加载失败:', e)
+  mediaError.value = isVideoFormat.value
+    ? '视频文件加载失败，请检查文件是否存在'
+    : '音频文件加载失败，请检查文件是否存在'
+}
+
+// 处理跳转到指定时间点
+const handleSeekTo = (seconds) => {
+  const player = isVideoFormat.value ? videoPlayer.value : audioPlayer.value
+  if (player && typeof seconds === 'number' && !isNaN(seconds)) {
+    player.currentTime = seconds
+    // 如果播放器暂停了，自动开始播放
+    if (player.paused) {
+      player.play().catch(e => console.warn('自动播放失败:', e))
+    }
+  }
+}
+
 // 视频片段相关
 const activeSegmentIndex = ref(0)
 const activeQuestionIndex = ref(0)
 const questionItemRefs = ref([])
 const answerExpanded = ref({})
 const likedQuestions = ref([])
+
+// 从 project/name 中解析交流时间
+// 格式: "20251107-刘春玲-长城资产受益所有人建设.MP3"
+const parsedExchangeTime = computed(() => {
+  const name = props.videoDetail?.project || ''
+  // 匹配开头的日期格式 YYYYMMDD
+  const match = name.match(/^(\d{4})(\d{2})(\d{2})/)
+  if (match) {
+    return `${match[1]}年${match[2]}月${match[3]}日`
+  }
+  // 如果解析失败，尝试使用 exchangeTime
+  return props.videoDetail?.exchangeTime || ''
+})
 
 // 评论输入框引用
 const commentTextareaRef = ref(null)
@@ -524,6 +629,119 @@ const handleClose = (value) => {
 </script>
 
 <style scoped lang="scss">
+/* 视频播放器 */
+.video-player-container {
+  background: #000;
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 16px;
+  position: relative;
+  width: 100%;
+  height: 0;
+  padding-bottom: 45.25%;
+}
+
+.video-placeholder {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  z-index: 0;
+
+  i {
+    font-size: 48px;
+  }
+
+  span {
+    font-size: 14px;
+  }
+}
+
+.video-player {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  z-index: 1;
+  object-fit: contain;
+}
+
+.media-error {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #fecaca;
+  font-size: 13px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.8);
+
+  i {
+    font-size: 16px;
+  }
+}
+
+/* 音频播放器 */
+.audio-player-container {
+  background: linear-gradient(135deg, #374151 0%, #1f2937 100%);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.audio-player-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #fff;
+  font-size: 14px;
+  margin-bottom: 12px;
+
+  i {
+    font-size: 20px;
+  }
+}
+
+.audio-player {
+  width: 100%;
+  height: 40px;
+  border-radius: 8px;
+
+  &::-webkit-media-controls-panel {
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 8px;
+  }
+}
+
+.audio-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #fecaca;
+  font-size: 13px;
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+
+  i {
+    font-size: 16px;
+  }
+}
+
 /* 视频片段区域样式 */
 .video-segments {
   margin-bottom: 24px;

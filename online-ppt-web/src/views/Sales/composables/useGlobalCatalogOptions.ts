@@ -21,7 +21,6 @@ export function useGlobalCatalogOptions() {
       
       if (res.success) {
         catalogs.value = res.data.catalogs
-        console.log('[全局目录选项] 📦 加载目录树:', catalogs.value)
       } else {
         console.error('[全局目录选项] ❌ 加载失败:', res.error)
         catalogs.value = []
@@ -53,7 +52,6 @@ export function useGlobalCatalogOptions() {
       }
     })
     
-    console.log('[全局目录选项] 🎯 提取的筛选选项:', options)
     return options
   })
   

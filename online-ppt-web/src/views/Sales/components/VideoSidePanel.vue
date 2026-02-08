@@ -10,10 +10,13 @@
         </template>
         <div class="side-block">
           <div class="transcript-content" v-if="transcriptList.length > 0">
-            <div 
-              v-for="(item, index) in transcriptList" 
+            <div
+              v-for="(item, index) in transcriptList"
               :key="index"
+              :data-index="index"
               class="transcript-item"
+              :class="{ 'transcript-item-active': activeTranscriptIndex === index }"
+              @click="handleTranscriptClick(index)"
             >
               <div class="transcript-header">
                 <span class="transcript-speaker">{{ item.speaker }}</span>
@@ -219,7 +222,7 @@
 </template>
 
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, nextTick } from 'vue'
 import VideoAnalysisReport from './VideoAnalysisReport.vue'
 
 const props = defineProps({
@@ -235,21 +238,152 @@ const props = defineProps({
   activeTab: {
     type: String,
     default: 'record'
+  },
+  currentTime: {
+    type: Number,
+    default: 0
   }
 })
 
-const emit = defineEmits(['update:activeTab'])
+const emit = defineEmits(['update:activeTab', 'seek-to'])
+
+// 格式化 speaker 显示名称
+const formatSpeaker = (speaker, speakerRoles) => {
+  if (!speaker) return ''
+
+  // 获取映射的角色
+  const role = speakerRoles[speaker]
+
+  if (role === 'our_side') {
+    return '我方'
+  } else if (role === 'customer') {
+    return '客户'
+  }
+
+  // 没有映射，保持原样
+  return speaker
+}
 
 // 原文列表：归一化 transcript（兼容 content/text、空数组）
 const transcriptList = computed(() => {
   const raw = props.videoDetail?.transcript
   if (!raw || !Array.isArray(raw)) return []
+
+  // 获取 speaker_roles 映射
+  const speakerRoles = props.videoDetail?.speakerRoles || {}
+
   return raw.map((x) => ({
-    speaker: x.speaker || '',
+    speaker: formatSpeaker(x.speaker || '', speakerRoles),
     time: x.time || '',
     content: x.content ?? x.text ?? ''
   }))
 })
+
+// 解析时间字符串为秒数 (支持 "MM:SS" 和 "MM:SS-MM:SS" 格式)
+const parseTimeToSeconds = (timeStr) => {
+  if (!timeStr) return { start: 0, end: 0 }
+
+  // 处理 "MM:SS-MM:SS" 格式（支持任意位数的分钟）
+  const rangeMatch = timeStr.match(/^(\d+):(\d{2})\s*-\s*(\d+):(\d{2})$/)
+  if (rangeMatch) {
+    const startMin = parseInt(rangeMatch[1], 10)
+    const startSec = parseInt(rangeMatch[2], 10)
+    const endMin = parseInt(rangeMatch[3], 10)
+    const endSec = parseInt(rangeMatch[4], 10)
+    return {
+      start: startMin * 60 + startSec,
+      end: endMin * 60 + endSec
+    }
+  }
+
+  // 处理 "MM:SS" 格式（单个时间点，支持任意位数的分钟）
+  const singleMatch = timeStr.match(/^(\d+):(\d{2})$/)
+  if (singleMatch) {
+    const min = parseInt(singleMatch[1], 10)
+    const sec = parseInt(singleMatch[2], 10)
+    const time = min * 60 + sec
+    return { start: time, end: time }
+  }
+
+  return { start: 0, end: 0 }
+}
+
+// 计算每个条目的时间范围（秒）
+const transcriptTimeRanges = computed(() => {
+  return transcriptList.value.map((item, index) => {
+    const { start, end } = parseTimeToSeconds(item.time)
+    // 如果结束时间与开始时间相同，使用下一条的开始时间作为结束时间
+    let effectiveEnd = end
+    if (start === end && index < transcriptList.value.length - 1) {
+      const nextStart = parseTimeToSeconds(transcriptList.value[index + 1].time).start
+      if (nextStart > start) {
+        effectiveEnd = nextStart
+      }
+    }
+    // 如果是最后一条且没有结束时间，设置一个很大的值
+    if (start === effectiveEnd && index === transcriptList.value.length - 1) {
+      effectiveEnd = 999999
+    }
+    return { start, end: effectiveEnd }
+  })
+})
+
+// 当前激活的原文条目索引
+const activeTranscriptIndex = computed(() => {
+  const current = props.currentTime
+  if (current <= 0 || transcriptTimeRanges.value.length === 0) return -1
+
+  // 找到当前时间所在的条目
+  for (let i = 0; i < transcriptTimeRanges.value.length; i++) {
+    const { start, end } = transcriptTimeRanges.value[i]
+    if (current >= start && current < end) {
+      return i
+    }
+  }
+
+  // 如果没找到精确匹配，找最接近的前一个条目
+  for (let i = transcriptTimeRanges.value.length - 1; i >= 0; i--) {
+    if (current >= transcriptTimeRanges.value[i].start) {
+      return i
+    }
+  }
+
+  return -1
+})
+
+// 原文条目 refs
+const transcriptItemRefs = ref([])
+
+// 节流控制：避免频繁滚动
+let lastScrollTime = 0
+const SCROLL_THROTTLE_MS = 500
+
+// 监听激活索引变化，自动滚动
+watch(activeTranscriptIndex, (newIndex) => {
+  if (newIndex < 0 || props.activeTab !== 'record') return
+
+  const now = Date.now()
+  if (now - lastScrollTime < SCROLL_THROTTLE_MS) return
+  lastScrollTime = now
+
+  nextTick(() => {
+    const itemEl = document.querySelector(`.transcript-item[data-index="${newIndex}"]`)
+    if (itemEl) {
+      itemEl.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center'
+      })
+    }
+  })
+})
+
+// 点击原文条目跳转到对应时间
+const handleTranscriptClick = (index) => {
+  const range = transcriptTimeRanges.value[index]
+  if (range) {
+    emit('seek-to', range.start)
+  }
+}
 
 // Q&A 列表：归一化 qa 项（兼容 q/question、summary/a/answer、与 new 一致的结构与样式）
 const qaList = computed(() => {
@@ -773,18 +907,88 @@ const handleToggleLike = (index) => {
   text-align: center;
   padding: 40px 20px;
   color: #9ca3af;
-  
+
   i {
     font-size: 48px;
     color: #d1d5db;
     margin-bottom: 12px;
     display: block;
   }
-  
+
   p {
     font-size: 0.9rem;
     margin: 0;
   }
+}
+
+/* 原文内容区域 */
+.transcript-content {
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+}
+
+/* 原文条目样式 */
+.transcript-item {
+  padding: 12px;
+  border-bottom: 1px solid #e5e7eb;
+  cursor: pointer;
+  transition: all 0.3s ease;
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  &:hover {
+    background: #f8fafc;
+  }
+
+  &.transcript-item-active {
+    background: #eff6ff;
+    border-left: 3px solid #3b82f6;
+
+    .transcript-speaker {
+      color: #2563eb;
+    }
+
+    .transcript-time {
+      color: #3b82f6;
+      background: #dbeafe;
+    }
+
+    .transcript-text {
+      color: #1e40af;
+    }
+  }
+}
+
+.transcript-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.transcript-speaker {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #374151;
+  transition: color 0.3s;
+}
+
+.transcript-time {
+  font-size: 0.7rem;
+  color: #6b7280;
+  background: #f3f4f6;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.3s;
+}
+
+.transcript-text {
+  font-size: 0.85rem;
+  color: #4b5563;
+  line-height: 1.6;
+  transition: color 0.3s;
 }
 
 .qa-empty {

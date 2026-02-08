@@ -286,7 +286,7 @@ import VideoDialog from './components/VideoDialog.vue'
 import PdfDialog from './components/PdfDialog.vue'
 import ResponseFileDialog from './components/ResponseFileDialog.vue'
 import { useDialogs } from './composables/useDialogs'
-import { salesData, createCustomerPptList } from '@/configs/salesData'
+import { salesData } from '@/configs/salesData'
 
 const route = useRoute()
 
@@ -512,10 +512,10 @@ const updateContent = (catIds: string[]) => {
   if (ids.length > 0) {
     isExpanded.value = false
   }
-  
-  // 使用 createCustomerPptList 生成包含客户名称的PPT数据
-  const customerPPTList = createCustomerPptList(customerName.value, 25) // 生成25个PPT
-  
+
+  // TODO: 从API获取客户相关的PPT数据
+  const customerPPTList: any[] = []
+
   // 根据目录ID过滤PPT（如果选择了目录，只显示包含该目录ID的PPT）
   let filteredPPT = customerPPTList
   if (ids.length > 0) {

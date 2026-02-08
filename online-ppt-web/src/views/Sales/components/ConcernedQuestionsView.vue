@@ -302,7 +302,6 @@ watch(selectedFilters, () => {
 watch(() => props.externalFilters, (newFilters) => {
   console.log('[ConcernedQuestionsView] 📥 外部筛选变化:', newFilters)
   console.log('[ConcernedQuestionsView] 📥 questionCategory:', newFilters?.questionCategory)
-  console.log('[ConcernedQuestionsView] 📥 hasActiveExternalFilters:', allActiveExternalFilters.value.length > 0)
   loadConcerns(true)
 }, { deep: true, immediate: true })
 
@@ -508,7 +507,7 @@ onMounted(() => {
   font-size: 12px;
   cursor: pointer;
   color: #1D4ED8;
-  
+
   &:hover {
     opacity: 0.7;
   }

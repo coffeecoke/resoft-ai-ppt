@@ -84,6 +84,108 @@ router.get('/', async (req, res) => {
 })
 
 /**
+ * GET /api/sales/products/stats
+ * 获取产品统计数据（用于首页重点关注产品卡片）
+ *
+ * 返回所有产品的统计数据：
+ * - sessions: 交流会议数量（transcriptions 表）
+ * - ppts: PPT 资料数量（documents 表，仅已发布）
+ * - questions: 客户问题数量（concerns 表）
+ * - brochures, tenderFiles, responseFiles: 占位字段，暂时为 0
+ */
+router.get('/stats', async (req, res) => {
+  try {
+    // 1. 获取所有产品列表
+    const products = await prisma.products.findMany({
+      select: {
+        code: true,
+        name: true
+      },
+      orderBy: { sort_order: 'asc' }
+    })
+
+    // 2. 对每个产品统计三类数据
+    const stats = await Promise.all(products.map(async (product) => {
+      // 统计交流会议（transcriptions 表）
+      // 通过 product_code 或 product_name 关联
+      const sessions = await prisma.transcriptions.count({
+        where: {
+          OR: [
+            { product_code: product.code },
+            { product_name: product.name }
+          ]
+        }
+      })
+
+      // 统计 PPT 资料（documents 表，仅已发布）
+      // 需要检查 product 字段（JSON 数组）是否包含该产品的 code 或 name
+      const allDocuments = await prisma.documents.findMany({
+        where: {
+          status: 'published'
+        },
+        select: {
+          product: true
+        }
+      })
+
+      const ppts = allDocuments.filter(doc => {
+        try {
+          const docProducts = Array.isArray(doc.product)
+            ? doc.product
+            : (doc.product ? [doc.product] : [])
+          // 匹配 code 或 name
+          return docProducts.includes(product.code) || docProducts.includes(product.name)
+        } catch (e) {
+          return false
+        }
+      }).length
+
+      // 统计客户问题（concerns 表）
+      // 先查询符合条件的 transcription ids，再统计 concerns
+      const transcriptionIds = await prisma.transcriptions.findMany({
+        where: {
+          OR: [
+            { product_code: product.code },
+            { product_name: product.name }
+          ]
+        },
+        select: { id: true }
+      })
+
+      const questions = await prisma.concerns.count({
+        where: {
+          transcription_id: {
+            in: transcriptionIds.map(t => t.id)
+          }
+        }
+      })
+
+      return {
+        code: product.code,
+        name: product.name,
+        sessions,
+        ppts,
+        questions,
+        brochures: 0,
+        tenderFiles: 0,
+        responseFiles: 0
+      }
+    }))
+
+    res.json({
+      success: true,
+      data: stats
+    })
+  } catch (error) {
+    console.error('查询产品统计数据失败:', error)
+    res.status(500).json({
+      success: false,
+      error: error.message
+    })
+  }
+})
+
+/**
  * GET /api/sales/products/:productCode/documents
  * 获取产品文档列表（未选目录时使用）
  * 
@@ -431,19 +533,19 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params
-    
+
     // 检查产品是否存在
     const product = await prisma.products.findUnique({
       where: { id }
     })
-    
+
     if (!product) {
       return res.status(404).json({
         success: false,
         error: '产品不存在'
       })
     }
-    
+
     // 软删除：设为不启用
     await prisma.products.update({
       where: { id },
@@ -452,7 +554,7 @@ router.delete('/:id', async (req, res) => {
         updated_at: new Date()
       }
     })
-    
+
     res.json({
       success: true,
       message: '产品已删除'

@@ -1,10 +1,11 @@
 <template>
   <div class="side-block analysis-report">
     <div class="report-header">
-      <h4 class="sub-head">{{ reportTitle }}</h4>
-      <el-button 
-        size="small" 
-        type="primary" 
+      <h4 class="sub-head">分析报告</h4>
+      <el-button
+        v-if="hasAnalysis"
+        size="small"
+        type="primary"
         :icon="Download"
         @click="downloadReport"
         class="download-btn"
@@ -12,183 +13,250 @@
         下载报告
       </el-button>
     </div>
-    
-    <!-- 交流目标达成情况 -->
-    <div class="report-section">
-      <div class="report-section-title">一、交流目标达成情况</div>
-      <div class="report-content">
-        {{ videoDetail.analysis?.goalAchievement || '已完成一表通政策、产品方案、案例及实施流程的全面介绍，解答客户多方面疑问，初步挖掘核心需求，基本达成政策传递与方案展示目标。' }}
-      </div>
+
+    <!-- 加载中 -->
+    <div v-if="loading" class="analysis-loading">
+      <el-icon class="is-loading"><Loading /></el-icon>
+      <span>加载中...</span>
     </div>
 
-    <!-- 核心议题 -->
-    <div class="report-section">
-      <div class="report-section-title">二、核心议题</div>
-      <div class="report-content">
-        <ul class="report-list">
-          <li v-for="(topic, index) in videoDetail.analysis?.coreTopics" :key="index">{{ topic }}</li>
-        </ul>
-      </div>
+    <!-- 空状态 -->
+    <div v-else-if="!hasAnalysis" class="analysis-empty">
+      <i class="ri-file-text-line"></i>
+      <p>暂无分析结果</p>
     </div>
 
-    <!-- 关键维度分析 -->
-    <div class="report-section">
-      <div class="report-section-title">三、关键维度分析</div>
-      <div 
-        v-for="(dimension, index) in videoDetail.analysis?.dimensions" 
-        :key="index"
-        class="dimension-item"
-      >
-        <div class="dimension-title">{{ dimension.name }}</div>
-        <div class="dimension-content">
-          <div v-if="dimension.ourDisplay" class="dimension-subsection">
-            <div class="subsection-title">我方展示：</div>
-            <ul class="report-list">
-              <li v-for="(item, i) in dimension.ourDisplay" :key="i">{{ item }}</li>
-            </ul>
-          </div>
-          <div v-if="dimension.customerInfo" class="dimension-subsection">
-            <div class="subsection-title">已挖掘客户信息：</div>
-            <ul class="report-list">
-              <li v-for="(item, i) in dimension.customerInfo" :key="i">{{ item }}</li>
-            </ul>
-          </div>
-          <div v-if="dimension.pendingInfo" class="dimension-subsection">
-            <div class="subsection-title">待挖掘信息：</div>
-            <ul class="report-list">
-              <li v-for="(item, i) in dimension.pendingInfo" :key="i">{{ item }}</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 关键节点 -->
-    <div class="report-section">
-      <div class="report-section-title">四、关键节点</div>
-      <div class="report-content">
-        <div 
-          v-for="(node, index) in videoDetail.analysis?.keyNodes" 
-          :key="index"
-          class="key-node-item"
-        >
-          <div class="key-node-time">{{ node.time }}</div>
-          <div class="key-node-desc">{{ node.desc }}</div>
-        </div>
-      </div>
-    </div>
+    <!-- Markdown 内容 -->
+    <div v-else class="markdown-content" v-html="renderedMarkdown"></div>
   </div>
 </template>
 
-<script setup>
-import { computed } from 'vue'
-import { Download } from '@element-plus/icons-vue'
+<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue'
+import { Download, Loading } from '@element-plus/icons-vue'
+import { marked } from 'marked'
+import { getTranscriptionAnalysis } from '@/services/salesService'
 
-const props = defineProps({
-  videoDetail: {
-    type: Object,
-    required: true,
-    default: () => ({})
+interface VideoDetail {
+  id?: string
+  name?: string
+  customer_name?: string
+  [key: string]: any
+}
+
+interface Props {
+  videoDetail: VideoDetail
+}
+
+const props = defineProps<Props>()
+
+const loading = ref(false)
+const analysisData = ref(null)
+const rawMarkdown = ref('')
+
+// 是否有分析结果
+const hasAnalysis = computed(() => {
+  return !!rawMarkdown.value
+})
+
+// 渲染后的 HTML
+const renderedMarkdown = computed(() => {
+  if (!rawMarkdown.value) return ''
+  try {
+    return marked.parse(rawMarkdown.value)
+  } catch (e) {
+    console.error('Markdown 解析失败:', e)
+    return '<p>分析结果解析失败</p>'
   }
 })
 
-// 计算报告标题
-const reportTitle = computed(() => {
-  const customerName = props.videoDetail.customerName || props.videoDetail.customer || '阜新银行'
-  const product = props.videoDetail.productSolution || '一表通'
-  return `${customerName}${product}建设项目售前交流报告`
+// 加载分析结果
+const loadAnalysis = async () => {
+  const transcriptionId = props.videoDetail?.id
+  if (!transcriptionId) return
+
+  loading.value = true
+  try {
+    const res = await getTranscriptionAnalysis(transcriptionId)
+    if (res.success && res.data) {
+      analysisData.value = res.data
+      rawMarkdown.value = res.data.rawMarkdown || ''
+    }
+  } catch (e) {
+    console.error('加载分析结果失败:', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+// 下载报告为 Word 文档
+const downloadReport = async () => {
+  if (!rawMarkdown.value) return
+
+  try {
+    // 动态导入 docx 库
+    const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } = await import('docx')
+
+    // 生成文件名（使用交流主题或会议名称）
+    const themeName = props.videoDetail?.name || props.videoDetail?.customer_name || '会议'
+    const fileName = `${themeName}_分析报告.docx`
+
+    console.log('[下载] 开始解析 Markdown')
+
+    // 简单解析 Markdown 转换为 docx 段落
+    const paragraphs: any[] = []
+    const lines = rawMarkdown.value.split('\n')
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]
+
+      // 空行
+      if (!line.trim()) {
+        paragraphs.push(new Paragraph({ text: '' }))
+        continue
+      }
+
+      // H1 标题
+      if (line.startsWith('# ')) {
+        paragraphs.push(
+          new Paragraph({
+            text: line.substring(2),
+            heading: HeadingLevel.HEADING_1,
+            spacing: { before: 400, after: 200 }
+          })
+        )
+      }
+      // H2 标题
+      else if (line.startsWith('## ')) {
+        paragraphs.push(
+          new Paragraph({
+            text: line.substring(3),
+            heading: HeadingLevel.HEADING_2,
+            spacing: { before: 300, after: 150 }
+          })
+        )
+      }
+      // H3 标题
+      else if (line.startsWith('### ')) {
+        paragraphs.push(
+          new Paragraph({
+            text: line.substring(4),
+            heading: HeadingLevel.HEADING_3,
+            spacing: { before: 200, after: 100 }
+          })
+        )
+      }
+      // 无序列表
+      else if (line.match(/^[\-\*]\s/)) {
+        paragraphs.push(
+          new Paragraph({
+            text: line.substring(2),
+            bullet: { level: 0 },
+            spacing: { before: 100, after: 100 }
+          })
+        )
+      }
+      // 有序列表
+      else if (line.match(/^\d+\.\s/)) {
+        paragraphs.push(
+          new Paragraph({
+            text: line.replace(/^\d+\.\s/, ''),
+            numbering: { reference: 'default-numbering', level: 0 },
+            spacing: { before: 100, after: 100 }
+          })
+        )
+      }
+      // 加粗文本 **text**
+      else if (line.includes('**')) {
+        const children: any[] = []
+        const parts = line.split('**')
+        parts.forEach((part, index) => {
+          if (index % 2 === 0) {
+            if (part) children.push(new TextRun({ text: part }))
+          } else {
+            children.push(new TextRun({ text: part, bold: true }))
+          }
+        })
+        paragraphs.push(
+          new Paragraph({
+            children,
+            spacing: { before: 100, after: 100 }
+          })
+        )
+      }
+      // 普通段落
+      else {
+        paragraphs.push(
+          new Paragraph({
+            text: line,
+            spacing: { before: 100, after: 100 }
+          })
+        )
+      }
+    }
+
+    console.log('[下载] 创建 Word 文档')
+
+    // 创建文档
+    const doc = new Document({
+      sections: [
+        {
+          properties: {
+            page: {
+              margin: {
+                top: 1440,
+                right: 1440,
+                bottom: 1440,
+                left: 1440
+              }
+            }
+          },
+          children: paragraphs
+        }
+      ],
+      numbering: {
+        config: [
+          {
+            reference: 'default-numbering',
+            levels: [
+              {
+                level: 0,
+                format: 'decimal',
+                text: '%1.',
+                alignment: AlignmentType.LEFT
+              }
+            ]
+          }
+        ]
+      }
+    })
+
+    console.log('[下载] 生成 Blob')
+
+    // 生成 Blob
+    const blob = await Packer.toBlob(doc)
+
+    console.log('[下载] Blob 创建完成, size:', blob.size)
+
+    // 创建下载链接
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = fileName
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+
+    console.log('[下载] 完成，文件名:', fileName)
+  } catch (e) {
+    console.error('下载 Word 文档失败:', e)
+  }
+}
+
+onMounted(() => {
+  loadAnalysis()
 })
-
-// 下载报告
-const downloadReport = () => {
-  // 生成报告内容
-  const reportContent = generateReportContent()
-
-  // 创建 Blob 对象
-  const blob = new Blob([reportContent], { type: 'text/plain;charset=utf-8' })
-
-  // 创建下载链接
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = `${reportTitle.value}_${new Date().getTime()}.txt`
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-  URL.revokeObjectURL(url)
-}
-
-// 生成报告内容
-const generateReportContent = () => {
-  const detail = props.videoDetail
-  const analysis = detail.analysis || {}
-  
-  let content = `${reportTitle.value}\n`
-  content += '='.repeat(50) + '\n\n'
-  
-  // 基本信息
-  content += '一、基本信息\n'
-  content += `客户名称：${detail.customerName || detail.customer || '阜新银行'}\n`
-  content += `客户类型：${detail.customerType || '老客户新产品'}\n`
-  content += `交流时间：${detail.exchangeTime || '2025 年 5 月 15 日'}\n`
-  content += `交流次数：${detail.exchangeCount || '首次'}\n`
-  content += `产品解决方案：${detail.productSolution || '一表通'}\n`
-  content += `交流人员：${detail.exchangePersonnel || ''}\n`
-  content += `交流主题：${detail.exchangeTheme || ''}\n`
-  content += `交流目标：${detail.exchangeGoal || ''}\n\n`
-  
-  // 交流目标达成情况
-  if (analysis.goalAchievement) {
-    content += '二、交流目标达成情况\n'
-    content += analysis.goalAchievement + '\n\n'
-  }
-  
-  // 核心议题
-  if (analysis.coreTopics && analysis.coreTopics.length > 0) {
-    content += '三、核心议题\n'
-    analysis.coreTopics.forEach((topic, index) => {
-      content += `${index + 1}. ${topic}\n`
-    })
-    content += '\n'
-  }
-  
-  // 关键维度分析
-  if (analysis.dimensions && analysis.dimensions.length > 0) {
-    content += '四、关键维度分析\n'
-    analysis.dimensions.forEach((dimension, index) => {
-      content += `${index + 1}. ${dimension.name}\n`
-      if (dimension.ourDisplay && dimension.ourDisplay.length > 0) {
-        content += '   我方展示：\n'
-        dimension.ourDisplay.forEach((item, i) => {
-          content += `   ${i + 1}. ${item}\n`
-        })
-      }
-      if (dimension.customerInfo && dimension.customerInfo.length > 0) {
-        content += '   已挖掘客户信息：\n'
-        dimension.customerInfo.forEach((item, i) => {
-          content += `   ${i + 1}. ${item}\n`
-        })
-      }
-      if (dimension.pendingInfo && dimension.pendingInfo.length > 0) {
-        content += '   待挖掘信息：\n'
-        dimension.pendingInfo.forEach((item, i) => {
-          content += `   ${i + 1}. ${item}\n`
-        })
-      }
-      content += '\n'
-    })
-  }
-  
-  // 关键节点
-  if (analysis.keyNodes && analysis.keyNodes.length > 0) {
-    content += '五、关键节点\n'
-    analysis.keyNodes.forEach((node, index) => {
-      content += `${index + 1}. ${node.time}：${node.desc}\n`
-    })
-  }
-  
-  return content
-}
 </script>
 
 <style scoped lang="scss">
@@ -198,121 +266,197 @@ const generateReportContent = () => {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 10px;
+    margin-bottom: 16px;
     padding-bottom: 12px;
-    border-bottom: 0;
+    border-bottom: 1px solid #e5e7eb;
   }
-  
+
   .sub-head {
-    font-size: 0.85rem;
+    font-size: 0.95rem;
     font-weight: 600;
     color: #1f2937;
     margin: 0;
     flex: 1;
   }
-  
+
   .download-btn {
     flex-shrink: 0;
   }
 }
 
-.report-section {
-  margin-bottom: 24px;
-  
-  &:last-child {
-    margin-bottom: 0;
-  }
-}
-
-.report-section-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: #1f2937;
-  margin-bottom: 12px;
-  padding-left: 8px;
-  border-left: 3px solid #2563eb;
-}
-
-.report-content {
-  font-size: 14px;
-  color: #4b5563;
-  line-height: 1.8;
-  padding-left: 11px;
-}
-
-.report-list {
-  margin: 0;
-  padding-left: 20px;
-  color: #4b5563;
-  line-height: 1.8;
-  
-  li {
-    margin-bottom: 8px;
-    
-    &:last-child {
-      margin-bottom: 0;
-    }
-  }
-}
-
-.dimension-item {
-  margin-bottom: 20px;
-  padding: 12px;
-  background: #f9fafb;
-  border-radius: 6px;
-  border-left: 2px solid #e5e7eb;
-  
-  &:last-child {
-    margin-bottom: 0;
-  }
-}
-
-.dimension-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #1f2937;
-  margin-bottom: 12px;
-}
-
-.dimension-content {
+/* 加载状态 */
+.analysis-loading {
   display: flex;
   flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: #9ca3af;
   gap: 12px;
-}
 
-.dimension-subsection {
-  padding-left: 8px;
-}
+  .el-icon {
+    font-size: 32px;
+  }
 
-.subsection-title {
-  font-size: 13px;
-  font-weight: 500;
-  color: #374151;
-  margin-bottom: 6px;
-}
-
-.key-node-item {
-  margin-bottom: 12px;
-  padding: 10px;
-  background: #f9fafb;
-  border-radius: 6px;
-  border-left: 2px solid #2563eb;
-  
-  &:last-child {
-    margin-bottom: 0;
+  span {
+    font-size: 14px;
   }
 }
 
-.key-node-time {
-  font-size: 12px;
-  font-weight: 600;
-  color: #2563eb;
-  margin-bottom: 6px;
+/* 空状态 */
+.analysis-empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: #9ca3af;
+
+  i {
+    font-size: 48px;
+    color: #d1d5db;
+    margin-bottom: 12px;
+    display: block;
+  }
+
+  p {
+    font-size: 14px;
+    margin: 0;
+  }
 }
 
-.key-node-desc {
-  font-size: 13px;
-  color: #4b5563;
-  line-height: 1.6;
+/* Markdown 内容样式 */
+.markdown-content {
+  font-size: 14px;
+  color: #374151;
+  line-height: 1.8;
+
+  :deep(h1) {
+    font-size: 20px;
+    font-weight: 600;
+    color: #1f2937;
+    margin: 24px 0 16px 0;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #e5e7eb;
+  }
+
+  :deep(h2) {
+    font-size: 18px;
+    font-weight: 600;
+    color: #1f2937;
+    margin: 20px 0 12px 0;
+    padding-left: 12px;
+    border-left: 3px solid #2563eb;
+  }
+
+  :deep(h3) {
+    font-size: 16px;
+    font-weight: 600;
+    color: #374151;
+    margin: 16px 0 10px 0;
+  }
+
+  :deep(h4),
+  :deep(h5),
+  :deep(h6) {
+    font-size: 14px;
+    font-weight: 600;
+    color: #4b5563;
+    margin: 12px 0 8px 0;
+  }
+
+  :deep(p) {
+    margin: 12px 0;
+    line-height: 1.8;
+  }
+
+  :deep(ul),
+  :deep(ol) {
+    margin: 12px 0;
+    padding-left: 24px;
+  }
+
+  :deep(li) {
+    margin: 6px 0;
+    line-height: 1.6;
+  }
+
+  :deep(blockquote) {
+    margin: 16px 0;
+    padding: 12px 16px;
+    background: #f9fafb;
+    border-left: 3px solid #d1d5db;
+    color: #6b7280;
+  }
+
+  :deep(code) {
+    padding: 2px 6px;
+    background: #f3f4f6;
+    border-radius: 3px;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 13px;
+    color: #e11d48;
+  }
+
+  :deep(pre) {
+    margin: 16px 0;
+    padding: 16px;
+    background: #1f2937;
+    border-radius: 6px;
+    overflow-x: auto;
+
+    code {
+      padding: 0;
+      background: transparent;
+      color: #e5e7eb;
+      font-size: 13px;
+    }
+  }
+
+  :deep(table) {
+    width: 100%;
+    margin: 16px 0;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  :deep(th),
+  :deep(td) {
+    padding: 8px 12px;
+    border: 1px solid #e5e7eb;
+    text-align: left;
+  }
+
+  :deep(th) {
+    background: #f9fafb;
+    font-weight: 600;
+    color: #374151;
+  }
+
+  :deep(tr:nth-child(even)) {
+    background: #fafafa;
+  }
+
+  :deep(hr) {
+    margin: 20px 0;
+    border: none;
+    border-top: 1px solid #e5e7eb;
+  }
+
+  :deep(a) {
+    color: #2563eb;
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+
+  :deep(strong) {
+    font-weight: 600;
+    color: #1f2937;
+  }
+
+  :deep(em) {
+    font-style: italic;
+    color: #6b7280;
+  }
 }
 </style>

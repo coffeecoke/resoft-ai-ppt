@@ -226,17 +226,32 @@ async function main() {
   console.log('🌱 开始初始化产品目录数据...')
 
   try {
-    // ========== 步骤 1: 获取通用产品 ==========
+    // ========== 步骤 1: 获取或创建通用产品 ==========
     const GENERAL_PRODUCT_CODE = 'general_ppt_categories'
-    const generalProduct = await prisma.products.findFirst({
+    let generalProduct = await prisma.products.findFirst({
       where: { code: GENERAL_PRODUCT_CODE }
     })
     
     if (!generalProduct) {
-      throw new Error('未找到通用产品，请先运行迁移脚本: migrate-content-categories-to-product-catalogs.js')
+      generalProduct = await prisma.products.create({
+        data: {
+          id: randomUUID(),
+          name: '通用PPT内容分类',
+          code: GENERAL_PRODUCT_CODE,
+          description: '通用的PPT内容分类标准，适用于所有产品的内容分析',
+          category: 'system',
+          tags: ['通用', 'PPT分类', '内容分析'],
+          sort_order: 0,
+          is_active: true,
+          created_at: new Date(),
+          updated_at: new Date()
+        }
+      })
+      console.log(`✅ 创建通用产品: ${generalProduct.name} (${generalProduct.id})`)
+    } else {
+      console.log(`✅ 使用通用产品: ${generalProduct.name} (${generalProduct.id})`)
     }
-    
-    console.log(`✅ 使用通用产品: ${generalProduct.name} (${generalProduct.id})\n`)
+    console.log('')
     
     // ========== 步骤 2: 检查是否已有数据 ==========
     const existingCatalogs = await prisma.product_catalogs.findMany({

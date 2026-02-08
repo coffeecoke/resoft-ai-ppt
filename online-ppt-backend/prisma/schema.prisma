@@ -395,6 +395,8 @@ model transcriptions {
   // 业务关联
   session_id    String? @db.VarChar(50) /// 关联交流场次ID（可选）
   product_id    String? @db.VarChar(50) /// 关联产品ID（可选）
+  product_code  String? @db.VarChar(50) /// 产品代码（冗余存储，便于查询）
+  product_name  String  @default("一表通") @db.VarChar(100) /// 产品名称（冗余存储，默认一表通）
   customer_name String? @db.VarChar(255) /// 客户名称
   industry      String? @db.VarChar(50) /// 行业（中文，如城商行、农商）
   meeting_type  String? @db.VarChar(50) /// 会议类型（中文，如首次交流、需求调研）

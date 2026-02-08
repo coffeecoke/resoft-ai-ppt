@@ -180,6 +180,31 @@ export async function deleteProduct(id: string): Promise<{
   return axios.delete(`${SERVER_URL}/sales/products/${id}`)
 }
 
+/**
+ * 产品卡片统计数据（用于首页重点关注产品）
+ */
+export interface ProductCardStats {
+  code: string
+  name: string
+  sessions: number        // 交流会议数量
+  ppts: number            // PPT资料数量（已发布）
+  questions: number       // 客户问题数量
+  brochures: number       // 产品彩页（占位）
+  tenderFiles: number     // 招标文件（占位）
+  responseFiles: number   // 投标文件（占位）
+}
+
+/**
+ * 获取产品统计数据（用于首页重点关注产品卡片）
+ */
+export async function getProductStats(): Promise<{
+  success: boolean
+  data: ProductCardStats[]
+  error?: string
+}> {
+  return axios.get(`${SERVER_URL}/sales/products/stats`)
+}
+
 // ==================== 交流会议（transcriptions）接口 ====================
 
 export interface TranscriptionListItem {
@@ -282,4 +307,25 @@ export async function getTranscriptionConcerns(transcriptionId: string): Promise
   error?: string
 }> {
   return axios.get(`${SERVER_URL}/sales/transcriptions/${transcriptionId}/concerns`)
+}
+
+/**
+ * 交流会议分析结果
+ */
+export interface TranscriptionAnalysis {
+  id: string
+  rawMarkdown: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * 获取交流会议分析结果
+ */
+export async function getTranscriptionAnalysis(transcriptionId: string): Promise<{
+  success: boolean
+  data: TranscriptionAnalysis | null
+  error?: string
+}> {
+  return axios.get(`${SERVER_URL}/sales/transcriptions/${transcriptionId}/analysis`)
 }

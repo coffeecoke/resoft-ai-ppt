@@ -5,27 +5,26 @@
     </div>
 
     <!-- 加载状态 -->
-    <div v-if="loading" class="hot-search-loading">
-      <div v-for="i in 5" :key="i" class="skeleton-item">
+    <div v-if="loading" class="hot-search-list">
+      <div v-for="i in 5" :key="i" class="hot-search-item skeleton">
         <div class="skeleton-rank"></div>
         <div class="skeleton-text"></div>
         <div class="skeleton-count"></div>
       </div>
     </div>
 
-    <!-- 列表 -->
     <div v-else class="hot-search-list">
       <div
         v-for="(item, index) in hotSearchList"
-        :key="item.id"
+        :key="item.code"
         class="hot-search-item"
-        @click="handleSearch(item.question)"
+        @click="handleSearch(item)"
       >
         <div class="hot-search-rank" :class="getRankClass(index + 1)">
           {{ index + 1 }}
         </div>
-        <div class="hot-search-keyword">{{ item.question }}</div>
-        <div class="hot-search-count">{{ item.likes }}</div>
+        <div class="hot-search-keyword">{{ item.keyword }}</div>
+        <div class="hot-search-count">{{ item.count }}</div>
       </div>
     </div>
   </div>
@@ -34,21 +33,35 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { getHotConcerns, type HotConcernItem } from '@/services/concernsApi'
+import { getProductList } from '@/services/salesService'
 
 const router = useRouter()
 
 // 热搜榜数据
-const hotSearchList = ref<HotConcernItem[]>([])
+interface HotSearchItem {
+  keyword: string
+  code: string
+  count: number
+}
+
+const hotSearchList = ref<HotSearchItem[]>([])
 const loading = ref(true)
 
-// 加载热搜数据
-const loadHotConcerns = async () => {
+// 加载产品热搜数据
+const loadHotProducts = async () => {
   loading.value = true
   try {
-    const res = await getHotConcerns()
+    const res = await getProductList({ isActive: true })
     if (res.success && res.data) {
+      // 按问题数量降序排序，取前10个
       hotSearchList.value = res.data
+        .map(p => ({
+          keyword: p.name,
+          code: p.code,
+          count: p.stats?.questions || 0
+        }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10)
     }
   } catch (error) {
     console.error('加载热搜榜失败:', error)
@@ -65,16 +78,19 @@ const getRankClass = (rank: number): string => {
   return 'rank-normal'
 }
 
-// 处理搜索
-const handleSearch = (keyword: string) => {
+// 处理搜索 - 使用 productCode 筛选
+const handleSearch = (item: HotSearchItem) => {
   router.push({
     path: '/sales/question-search',
-    query: { q: keyword }
+    query: {
+      productCode: item.code,
+      productName: item.keyword
+    }
   })
 }
 
 onMounted(() => {
-  loadHotConcerns()
+  loadHotProducts()
 })
 </script>
 
@@ -100,47 +116,6 @@ onMounted(() => {
   margin: 0;
 }
 
-.hot-search-loading {
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-}
-
-.skeleton-item {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.skeleton-rank {
-  width: 24px;
-  height: 24px;
-  background: #f0f0f0;
-  border-radius: 4px;
-  animation: pulse 1.5s infinite;
-}
-
-.skeleton-text {
-  flex: 1;
-  height: 16px;
-  background: #f0f0f0;
-  border-radius: 4px;
-  animation: pulse 1.5s infinite;
-}
-
-.skeleton-count {
-  width: 30px;
-  height: 14px;
-  background: #f0f0f0;
-  border-radius: 4px;
-  animation: pulse 1.5s infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-
 .hot-search-list {
   display: flex;
   flex-direction: column;
@@ -160,6 +135,10 @@ onMounted(() => {
     .hot-search-keyword {
       color: #2563eb;
     }
+  }
+
+  &.skeleton {
+    cursor: default;
   }
 }
 
@@ -205,5 +184,35 @@ onMounted(() => {
   font-size: 12px;
   color: #9ca3af;
   flex-shrink: 0;
+}
+
+// 骨架屏样式
+.skeleton-rank {
+  width: 24px;
+  height: 24px;
+  background: #f0f0f0;
+  border-radius: 4px;
+  animation: pulse 1.5s infinite;
+}
+
+.skeleton-text {
+  flex: 1;
+  height: 16px;
+  background: #f0f0f0;
+  border-radius: 4px;
+  animation: pulse 1.5s infinite;
+}
+
+.skeleton-count {
+  width: 30px;
+  height: 14px;
+  background: #f0f0f0;
+  border-radius: 4px;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 </style>

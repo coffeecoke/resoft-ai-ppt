@@ -39,6 +39,28 @@
         @update:filters="handleFiltersUpdate"
       />
       
+      <!-- 🆕 新组件：交流会议（使用 VideoPageView 支持无限滚动） -->
+      <div v-if="showVideoSection" class="content-with-filter">
+        <!-- 筛选面板（在左侧） -->
+        <FilterPanel
+          v-if="showFilterPanel"
+          v-model:visible="showFilterPanel"
+          :active-tab="'video'"
+          :filters="filterProps"
+          @close="handleFilterClose"
+          @update:filters="handleFiltersUpdate"
+        />
+
+        <div class="content-grid-wrapper" :class="{ 'with-filter': showFilterPanel }">
+          <VideoPageView
+            :filteredVideos="[]"
+            :showHeader="false"
+            v-model:fProduct="fProduct"
+            v-model:fIndustry="fIndustry"
+          />
+        </div>
+      </div>
+
       <!-- 🆕 新组件：内容区域和筛选面板的容器（包含选中产品后的详情视图） -->
       <div v-if="showPptGrid || showContentGrid || showProductDetail" class="content-with-filter">
         <!-- 🆕 新组件：筛选面板（在左侧） -->
@@ -257,7 +279,7 @@ import BrandMaterials from './components/BrandMaterials.vue'
 // ============================================
 import { salesData, responseTocSections } from '@/configs/salesData'
 import { BRAND_TAB_OPTIONS } from '@/configs/salesConstants'
-import { getProductList } from '@/services/salesService'
+import { getProductStats } from '@/services/salesService'
 
 // ============================================
 // 🔧 Composable函数导入（所有业务逻辑都在这里）
@@ -346,11 +368,18 @@ const filterProps = { pptFilters, videoFilters, qaFilters, tenderFilters, respon
 // 4.5. 计算属性（优化复杂的显示逻辑）
 // ============================================
 
-// 是否显示内容网格（PPT/视频/招标/响应）
+// 是否显示内容网格（PPT/招标/响应，video 单独处理）
 const showContentGrid = computed(() => {
   return activeNav.value === 'recommend'           // ① 在推荐页
     && activeDashboardTab.value === 'products'     // ② 在产品标签
-    && ['video', 'tender', 'response'].includes(activeTab.value)  // ③ 这3个tab（不包括ppt和qa）
+    && ['tender', 'response'].includes(activeTab.value)  // ③ 招标/响应 tab（video 单独处理）
+})
+
+// 是否显示交流会议（使用 VideoPageView 支持无限滚动）
+const showVideoSection = computed(() => {
+  return activeNav.value === 'recommend'           // ① 在推荐页
+    && activeDashboardTab.value === 'products'     // ② 在产品标签
+    && activeTab.value === 'video'                 // ③ 在交流会议 tab
 })
 
 // 是否显示产品详情（仅PPT tab且已选产品时显示）
@@ -441,24 +470,15 @@ watch(() => route.query.nav, (newNav) => {
   if (newNav) activeNav.value = newNav as string
 })
 
-// 加载重点关注产品列表（产品分类表接口）
+// 加载重点关注产品统计数据
 const loadProductStats = async () => {
   try {
-    const res = await getProductList({ isActive: true })
+    const res = await getProductStats()
     if (res.success && res.data && Array.isArray(res.data)) {
-      productStats.value = res.data.map((item: any) => ({
-        name: item.name,
-        code: item.code,
-        sessions: item.stats?.sessions ?? 0,
-        ppts: item.stats?.ppts ?? 0,
-        questions: item.stats?.questions ?? 0,
-        brochures: item.stats?.brochures ?? 0,
-        tenderFiles: item.stats?.tenderFiles ?? 0,
-        responseFiles: item.stats?.responseFiles ?? 0
-      }))
+      productStats.value = res.data
     }
   } catch (e) {
-    console.error('[Sales首页] 加载产品列表失败:', e)
+    console.error('[Sales首页] 加载产品统计失败:', e)
     productStats.value = []
   }
 }

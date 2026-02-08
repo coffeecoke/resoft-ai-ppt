@@ -3,29 +3,37 @@
     <Header />
     
     <div class="main">
-      <h2 class="page-title">#{{ keyword }}#</h2>
+      <h2 class="page-title">#{{ pageTitle }}#</h2>
       
       <div class="search-result-layout">
         <!-- 左侧：问题列表 -->
         <div class="reports-list">
-          <QuestionReportItem
-            v-for="report in filteredReports"
-            :key="report.id"
-            :report="report"
-            :highlight-keyword="highlightKeyword"
-            :liked-reports="likedReports"
-            :like-count="getLikeCount(report.id)"
-            :answer-expanded="answerExpanded"
-            @toggle-like="toggleLike"
-            @toggle-answer="toggleAnswer"
-          />
-        
-        <!-- 空状态 -->
-        <div v-if="filteredReports.length === 0" class="empty-state">
-          <i class="ri-search-line"></i>
-          <p>未找到相关问题</p>
+          <!-- 加载状态 -->
+          <div v-if="loading" class="loading-state">
+            <i class="ri-loader-4-line spinning"></i>
+            <p>搜索中...</p>
+          </div>
+
+          <template v-else>
+            <QuestionReportItem
+              v-for="report in filteredReports"
+              :key="report.id"
+              :report="report"
+              :highlight-keyword="highlightKeyword"
+              :liked-reports="likedReports"
+              :like-count="getLikeCount(report.id)"
+              :answer-expanded="answerExpanded"
+              @toggle-like="toggleLike"
+              @toggle-answer="toggleAnswer"
+            />
+
+            <!-- 空状态 -->
+            <div v-if="filteredReports.length === 0 && hasSearchCondition" class="empty-state">
+              <i class="ri-search-line"></i>
+              <p>未找到相关问题</p>
+            </div>
+          </template>
         </div>
-      </div>
       
       <!-- 右侧：历史搜索和热搜榜 -->
       <div class="right-sidebar">
@@ -74,7 +82,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { concernedQuestionsData } from '@/configs/salesData'
+import { getConcerns, likeConcern, type ConcernItem } from '@/services/concernsApi'
 import Header from './components/Header.vue'
 import HotSearchPanel from './components/HotSearchPanel.vue'
 import QuestionReportItem from './components/QuestionReportItem.vue'
@@ -86,18 +94,114 @@ const router = useRouter()
 const SEARCH_HISTORY_KEY = 'question_search_history'
 const MAX_HISTORY_COUNT = 20 // 最多保存20条历史记录
 
-// 获取搜索关键词
+// 获取搜索参数
 const keyword = computed(() => {
   return (route.query.q as string) || ''
+})
+
+const productCode = computed(() => {
+  return (route.query.productCode as string) || ''
+})
+
+const productName = computed(() => {
+  return (route.query.productName as string) || ''
+})
+
+// 页面标题（优先显示产品名称，其次是关键词）
+const pageTitle = computed(() => {
+  return productName.value || keyword.value || ''
+})
+
+// 是否有搜索条件
+const hasSearchCondition = computed(() => {
+  return !!keyword.value || !!productCode.value
 })
 
 // 历史搜索记录
 interface SearchHistoryItem {
   keyword: string
+  productCode?: string
   time: number
 }
 
 const searchHistory = ref<SearchHistoryItem[]>([])
+
+// ====================== API 数据 ======================
+const concerns = ref<ConcernItem[]>([])
+const loading = ref(false)
+const hasMore = ref(true)
+const nextCursor = ref<string | null>(null)
+
+// 已点赞的报告ID列表
+const likedReports = ref<string[]>([])
+
+// 每个报告的点赞数量
+const reportLikeCounts = ref<Record<string, number>>({})
+
+// 答案展开/折叠状态
+const answerExpanded = ref<Record<string, boolean>>({})
+
+// 加载搜索结果
+const loadSearchResults = async (reset = false) => {
+  if (!hasSearchCondition.value) {
+    concerns.value = []
+    return
+  }
+
+  if (loading.value) return
+  if (!reset && !hasMore.value) return
+
+  loading.value = true
+
+  try {
+    const params: any = {
+      limit: 20,
+      sortBy: 'latest'
+    }
+
+    // 使用 productCode 筛选（优先）
+    if (productCode.value) {
+      params.productCode = [productCode.value]
+    }
+
+    // 使用关键词搜索
+    if (keyword.value) {
+      params.keyword = keyword.value
+    }
+
+    if (!reset && nextCursor.value) {
+      params.cursor = nextCursor.value
+    }
+
+    const res = await getConcerns(params)
+
+    if (res.success && res.data) {
+      if (reset) {
+        concerns.value = res.data.list
+      } else {
+        concerns.value = [...concerns.value, ...res.data.list]
+      }
+      nextCursor.value = res.data.nextCursor
+      hasMore.value = res.data.hasMore
+
+      // 初始化点赞数
+      res.data.list.forEach(item => {
+        if (!(item.id in reportLikeCounts.value)) {
+          reportLikeCounts.value[item.id] = item.likes
+        }
+      })
+    }
+  } catch (error) {
+    console.error('搜索问题失败:', error)
+  } finally {
+    loading.value = false
+  }
+}
+
+// 过滤后的报告列表（直接使用 API 返回的数据）
+const filteredReports = computed(() => {
+  return concerns.value
+})
 
 // 加载历史搜索记录
 const loadSearchHistory = () => {
@@ -184,127 +288,73 @@ const formatHistoryTime = (timestamp: number): string => {
 
 // 热搜榜已移至 HotSearchPanel 组件
 
-// 监听关键词变化，保存搜索历史
-watch(keyword, (newKeyword) => {
+// 监听搜索条件变化，保存搜索历史并重新搜索
+watch([keyword, productCode], ([newKeyword, newProductCode]) => {
   if (newKeyword && newKeyword.trim()) {
     saveSearchHistory(newKeyword)
   }
+  if (newKeyword || newProductCode) {
+    loadSearchResults(true)
+  } else {
+    concerns.value = []
+  }
 }, { immediate: true })
-
-// 已点赞的报告ID列表
-const likedReports = ref<number[]>([])
-
-// 每个报告的点赞数量（初始值从数据中获取，点击后会更新）
-const reportLikeCounts = ref<Record<number, number>>({})
-
-// 答案展开/折叠状态：key 为 'system-{reportId}' 或 'expert-{reportId}'
-const answerExpanded = ref<Record<string, boolean>>({})
 
 // 初始化
 onMounted(() => {
   // 加载历史搜索记录
   loadSearchHistory()
-  
-  // 初始化点赞数量
-  if (concernedQuestionsData?.reports) {
-    concernedQuestionsData.reports.forEach(report => {
-      reportLikeCounts.value[report.id] = report.likes || 0
-    })
-  }
 })
 
-// 模糊搜索：检查文本是否包含关键词
-const matchesKeyword = (text: string): boolean => {
-  if (!keyword.value || !text) return false
-  const searchKeyword = keyword.value.toLowerCase()
-  const searchText = text.toLowerCase()
-  return searchText.includes(searchKeyword)
-}
-
-// 过滤后的报告列表（模糊搜索）
-const filteredReports = computed(() => {
-  if (!keyword.value) {
-    return []
-  }
-  
-  // 确保数据已加载
-  if (!concernedQuestionsData?.reports || concernedQuestionsData.reports.length === 0) {
-    return []
-  }
-  
-  return concernedQuestionsData.reports.filter(report => {
-    // 搜索问题标题
-    if (report.question && matchesKeyword(report.question)) {
-      return true
-    }
-    if (report.title && matchesKeyword(report.title)) {
-      return true
-    }
-    // 搜索问题分类（category）
-    if (report.category && matchesKeyword(report.category)) {
-      return true
-    }
-    // 搜索系统答案
-    if (report.systemAnswer && matchesKeyword(report.systemAnswer)) {
-      return true
-    }
-    // 搜索专家答案
-    if (report.expertAnswer?.content && matchesKeyword(report.expertAnswer.content)) {
-      return true
-    }
-    // 搜索公司名称
-    if (report.company && matchesKeyword(report.company)) {
-      return true
-    }
-    // 搜索产品名称
-    if (report.productName && matchesKeyword(report.productName)) {
-      return true
-    }
-    // 搜索标签（tag）
-    if (report.tag && matchesKeyword(report.tag)) {
-      return true
-    }
-    // 搜索描述
-    if (report.description && matchesKeyword(report.description)) {
-      return true
-    }
-    // 搜索会议名称
-    if (report.meetingName && matchesKeyword(report.meetingName)) {
-      return true
-    }
-    return false
-  })
-})
-
-// 高亮关键词
+// 高亮关键词（同时高亮搜索词和产品名称）
 const highlightKeyword = (text: string): string => {
-  if (!keyword.value || !text) return text || ''
-  
-  const searchKeyword = keyword.value
-  const regex = new RegExp(`(${escapeRegex(searchKeyword)})`, 'gi')
-  
-  return text.replace(regex, '<mark class="highlight-keyword">$1</mark>')
+  if (!text) return ''
+
+  let result = text
+
+  // 高亮关键词
+  if (keyword.value) {
+    const regex = new RegExp(`(${escapeRegex(keyword.value)})`, 'gi')
+    result = result.replace(regex, '<mark class="highlight-keyword">$1</mark>')
+  }
+
+  // 高亮产品名称
+  if (productName.value && productName.value !== keyword.value) {
+    const regex = new RegExp(`(${escapeRegex(productName.value)})`, 'gi')
+    result = result.replace(regex, '<mark class="highlight-keyword">$1</mark>')
+  }
+
+  return result
 }
 
-// 转义正则表达式特殊字符
+// 转义正则表达式特殊字符// 转义正则表达式特殊字符
 const escapeRegex = (str: string): string => {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 // 切换点赞
-const toggleLike = (reportId: number) => {
+const toggleLike = async (reportId: string) => {
   const index = likedReports.value.indexOf(reportId)
   if (index > -1) {
+    // 已点赞，取消（前端本地处理）
     likedReports.value.splice(index, 1)
-    reportLikeCounts.value[reportId] = Math.max(0, (reportLikeCounts.value[reportId] || 0) - 1)
+    reportLikeCounts.value[reportId] = (reportLikeCounts.value[reportId] || 0) - 1
   } else {
-    likedReports.value.push(reportId)
-    reportLikeCounts.value[reportId] = (reportLikeCounts.value[reportId] || 0) + 1
+    // 点赞
+    try {
+      const res = await likeConcern(reportId)
+      if (res.success) {
+        likedReports.value.push(reportId)
+        reportLikeCounts.value[reportId] = res.data.likes
+      }
+    } catch (error) {
+      console.error('点赞失败:', error)
+    }
   }
 }
 
 // 获取点赞数量
-const getLikeCount = (reportId: number): number => {
+const getLikeCount = (reportId: string): number => {
   return reportLikeCounts.value[reportId] || 0
 }
 
@@ -463,17 +513,46 @@ const formatDate = (date: string): string => {
   justify-content: center;
   padding: 60px 20px;
   color: #9ca3af;
-  
+
   i {
     font-size: 48px;
     margin-bottom: 16px;
     color: #d1d5db;
   }
-  
+
   p {
     font-size: 16px;
     margin: 0;
   }
+}
+
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: #9ca3af;
+
+  i {
+    font-size: 32px;
+    margin-bottom: 16px;
+    color: #2563eb;
+  }
+
+  p {
+    font-size: 14px;
+    margin: 0;
+  }
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 // 高亮关键词样式
