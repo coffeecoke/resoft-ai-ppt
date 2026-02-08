@@ -9,6 +9,7 @@
 
 const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client')
 const aiService = require('./aiServiceUnified')
+const modelConfigService = require('./modelConfigService')
 const promptTemplateService = require('./promptTemplateService')
 const logger = require('../utils/logger')
 
@@ -53,11 +54,26 @@ class PresalesAnalysisService {
         throw new Error('对话内容为空，无法分析')
       }
 
-      logger.debug(`对话内容长度: ${formattedDialogue.length} 字符`)
+      // 若有前置内容，拼在对话内容前：发给大模型时 = 前置内容 + 提示词(库) + 对话内容（提示词由模板渲染，dialogueContent 占位符用「前置+对话」）
+      const prependContent = (options.prependContent || '').trim()
+      const fullDialogueContent = prependContent
+        ? `【前置说明】\n${prependContent}\n\n【对话内容】\n${formattedDialogue}`
+        : formattedDialogue
 
-      // 2. 构建提示词变量
+      if (prependContent) {
+        logger.info('========== 前置内容（会随【售前交流内容】一并发送给模型）==========')
+        logger.info(`前置长度: ${prependContent.length} 字符`)
+        logger.info('前置内容预览（前 500 字）:')
+        logger.info(prependContent.substring(0, 500) + (prependContent.length > 500 ? '...' : ''))
+        logger.info('========== 前置内容结束 ==========')
+      } else {
+        logger.info('本次请求未携带前置内容')
+      }
+      logger.debug(`对话内容长度: ${fullDialogueContent.length} 字符${prependContent ? '（含前置）' : ''}`)
+
+      // 2. 构建提示词变量（数据库模板中的 dialogueContent 将收到「前置+对话」或仅对话）
       const variables = {
-        dialogueContent: formattedDialogue,
+        dialogueContent: fullDialogueContent,
         metadata: options.metadata ? JSON.stringify(options.metadata, null, 2) : ''
       }
 
@@ -74,15 +90,45 @@ class PresalesAnalysisService {
         promptConfig = {
           variables: {
             ...variables,
-            dialogueContent: formattedDialogue
+            dialogueContent: fullDialogueContent
           }
         }
       }
 
+      // 3.1 渲染提示词模板得到初始内容
+      let contentToSend
+      if (promptConfig.code && promptConfig.variables) {
+        contentToSend = await promptTemplateService.getPromptByCode(promptConfig.code, promptConfig.variables)
+      } else {
+        contentToSend = await promptTemplateService.getPrompt(SCENE_TYPE, promptConfig.variables)
+      }
+
+      // 3.2 兜底：若模板中未使用 {{dialogueContent}}，渲染结果不会包含前置+对话，此处强制追加，确保模型一定能收到
+      const dialogueSample = fullDialogueContent.substring(0, Math.min(80, fullDialogueContent.length))
+      if (!contentToSend.includes(dialogueSample) && dialogueSample.length > 0) {
+        logger.warn('提示词模板中未包含对话内容占位符（如 {{dialogueContent}}），已自动在末尾追加前置+对话内容')
+        contentToSend = contentToSend + '\n\n---\n【售前交流内容】\n\n' + fullDialogueContent
+      }
+
+      logger.info('========== 发送给模型的内容 ==========')
+      logger.info(contentToSend)
+      logger.info('========== 发送给模型的内容结束 ==========')
+
       logger.info('调用AI进行售前交流分析...')
+      // 解析当前使用的模型并输出到日志（名称、地址）
+      let currentModelConfig
+      try {
+        currentModelConfig = options.modelId
+          ? await modelConfigService.getModelById(options.modelId)
+          : await modelConfigService.getDefaultModel(SCENE_TYPE)
+        logger.info(`[售前分析] 当前调用模型 - 名称: ${currentModelConfig.name || '(未设置)'}, 模型标识: ${currentModelConfig.model_name || '(未设置)'}, API地址: ${currentModelConfig.api_url || '(未设置)'}`)
+      } catch (e) {
+        logger.warn('[售前分析] 获取当前模型配置用于日志失败:', e.message)
+      }
+      // 传入最终拼接好的字符串，保证发送内容与日志一致（不再用 promptConfig 让 chat 内部二次渲染）
       const aiResponse = await this.aiService.chat(
         SCENE_TYPE,
-        promptConfig,
+        contentToSend,
         {
           modelId: options.modelId,
           temperature: 0.7,
@@ -90,23 +136,46 @@ class PresalesAnalysisService {
         }
       )
 
-      // 4. 解析AI返回的JSON
+      logger.info('========== 接收到的内容 ==========')
+      logger.info(aiResponse)
+      logger.info('========== 接收到的内容结束 ==========')
+
+      // 4. 解析AI返回内容：支持 JSON 或 Markdown 报告
       let analysisResult
+      const trimmedResponse = (aiResponse || '').trim()
       try {
-        // 尝试直接解析JSON
-        analysisResult = JSON.parse(aiResponse)
+        // 4.1 尝试直接解析为 JSON
+        analysisResult = JSON.parse(trimmedResponse)
       } catch (parseError) {
-        // 如果直接解析失败，尝试提取JSON部分
-        const jsonMatch = aiResponse.match(/\{[\s\S]*\}/)
+        // 4.2 尝试从内容中提取 JSON 块
+        const jsonMatch = trimmedResponse.match(/\{[\s\S]*\}/)
         if (jsonMatch) {
-          analysisResult = JSON.parse(jsonMatch[0])
-        } else {
-          throw new Error(`AI返回内容不是有效的JSON格式: ${aiResponse.substring(0, 200)}`)
+          try {
+            analysisResult = JSON.parse(jsonMatch[0])
+          } catch (e) {
+            // 忽略
+          }
+        }
+        // 4.3 若为 Markdown 报告（以 # 或 ## 开头等），包装为统一结构并保存，不再报错
+        if (!analysisResult && /^#|\n##\s/m.test(trimmedResponse)) {
+          logger.info('模型返回为 Markdown 报告格式，已转为结构化结果并保存')
+          analysisResult = {
+            summary: { overall_impression: '（详见下方完整 Markdown 报告）' },
+            analysis_details: {},
+            recommendations: { immediate: [], short_term: [], long_term: [] },
+            raw_markdown: trimmedResponse,
+            confidence: 0.85
+          }
+        }
+        if (!analysisResult) {
+          throw new Error(`AI返回内容不是有效的JSON格式: ${trimmedResponse.substring(0, 200)}`)
         }
       }
 
-      // 5. 验证分析结果结构
-      this.validateAnalysisResult(analysisResult)
+      // 5. 验证分析结果结构（有 raw_markdown 时仅做基本校验）
+      if (!analysisResult.raw_markdown) {
+        this.validateAnalysisResult(analysisResult)
+      }
 
       logger.success('售前交流综合分析完成')
       return {
@@ -170,41 +239,56 @@ class PresalesAnalysisService {
         throw new Error(`转录记录不存在: ${transcriptionId}`)
       }
 
-      // 2. 确定要分析的对话内容（优先使用最后一次合并完成后的内容）
+      // 2. 确定要分析的对话内容（优先使用「合并相邻同一说话人的对话」）
       let dialogues = []
 
-      // 最优先：再次合并后的对话
-      const reMergeAdjustment = await prisma.dialogue_adjustments.findFirst({
+      // 最优先：合并相邻同一说话人的对话
+      const mergeAdjustment = await prisma.dialogue_adjustments.findFirst({
         where: {
           transcription_id: transcriptionId,
-          note1: '再次合并对话'
+          note1: '合并相邻同一说话人的对话'
         },
         orderBy: { created_at: 'desc' }
       })
 
-      if (reMergeAdjustment && reMergeAdjustment.adjusted_dialogues) {
-        dialogues = typeof reMergeAdjustment.adjusted_dialogues === 'string'
-          ? JSON.parse(reMergeAdjustment.adjusted_dialogues)
-          : reMergeAdjustment.adjusted_dialogues
+      if (mergeAdjustment && mergeAdjustment.adjusted_dialogues) {
+        dialogues = typeof mergeAdjustment.adjusted_dialogues === 'string'
+          ? JSON.parse(mergeAdjustment.adjusted_dialogues)
+          : mergeAdjustment.adjusted_dialogues
       } else {
-        // 其次：AI修正后的对话
-        const aiAdjustment = await prisma.dialogue_adjustments.findFirst({
+        // 其次：再次合并后的对话
+        const reMergeAdjustment = await prisma.dialogue_adjustments.findFirst({
           where: {
             transcription_id: transcriptionId,
-            note1: 'AI错别字修正'
+            note1: '再次合并对话'
           },
           orderBy: { created_at: 'desc' }
         })
 
-        if (aiAdjustment && aiAdjustment.adjusted_dialogues) {
-          dialogues = typeof aiAdjustment.adjusted_dialogues === 'string'
-            ? JSON.parse(aiAdjustment.adjusted_dialogues)
-            : aiAdjustment.adjusted_dialogues
-        } else if (transcription.dialogues) {
-          // 最后：原始对话
-          dialogues = typeof transcription.dialogues === 'string'
-            ? JSON.parse(transcription.dialogues)
-            : transcription.dialogues
+        if (reMergeAdjustment && reMergeAdjustment.adjusted_dialogues) {
+          dialogues = typeof reMergeAdjustment.adjusted_dialogues === 'string'
+            ? JSON.parse(reMergeAdjustment.adjusted_dialogues)
+            : reMergeAdjustment.adjusted_dialogues
+        } else {
+          // 再次：AI修正后的对话
+          const aiAdjustment = await prisma.dialogue_adjustments.findFirst({
+            where: {
+              transcription_id: transcriptionId,
+              note1: 'AI错别字修正'
+            },
+            orderBy: { created_at: 'desc' }
+          })
+
+          if (aiAdjustment && aiAdjustment.adjusted_dialogues) {
+            dialogues = typeof aiAdjustment.adjusted_dialogues === 'string'
+              ? JSON.parse(aiAdjustment.adjusted_dialogues)
+              : aiAdjustment.adjusted_dialogues
+          } else if (transcription.dialogues) {
+            // 最后：原始对话
+            dialogues = typeof transcription.dialogues === 'string'
+              ? JSON.parse(transcription.dialogues)
+              : transcription.dialogues
+          }
         }
       }
 

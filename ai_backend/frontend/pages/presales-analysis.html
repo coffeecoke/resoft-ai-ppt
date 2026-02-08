@@ -1,4 +1,42 @@
 <!-- 售前交流综合分析页面 -->
+<style>
+  /* 仅当弹窗打开时应用：页面正中、大尺寸（避免未打开时误显示） */
+  #presales-result-dialog[open] {
+    margin: auto;
+    width: 92vw;
+    max-width: 1280px;
+    max-height: 90vh;
+    min-width: 320px;
+    border-radius: 12px;
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.2);
+    display: flex;
+    flex-direction: column;
+  }
+  #presales-result-dialog[open] .dialog-content {
+    display: flex;
+    flex-direction: column;
+    max-height: 90vh;
+    overflow: hidden;
+  }
+  #presales-result-dialog[open] .dialog-body {
+    flex: 1;
+    overflow: auto;
+    padding: 20px 24px;
+    min-height: 200px;
+    max-height: calc(90vh - 140px);
+  }
+  #presales-result-dialog[open] .dialog-header h2 {
+    font-size: 20px;
+  }
+  #presales-result-dialog[open] #presales-result-content {
+    font-size: 15px;
+    line-height: 1.65;
+  }
+  #presales-result-dialog[open] .raw-markdown-report {
+    font-size: 14px;
+    line-height: 1.7;
+  }
+</style>
 <div class="page-header">
   <h1>💬 售前交流综合分析</h1>
   <p class="page-description">对已完成转录、合并和角色设置的对话进行综合分析</p>
@@ -8,6 +46,29 @@
     </button>
   </div>
 </div>
+
+<!-- 添加前置内容对话框 -->
+<dialog id="presales-prepend-dialog" style="max-width: 600px; width: 90%;">
+  <div class="dialog-content">
+    <div class="dialog-header">
+      <h2>📝 添加前置内容</h2>
+      <button class="icon-btn" onclick="closePrependDialog()">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+    <div class="dialog-body">
+      <p class="text-secondary" style="margin-bottom: 8px;">以下内容将在分析时放在「提示词 + 对话内容」之前一并发给大模型，如：背景说明、客户信息、产品上下文等。</p>
+      <textarea id="presales-prepend-content" rows="8" placeholder="请输入前置内容（可选）&#10;例如：客户为城商行，本次为首次交流..." style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color, #ddd); resize: vertical;"></textarea>
+    </div>
+    <div class="dialog-actions">
+      <button class="btn btn-secondary" onclick="closePrependDialog()">取消</button>
+      <button class="btn btn-primary" onclick="savePrependContent()">保存</button>
+    </div>
+  </div>
+</dialog>
 
 <!-- 转录记录列表 -->
 <div class="card">
@@ -39,7 +100,7 @@
             <th style="width: 150px;">客户名称</th>
             <th style="width: 150px;">创建时间</th>
             <th style="width: 100px;">分析状态</th>
-            <th style="width: 200px;">操作</th>
+            <th style="width: 280px;">操作</th>
           </tr>
         </thead>
         <tbody id="presales-list-tbody">
@@ -62,8 +123,8 @@
   </div>
 </div>
 
-<!-- 分析结果查看对话框 -->
-<dialog id="presales-result-dialog" style="max-width: 900px; width: 90%;">
+<!-- 分析结果查看对话框：居中、大尺寸 -->
+<dialog id="presales-result-dialog" class="presales-result-dialog">
   <div class="dialog-content">
     <div class="dialog-header">
       <h2>📊 分析结果</h2>

@@ -11,7 +11,11 @@ let presalesState = {
   total: 0,
   totalPages: 1,
   transcriptions: [],
-  currentResult: null
+  currentResult: null,
+  /** 每条转录的前置内容：{ [transcriptionId]: string } */
+  prependContentByTranscriptionId: {},
+  /** 当前正在编辑前置内容的转录 ID（弹窗用） */
+  editingPrependTranscriptionId: null
 };
 
 // 页面初始化
@@ -90,6 +94,9 @@ function renderTranscriptionList() {
       ? '<button class="btn btn-sm btn-info" onclick="viewResult(\'' + transcription.id + '\')">📊 查看结果</button>'
       : '<button class="btn btn-sm" disabled>📊 查看结果</button>';
 
+    const hasPrepend = (presalesState.prependContentByTranscriptionId[transcription.id] || '').trim().length > 0;
+    const prependBtn = '<button class="btn btn-sm btn-secondary" onclick="openPrependDialog(\'' + transcription.id + '\')" title="分析时将此前置内容与提示词、对话内容一并发给大模型">' + (hasPrepend ? '📝 编辑前置' : '📝 添加前置') + '</button>';
+
     return `
       <tr>
         <td><strong>${escapeHtml(transcription.name || transcription.originalFileName || '未命名')}</strong></td>
@@ -97,9 +104,10 @@ function renderTranscriptionList() {
         <td>${formatDate(transcription.createdAt)}</td>
         <td>${analysisStatus}</td>
         <td>
-          <div style="display: flex; gap: 8px;">
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
             ${analyzeBtn}
             ${viewBtn}
+            ${prependBtn}
           </div>
         </td>
       </tr>
@@ -108,7 +116,49 @@ function renderTranscriptionList() {
 }
 
 /**
+ * 打开前置内容编辑对话框
+ */
+window.openPrependDialog = function(transcriptionId) {
+  presalesState.editingPrependTranscriptionId = transcriptionId;
+  const textarea = document.getElementById('presales-prepend-content');
+  if (textarea) {
+    textarea.value = presalesState.prependContentByTranscriptionId[transcriptionId] || '';
+  }
+  const dialog = document.getElementById('presales-prepend-dialog');
+  if (dialog) {
+    dialog.showModal();
+  }
+};
+
+/**
+ * 关闭前置内容对话框
+ */
+window.closePrependDialog = function() {
+  presalesState.editingPrependTranscriptionId = null;
+  const dialog = document.getElementById('presales-prepend-dialog');
+  if (dialog) {
+    dialog.close();
+  }
+};
+
+/**
+ * 保存前置内容到状态并关闭对话框
+ */
+window.savePrependContent = function() {
+  const id = presalesState.editingPrependTranscriptionId;
+  if (!id) return;
+  const textarea = document.getElementById('presales-prepend-content');
+  if (textarea) {
+    presalesState.prependContentByTranscriptionId[id] = textarea.value || '';
+  }
+  closePrependDialog();
+  renderTranscriptionList();
+  showToast('前置内容已保存，点击「分析」时将一并发送', 'success');
+};
+
+/**
  * 分析转录记录
+ * 请求体包含前置内容（若有）：分析时将 前置内容 + 提示词（数据库） + 对话内容 合并发给大模型
  */
 window.analyzeTranscription = async function(transcriptionId) {
   if (!confirm('确定要对该转录记录进行分析吗？')) {
@@ -118,13 +168,13 @@ window.analyzeTranscription = async function(transcriptionId) {
   try {
     showAnalyzing(true, '正在分析中，请稍候...');
 
-    // 使用默认模型和提示词（不传modelId和promptCode）
+    const prependContent = (presalesState.prependContentByTranscriptionId[transcriptionId] || '').trim();
     const response = await fetch(`${API_BASE}/presales-analysis/analyze/transcription/${transcriptionId}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({})
+      body: JSON.stringify(prependContent ? { prependContent } : {})
     });
 
     const data = await response.json();
@@ -181,12 +231,23 @@ window.viewResult = async function(transcriptionId) {
 
 /**
  * 显示分析结果
+ * 若为 Markdown 报告（raw_markdown），优先展示完整报告；否则按结构化字段展示
  */
 function displayAnalysisResult(result) {
   const contentDiv = document.getElementById('presales-result-content');
   if (!contentDiv) return;
 
   let html = '';
+
+  // 模型返回 Markdown 报告时，直接展示完整内容（保留换行与格式）
+  if (result.raw_markdown) {
+    html += '<div class="analysis-section">';
+    html += '<h4>📄 售前交流分析报告</h4>';
+    html += '<pre class="raw-markdown-report" style="white-space: pre-wrap; word-break: break-word; max-height: 70vh; overflow: auto; padding: 12px; background: var(--bg-secondary, #f5f5f5); border-radius: 8px;">' + escapeHtml(result.raw_markdown) + '</pre>';
+    html += '</div>';
+    contentDiv.innerHTML = html;
+    return;
+  }
 
   if (result.summary) {
     html += '<div class="analysis-section">';
@@ -334,7 +395,10 @@ window.closeResultDialog = function() {
  */
 window.copyResult = function() {
   if (presalesState.currentResult && presalesState.currentResult.analysisResult) {
-    const text = JSON.stringify(presalesState.currentResult.analysisResult, null, 2);
+    const result = presalesState.currentResult.analysisResult;
+    const text = result.raw_markdown
+      ? result.raw_markdown
+      : JSON.stringify(result, null, 2);
     navigator.clipboard.writeText(text).then(() => {
       showToast('结果已复制到剪贴板', 'success');
     }).catch(err => {
