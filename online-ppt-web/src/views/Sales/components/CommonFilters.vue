@@ -186,8 +186,8 @@ const emit = defineEmits<{
   'select-product': []
 }>()
 
-// 更多筛选显示状态
-const showMoreFilters = ref(false)
+// 更多筛选显示状态（默认展开）
+const showMoreFilters = ref(true)
 
 // 获取筛选值
 const getSelectedValue = (key: string): string | null => {

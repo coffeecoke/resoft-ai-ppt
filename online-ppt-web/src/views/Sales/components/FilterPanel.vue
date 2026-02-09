@@ -287,7 +287,7 @@ const responseFileCatalogData = [
     id: 'business',
     text: '一、商务部分',
     children: [
-      { id: 'file-header', text: '文件头部' },
+      { id: 'file-header', text: '文件封面' },
       { id: 'score-index', text: '评分索引表' },
       { id: 'bid-letter', text: '投标函' },
       { id: 'legal-representative', text: '法定代表人身份证明' },
@@ -609,7 +609,7 @@ const filterCategories = computed(() => {
       },
       {
         id: 'industry',
-        name: '行业',
+        name: '客户类型',
         hasMore: false,
         options: [
           { id: '全国/股份制/政策性银行', name: '全国/股份制/政策性银行' },

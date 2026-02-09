@@ -92,7 +92,7 @@
             </div>
             <div class="exchange-info-row">
               <span class="exchange-info-label">交流次数：</span>
-              <span class="exchange-info-value">{{ videoDetail.exchangeCount || '' }}</span>
+              <span class="exchange-info-value">{{ videoDetail.exchangeCount || '首次交流' }}</span>
             </div>
             <div class="exchange-info-row">
               <span class="exchange-info-label">产品解决方案：</span>
@@ -100,7 +100,7 @@
             </div>
             <div class="exchange-info-row">
               <span class="exchange-info-label">交流人员：</span>
-              <span class="exchange-info-value">{{ videoDetail.exchangePersonnel || '' }}</span>
+              <span class="exchange-info-value">{{ videoDetail.exchangePersonnel || '张瑶瑶、郑超、谢明皓' }}</span>
             </div>
             <div class="exchange-info-row">
               <span class="exchange-info-label">交流主题：</span>
@@ -108,7 +108,7 @@
             </div>
             <div class="exchange-info-row">
               <span class="exchange-info-label">交流目标：</span>
-              <span class="exchange-info-value">{{ videoDetail.exchangeGoal || '' }}</span>
+              <span class="exchange-info-value">{{ videoDetail.exchangeGoal || '通过和南方电网财司客户沟通交流，获取监管有关于一表通发文在财务公司类型的金融机构的进展及规划，以便后续推进财司一表通市场方案的制定。' }}</span>
             </div>
           </div>
           

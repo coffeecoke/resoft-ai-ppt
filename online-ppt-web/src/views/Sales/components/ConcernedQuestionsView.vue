@@ -31,6 +31,20 @@
           <button class="clear-all-btn" @click="clearAllFilters">清空</button>
         </div>
 
+        <!-- 当前筛选（热搜榜选中的产品） -->
+        <div v-if="showFilters && selectedProduct" class="current-filters">
+          <div class="filter-content">
+            <span class="filter-title">产品筛选:</span>
+            <div class="filter-tags">
+              <span class="filter-tag">
+                <i class="ri-price-tag-3-line filter-tag-icon"></i>
+                {{ selectedProduct.name }}
+                <i class="ri-close-line filter-tag-close" @click="selectedProduct = null"></i>
+              </span>
+            </div>
+          </div>
+        </div>
+
         <!-- 当前筛选（外部筛选，来自 FilterPanel） -->
         <div v-if="showFilters && hasActiveExternalFilters" class="current-filters">
           <div class="filter-content">
@@ -66,7 +80,7 @@
     
     <!-- 右侧：热搜榜 -->
     <aside class="hot-topics-sidebar">
-      <HotSearchPanel />
+      <HotSearchPanel @select-product="handleSelectProduct" />
     </aside>
   </div>
 </template>
@@ -96,6 +110,7 @@ interface ExternalFilters {
   industry: string[]
   essenceType: string[]
   customerName: string
+  productCode?: string[]  // 产品筛选
 }
 
 interface Props {
@@ -115,12 +130,16 @@ const props = withDefaults(defineProps<Props>(), {
     questionCategory: [],
     industry: [],
     essenceType: [],
-    customerName: ''
+    customerName: '',
+    productCode: []
   })
 })
 
 // 已选中的筛选条件
 const selectedFilters = ref<string[]>([])
+
+// 从热搜榜选中的产品
+const selectedProduct = ref<{ code: string; name: string } | null>(null)
 
 // 已点赞的报告ID列表
 const likedReports = ref<string[]>([])
@@ -241,6 +260,17 @@ const loadConcerns = async (reset = false) => {
       if (props.externalFilters.customerName) {
         params.keyword = props.externalFilters.customerName
       }
+      // 产品筛选
+      if (props.externalFilters.productCode && props.externalFilters.productCode.length > 0) {
+        params.productCode = props.externalFilters.productCode
+      }
+    }
+
+    // 添加热搜榜选中的产品筛选
+    if (selectedProduct.value) {
+      params.productCode = params.productCode
+        ? [...(Array.isArray(params.productCode) ? params.productCode : [params.productCode]), selectedProduct.value.code]
+        : [selectedProduct.value.code]
     }
 
     console.log('[ConcernedQuestionsView] 📤 加载问题列表，参数:', params)
@@ -293,6 +323,12 @@ const clearAllFilters = () => {
   selectedFilters.value = []
 }
 
+// 处理热搜榜选中产品
+const handleSelectProduct = (product: { code: string; name: string }) => {
+  console.log('[ConcernedQuestionsView] 🔍 选中产品:', product)
+  selectedProduct.value = product
+}
+
 // 监听筛选变化，重新加载数据
 watch(selectedFilters, () => {
   loadConcerns(true)
@@ -304,6 +340,12 @@ watch(() => props.externalFilters, (newFilters) => {
   console.log('[ConcernedQuestionsView] 📥 questionCategory:', newFilters?.questionCategory)
   loadConcerns(true)
 }, { deep: true, immediate: true })
+
+// 监听热搜榜选中的产品变化，重新加载数据
+watch(selectedProduct, (newProduct) => {
+  console.log('[ConcernedQuestionsView] 🔍 产品筛选变化:', newProduct)
+  loadConcerns(true)
+})
 
 // 行业选项映射
 const industryOptions: Record<string, string> = {
@@ -391,7 +433,22 @@ const filteredReports = computed(() => {
     reports = reports.filter(r => r.categoryCode === props.selectedSubFilter)
   }
 
-  return reports
+  // 映射数据格式：API 返回的字段 → 组件期望的字段
+  return reports.map(item => ({
+    ...item,
+    // 答案字段映射
+    systemAnswer: item.answer,
+    // 专家答案映射
+    expertAnswer: item.expertApproved ? {
+      approved: item.expertApproved,
+      content: item.expertAdvice || '',
+      reviewer: item.expertReviewer || ''
+    } : null,
+    // 公司名称映射
+    company: item.customerName || '未知公司',
+    // 标签映射（如果需要）
+    tag: item.industry || ''
+  }))
 })
 
 // 切换点赞状态
