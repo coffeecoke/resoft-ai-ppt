@@ -541,17 +541,21 @@ const filterCategories = computed(() => {
       },
       {
         id: 'customerType',
-        name: '客户类型',
+        name: '线索分类',
         hasMore: false,
         options: [
-          { id: 'customerType1', name: '新客户新产品' },
-          { id: 'customerType2', name: '老客户新产品' },
-          { id: 'customerType3', name: '老客户老产品' }
+          { id: 'customerType1', name: '新客户' },
+          { id: 'customerType2', name: '新产品' },
+          { id: 'customerType3', name: '大版本设计' },
+          { id: 'customerType4', name: '升级' },
+          { id: 'customerType5', name: '外包' },
+          { id: 'customerType6', name: '维护' },
+          { id: 'customerType7', name: '其它' },
         ]
       },
       {
         id: 'industry',
-        name: '行业',
+        name: '客户类型',
         hasMore: false,
         options: [
           { id: '全国/股份制/政策性银行', name: '全国/股份制/政策性银行' },
@@ -632,50 +636,50 @@ const filterCategories = computed(() => {
         name: '客户',
         hasMore: false,
         options: []
-  },
-  {
-    id: 'pptCatalog',
-    name: 'PPT目录',
-    hasMore: false,
-        options: []
-  },
-  {
-    id: 'industry',
-    name: '行业',
-    hasMore: false,
-    options: [
-      { id: '全国/股份制/政策性银行', name: '全国/股份制/政策性银行' },
-      { id: '城商行', name: '城商行' },
-      { id: '外资行', name: '外资行' },
-      { id: '农商', name: '农商' },
-      { id: '财务公司', name: '财务公司' },
-      { id: '信托公司', name: '信托公司' },
-      { id: '汽车/消费金融', name: '汽车/消费金融' },
-      { id: '金融租赁', name: '金融租赁' },
-      { id: '其他', name: '其他' }
+      },
+      {
+        id: 'pptCatalog',
+        name: 'PPT目录',
+        hasMore: false,
+            options: []
+      },
+      {
+        id: 'industry',
+        name: '客户类型',
+        hasMore: false,
+        options: [
+          { id: '全国/股份制/政策性银行', name: '全国/股份制/政策性银行' },
+          { id: '城商行', name: '城商行' },
+          { id: '外资行', name: '外资行' },
+          { id: '农商', name: '农商' },
+          { id: '财务公司', name: '财务公司' },
+          { id: '信托公司', name: '信托公司' },
+          { id: '汽车/消费金融', name: '汽车/消费金融' },
+          { id: '金融租赁', name: '金融租赁' },
+          { id: '其他', name: '其他' }
+        ]
+      },
+      {
+        id: 'audience',
+        name: '交流对象',
+        hasMore: false,
+        options: [
+          { id: '技术', name: '技术' },
+          { id: '技术负责人', name: '技术负责人' },
+          { id: '业务', name: '业务' },
+          { id: '业务负责人', name: '业务负责人' }
+        ]
+      },
+      {
+        id: 'language',
+        name: '语言',
+        hasMore: false,
+        options: [
+          { id: '中文', name: '中文' },
+          { id: '英文', name: '英文' }
+        ]
+      }
     ]
-  },
-  {
-    id: 'audience',
-    name: '交流对象',
-    hasMore: false,
-    options: [
-      { id: '技术', name: '技术' },
-      { id: '技术负责人', name: '技术负责人' },
-      { id: '业务', name: '业务' },
-      { id: '业务负责人', name: '业务负责人' }
-    ]
-  },
-  {
-    id: 'language',
-    name: '语言',
-    hasMore: false,
-    options: [
-      { id: '中文', name: '中文' },
-      { id: '英文', name: '英文' }
-    ]
-  }
-]
   }
 })
 
