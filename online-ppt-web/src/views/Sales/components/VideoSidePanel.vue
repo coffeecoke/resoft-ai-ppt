@@ -41,11 +41,12 @@
         </template>
         <div class="side-block qa-list-container">
           <div class="question-list" v-if="qaList.length > 0">
-            <div 
-              v-for="(item, index) in qaList" 
+            <div
+              v-for="(item, index) in qaList"
               :key="index"
               :id="`qa-item-${index}`"
               class="report-item"
+              :class="{ 'qa-playing': activeQaIndex === index }"
             >
               <!-- 左侧图标 -->
               <div class="report-item-icon" :class="{ 'expert-approved-icon': item.expertApproved }">
@@ -88,7 +89,13 @@
 
                 <!-- 问题 -->
                 <div class="report-item-question">
-                  <span class="report-item-time" v-if="item.time">{{ item.time }}</span>
+                  <span
+                    v-if="item.time"
+                    class="report-item-time qa-time-clickable"
+                    @click.stop="handleQATimeClick(item, index)"
+                  >
+                    {{ item.time }}
+                  </span>
                   <span class="report-item-question-text">{{ item.q }}</span>
                 </div>
                 
@@ -242,10 +249,14 @@ const props = defineProps({
   currentTime: {
     type: Number,
     default: 0
+  },
+  activeQaIndex: {
+    type: Number,
+    default: -1
   }
 })
 
-const emit = defineEmits(['update:activeTab', 'seek-to'])
+const emit = defineEmits(['update:activeTab', 'seek-to', 'qa-time-click'])
 
 // 格式化 speaker 显示名称
 const formatSpeaker = (speaker, speakerRoles) => {
@@ -441,6 +452,11 @@ const handleToggleLike = (index) => {
     localLikedQuestions.value.push(index)
   }
 }
+
+// 处理 Q&A 时间点击
+const handleQATimeClick = (qaItem, index) => {
+  emit('qa-time-click', qaItem, index)
+}
 </script>
 
 <style scoped>
@@ -526,6 +542,24 @@ const handleToggleLike = (index) => {
 /* 视频对话框：文件名称字体大小 */
 .file-item .f-name {
   font-size: 0.85rem !important;
+}
+
+/* Q&A 时间标签可点击样式 */
+.qa-time-clickable {
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.qa-time-clickable:hover {
+  color: #2563eb;
+  text-decoration: underline;
+}
+
+/* Q&A 播放中高亮样式 */
+.report-item.qa-playing {
+  background: #eff6ff;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
 }
 
 /* 视频对话框：相关视频标题字体大小 */
