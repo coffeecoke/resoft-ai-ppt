@@ -8,7 +8,7 @@
       <el-menu :default-active="activeNav" mode="horizontal" class="nav" @select="handleNav">
         <el-menu-item index="recommend"><i class="ri-home-4-line"></i> 推荐</el-menu-item>
         <el-menu-item index="ppt"><i class="ri-file-ppt-2-line"></i> 产品介绍PPT</el-menu-item>
-        <el-menu-item index="video"><i class="ri-video-on-ai-line"></i> 交流会议</el-menu-item>
+        <el-menu-item index="video"><i class="ri-video-on-ai-line"></i> 售前交流</el-menu-item>
         <el-menu-item index="qa"><i class="ri-heart-2-line"></i> 客户问题</el-menu-item>
         <el-menu-item index="tender"><i class="ri-file-list-3-line"></i> 招标文件</el-menu-item>
         <el-menu-item index="response"><i class="ri-file-word-line"></i> 响应文件</el-menu-item>
