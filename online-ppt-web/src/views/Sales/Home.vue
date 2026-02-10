@@ -81,6 +81,7 @@
           <ProductDetailView
             v-if="showProductDetail && (activeTab === 'ppt' || activeTab === 'ppt-new')"
             :activeProduct="productContent.activeProduct.value"
+            :activeCatalogCodes="filters.pptFilters.productIntro"
           />
           
           <!-- 🆕 新组件：PPT tab 未选产品时显示PPT网格 -->

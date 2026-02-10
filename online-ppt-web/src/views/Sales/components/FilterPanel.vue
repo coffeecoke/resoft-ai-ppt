@@ -438,10 +438,10 @@ const filterCategories = computed(() => {
   if (props.activeTab === 'concerned') {
     // 关心问题的筛选类别
     return [
-  {
-    id: 'customerName',
-    name: '客户',
-    hasMore: false,
+      {
+        id: 'customerName',
+        name: '客户',
+        hasMore: false,
         options: []
       },
       {
