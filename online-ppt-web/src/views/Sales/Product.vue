@@ -482,10 +482,10 @@ const filters = useFilters({ pptList: [], videoList: [], questions: [], tenderFi
 // 获取全局 PPT 目录树（用于目录面板展示）
 const { catalogs: pptCatalogTree } = useGlobalCatalogOptions()
 
-// useProductCatalogs 需要一个空 filters ref（Product 页面的筛选已经通过 CommonFilters 实现）
-const emptyFilters = ref<Record<string, never>>({})
+// useProductCatalogs 需要传入目录筛选数组（Product 页面暂时不通过外部控制目录）
+const emptyCatalogCodes = ref<string[]>([])
 // 使用 useProductCatalogs 获取当前产品的 PPT 数据
-const catalogState = useProductCatalogs(activeProduct, emptyFilters)
+const catalogState = useProductCatalogs(activeProduct, emptyCatalogCodes)
 
 // 目录树：转换 API 树结构为 ProductCatalogPanel 所需格式
 const catalog = computed(() => {
@@ -723,9 +723,8 @@ const updateContent = (catIds: string[]) => {
 
 const handleCatalogModeChange = (mode) => {
   catalogMode.value = mode
-  catalogState.catalogMode.value = mode
   activeCatalogIds.value = []
-  catalogState.activeCatalogCodes.value = []
+  emptyCatalogCodes.value = []
   if (!activeProduct.value) {
     filters.pptFilters.productIntro = []
     filters.loadDocuments(filters.buildDocumentParams(filters.pptFilters))
@@ -735,7 +734,7 @@ const handleCatalogModeChange = (mode) => {
 const handleCatalogIdsChange = (ids) => {
   activeCatalogIds.value = ids
   if (activeProduct.value) {
-    catalogState.activeCatalogCodes.value = ids
+    emptyCatalogCodes.value = ids
   } else {
     // 所有产品模式：按目录筛选文档列表（同步到 useFilters 并重新请求）
     filters.pptFilters.productIntro = ids || []

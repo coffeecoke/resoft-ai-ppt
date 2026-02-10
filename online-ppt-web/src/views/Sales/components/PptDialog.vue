@@ -144,13 +144,9 @@
                 <div class="comm-video-wrapper">
                   <div class="comm-video-thumb">
                     <img 
-                      v-if="communicationInfo?.thumbnail" 
-                      :src="communicationInfo.thumbnail" 
+                      :src="normalizeThumb(communicationInfo?.thumbnail)" 
                       :alt="communicationInfo?.title || '视频'"
                     />
-                    <div v-else class="video-placeholder">
-                      <span class="video-label">视频</span>
-                    </div>
                     <span v-if="communicationInfo?.duration" class="video-duration">{{ communicationInfo.duration }}</span>
                   </div>
                   <div class="comm-content">
@@ -176,13 +172,11 @@
                 >
                   <div class="doc-thumb">
                     <img 
-                      v-if="doc.thumbnail" 
-                      :src="doc.thumbnail" 
+                      width="120px"
+                     
+                      :src="normalizeThumb(doc.thumbnail)" 
                       :alt="doc.title || 'PPT'"
                     />
-                    <div v-else class="doc-thumb-placeholder">
-                      <span class="doc-thumb-text">PPT</span>
-                    </div>
                   </div>
                   <div class="doc-info">
                     <div class="doc-title">{{ doc.title }}</div>
@@ -209,13 +203,9 @@
                   <div class="comm-video-wrapper">
                     <div class="comm-video-thumb">
                       <img 
-                        v-if="comm.thumbnail" 
-                        :src="comm.thumbnail" 
+                        :src="normalizeThumb(comm.thumbnail)" 
                         :alt="comm.title || '视频'"
                       />
-                      <div v-else class="video-placeholder">
-                        <span class="video-label">视频</span>
-                      </div>
                       <span v-if="comm.duration" class="video-duration">{{ comm.duration }}</span>
                     </div>
                     <div class="comm-content">
@@ -342,6 +332,12 @@ import { usePendingOperationsStore } from '@/store/Sales/pendingOperations'
 import { usePptDialogAiStore } from '@/store/Sales/pptDialogAi'
 import PendingOperationsDrawer from '@/components/Sales/PendingOperationsDrawer.vue'
 import { useExportPPT } from '../composables/useExportPPT'
+import defaultCoverImg from '@/assets/imgs/fm.jpg'
+
+/** 缩略图优先用项目图：无值或为 picsum 占位图时使用 fm.jpg */
+function normalizeThumb(url) {
+  return (!url || (typeof url === 'string' && url.includes('picsum'))) ? defaultCoverImg : url
+}
 
 const router = useRouter()
 
@@ -392,7 +388,7 @@ const props = defineProps({
       views: 100,
       likes: 30,
       duration: '01:05:51',
-      thumbnail: 'https://picsum.photos/seed/video1/400/225'
+      thumbnail: defaultCoverImg
     })
   },
   similarDocuments: {
@@ -406,7 +402,7 @@ const props = defineProps({
         views: 23,
         downloads: 12,
         likes: 1,
-        thumbnail: 'https://picsum.photos/seed/doc1/110/62'
+        thumbnail: defaultCoverImg
       }
     ]
   },
@@ -421,7 +417,7 @@ const props = defineProps({
         views: 85,
         likes: 25,
         duration: '01:20:30',
-        thumbnail: 'https://picsum.photos/seed/comm1/400/225'
+        thumbnail: defaultCoverImg
       },
       {
         id: 'comm2',
@@ -431,7 +427,7 @@ const props = defineProps({
         views: 92,
         likes: 28,
         duration: '01:15:45',
-        thumbnail: 'https://picsum.photos/seed/comm2/400/225'
+        thumbnail: defaultCoverImg
       }
     ]
   }

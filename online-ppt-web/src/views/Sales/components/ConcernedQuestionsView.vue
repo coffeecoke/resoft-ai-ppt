@@ -62,18 +62,28 @@
           </div>
         </div>
 
-        <!-- 问题列表 -->
-        <div class="reports-list">
-          <QuestionReportItem
-            v-for="report in filteredReports"
-            :key="report.id"
-            :report="report"
-            :liked-reports="likedReports"
-            :like-count="getLikeCount(report.id)"
-            :answer-expanded="answerExpanded"
-            @toggle-like="toggleLike"
-            @toggle-answer="toggleAnswer"
+        <!-- 问题列表（触底加载更多） -->
+        <div class="reports-list-wrapper">
+          <div class="reports-list">
+            <QuestionReportItem
+              v-for="report in filteredReports"
+              :key="report.id"
+              :report="report"
+              :liked-reports="likedReports"
+              :like-count="getLikeCount(report.id)"
+              :answer-expanded="answerExpanded"
+              @toggle-like="toggleLike"
+              @toggle-answer="toggleAnswer"
+            />
+          </div>
+          <!-- 触底加载哨兵：进入视口时加载下一页 -->
+          <div
+            v-if="hasMore && !loading"
+            ref="loadMoreSentinel"
+            class="load-more-sentinel"
           />
+          <div v-if="loading && concerns.length > 0" class="load-more-tip">加载中...</div>
+          <div v-if="!hasMore && concerns.length > 0" class="load-more-tip load-more-end">没有更多了</div>
         </div>
       </main>
     </div>
@@ -86,7 +96,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { getConcerns, getConcernCategories, likeConcern, type ConcernItem } from '@/services/concernsApi'
 import QuestionCategorySidebar from './QuestionCategorySidebar.vue'
 import HotSearchPanel from './HotSearchPanel.vue'
@@ -155,6 +165,10 @@ const concerns = ref<ConcernItem[]>([])
 const loading = ref(false)
 const hasMore = ref(true)
 const nextCursor = ref<string | null>(null)
+
+// 触底加载：哨兵元素（进入视口时加载下一页）
+const loadMoreSentinel = ref<HTMLElement | null>(null)
+let loadMoreObserver: IntersectionObserver | null = null
 
 // 问题分类结构（使用正确的类型）
 const questionCategories = ref<QuestionCategory[]>([])
@@ -482,10 +496,41 @@ const toggleAnswer = (key: string) => {
   answerExpanded.value[key] = !answerExpanded.value[key]
 }
 
+// 初始化触底加载：当哨兵进入视口时加载下一页（以页面视口为 root，支持整页滚动）
+const setupLoadMoreObserver = () => {
+  if (!loadMoreSentinel.value) return
+  loadMoreObserver?.disconnect()
+  loadMoreObserver = new IntersectionObserver(
+    (entries) => {
+      const entry = entries[0]
+      if (!entry?.isIntersecting) return
+      if (loading.value || !hasMore.value) return
+      loadConcerns(false)
+    },
+    {
+      root: null,
+      rootMargin: '100px 0px',
+      threshold: 0
+    }
+  )
+  loadMoreObserver.observe(loadMoreSentinel.value)
+}
+
 // 初始化
 onMounted(() => {
   loadCategories()
   loadConcerns(true)
+  nextTick(() => setupLoadMoreObserver())
+})
+
+// 列表或 hasMore 变化时重新绑定哨兵（哨兵节点可能被 v-if 替换）
+watch([() => filteredReports.value.length, hasMore, loadMoreSentinel], () => {
+  nextTick(() => setupLoadMoreObserver())
+}, { flush: 'post' })
+
+onUnmounted(() => {
+  loadMoreObserver?.disconnect()
+  loadMoreObserver = null
 })
 </script>
 
@@ -588,12 +633,34 @@ onMounted(() => {
 
 /* 筛选容器样式已移至 ConcernedQuestionsFilters 组件 */
 
+.reports-list-wrapper {
+  width: 100%;
+}
+
 .reports-list {
   display: flex;
   flex-direction: column;
   gap: 16px;
   width: 100%;
   box-sizing: border-box;
+}
+
+.load-more-sentinel {
+  height: 1px;
+  width: 100%;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.load-more-tip {
+  padding: 12px 0;
+  text-align: center;
+  font-size: 12px;
+  color: #999;
+}
+
+.load-more-tip.load-more-end {
+  color: #bbb;
 }
 
 .hot-topics-sidebar {

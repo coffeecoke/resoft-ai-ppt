@@ -41,18 +41,27 @@
       <!-- 系统答案 -->
       <div class="report-item-answer">
         <div class="answer-content-wrapper">
-          <div 
+          <div
+            ref="systemAnswerRef"
             class="answer-content"
             :class="{ 'answer-content-expanded': localAnswerExpanded[`system-${report.id}`] }"
             v-html="highlightKeyword ? highlightKeyword(report.systemAnswer || report.description) : (report.systemAnswer || report.description)"
           ></div>
           <button
-            v-if="shouldShowExpand(report.systemAnswer || report.description)"
+            v-if="isSystemTruncated && !localAnswerExpanded[`system-${report.id}`]"
             class="answer-expand-btn"
             @click="toggleAnswer(`system-${report.id}`)"
           >
-            {{ localAnswerExpanded[`system-${report.id}`] ? '收起' : '展开' }}
-            <i :class="answerExpanded[`system-${report.id}`] ? 'ri-arrow-up-s-line' : 'ri-arrow-down-s-line'"></i>
+            展开
+            <i class="ri-arrow-down-s-line"></i>
+          </button>
+          <button
+            v-if="localAnswerExpanded[`system-${report.id}`]"
+            class="answer-expand-btn"
+            @click="toggleAnswer(`system-${report.id}`)"
+          >
+            收起
+            <i class="ri-arrow-up-s-line"></i>
           </button>
         </div>
       </div>
@@ -62,18 +71,27 @@
         <div class="expert-answer-row">
           <div class="answer-label">专家建议：</div>
           <div class="answer-content-wrapper">
-            <div 
+            <div
+              ref="expertAnswerRef"
               class="answer-content"
               :class="{ 'answer-content-expanded': localAnswerExpanded[`expert-${report.id}`] }"
               v-html="highlightKeyword ? highlightKeyword(report.expertAnswer.content) : report.expertAnswer.content"
             ></div>
-            <button 
-              v-if="shouldShowExpand(report.expertAnswer.content)"
+            <button
+              v-if="isExpertTruncated && !localAnswerExpanded[`expert-${report.id}`]"
               class="answer-expand-btn"
               @click="toggleAnswer(`expert-${report.id}`)"
             >
-              {{ localAnswerExpanded[`expert-${report.id}`] ? '收起' : '展开' }}
-              <i :class="answerExpanded[`expert-${report.id}`] ? 'ri-arrow-up-s-line' : 'ri-arrow-down-s-line'"></i>
+              展开
+              <i class="ri-arrow-down-s-line"></i>
+            </button>
+            <button
+              v-if="localAnswerExpanded[`expert-${report.id}`]"
+              class="answer-expand-btn"
+              @click="toggleAnswer(`expert-${report.id}`)"
+            >
+              收起
+              <i class="ri-arrow-up-s-line"></i>
             </button>
           </div>
         </div>
@@ -109,7 +127,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 
 interface Props {
   report: any
@@ -131,9 +149,42 @@ const emit = defineEmits<{
   'toggle-answer': [key: string]
 }>()
 
+// DOM 引用
+const systemAnswerRef = ref<HTMLElement | null>(null)
+const expertAnswerRef = ref<HTMLElement | null>(null)
+
+// 是否被截断
+const isSystemTruncated = ref(false)
+const isExpertTruncated = ref(false)
+
 // 使用 props 中的 answerExpanded，通过 watch 同步
 const localAnswerExpanded = computed(() => props.answerExpanded)
 const localLikeCount = computed(() => props.likeCount || 0)
+
+// 检测是否被截断
+const checkTruncation = () => {
+  nextTick(() => {
+    setTimeout(() => {
+      if (systemAnswerRef.value) {
+        // 检测实际高度是否超过显示高度
+        isSystemTruncated.value = systemAnswerRef.value.scrollHeight > systemAnswerRef.value.clientHeight
+      }
+      if (expertAnswerRef.value) {
+        isExpertTruncated.value = expertAnswerRef.value.scrollHeight > expertAnswerRef.value.clientHeight
+      }
+    }, 50)
+  })
+}
+
+// 组件挂载后检测
+onMounted(() => {
+  checkTruncation()
+})
+
+// 监听 report 变化重新检测
+watch(() => props.report, () => {
+  checkTruncation()
+}, { deep: true })
 
 // 格式化日期
 const formatDate = (date: string): string => {
@@ -142,12 +193,6 @@ const formatDate = (date: string): string => {
   const month = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${month}-${day}`
-}
-
-// 判断是否应该显示展开按钮
-const shouldShowExpand = (text: string): boolean => {
-  if (!text) return false
-  return text.length > 150
 }
 
 // 切换答案展开/折叠
@@ -318,7 +363,7 @@ const handleLike = () => {
   
   .answer-content-wrapper {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 8px;
   }
   
@@ -330,14 +375,16 @@ const handleLike = () => {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
     transition: all 0.3s;
-    
+
     &.answer-content-expanded {
-      white-space: normal;
+      display: block;
+      -webkit-line-clamp: unset;
       overflow: visible;
       text-overflow: unset;
-      align-self: flex-start;
     }
   }
   
@@ -404,14 +451,16 @@ const handleLike = () => {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
     transition: all 0.3s;
-    
+
     &.answer-content-expanded {
-      white-space: normal;
+      display: block;
+      -webkit-line-clamp: unset;
       overflow: visible;
       text-overflow: unset;
-      align-self: flex-start;
     }
   }
   
