@@ -25,6 +25,12 @@
           v-model:value="filterCategory"
           :options="categoryOptions"
         />
+        <SelectMultiple
+          class="product-select"
+          v-model:value="filterProduct"
+          :options="productOptions"
+          placeholder="筛选产品方案"
+        />
         <button class="btn btn-primary" @click="openCreateModal">
           ＋ 新建文档
         </button>
@@ -368,6 +374,7 @@ const loading = ref(false)
 const documents = ref<DocumentMetadata[]>([])
 const filterCategory = ref<string>('')
 const filterStatus = ref<string>('published')
+const filterProduct = ref<string[]>([])
 const keyword = ref<string>('')
 const showCreate = ref(false)
 const creating = ref(false)
@@ -477,7 +484,15 @@ const filteredDocuments = computed(() => {
   if (filterCategory.value) {
     list = list.filter(d => d.category === filterCategory.value)
   }
-  
+
+  // 产品方案筛选
+  if (filterProduct.value.length > 0) {
+    list = list.filter(d => {
+      const docProducts = d.product || []
+      return filterProduct.value.some(p => docProducts.includes(p))
+    })
+  }
+
   // 关键词搜索
   const k = keyword.value.trim().toLowerCase()
   if (k) {
@@ -825,6 +840,10 @@ onMounted(() => {
 
   .category-select {
     width: 140px;
+  }
+
+  .product-select {
+    width: 180px;
   }
 
   .search {
