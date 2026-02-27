@@ -1,5 +1,10 @@
 import axios from './config'
 
+function getAuthHeaders(): HeadersInit {
+  const token = localStorage.getItem('resoft_auth_token')
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
 // export const SERVER_URL = 'http://localhost:5000'
 // 支持环境变量配置，Docker部署时可通过环境变量设置
 // 如果未设置环境变量，默认使用 /api（适用于Docker部署和开发环境）
@@ -163,6 +168,7 @@ export default {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...getAuthHeaders(),
       },
       body: JSON.stringify(body),
     }).then(response => {
@@ -188,6 +194,7 @@ export default {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...getAuthHeaders(),
       },
       body: JSON.stringify({
         content,
@@ -207,6 +214,7 @@ export default {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...getAuthHeaders(),
       },
       body: JSON.stringify({
         content,
@@ -328,6 +336,7 @@ export default {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...getAuthHeaders(),
       },
       body: JSON.stringify({
         message,

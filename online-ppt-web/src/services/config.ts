@@ -9,6 +9,17 @@ const instance = axios.create({
   maxBodyLength: 100 * 1024 * 1024
 })
 
+instance.interceptors.request.use(
+  config => {
+    const token = localStorage.getItem('resoft_auth_token')
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+    return config
+  },
+  error => Promise.reject(error)
+)
+
 instance.interceptors.response.use(
   response => {
     if (response.status >= 200 && response.status < 400) {
@@ -32,6 +43,15 @@ instance.interceptors.response.use(
       return Promise.reject(new Error('请求超时'))
     }
     
+    if (error?.response?.status === 401) {
+      localStorage.removeItem('resoft_auth_token')
+      localStorage.removeItem('resoft_auth_user')
+      if (!window.location.hash.includes('/login')) {
+        window.location.hash = '/login'
+      }
+      return Promise.reject(new Error('登录已过期，请重新登录'))
+    }
+
     if (error && error.response) {
       // 优先使用后端返回的错误消息
       const errorMessage = error.response.data?.error || error.response.data?.message || error.message
