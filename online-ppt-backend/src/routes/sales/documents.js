@@ -1,11 +1,12 @@
 import { Router } from 'express'
 import { documentService } from '../../services/documentService.js'
 import { thumbnailService } from '../../services/thumbnailService.js'
-import { PrismaClient } from '@prisma/client'
+import * as prismaClient from '@prisma/client'
 import aiService from '../../services/aiService.js'
 import { createSummaryPrompt } from '../../prompts/summaryPrompt.js'
 
 const router = Router()
+const { PrismaClient } = prismaClient
 const prisma = new PrismaClient()
 
 /**

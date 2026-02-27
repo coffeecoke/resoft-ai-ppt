@@ -2,8 +2,9 @@
  * 缩略图生成队列服务
  * 使用内存队列管理生成任务，通过 WebSocket 推送进度
  */
-import { PrismaClient } from '@prisma/client'
+import * as prismaClient from '@prisma/client'
 
+const { PrismaClient } = prismaClient
 const prisma = new PrismaClient()
 
 class ThumbnailQueue {

@@ -1,8 +1,9 @@
 import express from 'express'
 import { documentService } from '../../services/documentService.js'
-import { PrismaClient } from '@prisma/client'
+import * as prismaClient from '@prisma/client'
 
 const router = express.Router()
+const { PrismaClient } = prismaClient
 const prisma = new PrismaClient()
 
 /**

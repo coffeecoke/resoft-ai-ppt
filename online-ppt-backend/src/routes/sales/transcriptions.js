@@ -1,7 +1,8 @@
 import express from 'express'
-import { PrismaClient } from '@prisma/client'
+import * as prismaClient from '@prisma/client'
 
 const router = express.Router()
+const { PrismaClient } = prismaClient
 const prisma = new PrismaClient()
 
 // 为 5 个筛选项补充 name 字段（表存中文，code 与 name 同值）

@@ -1,9 +1,10 @@
 import { Router } from 'express'
-import { PrismaClient } from '@prisma/client'
+import * as prismaClient from '@prisma/client'
 import aiService from '../../services/aiService.js'
 import { createSlideAnalysisPrompt } from '../../prompts/slideAnalysisPrompt.js'
 
 const router = Router()
+const { PrismaClient } = prismaClient
 const prisma = new PrismaClient()
 
 /**

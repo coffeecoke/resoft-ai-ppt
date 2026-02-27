@@ -3,11 +3,12 @@
  * 
  * 提供字典类型和字典数据的增删改查功能
  */
-
-import { PrismaClient } from '@prisma/client'
+ 
+import * as prismaClient from '@prisma/client'
 import { generateDocumentId } from '../../../utils/idGenerator.js'
 import { formatObjectDates, formatArrayDates } from '../../../utils/dateFormatter.js'
 
+const { PrismaClient } = prismaClient
 const prisma = new PrismaClient()
 
 class DictService {

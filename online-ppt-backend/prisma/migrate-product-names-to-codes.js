@@ -9,7 +9,7 @@
  * node prisma/migrate-product-names-to-codes.js
  */
 
-import { PrismaClient } from '@prisma/client'
+import * as prismaClient from '@prisma/client'
 import dotenv from 'dotenv'
 import { fileURLToPath } from 'url'
 import path from 'path'
@@ -21,6 +21,7 @@ const __dirname = path.dirname(__filename)
 const envPath = path.join(__dirname, '..', '.env')
 dotenv.config({ path: envPath })
 
+const { PrismaClient } = prismaClient
 const prisma = new PrismaClient()
 
 /**

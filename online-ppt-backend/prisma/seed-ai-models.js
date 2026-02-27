@@ -3,8 +3,9 @@
  * 为各个AI功能场景添加默认的模型配置
  */
 
-import { PrismaClient } from '@prisma/client';
+import * as prismaClient from '@prisma/client';
 import { randomUUID } from 'crypto';
+const { PrismaClient } = prismaClient;
 const prisma = new PrismaClient();
 
 // 默认模型配置数据
