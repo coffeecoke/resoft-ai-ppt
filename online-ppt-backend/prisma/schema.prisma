@@ -46,6 +46,7 @@ model documents {
   updated_at     DateTime /// 更新时间
   last_opened_at DateTime? /// 最后打开时间
   view_count     Int       @default(0) /// 阅读次数
+  created_by     String?   @db.VarChar(50) /// 创建人用户ID
 
   // 关联
   document_concerns document_concerns[]
@@ -60,6 +61,7 @@ model documents {
   @@index([product_id], map: "idx_product_id")
   @@index([session_id], map: "idx_session_id")
   @@index([status], map: "idx_status")
+  @@index([created_by], map: "idx_created_by")
 }
 
 /// 缩略图表
@@ -410,6 +412,7 @@ model transcriptions {
   progress      Int     @default(0) /// 进度（0-100）
 
   // 时间戳
+  created_by   String?   @db.VarChar(50) /// 创建人用户ID
   created_at   DateTime  @default(now()) /// 创建时间
   updated_at   DateTime  @updatedAt /// 更新时间
   completed_at DateTime? /// 完成时间
@@ -430,6 +433,7 @@ model transcriptions {
   @@index([customer_type], map: "idx_customer_type")
   @@index([audience], map: "idx_audience")
   @@index([language], map: "idx_language")
+  @@index([created_by], map: "idx_transcription_created_by")
   @@fulltext([full_text], map: "ft_full_text")
 }
 
@@ -646,4 +650,47 @@ model presales_analysis_results {
   @@index([transcription_id], map: "idx_presales_analysis_transcription_id")
   @@index([created_at], map: "idx_presales_analysis_created_at")
   @@index([status], map: "idx_presales_analysis_status")
+}
+
+// ==================== 用户认证相关表 ====================
+
+/// 用户表
+model users {
+  id            String    @id @db.VarChar(50)
+  username      String    @unique @db.VarChar(100)  /// 登录账号
+  name          String    @db.VarChar(100)           /// 姓名（显示用）
+  department    String?   @db.VarChar(100)           /// 部门
+  email         String?   @unique @db.VarChar(255)  /// 邮箱（可选）
+  password_hash String?   @db.VarChar(255)          /// bcrypt哈希，SSO用户可为空
+  role          String    @default("user") @db.VarChar(20)   /// "admin" | "user"
+  status        String    @default("active") @db.VarChar(20) /// "active" | "disabled"
+  cas_username  String?   @unique @db.VarChar(100)  /// 期2 CAS SSO绑定账号
+  last_login_at DateTime?
+  login_count   Int       @default(0)
+  created_by    String?   @db.VarChar(50)            /// 创建人ID
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
+
+  @@index([role], map: "idx_users_role")
+  @@index([status], map: "idx_users_status")
+  @@index([department], map: "idx_users_department")
+}
+
+/// 审计日志表
+model audit_logs {
+  id          String   @id @db.VarChar(50)
+  user_id     String   @db.VarChar(50)
+  username    String   @db.VarChar(100)  /// 冗余存储，防止用户被删后丢失
+  action      String   @db.VarChar(50)   /// "login" | "logout" | "create" | "update" | "delete"
+  resource    String   @db.VarChar(50)   /// "user" | "document" | "session" | ...
+  resource_id String?  @db.VarChar(50)
+  detail      Json?                       /// 操作详情
+  ip_address  String?  @db.VarChar(50)
+  user_agent  String?  @db.VarChar(500)
+  created_at  DateTime @default(now())
+
+  @@index([user_id], map: "idx_audit_user_id")
+  @@index([action], map: "idx_audit_action")
+  @@index([resource], map: "idx_audit_resource")
+  @@index([created_at], map: "idx_audit_created_at")
 }
