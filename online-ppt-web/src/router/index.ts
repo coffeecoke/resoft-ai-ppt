@@ -3,6 +3,12 @@ import type { RouteRecordRaw } from 'vue-router'
 
 const routes: RouteRecordRaw[] = [
   {
+    path: '/login',
+    name: 'Login',
+    component: () => import('@/views/Login.vue'),
+    meta: { title: '登录', public: true },
+  },
+  {
     path: '/',
     redirect: '/sales/home'
   },
@@ -176,6 +182,17 @@ router.afterEach((to) => {
   if (to.meta.title) {
     document.title = to.meta.title as string
   }
+})
+
+import { useAuthStore } from '@/store/auth'
+
+router.beforeEach((to, _from, next) => {
+  if (to.meta.public) return next()
+  const authStore = useAuthStore()
+  if (!authStore.isLoggedIn) {
+    return next({ path: '/login', query: { redirect: to.fullPath } })
+  }
+  next()
 })
 
 export default router
