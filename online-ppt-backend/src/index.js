@@ -33,6 +33,9 @@ import thumbnailTasksRouter from './routes/thumbnailTasks.js'
 import adminRouter from './routes/admin/index.js'
 import scanScheduler from './services/admin/scanScheduler.js'
 import { setupThumbnailProgressWS } from './routes/websocket/thumbnailProgress.js'
+import authRouter from './routes/auth.js'
+import usersRouter from './routes/users.js'
+import { authMiddleware } from './middleware/auth.js'
 
 const app = express()
 const PORT = process.env.PORT || 5001
@@ -69,17 +72,34 @@ app.use('/covers', express.static(coversDir))
 const snapshotsDir = path.join(DATA_DIR, 'snapshots')
 app.use('/snapshots', express.static(snapshotsDir))
 
+// 认证路由 — 公开，无需登录
+app.use('/auth', authRouter)
+app.use('/users', usersRouter)
+
+// 全局认证中间件：白名单以外的所有请求都需要登录
+app.use((req, res, next) => {
+  const publicPaths = [
+    { method: 'GET', path: '/health' },
+    { method: 'GET', path: '/tools/models' },
+  ]
+  const isPublic = publicPaths.some(
+    p => p.method === req.method && req.path === p.path
+  )
+  if (isPublic) return next()
+  return authMiddleware(req, res, next)
+})
+
 // 路由 - 按业务模块区分
-app.use('/tools', toolsRouter)              // 工具相关接口
-app.use('/aippt', aipptChatRouter)          // 对话式PPT编辑
-app.use('/images', imagesRouter)            // 图片相关接口
-app.use('/translate', translateRouter)      // 翻译服务
-app.use('/templates', templatesRouter)      // 模板管理
-app.use('/documents', documentsRouter)      // 文档管理
-app.use('/thumbnails', thumbnailsRouter)    // 预览图管理
-app.use('/thumbnail-tasks', thumbnailTasksRouter)  // 缩略图生成任务
-app.use('/sales', salesRouter)              // 售前平台接口
-app.use('/admin', adminRouter)          // 管理后台接口
+app.use('/tools', toolsRouter)
+app.use('/aippt', aipptChatRouter)
+app.use('/images', imagesRouter)
+app.use('/translate', translateRouter)
+app.use('/templates', templatesRouter)
+app.use('/documents', documentsRouter)
+app.use('/thumbnails', thumbnailsRouter)
+app.use('/thumbnail-tasks', thumbnailTasksRouter)
+app.use('/sales', salesRouter)
+app.use('/admin', adminRouter)
 
 // 健康检查
 app.get('/health', (req, res) => {
