@@ -1,5 +1,7 @@
 import axios from 'axios'
 import message from '@/utils/message'
+import router from '@/router'
+import { useAuthStore } from '@/store/auth'
 
 // 创建axios实例，超时时间设置为5分钟（用于处理大文件上传）
 const instance = axios.create({ 
@@ -44,10 +46,9 @@ instance.interceptors.response.use(
     }
     
     if (error?.response?.status === 401) {
-      localStorage.removeItem('resoft_auth_token')
-      localStorage.removeItem('resoft_auth_user')
-      if (!window.location.hash.includes('/login')) {
-        window.location.hash = '/login'
+      useAuthStore().clearAuth()
+      if (router.currentRoute.value.path !== '/login') {
+        router.push({ path: '/login', query: { redirect: router.currentRoute.value.fullPath } })
       }
       return Promise.reject(new Error('登录已过期，请重新登录'))
     }

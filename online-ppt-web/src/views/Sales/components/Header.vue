@@ -24,9 +24,9 @@
             <span v-if="pendingCount > 0" class="pending-count-badge">{{ pendingCount }}</span>
           </el-link>
           <el-divider direction="vertical" />
-          <el-link :underline="false" @click="goToProfile"><i class="ri-user-2-line" style="margin-right:4px"></i> 用户名</el-link>
+          <el-link :underline="false" @click="goToProfile"><i class="ri-user-2-line" style="margin-right:4px"></i> {{ authStore.user?.name || authStore.user?.username || '用户' }}</el-link>
           <el-divider direction="vertical" />
-          <el-link type="danger" :underline="false"><i class="ri-logout-circle-r-line" style="margin-right:4px"></i> 退出</el-link>
+          <el-link type="danger" :underline="false" @click="handleLogout"><i class="ri-logout-circle-r-line" style="margin-right:4px"></i> 退出</el-link>
         </div>
       </div>
     </header>
@@ -40,12 +40,14 @@
 import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { usePendingOperationsStore } from '@/store/Sales/pendingOperations'
+import { useAuthStore } from '@/store/auth'
 import PendingOperationsDrawer from './PendingOperationsDrawer.vue'
 import SearchPanel from './SearchPanel.vue'
 
 const route = useRoute()
 const router = useRouter()
 const pendingStore = usePendingOperationsStore()
+const authStore = useAuthStore()
 
 const pendingDrawerVisible = ref(false)
 const searchVisible = ref(false)
@@ -88,6 +90,11 @@ const handleSearch = () => {
 
 const closeSearch = () => {
   searchVisible.value = false
+}
+
+const handleLogout = () => {
+  authStore.clearAuth()
+  router.push('/login')
 }
 </script>
 

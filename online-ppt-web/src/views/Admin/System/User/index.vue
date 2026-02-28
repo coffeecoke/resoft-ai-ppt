@@ -14,8 +14,8 @@
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="queryParams.status" placeholder="用户状态" clearable style="width: 120px">
-            <el-option label="正常" value="0" />
-            <el-option label="停用" value="1" />
+            <el-option label="正常" value="active" />
+            <el-option label="停用" value="disabled" />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -77,22 +77,22 @@
       >
         <el-table-column type="selection" width="55" align="center" />
         <el-table-column label="用户编号" prop="id" width="120" />
-        <el-table-column label="用户名称" prop="user_name" />
-        <el-table-column label="用户昵称" prop="nick_name" />
+        <el-table-column label="用户名称" prop="username" />
+        <el-table-column label="用户昵称" prop="name" />
         <el-table-column label="邮箱" prop="email" />
         <el-table-column label="手机号" prop="phone" />
-        <el-table-column label="部门" prop="dept_name" />
+        <el-table-column label="部门" prop="department" />
         <el-table-column label="状态" align="center" width="100">
           <template #default="{ row }">
             <el-switch
               v-model="row.status"
-              active-value="0"
-              inactive-value="1"
+              active-value="active"
+              inactive-value="disabled"
               @change="handleStatusChange(row)"
             />
           </template>
         </el-table-column>
-        <el-table-column label="创建时间" prop="create_time" width="180" />
+        <el-table-column label="创建时间" prop="created_at" width="180" />
         <el-table-column label="操作" align="center" width="250" fixed="right">
           <template #default="{ row }">
             <div class="operation-buttons">
@@ -136,14 +136,14 @@
       @close="resetForm"
     >
       <el-form ref="formRef" :model="form" :rules="formRules" label-width="100px">
-        <el-form-item label="用户名称" prop="user_name">
-          <el-input v-model="form.user_name" placeholder="请输入用户名称" />
+        <el-form-item label="用户名称" prop="username">
+          <el-input v-model="form.username" placeholder="请输入用户名称" />
         </el-form-item>
         <el-form-item v-if="!form.id" label="密码" prop="password">
           <el-input v-model="form.password" type="password" placeholder="请输入密码" show-password />
         </el-form-item>
-        <el-form-item label="用户昵称" prop="nick_name">
-          <el-input v-model="form.nick_name" placeholder="请输入用户昵称" />
+        <el-form-item label="用户昵称" prop="name">
+          <el-input v-model="form.name" placeholder="请输入用户昵称" />
         </el-form-item>
         <el-form-item label="邮箱" prop="email">
           <el-input v-model="form.email" placeholder="请输入邮箱" />
@@ -160,8 +160,8 @@
         </el-form-item>
         <el-form-item label="状态" prop="status">
           <el-radio-group v-model="form.status">
-            <el-radio label="0">正常</el-radio>
-            <el-radio label="1">停用</el-radio>
+            <el-radio label="active">正常</el-radio>
+            <el-radio label="disabled">停用</el-radio>
           </el-radio-group>
         </el-form-item>
       </el-form>
@@ -206,7 +206,6 @@ const queryParams = reactive({
   pageSize: 20,
   keyword: '',
   status: '',
-  dept_id: ''
 })
 
 // 用户列表
@@ -221,24 +220,24 @@ const formTitle = ref('新增用户')
 const formRef = ref<FormInstance>()
 const form = reactive({
   id: '',
-  user_name: '',
+  username: '',
   password: '',
-  nick_name: '',
+  name: '',
   email: '',
   phone: '',
   sex: '0',
-  status: '0',
-  dept_id: '',
-  role_ids: []
+  status: 'active',
+  department: '',
+  role: 'user',
 })
 
 const formRules: FormRules = {
-  user_name: [{ required: true, message: '用户名称不能为空', trigger: 'blur' }],
+  username: [{ required: true, message: '用户名称不能为空', trigger: 'blur' }],
   password: [
     { required: true, message: '密码不能为空', trigger: 'blur' },
     { min: 6, message: '密码长度不能少于6位', trigger: 'blur' }
   ],
-  nick_name: [{ required: true, message: '用户昵称不能为空', trigger: 'blur' }]
+  name: [{ required: true, message: '用户昵称不能为空', trigger: 'blur' }]
 }
 
 // 重置密码表单
@@ -290,7 +289,6 @@ const resetQuery = () => {
   queryParams.pageSize = 20
   queryParams.keyword = ''
   queryParams.status = ''
-  queryParams.dept_id = ''
   handleQuery()
 }
 
@@ -306,15 +304,15 @@ const handleEdit = (row: User) => {
   formTitle.value = '修改用户'
   Object.assign(form, {
     id: row.id,
-    user_name: row.user_name,
+    username: row.username,
     password: '',
-    nick_name: row.nick_name,
+    name: row.name,
     email: row.email || '',
     phone: row.phone || '',
-    sex: row.sex,
+    sex: row.sex || '0',
     status: row.status,
-    dept_id: row.dept_id || '',
-    role_ids: row.role_ids || []
+    department: row.department || '',
+    role: row.role,
   })
   formVisible.value = true
 }
@@ -348,15 +346,15 @@ const submitForm = async () => {
 const resetForm = () => {
   Object.assign(form, {
     id: '',
-    user_name: '',
+    username: '',
     password: '',
-    nick_name: '',
+    name: '',
     email: '',
     phone: '',
     sex: '0',
-    status: '0',
-    dept_id: '',
-    role_ids: []
+    status: 'active',
+    department: '',
+    role: 'user',
   })
   formRef.value?.resetFields()
 }
@@ -364,7 +362,7 @@ const resetForm = () => {
 // 删除
 const handleDelete = async (row: User) => {
   try {
-    await ElMessageBox.confirm(`确定要删除用户"${row.user_name}"吗？`, '提示', {
+    await ElMessageBox.confirm(`确定要删除用户"${row.username}"吗？`, '提示', {
       type: 'warning'
     })
     await deleteUser(row.id)
@@ -419,7 +417,7 @@ const handleBatchDelete = async () => {
   if (selectedRows.value.length === 0) return
   
   try {
-    const names = selectedRows.value.map(u => u.user_name).join('、')
+    const names = selectedRows.value.map(u => u.username).join('、')
     await ElMessageBox.confirm(`确定要删除选中的 ${selectedRows.value.length} 个用户吗？`, '提示', {
       type: 'warning'
     })
