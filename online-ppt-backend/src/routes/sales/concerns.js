@@ -78,10 +78,8 @@ router.get('/', async (req, res) => {
       where.question = { contains: String(keyword).trim() }
     }
 
-    // 4. cursor 分页
-    if (cursor && String(cursor).trim()) {
-      where.id = { lt: String(cursor).trim() }
-    }
+    // 4. cursor 分页（使用 Prisma cursor + skip，与 orderBy 一致，避免 id 与排序不一致导致只加载几页）
+    const cursorId = cursor && String(cursor).trim() ? String(cursor).trim() : null
 
     // 5. 行业和产品筛选需要通过 transcription_id 关联查询
     const industries = parseArrayParam(industry)
@@ -127,10 +125,12 @@ router.get('/', async (req, res) => {
       orderBy = [{ likes: 'desc' }, { created_at: 'desc' }]
     }
 
-    // 查询数据（只包含 concern_categories 关联）
+    // 查询数据（只包含 concern_categories 关联）；使用 cursor + skip 实现与 orderBy 一致的分页
     const list = await prisma.concerns.findMany({
       where,
       take: take + 1, // 多取一条判断是否有更多
+      skip: cursorId ? 1 : 0, // 有 cursor 时跳过 cursor 所在行
+      cursor: cursorId ? { id: cursorId } : undefined,
       orderBy,
       include: {
         concern_categories: {

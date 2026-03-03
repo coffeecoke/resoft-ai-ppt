@@ -32,10 +32,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { getProductList } from '@/services/salesService'
-
-const router = useRouter()
 
 // 热搜榜数据
 interface HotSearchItem {
@@ -78,14 +75,15 @@ const getRankClass = (rank: number): string => {
   return 'rank-normal'
 }
 
-// 处理搜索 - 使用 productCode 筛选
+// 处理搜索 - emit 事件给父组件
+const emit = defineEmits<{
+  'select-product': [{ code: string; name: string }]
+}>()
+
 const handleSearch = (item: HotSearchItem) => {
-  router.push({
-    path: '/sales/question-search',
-    query: {
-      productCode: item.code,
-      productName: item.keyword
-    }
+  emit('select-product', {
+    code: item.code,
+    name: item.keyword
   })
 }
 

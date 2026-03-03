@@ -4,7 +4,7 @@
  * 负责：
  * 1. 调用AI对问答对进行分类
  * 2. 根据分类表(concern_categories)进行分类标注
- * 3. 更新concerns表的category_id和intent_code字段
+ * 3. 更新concerns表的category_code和intent_code字段
  */
 
 const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client')
@@ -242,12 +242,12 @@ ${JSON.stringify(inputData, null, 2)}
       // 10. 更新数据库
       const updateData = {}
       
-      // 更新category_id（level=2的分类类别）
+      // 更新 category_code（level=2 的分类类别，关联 concern_categories.code）
       if (validatedResult.category_code) {
         const category = categoryLevel2.find(c => c.code === validatedResult.category_code)
         if (category) {
-          updateData.category_id = category.id
-          updateData.category = category.code // 兼容旧字段
+          updateData.category_code = category.code
+          updateData.category = category.code // 兼容旧字段/展示
         }
       }
 
@@ -266,7 +266,7 @@ ${JSON.stringify(inputData, null, 2)}
           concernId: concernId,
           category_code: validatedResult.category_code || '未分类',
           intent_code: validatedResult.intent_code || '未分类',
-          category_id: updateData.category_id || null,
+          category_code_updated: updateData.category_code || null,
           updatedFields: Object.keys(updateData)
         })
         logger.success(`问答对分类成功: ${concernId} - 类别: ${validatedResult.category_code || '未分类'}, 性质: ${validatedResult.intent_code || '未分类'}`)
@@ -500,7 +500,7 @@ ${JSON.stringify(inputData, null, 2)}
             if (validatedResult.category_code) {
               const category = categoryLevel2.find(c => c.code === validatedResult.category_code)
               if (category) {
-                updateData.category_id = category.id
+                updateData.category_code = category.code
                 updateData.category = category.code
               }
             }

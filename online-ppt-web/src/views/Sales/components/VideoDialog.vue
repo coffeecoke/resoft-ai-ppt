@@ -92,7 +92,7 @@
             </div>
             <div class="exchange-info-row">
               <span class="exchange-info-label">交流次数：</span>
-              <span class="exchange-info-value">{{ videoDetail.exchangeCount || '' }}</span>
+              <span class="exchange-info-value">{{ videoDetail.exchangeCount || '首次交流' }}</span>
             </div>
             <div class="exchange-info-row">
               <span class="exchange-info-label">产品解决方案：</span>
@@ -100,7 +100,7 @@
             </div>
             <div class="exchange-info-row">
               <span class="exchange-info-label">交流人员：</span>
-              <span class="exchange-info-value">{{ videoDetail.exchangePersonnel || '' }}</span>
+              <span class="exchange-info-value">{{ videoDetail.exchangePersonnel || '张瑶瑶、郑超、谢明皓' }}</span>
             </div>
             <div class="exchange-info-row">
               <span class="exchange-info-label">交流主题：</span>
@@ -108,7 +108,7 @@
             </div>
             <div class="exchange-info-row">
               <span class="exchange-info-label">交流目标：</span>
-              <span class="exchange-info-value">{{ videoDetail.exchangeGoal || '' }}</span>
+              <span class="exchange-info-value">{{ videoDetail.exchangeGoal || '通过和南方电网财司客户沟通交流，获取监管有关于一表通发文在财务公司类型的金融机构的进展及规划，以便后续推进财司一表通市场方案的制定。' }}</span>
             </div>
           </div>
           
@@ -217,8 +217,10 @@
         :width="rightWidth"
         :active-tab="activeTab"
         :current-time="currentTime"
+        :active-qa-index="activeQAIndex"
         @update:active-tab="activeTab = $event"
         @seek-to="handleSeekTo"
+        @qa-time-click="handleQATimeClick"
       />
     </div>
   </el-dialog>
@@ -319,6 +321,11 @@ const mediaError = ref('')
 const currentTime = ref(0)
 const duration = ref(0)
 
+// Q&A 范围播放相关
+const activeQAIndex = ref(-1) // 当前播放的 Q&A 索引（用于高亮）
+const qaPlaybackRanges = ref([]) // 时间范围数组 [{start, end}, ...]
+const currentRangeIndex = ref(-1) // 当前播放到第几个范围
+
 // 判断是否为视频格式
 const videoFormats = ['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv']
 const isVideoFormat = computed(() => {
@@ -337,6 +344,30 @@ const onTimeUpdate = () => {
   const player = isVideoFormat.value ? videoPlayer.value : audioPlayer.value
   if (player) {
     currentTime.value = player.currentTime
+
+    // Q&A 范围播放检查
+    if (qaPlaybackRanges.value.length > 0 && currentRangeIndex.value >= 0) {
+      const currentRange = qaPlaybackRanges.value[currentRangeIndex.value]
+
+      // 检查是否播放到当前范围的结束时间
+      if (currentTime.value >= currentRange.end) {
+        // 检查是否还有下一个范围
+        if (currentRangeIndex.value < qaPlaybackRanges.value.length - 1) {
+          // 跳转到下一个范围
+          currentRangeIndex.value++
+          const nextRange = qaPlaybackRanges.value[currentRangeIndex.value]
+          player.currentTime = nextRange.start
+          // 继续播放（已经在播放状态）
+        } else {
+          // 所有范围播放完毕，停止
+          player.pause()
+          // 清除范围播放模式
+          activeQAIndex.value = -1
+          qaPlaybackRanges.value = []
+          currentRangeIndex.value = -1
+        }
+      }
+    }
   }
 }
 
@@ -364,6 +395,63 @@ const handleSeekTo = (seconds) => {
     if (player.paused) {
       player.play().catch(e => console.warn('自动播放失败:', e))
     }
+  }
+}
+
+// ==================== Q&A 范围播放相关 ====================
+
+// 解析单个时间点为秒数（支持 HH:MM:SS, MMM:SS, MM:SS 格式）
+const parseTimeToSeconds = (timeStr) => {
+  if (!timeStr) return 0
+  const parts = timeStr.split(':').map(p => parseInt(p, 10))
+
+  if (parts.length === 3) {
+    // HH:MM:SS
+    return parts[0] * 3600 + parts[1] * 60 + parts[2]
+  } else if (parts.length === 2) {
+    // MM:SS 或 MMM:SS
+    return parts[0] * 60 + parts[1]
+  }
+
+  return 0
+}
+
+// 解析 Q&A 时间字符串为范围数组
+// 例如："14:34-14:42,103:19-103:26" -> [{start: 874, end: 902}, {start: 6199, end: 6226}]
+const parseQATimeRanges = (timeStr) => {
+  if (!timeStr) return []
+
+  // 按逗号分割多个范围
+  const ranges = timeStr.split(',').map(r => r.trim()).filter(r => r)
+
+  return ranges.map(range => {
+    // 分割 "14:34-14:42" -> ["14:34", "14:42"]
+    const [startStr, endStr] = range.split('-').map(s => s.trim())
+
+    return {
+      start: parseTimeToSeconds(startStr),
+      end: parseTimeToSeconds(endStr || startStr) // 如果没有结束时间，使用开始时间
+    }
+  }).filter(range => range.start > 0 || range.end > 0) // 过滤掉无效的范围
+}
+
+// 处理 Q&A 时间点击
+const handleQATimeClick = (qaItem, qaIndex) => {
+  const ranges = parseQATimeRanges(qaItem.time)
+  if (ranges.length === 0) return
+
+  console.log('[Q&A 范围播放] 点击时间:', qaItem.time, '解析结果:', ranges)
+
+  // 设置当前播放的 Q&A
+  activeQAIndex.value = qaIndex
+  qaPlaybackRanges.value = ranges
+  currentRangeIndex.value = 0
+
+  // 跳转到第一个范围的开始时间
+  const player = isVideoFormat.value ? videoPlayer.value : audioPlayer.value
+  if (player) {
+    player.currentTime = ranges[0].start
+    player.play().catch(e => console.warn('播放失败:', e))
   }
 }
 

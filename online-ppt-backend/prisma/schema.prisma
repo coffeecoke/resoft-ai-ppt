@@ -647,3 +647,75 @@ model presales_analysis_results {
   @@index([created_at], map: "idx_presales_analysis_created_at")
   @@index([status], map: "idx_presales_analysis_status")
 }
+
+// ==================== 招投标关键词导出（爬取内容） ====================
+
+/// 招投标关键词导出记录表（按 Excel 结构 + 投标保证金）
+model bidding_keyword_exports {
+  id String @id @db.VarChar(50) /// 主键，使用来源 ID（Excel 的 ID 列）或生成
+
+  /// 关键字（Excel 列：关键字）
+  keyword String @db.VarChar(100)
+  /// 类型（Excel 列：类型）
+  record_type String? @db.VarChar(50)
+  /// 细分类型（Excel 列：细分类型）
+  sub_type String? @db.VarChar(100)
+  /// 标题（Excel 列：标题）
+  title String? @db.Text
+  /// 省份/直辖市
+  province String? @db.VarChar(50)
+  /// 城市
+  city String? @db.VarChar(50)
+  /// 区/县
+  district String? @db.VarChar(50)
+  /// 开工/交货/服务周期
+  cycle_info String? @db.VarChar(255)
+  /// 发布时间（存原始字符串便于导入，如 2025/12/03）
+  publish_time_str String? @db.VarChar(50)
+  /// 标书获取时间
+  doc_fetch_time_str String? @db.VarChar(100)
+  /// 项目编号
+  project_no String? @db.VarChar(100)
+  /// 项目预算（金额或说明）
+  project_budget String? @db.VarChar(255)
+  /// 中标金额
+  winning_amount String? @db.VarChar(255)
+  /// 资金来源
+  fund_source String? @db.VarChar(255)
+  /// 招标方式
+  bidding_method String? @db.VarChar(100)
+  /// 评标方法
+  evaluation_method String? @db.VarChar(100)
+  /// 项目业主
+  project_owner String? @db.VarChar(255)
+  /// 业主联系人
+  owner_contact String? @db.VarChar(100)
+  /// 业主联系电话
+  owner_phone String? @db.VarChar(50)
+  /// 中标单位
+  winning_unit String? @db.VarChar(255)
+  /// 中标单位联系人
+  winning_unit_contact String? @db.VarChar(100)
+  /// 中标单位联系电话
+  winning_unit_phone String? @db.VarChar(50)
+  /// 招标代理
+  bidding_agent String? @db.VarChar(255)
+  /// 投标截止时间（原始字符串）
+  bid_deadline_str String? @db.VarChar(100)
+  /// 详情页地址
+  detail_url String? @db.VarChar(500)
+  /// 投标保证金（新增字段）
+  bid_bond String? @db.VarChar(255)
+  /// 项目详情
+  project_detail String? @db.Text
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([keyword], map: "idx_bidding_keyword")
+  @@index([record_type], map: "idx_bidding_record_type")
+  @@index([province], map: "idx_bidding_province")
+  @@index([city], map: "idx_bidding_city")
+  @@index([project_no], map: "idx_bidding_project_no")
+  @@index([publish_time_str], map: "idx_bidding_publish_time")
+}

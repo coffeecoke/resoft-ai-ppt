@@ -21,7 +21,7 @@
             <div class="profile-stats">
               <div class="stat-item">
                 <span class="stat-value">{{ userStats.totalSessions }}</span>
-                <span class="stat-label">交流会议</span>
+                <span class="stat-label">售前交流</span>
               </div>
               <div class="stat-item">
                 <span class="stat-value">{{ userStats.totalPPTs }}</span>

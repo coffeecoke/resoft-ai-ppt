@@ -41,11 +41,12 @@
         </template>
         <div class="side-block qa-list-container">
           <div class="question-list" v-if="qaList.length > 0">
-            <div 
-              v-for="(item, index) in qaList" 
+            <div
+              v-for="(item, index) in qaList"
               :key="index"
               :id="`qa-item-${index}`"
               class="report-item"
+              :class="{ 'qa-playing': activeQaIndex === index }"
             >
               <!-- 左侧图标 -->
               <div class="report-item-icon" :class="{ 'expert-approved-icon': item.expertApproved }">
@@ -64,7 +65,7 @@
                 <!-- 标题区域 -->
                 <div class="report-item-header">
                   <div class="report-item-title-row">
-                    <span class="report-company-name">{{ item.company || videoDetail.customerName || videoDetail.customer || '阜新银行' }}</span>
+                    <span class="report-company-name">{{ item.company || videoDetail.customerName || videoDetail.customer || '南方电网' }}</span>
                     <span class="report-category-name">{{ item.category || '资质与案例' }}</span>
                     <span 
                       v-if="item.expertApproved"
@@ -88,26 +89,41 @@
 
                 <!-- 问题 -->
                 <div class="report-item-question">
-                  <span class="report-item-time" v-if="item.time">{{ item.time }}</span>
+                  <span
+                    v-if="item.time"
+                    class="report-item-time qa-time-clickable"
+                    @click.stop="handleQATimeClick(item, index)"
+                  >
+                    {{ item.time }}
+                  </span>
                   <span class="report-item-question-text">{{ item.q }}</span>
                 </div>
                 
                 <!-- 系统答案 -->
                 <div class="report-item-answer" v-if="item.answerText">
                   <div class="answer-content-wrapper">
-                    <div 
+                    <div
+                      :data-key="`system-${index}`"
                       class="answer-content"
                       :class="{ 'answer-content-expanded': localAnswerExpanded[`system-${index}`] }"
                     >
                       {{ item.answerText }}
                     </div>
                     <button
-                      v-if="shouldShowExpand(item.answerText)"
+                      v-if="isTruncated[`system-${index}`] && !localAnswerExpanded[`system-${index}`]"
                       class="answer-expand-btn"
                       @click.stop="handleToggleAnswer(`system-${index}`)"
                     >
-                      {{ localAnswerExpanded[`system-${index}`] ? '收起' : '展开' }}
-                      <i :class="localAnswerExpanded[`system-${index}`] ? 'ri-arrow-up-s-line' : 'ri-arrow-down-s-line'"></i>
+                      展开
+                      <i class="ri-arrow-down-s-line"></i>
+                    </button>
+                    <button
+                      v-if="localAnswerExpanded[`system-${index}`]"
+                      class="answer-expand-btn"
+                      @click.stop="handleToggleAnswer(`system-${index}`)"
+                    >
+                      收起
+                      <i class="ri-arrow-up-s-line"></i>
                     </button>
                   </div>
                 </div>
@@ -117,20 +133,29 @@
                   <div class="expert-answer-row">
                     <div class="answer-label">专家建议：</div>
                     <div class="answer-content-wrapper">
-                      <div 
+                      <div
+                        :data-key="`expert-${index}`"
                         class="answer-content"
                         :class="{ 'answer-content-expanded': localAnswerExpanded[`expert-${index}`] }"
                       >
                         {{ item.expertAdvice }}
                         <span class="expert-reviewer" v-if="item.expertReviewer">审核人：{{ item.expertReviewer }}</span>
                       </div>
-                      <button 
-                        v-if="shouldShowExpand(item.expertAdvice)"
+                      <button
+                        v-if="isTruncated[`expert-${index}`] && !localAnswerExpanded[`expert-${index}`]"
                         class="answer-expand-btn"
                         @click.stop="handleToggleAnswer(`expert-${index}`)"
                       >
-                        {{ localAnswerExpanded[`expert-${index}`] ? '收起' : '展开' }}
-                        <i :class="localAnswerExpanded[`expert-${index}`] ? 'ri-arrow-up-s-line' : 'ri-arrow-down-s-line'"></i>
+                        展开
+                        <i class="ri-arrow-down-s-line"></i>
+                      </button>
+                      <button
+                        v-if="localAnswerExpanded[`expert-${index}`]"
+                        class="answer-expand-btn"
+                        @click.stop="handleToggleAnswer(`expert-${index}`)"
+                      >
+                        收起
+                        <i class="ri-arrow-up-s-line"></i>
                       </button>
                     </div>
                   </div>
@@ -222,7 +247,7 @@
 </template>
 
 <script setup>
-import { ref, watch, computed, nextTick } from 'vue'
+import { ref, watch, computed, nextTick, onMounted } from 'vue'
 import VideoAnalysisReport from './VideoAnalysisReport.vue'
 
 const props = defineProps({
@@ -242,10 +267,14 @@ const props = defineProps({
   currentTime: {
     type: Number,
     default: 0
+  },
+  activeQaIndex: {
+    type: Number,
+    default: -1
   }
 })
 
-const emit = defineEmits(['update:activeTab', 'seek-to'])
+const emit = defineEmits(['update:activeTab', 'seek-to', 'qa-time-click'])
 
 // 格式化 speaker 显示名称
 const formatSpeaker = (speaker, speakerRoles) => {
@@ -421,11 +450,42 @@ watch(() => props.activeTab, (newVal) => {
 const localAnswerExpanded = ref({})
 const localLikedQuestions = ref([])
 
-// 判断是否应该显示展开按钮
-const shouldShowExpand = (text) => {
-  if (!text) return false
-  return text.length > 60
+// 截断状态
+const isTruncated = ref({})
+
+// 检测所有答案是否被截断
+const checkAllTruncation = () => {
+  nextTick(() => {
+    setTimeout(() => {
+      // 获取所有 answer-content 元素
+      const elements = document.querySelectorAll('.qa-list-container .answer-content:not(.answer-content-expanded)')
+      elements.forEach((el, idx) => {
+        const key = el.getAttribute('data-key')
+        if (key) {
+          isTruncated.value[key] = el.scrollHeight > el.clientHeight
+        }
+      })
+    }, 100)
+  })
 }
+
+// 监听 qaList 变化重新检测
+watch(() => props.videoDetail?.qa, () => {
+  isTruncated.value = {}
+  checkAllTruncation()
+}, { deep: true })
+
+// 监听 tab 切换，切到 qa 时检测
+watch(() => props.activeTab, (newTab) => {
+  if (newTab === 'qa') {
+    checkAllTruncation()
+  }
+})
+
+// 组件挂载后检测
+onMounted(() => {
+  checkAllTruncation()
+})
 
 // 切换答案展开/折叠
 const handleToggleAnswer = (key) => {
@@ -440,6 +500,11 @@ const handleToggleLike = (index) => {
   } else {
     localLikedQuestions.value.push(index)
   }
+}
+
+// 处理 Q&A 时间点击
+const handleQATimeClick = (qaItem, index) => {
+  emit('qa-time-click', qaItem, index)
 }
 </script>
 
@@ -526,6 +591,24 @@ const handleToggleLike = (index) => {
 /* 视频对话框：文件名称字体大小 */
 .file-item .f-name {
   font-size: 0.85rem !important;
+}
+
+/* Q&A 时间标签可点击样式 */
+.qa-time-clickable {
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.qa-time-clickable:hover {
+  color: #2563eb;
+  text-decoration: underline;
+}
+
+/* Q&A 播放中高亮样式 */
+.report-item.qa-playing {
+  background: #eff6ff;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
 }
 
 /* 视频对话框：相关视频标题字体大小 */
@@ -771,13 +854,13 @@ const handleToggleLike = (index) => {
   color: #4b5563;
   line-height: 1.6;
   width: 80%;
-  
+
   .answer-content-wrapper {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 8px;
   }
-  
+
   .answer-content {
     font-size: 0.75rem;
     color: #94a3b8;
@@ -786,17 +869,19 @@ const handleToggleLike = (index) => {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
     transition: all 0.3s;
-    
+
     &.answer-content-expanded {
-      white-space: normal;
+      display: block;
+      -webkit-line-clamp: unset;
       overflow: visible;
       text-overflow: unset;
-      align-self: flex-start;
     }
   }
-  
+
   .answer-expand-btn {
     flex-shrink: 0;
     display: inline-flex;
@@ -810,11 +895,11 @@ const handleToggleLike = (index) => {
     padding: 0;
     transition: color 0.2s;
     align-self: flex-start;
-    
+
     &:hover {
       color: #1d4ed8;
     }
-    
+
     i {
       font-size: 14px;
     }
@@ -829,13 +914,13 @@ const handleToggleLike = (index) => {
   padding: 0.375rem 0.75rem;
   background-color: #f9f9f9;
   width: 80%;
-  
+
   .expert-answer-row {
     display: flex;
     align-items: flex-start;
     gap: 12px;
   }
-  
+
   .answer-label {
     font-size: 0.8rem;
     font-weight: 600;
@@ -843,15 +928,15 @@ const handleToggleLike = (index) => {
     flex-shrink: 0;
     white-space: nowrap;
   }
-  
+
   .answer-content-wrapper {
     flex: 1;
     min-width: 0;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 8px;
   }
-  
+
   .answer-content {
     font-size: 0.8rem;
     color: #666;
@@ -860,24 +945,26 @@ const handleToggleLike = (index) => {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
     transition: all 0.3s;
-    
+
     &.answer-content-expanded {
-      white-space: normal;
+      display: block;
+      -webkit-line-clamp: unset;
       overflow: visible;
       text-overflow: unset;
-      align-self: flex-start;
     }
   }
-  
+
   .expert-reviewer {
     margin-left: 8px;
     font-size: 10px;
     color: rgb(217 119 6 / 0.7);
     display: inline;
   }
-  
+
   .answer-expand-btn {
     flex-shrink: 0;
     display: inline-flex;
@@ -891,11 +978,11 @@ const handleToggleLike = (index) => {
     padding: 0;
     transition: color 0.2s;
     align-self: flex-start;
-    
+
     &:hover {
       color: #1d4ed8;
     }
-    
+
     i {
       font-size: 14px;
     }

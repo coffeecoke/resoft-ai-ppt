@@ -81,6 +81,7 @@
           <ProductDetailView
             v-if="showProductDetail && (activeTab === 'ppt' || activeTab === 'ppt-new')"
             :activeProduct="productContent.activeProduct.value"
+            :activeCatalogCodes="filters.pptFilters.productIntro"
           />
           
           <!-- 🆕 新组件：PPT tab 未选产品时显示PPT网格 -->
@@ -325,7 +326,7 @@ const activeTab = ref('ppt')
 const activeDashboardTab = ref('products')
 const activeBrandTab = ref('company')
 const showAdvancedFilter = ref(false)
-const showFilterPanel = ref(false) // 筛选面板显示状态（独立于高级筛选）
+const showFilterPanel = ref(true) // 筛选面板显示状态（默认展开）
 
 // 问题分类筛选条件（关心问题 tab）
 const questionCategoryFilters = ref<{

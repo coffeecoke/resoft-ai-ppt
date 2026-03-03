@@ -1568,6 +1568,31 @@ body {
   margin-bottom: 0;
 }
 .product-ppt-section { display: grid; grid-template-columns: 200px 1.2fr 1fr; gap: 20px; background: #fff; border-radius: 10px; padding: 20px; }
+// 无目录时的两列布局（删除 ProductCatalogPanel 后使用）
+.product-ppt-section--no-catalog {
+  grid-template-columns: 1fr 1fr !important;
+  height: 100%;
+  max-height: calc(100vh - 89px - 40px); // 减去 header 和 padding
+
+  .public-block,
+  .practical-block {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    max-height: 100%;
+    overflow: hidden;
+
+    .section-head {
+      flex-shrink: 0;
+    }
+
+    .ppt-groups {
+      flex: 1;
+      overflow-y: auto;
+      min-height: 0;
+    }
+  }
+}
 .customer-search-result-page .product-ppt-section {
   padding: 20px;
   display: block !important; // 覆盖默认的grid布局，让子元素控制布局
@@ -3818,10 +3843,14 @@ body {
   flex: 1;
   transition: width 0.3s ease;
   min-width: 0; // 允许收缩
-  
+
   &.with-filter {
     width: calc(100% - 360px - 15px);
     max-width: calc(100% - 320px);
+    // 与左侧 FilterPanel 高度对齐
+    height: calc(100vh - 89px);
+    max-height: calc(100vh - 89px);
+    overflow-y: auto;
   }
 }
 

@@ -31,6 +31,20 @@
           <button class="clear-all-btn" @click="clearAllFilters">清空</button>
         </div>
 
+        <!-- 当前筛选（热搜榜选中的产品） -->
+        <div v-if="showFilters && selectedProduct" class="current-filters">
+          <div class="filter-content">
+            <span class="filter-title">产品筛选:</span>
+            <div class="filter-tags">
+              <span class="filter-tag">
+                <i class="ri-price-tag-3-line filter-tag-icon"></i>
+                {{ selectedProduct.name }}
+                <i class="ri-close-line filter-tag-close" @click="selectedProduct = null"></i>
+              </span>
+            </div>
+          </div>
+        </div>
+
         <!-- 当前筛选（外部筛选，来自 FilterPanel） -->
         <div v-if="showFilters && hasActiveExternalFilters" class="current-filters">
           <div class="filter-content">
@@ -48,31 +62,41 @@
           </div>
         </div>
 
-        <!-- 问题列表 -->
-        <div class="reports-list">
-          <QuestionReportItem
-            v-for="report in filteredReports"
-            :key="report.id"
-            :report="report"
-            :liked-reports="likedReports"
-            :like-count="getLikeCount(report.id)"
-            :answer-expanded="answerExpanded"
-            @toggle-like="toggleLike"
-            @toggle-answer="toggleAnswer"
+        <!-- 问题列表（触底加载更多） -->
+        <div class="reports-list-wrapper">
+          <div class="reports-list">
+            <QuestionReportItem
+              v-for="report in filteredReports"
+              :key="report.id"
+              :report="report"
+              :liked-reports="likedReports"
+              :like-count="getLikeCount(report.id)"
+              :answer-expanded="answerExpanded"
+              @toggle-like="toggleLike"
+              @toggle-answer="toggleAnswer"
+            />
+          </div>
+          <!-- 触底加载哨兵：进入视口时加载下一页 -->
+          <div
+            v-if="hasMore && !loading"
+            ref="loadMoreSentinel"
+            class="load-more-sentinel"
           />
+          <div v-if="loading && concerns.length > 0" class="load-more-tip">加载中...</div>
+          <div v-if="!hasMore && concerns.length > 0" class="load-more-tip load-more-end">没有更多了</div>
         </div>
       </main>
     </div>
     
     <!-- 右侧：热搜榜 -->
     <aside class="hot-topics-sidebar">
-      <HotSearchPanel />
+      <HotSearchPanel @select-product="handleSelectProduct" />
     </aside>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { getConcerns, getConcernCategories, likeConcern, type ConcernItem } from '@/services/concernsApi'
 import QuestionCategorySidebar from './QuestionCategorySidebar.vue'
 import HotSearchPanel from './HotSearchPanel.vue'
@@ -96,6 +120,7 @@ interface ExternalFilters {
   industry: string[]
   essenceType: string[]
   customerName: string
+  productCode?: string[]  // 产品筛选
 }
 
 interface Props {
@@ -115,12 +140,16 @@ const props = withDefaults(defineProps<Props>(), {
     questionCategory: [],
     industry: [],
     essenceType: [],
-    customerName: ''
+    customerName: '',
+    productCode: []
   })
 })
 
 // 已选中的筛选条件
 const selectedFilters = ref<string[]>([])
+
+// 从热搜榜选中的产品
+const selectedProduct = ref<{ code: string; name: string } | null>(null)
 
 // 已点赞的报告ID列表
 const likedReports = ref<string[]>([])
@@ -136,6 +165,10 @@ const concerns = ref<ConcernItem[]>([])
 const loading = ref(false)
 const hasMore = ref(true)
 const nextCursor = ref<string | null>(null)
+
+// 触底加载：哨兵元素（进入视口时加载下一页）
+const loadMoreSentinel = ref<HTMLElement | null>(null)
+let loadMoreObserver: IntersectionObserver | null = null
 
 // 问题分类结构（使用正确的类型）
 const questionCategories = ref<QuestionCategory[]>([])
@@ -241,6 +274,17 @@ const loadConcerns = async (reset = false) => {
       if (props.externalFilters.customerName) {
         params.keyword = props.externalFilters.customerName
       }
+      // 产品筛选
+      if (props.externalFilters.productCode && props.externalFilters.productCode.length > 0) {
+        params.productCode = props.externalFilters.productCode
+      }
+    }
+
+    // 添加热搜榜选中的产品筛选
+    if (selectedProduct.value) {
+      params.productCode = params.productCode
+        ? [...(Array.isArray(params.productCode) ? params.productCode : [params.productCode]), selectedProduct.value.code]
+        : [selectedProduct.value.code]
     }
 
     console.log('[ConcernedQuestionsView] 📤 加载问题列表，参数:', params)
@@ -293,6 +337,12 @@ const clearAllFilters = () => {
   selectedFilters.value = []
 }
 
+// 处理热搜榜选中产品
+const handleSelectProduct = (product: { code: string; name: string }) => {
+  console.log('[ConcernedQuestionsView] 🔍 选中产品:', product)
+  selectedProduct.value = product
+}
+
 // 监听筛选变化，重新加载数据
 watch(selectedFilters, () => {
   loadConcerns(true)
@@ -304,6 +354,12 @@ watch(() => props.externalFilters, (newFilters) => {
   console.log('[ConcernedQuestionsView] 📥 questionCategory:', newFilters?.questionCategory)
   loadConcerns(true)
 }, { deep: true, immediate: true })
+
+// 监听热搜榜选中的产品变化，重新加载数据
+watch(selectedProduct, (newProduct) => {
+  console.log('[ConcernedQuestionsView] 🔍 产品筛选变化:', newProduct)
+  loadConcerns(true)
+})
 
 // 行业选项映射
 const industryOptions: Record<string, string> = {
@@ -391,7 +447,22 @@ const filteredReports = computed(() => {
     reports = reports.filter(r => r.categoryCode === props.selectedSubFilter)
   }
 
-  return reports
+  // 映射数据格式：API 返回的字段 → 组件期望的字段
+  return reports.map(item => ({
+    ...item,
+    // 答案字段映射
+    systemAnswer: item.answer,
+    // 专家答案映射
+    expertAnswer: item.expertApproved ? {
+      approved: item.expertApproved,
+      content: item.expertAdvice || '',
+      reviewer: item.expertReviewer || ''
+    } : null,
+    // 公司名称映射
+    company: item.customerName || '未知公司',
+    // 标签映射（如果需要）
+    tag: item.industry || ''
+  }))
 })
 
 // 切换点赞状态
@@ -425,10 +496,41 @@ const toggleAnswer = (key: string) => {
   answerExpanded.value[key] = !answerExpanded.value[key]
 }
 
+// 初始化触底加载：当哨兵进入视口时加载下一页（以页面视口为 root，支持整页滚动）
+const setupLoadMoreObserver = () => {
+  if (!loadMoreSentinel.value) return
+  loadMoreObserver?.disconnect()
+  loadMoreObserver = new IntersectionObserver(
+    (entries) => {
+      const entry = entries[0]
+      if (!entry?.isIntersecting) return
+      if (loading.value || !hasMore.value) return
+      loadConcerns(false)
+    },
+    {
+      root: null,
+      rootMargin: '100px 0px',
+      threshold: 0
+    }
+  )
+  loadMoreObserver.observe(loadMoreSentinel.value)
+}
+
 // 初始化
 onMounted(() => {
   loadCategories()
   loadConcerns(true)
+  nextTick(() => setupLoadMoreObserver())
+})
+
+// 列表或 hasMore 变化时重新绑定哨兵（哨兵节点可能被 v-if 替换）
+watch([() => filteredReports.value.length, hasMore, loadMoreSentinel], () => {
+  nextTick(() => setupLoadMoreObserver())
+}, { flush: 'post' })
+
+onUnmounted(() => {
+  loadMoreObserver?.disconnect()
+  loadMoreObserver = null
 })
 </script>
 
@@ -531,12 +633,34 @@ onMounted(() => {
 
 /* 筛选容器样式已移至 ConcernedQuestionsFilters 组件 */
 
+.reports-list-wrapper {
+  width: 100%;
+}
+
 .reports-list {
   display: flex;
   flex-direction: column;
   gap: 16px;
   width: 100%;
   box-sizing: border-box;
+}
+
+.load-more-sentinel {
+  height: 1px;
+  width: 100%;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.load-more-tip {
+  padding: 12px 0;
+  text-align: center;
+  font-size: 12px;
+  color: #999;
+}
+
+.load-more-tip.load-more-end {
+  color: #bbb;
 }
 
 .hot-topics-sidebar {

@@ -41,8 +41,8 @@ const emit = defineEmits(['update:activeTab', 'update:showAdvancedFilter', 'crea
 // Tab选项
 const tabOptions = [
   { label: '产品介绍PPT', value: 'ppt' },
-  { label: 'PPT', value: 'ppt-new' },
-  { label: '交流会议', value: 'video' },
+  // { label: 'PPT', value: 'ppt-new' },
+  { label: '售前交流', value: 'video' },
   // { label: '客户问题', value: 'qa' }, // 已隐藏
   { label: '客户问题', value: 'concerned' },
   { label: '招标文件', value: 'tender' },
