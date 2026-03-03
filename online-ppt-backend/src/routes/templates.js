@@ -348,25 +348,19 @@ router.post('/:id/publish', (req, res) => {
     const templateData = JSON.parse(content)
     const slides = templateData.slides || []
 
-    // 检查每个页面是否有类型标注
-    const unmarkedSlides = []
-    slides.forEach((slide, index) => {
-      // 如果slide没有type字段，或者type为空字符串，则认为未标注
+    // 统计未标注的页面数量（不再阻止发布，仅记录）
+    let skippedCount = 0
+    slides.forEach(slide => {
       if (!slide.type || slide.type === '') {
-        unmarkedSlides.push({
-          index: index + 1, // 页面编号从1开始（用户友好）
-          slideId: slide.id || `slide_${index}`,
-        })
+        skippedCount++
       }
     })
 
-    // 如果有未标注的页面，不允许发布
-    if (unmarkedSlides.length > 0) {
-      const slideNumbers = unmarkedSlides.map(s => `第${s.index}页`).join('、')
+    // 至少需要有一个已标注的页面
+    if (skippedCount === slides.length) {
       return res.status(400).json({
         success: false,
-        error: `发布失败：以下页面未标注类型，请先完成页面类型标注后再发布：${slideNumbers}`,
-        unmarkedSlides: unmarkedSlides.map(s => s.index),
+        error: '发布失败：所有页面均未标注类型，请至少标注一个页面后再发布',
       })
     }
 
@@ -386,6 +380,7 @@ router.post('/:id/publish', (req, res) => {
         id,
         status: 'published',
         updatedAt: now,
+        skippedCount,
       },
     })
   } catch (error) {

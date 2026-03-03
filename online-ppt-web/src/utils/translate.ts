@@ -1,6 +1,7 @@
 /**
  * 翻译工具函数
  */
+import { getAuthHeaders } from '@/services'
 
 /**
  * 检测字符串是否包含中文
@@ -21,6 +22,7 @@ export async function translateToEnglish(chineseText: string): Promise<string> {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...getAuthHeaders(),
       },
       body: JSON.stringify({
         text: chineseText,

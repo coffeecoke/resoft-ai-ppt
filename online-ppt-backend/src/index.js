@@ -74,7 +74,6 @@ app.use('/snapshots', express.static(snapshotsDir))
 
 // 认证路由 — 公开，无需登录
 app.use('/auth', authRouter)
-app.use('/users', usersRouter)
 
 // 全局认证中间件：白名单以外的所有请求都需要登录
 app.use((req, res, next) => {
@@ -82,12 +81,18 @@ app.use((req, res, next) => {
     { method: 'GET', path: '/health' },
     { method: 'GET', path: '/tools/models' },
   ]
+  // 静态资源路径前缀（无需登录）
+  const publicPrefixes = ['/covers/', '/snapshots/', '/thumbnails/']
   const isPublic = publicPaths.some(
     p => p.method === req.method && req.path === p.path
-  )
+  ) || publicPrefixes.some(prefix => req.path.startsWith(prefix))
+
   if (isPublic) return next()
   return authMiddleware(req, res, next)
 })
+
+// 用户管理路由（需要管理员权限）
+app.use('/users', usersRouter)
 
 // 路由 - 按业务模块区分
 app.use('/tools', toolsRouter)
