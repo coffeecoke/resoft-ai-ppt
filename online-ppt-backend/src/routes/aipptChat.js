@@ -1243,5 +1243,134 @@ function buildPolishPrompt(content, requirement, scope) {
   return prompt
 }
 
+/**
+ * 按模版页生成内容
+ * POST /aippt/template-page-generate
+ *
+ * Request:
+ * {
+ *   elements: [{textType, text}],  // 模版页可替换的文字元素列表
+ *   topic: "用户输入的主题",
+ *   model: "deepseek-chat"
+ * }
+ */
+router.post('/template-page-generate', async (req, res) => {
+  try {
+    const { elements, topic, model = 'deepseek-chat' } = req.body
+    if (!elements || !Array.isArray(elements) || elements.length === 0) {
+      return res.json({ success: false, error: '缺少模版页面文字元素' })
+    }
+    if (!topic) {
+      return res.json({ success: false, error: '请输入主题内容' })
+    }
+    return handleTemplatePageGenerate(elements, topic, model, res)
+  } catch (error) {
+    console.error('[模版页生成] 错误:', error)
+    res.status(500).json({ success: false, error: error.message || '处理失败' })
+  }
+})
+
+/**
+ * 根据模版页文字元素和用户主题，用 AI 生成替换文字
+ *
+ * 改进方案：按 ID 精准回填
+ * - 请求：[{ id, textType, content }]
+ * - 返回：[{ id, newContent }]
+ */
+async function handleTemplatePageGenerate(elements, topic, model, res) {
+  try {
+    // textType 中文含义映射
+    const textTypeLabels = {
+      title: '标题',
+      subtitle: '副标题',
+      content: '正文',
+      item: '列表项内容',
+      itemTitle: '列表项标题',
+      notes: '注释',
+      header: '页眉',
+      footer: '页脚',
+      partNumber: '章节编号',
+      itemNumber: '项目编号',
+    }
+
+    // 构建发送给 AI 的元素描述
+    const elementLines = elements.map((el, i) => {
+      const label = textTypeLabels[el.textType] || el.textType
+      // 从 HTML 中提取纯文本用于显示和长度参考
+      const pureText = el.content?.replace(/<[^>]*>/g, '').trim() || ''
+      const hasSeqPrefix = /^[①②③④⑤⑥⑦⑧⑨⑩]|^\d+[\.。、]/.test(pureText)
+      const seqNote = hasSeqPrefix ? `\n   注意：开头的序号必须原样保留` : ''
+      return `${i + 1}. [id="${el.id}"] [类型: ${label}]
+   原文字: ${pureText}
+   HTML: ${el.content}${seqNote}`
+    }).join('\n\n')
+
+    const systemPrompt = `你是PPT内容生成专家。用户选定了一个PPT模版页面，请根据用户输入的主题，为该模版中每个文字元素生成合适的替换内容。
+
+【重要说明】
+- 模版中的"原文字"只是格式和长度参考，不代表实际内容！
+- 你必须完全根据"用户主题"来生成新内容，不要参考模版文字的含义！
+
+【返回格式要求】
+- 必须保留原HTML的所有标签和样式属性（如<p>、<span style="...">、<strong>等）
+- 只替换标签内的文字内容，HTML结构完全不变
+- 如果原内容是多段落（多个<p>），新内容也要保持相同的段落结构
+- 开头的序号（①②③或1.2.3.等）必须原样保留在文字开头
+
+【其他要求】
+- 生成文字的长度与原文字相近（误差不超过30%）
+- 内容要与用户主题紧密相关、专业准确
+- 只返回JSON数组，不要有任何其他内容`
+
+    const userPrompt = `用户主题：${topic}
+
+请根据上述主题，为以下每个元素生成新内容(一定不要使用模版中的文字内容！)：
+
+${elementLines}
+
+【返回格式】
+必须严格按原HTML格式返回，只替换文字，结构不变。示例：
+[{"id":"xxx","newContent":"<p><span style=\"color:#265BFE;font-size:12.4px;\">新文字内容</span></p>"}]`
+
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ]
+
+    const result = await aiService.chat(model, messages, {
+      temperature: 0.7,
+      maxTokens: 2000,
+    })
+
+    console.log('[模版页生成] AI返回:', result.substring(0, 500))
+
+    let items = null
+    try {
+      const jsonMatch = result.match(/\[[\s\S]*\]/)
+      if (jsonMatch) {
+        items = JSON.parse(jsonMatch[0])
+      }
+    } catch (e) {
+      console.error('[模版页生成] JSON解析失败:', e)
+    }
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.json({ success: false, error: '生成内容解析失败，请重试' })
+    }
+
+    // 直接返回 items 数组，前端按 id 回填
+    return res.json({
+      success: true,
+      type: 'edit',
+      action: 'template_page_generate',
+      message: '页面内容已生成',
+      data: { items },
+    })
+  } catch (error) {
+    console.error('[模版页生成] 错误:', error)
+    return res.json({ success: false, error: '生成失败：' + error.message })
+  }
+}
+
 export default router
 

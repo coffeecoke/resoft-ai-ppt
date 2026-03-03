@@ -72,6 +72,10 @@ app.use('/covers', express.static(coversDir))
 const snapshotsDir = path.join(DATA_DIR, 'snapshots')
 app.use('/snapshots', express.static(snapshotsDir))
 
+// 静态资源：模板页缩略图（data/templates/thumbnails 下的图片）
+const templateThumbsDir = path.join(DATA_DIR, 'templates', 'thumbnails')
+app.use('/templates/thumbnails', express.static(templateThumbsDir))
+
 // 认证路由 — 公开，无需登录
 app.use('/auth', authRouter)
 
@@ -82,12 +86,17 @@ app.use((req, res, next) => {
     { method: 'GET', path: '/tools/models' },
   ]
   // 静态资源路径前缀（无需登录）
-  const publicPrefixes = ['/covers/', '/snapshots/', '/thumbnails/']
+  const publicPrefixes = ['/covers/', '/snapshots/', '/thumbnails/', '/templates/thumbnails/']
   const isPublic = publicPaths.some(
     p => p.method === req.method && req.path === p.path
   ) || publicPrefixes.some(prefix => req.path.startsWith(prefix))
 
   if (isPublic) return next()
+  // 媒体流请求（<audio>/<video> src）无法携带 Authorization header，
+  // 支持通过 query param ?token=xxx 传递（行业标准做法）
+  if (req.query.token && !req.headers['authorization']) {
+    req.headers['authorization'] = `Bearer ${req.query.token}`
+  }
   return authMiddleware(req, res, next)
 })
 
