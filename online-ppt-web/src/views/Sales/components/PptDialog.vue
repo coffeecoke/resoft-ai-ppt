@@ -328,6 +328,7 @@ import { ref, computed, nextTick, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { MagicStick, Download } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import { getAuthHeaders } from '@/services'
 import { usePendingOperationsStore } from '@/store/Sales/pendingOperations'
 import { usePptDialogAiStore } from '@/store/Sales/pptDialogAi'
 import PendingOperationsDrawer from '@/components/Sales/PendingOperationsDrawer.vue'
@@ -1056,10 +1057,11 @@ const handleSummarize = async () => {
     const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
     const response = await fetch(
       `${API_BASE_URL}/sales/documents/${props.documentId}/summary`,
-      { 
+      {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
         }
       }
     )
