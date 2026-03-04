@@ -6,6 +6,18 @@ export function getAuthHeaders(): HeadersInit {
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
+// 带鉴权的 fetch 封装，自动附加 Authorization header
+// 用法与原生 fetch 完全一致，直接替换 fetch() 即可
+export function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  return fetch(url, {
+    ...options,
+    headers: {
+      ...getAuthHeaders(),
+      ...options.headers,
+    },
+  })
+}
+
 // export const SERVER_URL = 'http://localhost:5000'
 // 支持环境变量配置，Docker部署时可通过环境变量设置
 // 如果未设置环境变量，默认使用 /api（适用于Docker部署和开发环境）
@@ -165,12 +177,9 @@ export default {
     
     console.log('📤 AIPPT_Outline 请求参数:', body)
     
-    return fetch(`${SERVER_URL}/tools/aippt_outline`, {
+    return authFetch(`${SERVER_URL}/tools/aippt_outline`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAuthHeaders(),
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     }).then(response => {
       console.log('📥 AIPPT_Outline 响应对象:', {
@@ -191,12 +200,9 @@ export default {
     style,
     model,
   }: AIPPTPayload): Promise<any> {
-    return fetch(`${SERVER_URL}/tools/aippt`, {
+    return authFetch(`${SERVER_URL}/tools/aippt`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAuthHeaders(),
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         content,
         language,
@@ -211,12 +217,9 @@ export default {
     content,
     command,
   }: AIWritingPayload): Promise<any> {
-    return fetch(`${SERVER_URL}/tools/ai_writing`, {
+    return authFetch(`${SERVER_URL}/tools/ai_writing`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAuthHeaders(),
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         content,
         command,
@@ -333,12 +336,9 @@ export default {
       fullContent: string
     }
   }): Promise<Response> {
-    return fetch(`${SERVER_URL}/aippt/chat`, {
+    return authFetch(`${SERVER_URL}/aippt/chat`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAuthHeaders(),
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         message,
         context,
@@ -367,12 +367,9 @@ export default {
     topic: string
     model?: string
   }): Promise<Response> {
-    return fetch(`${SERVER_URL}/aippt/template-page-generate`, {
+    return authFetch(`${SERVER_URL}/aippt/template-page-generate`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAuthHeaders(),
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ elements, topic, model }),
     })
   },

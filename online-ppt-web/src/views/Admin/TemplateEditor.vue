@@ -38,7 +38,7 @@ import { useSlidesStore, useSnapshotStore, useMainStore } from '@/store'
 import { deleteDiscardedDB } from '@/utils/database'
 import message from '@/utils/message'
 import axios from '@/services/config'
-import { SERVER_URL, getAuthHeaders } from '@/services'
+import { SERVER_URL, authFetch } from '@/services'
 
 const route = useRoute()
 const router = useRouter()
@@ -69,9 +69,7 @@ const loadTemplate = async () => {
     loading.value = true
     
     // 从后端获取完整的模板数据（包含 title, theme, slides）
-    const resp = await fetch(`${SERVER_URL}/templates/${templateId}`, {
-      headers: { ...getAuthHeaders() }
-    })
+    const resp = await authFetch(`${SERVER_URL}/templates/${templateId}`)
     if (!resp.ok) {
       throw new Error('获取模板详情失败')
     }
@@ -184,9 +182,9 @@ const generateTemplateThumbnails = async (id: string) => {
         pixelRatio: 1,
       })
 
-      const resp = await fetch(`${SERVER_URL}/templates/${id}/thumbnails/${slide.id}`, {
+      const resp = await authFetch(`${SERVER_URL}/templates/${id}/thumbnails/${slide.id}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imageData: dataUrl }),
       })
 

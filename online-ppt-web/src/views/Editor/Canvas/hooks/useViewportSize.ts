@@ -85,7 +85,7 @@ export default (canvasRef: ShallowRef<HTMLElement | null>) => {
     if (canvasRef.value) resizeObserver.observe(canvasRef.value)
   })
   onUnmounted(() => {
-    if (canvasRef.value) resizeObserver.unobserve(canvasRef.value)
+    resizeObserver.disconnect()
   })
 
   // 拖拽画布

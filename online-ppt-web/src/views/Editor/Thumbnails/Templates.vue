@@ -36,7 +36,7 @@
         </template>
       </div>
       
-      <div class="content" v-loading="{ state: loading, text: '加载中...' }">
+      <div class="content" v-loading="loading" element-loading-text="加载中...">
       <div class="header">
         <div class="types">
           <div class="type" 

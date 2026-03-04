@@ -328,7 +328,7 @@ import { ref, computed, nextTick, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { MagicStick, Download } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { getAuthHeaders } from '@/services'
+import { authFetch } from '@/services'
 import { usePendingOperationsStore } from '@/store/Sales/pendingOperations'
 import { usePptDialogAiStore } from '@/store/Sales/pptDialogAi'
 import PendingOperationsDrawer from '@/components/Sales/PendingOperationsDrawer.vue'
@@ -663,16 +663,14 @@ const sendAiMessage = async () => {
     
     // 调用后端流式API
     const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
-    const response = await fetch(
+    const response = await authFetch(
       `${API_BASE_URL}/sales/documents/${props.documentId}/chat`,
-      { 
+      {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: userMessage,
-          history: history.slice(0, -1) // 不包含刚发送的用户消息
+          history: history.slice(0, -1)
         })
       }
     )
@@ -800,15 +798,13 @@ const analyzeSelectedSlide = async () => {
     
     // 8. 调用后端流式API
     const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
-    const response = await fetch(
+    const response = await authFetch(
       `${API_BASE_URL}/sales/documents/${props.documentId}/analyze-slides`,
-      { 
+      {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          slideIds: selectedSlideIds // 传递 slideId 数组
+          slideIds: selectedSlideIds
         })
       }
     )
@@ -1055,14 +1051,11 @@ const handleSummarize = async () => {
     
     // 调用后端流式API
     const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
-    const response = await fetch(
+    const response = await authFetch(
       `${API_BASE_URL}/sales/documents/${props.documentId}/summary`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders()
-        }
+        headers: { 'Content-Type': 'application/json' }
       }
     )
     

@@ -215,11 +215,11 @@ export function useThumbnailQueue(options: ThumbnailQueueOptions = {}) {
     const host = location.host
     const wsUrl = `${protocol}//${host}/ws/thumbnail-progress?taskId=${taskId}`
 
-    console.log(`[WebSocket] 连接地址: ${wsUrl}`)
+    if (import.meta.env.DEV) console.log(`[WebSocket] 连接地址: ${wsUrl}`)
     ws.value = new WebSocket(wsUrl)
 
     ws.value.onopen = () => {
-      console.log(`[WebSocket] 已连接: ${taskId}`)
+      if (import.meta.env.DEV) console.log(`[WebSocket] 已连接: ${taskId}`)
     }
 
     ws.value.onmessage = (event) => {
@@ -282,7 +282,7 @@ export function useThumbnailQueue(options: ThumbnailQueueOptions = {}) {
     }
 
     ws.value.onclose = () => {
-      console.log('[WebSocket] 连接关闭')
+      if (import.meta.env.DEV) console.log('[WebSocket] 连接关闭')
     }
   }
 
