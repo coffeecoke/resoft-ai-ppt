@@ -22,13 +22,13 @@
         <el-dropdown>
           <span class="user-name">
             <el-icon><User /></el-icon>
-            <span>管理员</span>
+            <span>{{ authStore.user?.name || authStore.user?.username || '管理员' }}</span>
             <el-icon class="arrow-down"><ArrowDown /></el-icon>
           </span>
           <template #dropdown>
             <el-dropdown-menu>
               <el-dropdown-item>个人中心</el-dropdown-item>
-              <el-dropdown-item divided>退出登录</el-dropdown-item>
+              <el-dropdown-item divided @click="handleLogout">退出登录</el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>
@@ -39,11 +39,14 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { Expand, Fold, User, ArrowDown } from '@element-plus/icons-vue'
 import { adminMenus } from '@/configs/adminMenu'
+import { useAuthStore } from '@/store/auth'
 
 const route = useRoute()
+const router = useRouter()
+const authStore = useAuthStore()
 
 // 侧边栏折叠状态
 const isCollapsed = ref(false)
@@ -85,6 +88,11 @@ const breadcrumbList = computed(() => {
 const emit = defineEmits<{
   'toggle-sidebar': [value: boolean]
 }>()
+
+const handleLogout = () => {
+  authStore.clearAuth()
+  router.push('/login')
+}
 
 defineExpose({
   isCollapsed,

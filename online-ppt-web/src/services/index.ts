@@ -1,5 +1,11 @@
 import axios from './config'
 
+// 获取认证请求头（用于 fetch 调用）
+export function getAuthHeaders(): HeadersInit {
+  const token = localStorage.getItem('resoft_auth_token')
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
 // export const SERVER_URL = 'http://localhost:5000'
 // 支持环境变量配置，Docker部署时可通过环境变量设置
 // 如果未设置环境变量，默认使用 /api（适用于Docker部署和开发环境）
@@ -163,6 +169,7 @@ export default {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...getAuthHeaders(),
       },
       body: JSON.stringify(body),
     }).then(response => {
@@ -188,6 +195,7 @@ export default {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...getAuthHeaders(),
       },
       body: JSON.stringify({
         content,
@@ -207,6 +215,7 @@ export default {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...getAuthHeaders(),
       },
       body: JSON.stringify({
         content,
@@ -328,6 +337,7 @@ export default {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...getAuthHeaders(),
       },
       body: JSON.stringify({
         message,
@@ -342,8 +352,34 @@ export default {
   },
 
   /**
+   * 按模版页生成内容
+   *
+   * @param elements 模版页文字元素列表 [{textType, text}]
+   * @param topic 用户输入的主题
+   * @param model AI模型
+   */
+  aipptTemplatePageGenerate({
+    elements,
+    topic,
+    model = 'GLM-4.5-Flash',
+  }: {
+    elements: Array<{ textType: string; text: string }>
+    topic: string
+    model?: string
+  }): Promise<Response> {
+    return fetch(`${SERVER_URL}/aippt/template-page-generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify({ elements, topic, model }),
+    })
+  },
+
+  /**
    * 图片推荐
-   * 
+   *
    * @param slideData 当前页面数据
    * @param keyword 搜索关键词（可选）
    * @param orientation 图片方向

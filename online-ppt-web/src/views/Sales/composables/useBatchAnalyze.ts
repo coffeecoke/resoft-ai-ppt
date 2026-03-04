@@ -6,7 +6,7 @@
 
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { SERVER_URL } from '@/services'
+import { SERVER_URL, getAuthHeaders } from '@/services'
 import { usePptDialogAiStore } from '@/store/Sales/pptDialogAi'
 
 interface PendingItem {
@@ -102,7 +102,8 @@ export function useBatchAnalyze() {
         fetch(`${API_BASE_URL}/sales/batch-operations/analyze`, {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            ...getAuthHeaders()
           },
           body: JSON.stringify(requestBody)
         })

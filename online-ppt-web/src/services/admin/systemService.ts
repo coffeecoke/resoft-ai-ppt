@@ -75,24 +75,22 @@ export async function deleteRole(id: string): Promise<void> {
 
 export interface User {
   id: string
-  user_name: string
-  nick_name: string
+  username: string
+  name: string
   email?: string
-  phone?: string
-  sex: string
-  status: string
-  dept_id?: string
-  dept_name?: string
-  role_ids?: string[]
-  create_time: string
+  phone?: string      // 前端保留，不存库
+  sex?: string        // 前端保留，不存库
+  status: string      // 'active' | 'disabled'
+  department?: string
+  role: string        // 'admin' | 'user'
+  created_at: string
 }
 
 export interface UserListParams {
   page?: number
   pageSize?: number
   keyword?: string
-  status?: string
-  dept_id?: string
+  status?: string     // 'active' | 'disabled'
 }
 
 export interface UserListResponse {

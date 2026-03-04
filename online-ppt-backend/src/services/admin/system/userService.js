@@ -1,68 +1,62 @@
 /**
  * 用户管理服务
- * 
- * 提供用户的增删改查功能
- * TODO: 后续对接数据库，当前返回Mock数据
+ *
+ * 对接 users 表，字段与数据库保持一致
+ * sex / phone 前端保留但不存库，读时返回 null
  */
 
-import { generateDocumentId } from '../../../utils/idGenerator.js'
+import pkg from '@prisma/client'
+const { PrismaClient } = pkg
+import bcrypt from 'bcryptjs'
+import { nanoid } from 'nanoid'
+
+const prisma = new PrismaClient()
 
 class UserService {
   /**
    * 获取用户列表
-   * @param {Object} params - 查询参数
-   * @param {number} params.page - 页码，默认1
-   * @param {number} params.pageSize - 每页数量，默认20
-   * @param {string} params.keyword - 关键词搜索（用户名、昵称、手机号）
-   * @param {string} params.status - 状态筛选：0=正常，1=停用
-   * @param {string} params.dept_id - 部门ID筛选
-   * @returns {Promise<Object>} { list, total }
+   * @param {Object} params - { page, pageSize, keyword, status }
+   * status: 'active' | 'disabled'
    */
   async getUserList(params = {}) {
     try {
-      // TODO: 对接数据库
-      const mockList = [
-        {
-          id: '1',
-          user_name: 'admin',
-          nick_name: '管理员',
-          email: 'admin@example.com',
-          phone: '13800138000',
-          sex: '0',
-          status: '0',
-          dept_id: '1',
-          dept_name: '总公司',
-          create_time: '2025-01-01 10:00:00'
-        }
-      ]
+      const { page = 1, pageSize = 20, keyword, status } = params
 
-      const { page = 1, pageSize = 20, keyword, status, dept_id } = params
-      let filteredList = [...mockList]
-
-      // 关键词筛选
+      const where = {}
       if (keyword) {
-        filteredList = filteredList.filter(item =>
-          item.user_name.includes(keyword) ||
-          item.nick_name.includes(keyword) ||
-          item.phone.includes(keyword)
-        )
+        where.OR = [
+          { username: { contains: keyword } },
+          { name: { contains: keyword } },
+        ]
+      }
+      if (status) {
+        where.status = status
       }
 
-      // 状态筛选
-      if (status !== undefined && status !== '') {
-        filteredList = filteredList.filter(item => item.status === status)
-      }
+      const skip = (Number(page) - 1) * Number(pageSize)
+      const take = Number(pageSize)
 
-      // 部门筛选
-      if (dept_id) {
-        filteredList = filteredList.filter(item => item.dept_id === dept_id)
-      }
+      const [users, total] = await Promise.all([
+        prisma.users.findMany({
+          where,
+          skip,
+          take,
+          orderBy: { created_at: 'desc' },
+          select: {
+            id: true,
+            username: true,
+            name: true,
+            email: true,
+            department: true,
+            role: true,
+            status: true,
+            created_at: true,
+          },
+        }),
+        prisma.users.count({ where }),
+      ])
 
-      // 分页
-      const skip = (page - 1) * pageSize
-      const list = filteredList.slice(skip, skip + parseInt(pageSize))
-      const total = filteredList.length
-
+      const list = users.map(u => ({ ...u, sex: null, phone: null }))
       return { list, total }
     } catch (error) {
       console.error('[用户服务] 获取用户列表失败:', error)
@@ -72,27 +66,24 @@ class UserService {
 
   /**
    * 获取用户详情
-   * @param {string} id - 用户ID
-   * @returns {Promise<Object>} 用户信息
    */
   async getUserById(id) {
     try {
-      // TODO: 对接数据库
-      const mockUser = {
-        id,
-        user_name: 'admin',
-        nick_name: '管理员',
-        email: 'admin@example.com',
-        phone: '13800138000',
-        sex: '0',
-        status: '0',
-        dept_id: '1',
-        dept_name: '总公司',
-        role_ids: ['1'],
-        create_time: '2025-01-01 10:00:00'
-      }
-
-      return mockUser
+      const user = await prisma.users.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          username: true,
+          name: true,
+          email: true,
+          department: true,
+          role: true,
+          status: true,
+          created_at: true,
+        },
+      })
+      if (!user) throw new Error('用户不存在')
+      return { ...user, sex: null, phone: null }
     } catch (error) {
       console.error('[用户服务] 获取用户详情失败:', error)
       throw new Error(`获取用户详情失败: ${error.message}`)
@@ -101,30 +92,43 @@ class UserService {
 
   /**
    * 创建用户
-   * @param {Object} data - 用户数据
-   * @returns {Promise<Object>} 创建的用户信息
+   * @param {Object} data - { username, password, name, email, status, department, role }
    */
   async createUser(data) {
     try {
-      // TODO: 对接数据库
-      if (!data.user_name || !data.password) {
-        throw new Error('用户名和密码不能为空')
-      }
+      const { username, password, name, email, status, department, role } = data
+      if (!username || !password) throw new Error('用户名和密码不能为空')
+      if (password.length < 6) throw new Error('密码长度不能少于6位')
 
-      const newUser = {
-        id: generateDocumentId().replace('document_', 'user_'),
-        user_name: data.user_name,
-        nick_name: data.nick_name || data.user_name,
-        email: data.email || null,
-        phone: data.phone || null,
-        sex: data.sex || '0',
-        status: data.status || '0',
-        dept_id: data.dept_id || null,
-        role_ids: data.role_ids || [],
-        create_time: new Date().toISOString()
-      }
+      const existing = await prisma.users.findUnique({ where: { username } })
+      if (existing) throw new Error('用户名已存在')
 
-      return newUser
+      const password_hash = await bcrypt.hash(password, 12)
+
+      const user = await prisma.users.create({
+        data: {
+          id: nanoid(),
+          username,
+          name: name || username,
+          email: email || null,
+          password_hash,
+          role: role === 'admin' ? 'admin' : 'user',
+          status: status || 'active',
+          department: department || null,
+        },
+        select: {
+          id: true,
+          username: true,
+          name: true,
+          email: true,
+          department: true,
+          role: true,
+          status: true,
+          created_at: true,
+        },
+      })
+
+      return { ...user, sex: null, phone: null }
     } catch (error) {
       console.error('[用户服务] 创建用户失败:', error)
       throw new Error(`创建用户失败: ${error.message}`)
@@ -133,20 +137,35 @@ class UserService {
 
   /**
    * 更新用户
-   * @param {string} id - 用户ID
-   * @param {Object} data - 更新的数据
-   * @returns {Promise<Object>} 更新后的用户信息
+   * @param {Object} data - { name, email, status, department, role }
    */
   async updateUser(id, data) {
     try {
-      // TODO: 对接数据库
-      const updatedUser = {
-        id,
-        ...data,
-        update_time: new Date().toISOString()
-      }
+      const { name, email, status, department, role } = data
 
-      return updatedUser
+      const updateData = {}
+      if (name !== undefined) updateData.name = name
+      if (email !== undefined) updateData.email = email || null
+      if (status !== undefined) updateData.status = status
+      if (department !== undefined) updateData.department = department || null
+      if (role !== undefined) updateData.role = role === 'admin' ? 'admin' : 'user'
+
+      const user = await prisma.users.update({
+        where: { id },
+        data: updateData,
+        select: {
+          id: true,
+          username: true,
+          name: true,
+          email: true,
+          department: true,
+          role: true,
+          status: true,
+          created_at: true,
+        },
+      })
+
+      return { ...user, sex: null, phone: null }
     } catch (error) {
       console.error('[用户服务] 更新用户失败:', error)
       throw new Error(`更新用户失败: ${error.message}`)
@@ -154,14 +173,11 @@ class UserService {
   }
 
   /**
-   * 删除用户
-   * @param {string} id - 用户ID
-   * @returns {Promise<void>}
+   * 删除用户（软删除，设为 disabled）
    */
   async deleteUser(id) {
     try {
-      // TODO: 对接数据库
-      console.log(`[用户服务] 删除用户: ${id}`)
+      await prisma.users.update({ where: { id }, data: { status: 'disabled' } })
     } catch (error) {
       console.error('[用户服务] 删除用户失败:', error)
       throw new Error(`删除用户失败: ${error.message}`)
@@ -170,14 +186,12 @@ class UserService {
 
   /**
    * 重置用户密码
-   * @param {string} id - 用户ID
-   * @param {string} newPassword - 新密码
-   * @returns {Promise<void>}
    */
   async resetPassword(id, newPassword) {
     try {
-      // TODO: 对接数据库
-      console.log(`[用户服务] 重置用户密码: ${id}`)
+      if (!newPassword || newPassword.length < 6) throw new Error('密码长度不能少于6位')
+      const password_hash = await bcrypt.hash(newPassword, 12)
+      await prisma.users.update({ where: { id }, data: { password_hash } })
     } catch (error) {
       console.error('[用户服务] 重置密码失败:', error)
       throw new Error(`重置密码失败: ${error.message}`)
@@ -186,4 +200,3 @@ class UserService {
 }
 
 export default new UserService()
-

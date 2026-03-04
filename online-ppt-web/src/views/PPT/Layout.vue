@@ -21,7 +21,7 @@ import { useScreenStore, useMainStore, useSnapshotStore, useSlidesStore } from '
 import { LOCALSTORAGE_KEY_DISCARDED_DB } from '@/configs/storage'
 import { deleteDiscardedDB } from '@/utils/database'
 import { isPC } from '@/utils/common'
-import api, { SERVER_URL } from '@/services'
+import api, { SERVER_URL, getAuthHeaders } from '@/services'
 
 import FullscreenSpin from '@/components/FullscreenSpin.vue'
 
@@ -72,7 +72,9 @@ const loadSlidesForRoute = async () => {
   if (templateId) {
     // 从后端加载指定模板数据
     try {
-      const resp = await fetch(`${SERVER_URL}/templates/${templateId}`)
+      const resp = await fetch(`${SERVER_URL}/templates/${templateId}`, {
+        headers: { ...getAuthHeaders() }
+      })
       if (resp.ok) {
         const json = await resp.json()
         if (json.success && json.data?.templateData) {
@@ -115,7 +117,9 @@ const loadSlidesForRoute = async () => {
   } else if (documentId) {
     // 从后端加载指定文档数据
     try {
-      const resp = await fetch(`${SERVER_URL}/documents/${documentId}`)
+      const resp = await fetch(`${SERVER_URL}/documents/${documentId}`, {
+        headers: { ...getAuthHeaders() }
+      })
       if (resp.ok) {
         const json = await resp.json()
         if (json.success && json.data?.documentData) {

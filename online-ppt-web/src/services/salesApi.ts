@@ -1,5 +1,7 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
+import router from '@/router'
+import { useAuthStore } from '@/store/auth'
 
 // 售前平台 API 配置
 // 使用空的 baseURL，让请求使用相对路径，这样 Vite 代理可以正确处理
@@ -15,7 +17,7 @@ const salesApi = axios.create({
 salesApi.interceptors.request.use(
   config => {
     // 可以在这里添加 token 等认证信息
-    const token = localStorage.getItem('sales_token')
+    const token = localStorage.getItem('resoft_auth_token')
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
@@ -39,7 +41,14 @@ salesApi.interceptors.response.use(
     if (error && error.response) {
       const errorMessage = error.response.data?.error || error.response.data?.message || error.message
       
-      if (error.response.status >= 400 && error.response.status < 500) {
+      if (error.response.status === 401) {
+        useAuthStore().clearAuth()
+        if (router.currentRoute.value.path !== '/login') {
+          router.push({ path: '/login', query: { redirect: router.currentRoute.value.fullPath } })
+        }
+        return Promise.reject(new Error('登录已过期，请重新登录'))
+      }
+      else if (error.response.status >= 400 && error.response.status < 500) {
         ElMessage.error(errorMessage)
         return Promise.reject(new Error(errorMessage))
       }

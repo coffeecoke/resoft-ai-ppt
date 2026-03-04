@@ -9,13 +9,12 @@ const path = require('path')
 // 尝试多个可能的 Prisma Client 路径
 let PrismaClient;
 try {
-  // 优先尝试 pnpm 路径
-  prismaClientPath = path.join(__dirname, '../../../online-ppt-backend/node_modules/.pnpm/@prisma+client@6.19.1_prisma@6.19.1/node_modules/.prisma/client');
-  PrismaClient = require(prismaClientPath).PrismaClient;
+  // 优先尝试从 @prisma/client 包导入（pnpm 软链接）
+  PrismaClient = require('../../../online-ppt-backend/node_modules/@prisma/client').PrismaClient;
 } catch (err) {
   try {
-    // 回退到常规路径
-    prismaClientPath = path.join(__dirname, '../../../online-ppt-backend/node_modules/.prisma/client');
+    // 回退到 pnpm 实际路径
+  prismaClientPath = path.join(__dirname, '../../../online-ppt-backend/node_modules/.pnpm/@prisma+client@6.19.1_prism_d4c309513f45d21f4e4aa7921d8002c7/node_modules/.prisma/client');
     PrismaClient = require(prismaClientPath).PrismaClient;
   } catch (err2) {
     console.error('❌ 无法加载 Prisma Client，请确保 online-ppt-backend 已正确安装依赖');

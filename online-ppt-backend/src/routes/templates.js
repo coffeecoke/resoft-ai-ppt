@@ -17,6 +17,7 @@ dotenv.config({ path: envPath })
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', '..', 'data')
 const TEMPLATES_DIR = path.join(DATA_DIR, 'templates')
 const COVERS_DIR = path.join(DATA_DIR, 'covers')
+const TEMPLATE_THUMBS_DIR = path.join(DATA_DIR, 'templates', 'thumbnails')
 const INDEX_FILE = path.join(DATA_DIR, 'template-index.json')
 
 function ensureDirs() {
@@ -348,25 +349,19 @@ router.post('/:id/publish', (req, res) => {
     const templateData = JSON.parse(content)
     const slides = templateData.slides || []
 
-    // 检查每个页面是否有类型标注
-    const unmarkedSlides = []
-    slides.forEach((slide, index) => {
-      // 如果slide没有type字段，或者type为空字符串，则认为未标注
+    // 统计未标注的页面数量（不再阻止发布，仅记录）
+    let skippedCount = 0
+    slides.forEach(slide => {
       if (!slide.type || slide.type === '') {
-        unmarkedSlides.push({
-          index: index + 1, // 页面编号从1开始（用户友好）
-          slideId: slide.id || `slide_${index}`,
-        })
+        skippedCount++
       }
     })
 
-    // 如果有未标注的页面，不允许发布
-    if (unmarkedSlides.length > 0) {
-      const slideNumbers = unmarkedSlides.map(s => `第${s.index}页`).join('、')
+    // 至少需要有一个已标注的页面
+    if (skippedCount === slides.length) {
       return res.status(400).json({
         success: false,
-        error: `发布失败：以下页面未标注类型，请先完成页面类型标注后再发布：${slideNumbers}`,
-        unmarkedSlides: unmarkedSlides.map(s => s.index),
+        error: '发布失败：所有页面均未标注类型，请至少标注一个页面后再发布',
       })
     }
 
@@ -386,6 +381,7 @@ router.post('/:id/publish', (req, res) => {
         id,
         status: 'published',
         updatedAt: now,
+        skippedCount,
       },
     })
   } catch (error) {
@@ -454,6 +450,85 @@ router.delete('/:id', (req, res) => {
   } catch (error) {
     console.error('[模板] 删除模板失败:', error)
     res.status(500).json({ success: false, error: '删除模板失败' })
+  }
+})
+
+// 上传模板页缩略图（base64 JSON 方式）
+// POST /templates/:id/thumbnails/:slideId
+// Body: { imageData: 'data:image/jpeg;base64,...' }
+router.post('/:id/thumbnails/:slideId', (req, res) => {
+  try {
+    const { id, slideId } = req.params
+    const { imageData } = req.body || {}
+
+    if (!imageData || typeof imageData !== 'string') {
+      return res.status(400).json({ success: false, error: '缺少 imageData 字段' })
+    }
+
+    // 解析 base64 数据
+    const matches = imageData.match(/^data:image\/(\w+);base64,(.+)$/)
+    if (!matches) {
+      return res.status(400).json({ success: false, error: 'imageData 格式无效' })
+    }
+    const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1]
+    const base64Data = matches[2]
+    const buffer = Buffer.from(base64Data, 'base64')
+
+    // 确保目标目录存在
+    const thumbDir = path.join(TEMPLATE_THUMBS_DIR, id)
+    if (!fs.existsSync(thumbDir)) fs.mkdirSync(thumbDir, { recursive: true })
+
+    // 写入文件
+    const filename = `${slideId}.${ext}`
+    const filePath = path.join(thumbDir, filename)
+    fs.writeFileSync(filePath, buffer)
+
+    // 生成访问 URL
+    const thumbnailUrl = `/templates/thumbnails/${id}/${filename}`
+
+    // 更新模板 JSON 中对应 slide 的 thumbnail 字段
+    const templateFile = path.join(TEMPLATES_DIR, `${id}.json`)
+    if (fs.existsSync(templateFile)) {
+      try {
+        const templateData = JSON.parse(fs.readFileSync(templateFile, 'utf-8'))
+        if (Array.isArray(templateData.slides)) {
+          const slideIdx = templateData.slides.findIndex(s => s.id === slideId)
+          if (slideIdx !== -1) {
+            templateData.slides[slideIdx].thumbnail = thumbnailUrl
+            fs.writeFileSync(templateFile, JSON.stringify(templateData, null, 2), 'utf-8')
+          }
+        }
+      } catch (e) {
+        console.warn(`[模板缩略图] 更新模板JSON失败: ${id}`, e)
+      }
+    }
+
+    // 更新索引中的 cover（取第一个有 thumbnail 的页面）
+    const indexList = readIndex()
+    const metaIdx = indexList.findIndex(item => item.id === id)
+    if (metaIdx !== -1) {
+      const templateFile2 = path.join(TEMPLATES_DIR, `${id}.json`)
+      if (fs.existsSync(templateFile2)) {
+        try {
+          const templateData2 = JSON.parse(fs.readFileSync(templateFile2, 'utf-8'))
+          const cover = getCoverFromSlides(templateData2.slides)
+          if (cover) {
+            indexList[metaIdx].cover = cover
+            indexList[metaIdx].updatedAt = new Date().toISOString()
+            writeIndex(indexList)
+          }
+        } catch (e) {
+          console.warn(`[模板缩略图] 更新索引封面失败: ${id}`, e)
+        }
+      }
+    }
+
+    console.log(`[模板缩略图] 已保存: ${id}/${slideId} -> ${thumbnailUrl}`)
+
+    res.json({ success: true, thumbnailUrl })
+  } catch (error) {
+    console.error('[模板缩略图] 上传失败:', error)
+    res.status(500).json({ success: false, error: '上传失败: ' + error.message })
   }
 })
 

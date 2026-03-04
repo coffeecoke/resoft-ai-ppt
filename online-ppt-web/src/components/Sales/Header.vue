@@ -2,7 +2,6 @@
   <div class="header-wrapper">
     <header class="header">
       <div class="brand">
-        <img src="https://dummyimage.com/28x28/6aa1ff/ffffff&text=L" alt="logo" />
         <span>售前平台</span>
       </div>
       <el-menu :default-active="activeNav" mode="horizontal" class="nav" @select="handleNav">

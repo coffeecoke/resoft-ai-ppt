@@ -901,10 +901,21 @@ const createPPT = async (template?: { slides: Slide[], theme: SlideTheme }) => {
 
   const reader: ReadableStreamDefaultReader = stream.body.getReader()
   const decoder = new TextDecoder('utf-8')
+  let buffer = '' // 缓存不完整的行
   
   const readStream = () => {
     reader.read().then(({ done, value }) => {
       if (done) {
+        // 处理最后一行（如果有）
+        if (buffer.trim()) {
+          try {
+            const slide: AIPPTSlide = JSON.parse(buffer.trim())
+            AIPPT(templateSlides, [slide])
+          }
+          catch (err) {
+            console.error('[AI生成PPT] 最后一行JSON解析失败:', err, '数据:', buffer)
+          }
+        }
         loading.value = false
         mainStore.setAIPPTDialogState(false)
         slidesStore.setTheme(templateTheme)
@@ -912,16 +923,29 @@ const createPPT = async (template?: { slides: Slide[], theme: SlideTheme }) => {
       }
   
       const chunk = decoder.decode(value, { stream: true })
-      try {
-        const text = chunk.replace('```json', '').replace('```', '').trim()
-        if (text) {
-          const slide: AIPPTSlide = JSON.parse(chunk)
+      buffer += chunk
+      
+      // 按行分割处理
+      const lines = buffer.split('\n')
+      // 保留最后一行（可能不完整）
+      buffer = lines.pop() || ''
+      
+      // 处理完整的行
+      for (const line of lines) {
+        const text = line.replace('```json', '').replace('```', '').trim()
+        if (!text) continue // 跳过空行
+        
+        try {
+          const startTime = performance.now()
+          const slide: AIPPTSlide = JSON.parse(text)
+          console.log(`[AI生成PPT] 收到第${slidesStore.slides.length + 1}页，类型: ${slide.type}`)
           AIPPT(templateSlides, [slide])
+          const endTime = performance.now()
+          console.log(`[AI生成PPT] 第${slidesStore.slides.length}页渲染完成，耗时: ${(endTime - startTime).toFixed(2)}ms`)
         }
-      }
-      catch (err) {
-        // eslint-disable-next-line
-        console.error(err)
+        catch (err) {
+          console.error('[AI生成PPT] JSON解析失败:', err, '行内容:', text)
+        }
       }
 
       readStream()

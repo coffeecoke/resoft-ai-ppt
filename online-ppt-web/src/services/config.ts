@@ -1,5 +1,7 @@
 import axios from 'axios'
 import message from '@/utils/message'
+import router from '@/router'
+import { useAuthStore } from '@/store/auth'
 
 // 创建axios实例，超时时间设置为5分钟（用于处理大文件上传）
 const instance = axios.create({ 
@@ -8,6 +10,17 @@ const instance = axios.create({
   maxContentLength: 100 * 1024 * 1024,
   maxBodyLength: 100 * 1024 * 1024
 })
+
+instance.interceptors.request.use(
+  config => {
+    const token = localStorage.getItem('resoft_auth_token')
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+    return config
+  },
+  error => Promise.reject(error)
+)
 
 instance.interceptors.response.use(
   response => {
@@ -32,6 +45,14 @@ instance.interceptors.response.use(
       return Promise.reject(new Error('请求超时'))
     }
     
+    if (error?.response?.status === 401) {
+      useAuthStore().clearAuth()
+      if (router.currentRoute.value.path !== '/login') {
+        router.push({ path: '/login', query: { redirect: router.currentRoute.value.fullPath } })
+      }
+      return Promise.reject(new Error('登录已过期，请重新登录'))
+    }
+
     if (error && error.response) {
       // 优先使用后端返回的错误消息
       const errorMessage = error.response.data?.error || error.response.data?.message || error.message

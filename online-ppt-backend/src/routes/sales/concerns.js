@@ -1,7 +1,8 @@
 import express from 'express'
-import { PrismaClient } from '@prisma/client'
+import * as prismaClient from '@prisma/client'
 
 const router = express.Router()
+const { PrismaClient } = prismaClient
 const prisma = new PrismaClient()
 
 // BigInt 无法被 JSON 序列化，转为 Number 再返回

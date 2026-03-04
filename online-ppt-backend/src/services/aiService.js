@@ -110,6 +110,7 @@ class AIService {
         ...options
       })
       
+      let slideCount = 0
       for await (const chunk of stream) {
         const content = chunk.choices[0]?.delta?.content || ''
         if (content) {
@@ -136,9 +137,13 @@ class AIService {
               
               // 尝试解析JSON，只发送有效的JSON
               try {
-                JSON.parse(trimmedLine)
+                const parsed = JSON.parse(trimmedLine)
+                slideCount++
+                console.log(`[PPT生成] 发送第${slideCount}页到前端，类型: ${parsed.type}`)
                 // 是有效的JSON，发送给前端
                 res.write(trimmedLine + '\n')
+                // 立即 flush，确保数据立即发送到前端
+                if (res.flush) res.flush()
               } catch (e) {
                 // 不是有效的JSON，可能是说明文字，跳过
                 // 不输出，避免前端解析错误
@@ -150,6 +155,7 @@ class AIService {
           }
         }
       }
+      console.log(`[PPT生成] 完成，共发送 ${slideCount} 页`)
       
       // 处理最后一行缓冲
       if (filterJson && buffer.trim()) {
@@ -160,8 +166,11 @@ class AIService {
             trimmedLine !== '```' &&
             !trimmedLine.startsWith('```')) {
           try {
-            JSON.parse(trimmedLine)
+            const parsed = JSON.parse(trimmedLine)
+            slideCount++
+            console.log(`[PPT生成] 发送最后一页（第${slideCount}页）到前端，类型: ${parsed.type}`)
             res.write(trimmedLine + '\n')
+            if (res.flush) res.flush()
           } catch (e) {
             // 最后一行不是有效JSON，忽略
           }
