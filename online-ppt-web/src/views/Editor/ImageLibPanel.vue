@@ -13,7 +13,7 @@
     title="AI图片搜索（来自 pexels.com）" 
     @close="close()"
   >
-    <div class="container" v-loading="{ state: loading, text: '加载中...' }">
+    <div class="container" v-loading="loading" element-loading-text="加载中...">
       <div class="tools">
         <Input class="input" v-model:value="searchWord" placeholder="搜索图片" @enter="search()">
           <template #prefix>

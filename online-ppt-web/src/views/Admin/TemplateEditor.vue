@@ -32,12 +32,13 @@
 <script lang="ts" setup>
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { toJpeg } from 'html-to-image'
 import EditorView from '@/views/Editor/index.vue'
 import { useSlidesStore, useSnapshotStore, useMainStore } from '@/store'
 import { deleteDiscardedDB } from '@/utils/database'
 import message from '@/utils/message'
 import axios from '@/services/config'
-import { SERVER_URL } from '@/services'
+import { SERVER_URL, authFetch } from '@/services'
 
 const route = useRoute()
 const router = useRouter()
@@ -68,7 +69,7 @@ const loadTemplate = async () => {
     loading.value = true
     
     // 从后端获取完整的模板数据（包含 title, theme, slides）
-    const resp = await fetch(`${SERVER_URL}/templates/${templateId}`)
+    const resp = await authFetch(`${SERVER_URL}/templates/${templateId}`)
     if (!resp.ok) {
       throw new Error('获取模板详情失败')
     }
@@ -154,6 +155,53 @@ const handleSave = async () => {
   }
 }
 
+// 为有类型标注的页面生成并上传缩略图
+const generateTemplateThumbnails = async (id: string) => {
+  const typedSlides = slidesStore.slides.filter(s => s.type && s.type !== '')
+  if (typedSlides.length === 0) {
+    console.log('[模板编辑器] 没有已标注类型的页面，跳过缩略图生成')
+    return
+  }
+
+  console.log(`[模板编辑器] 开始生成缩略图，共 ${typedSlides.length} 个已标注页面`)
+  let successCount = 0
+
+  for (const slide of typedSlides) {
+    const element = document.querySelector(`[data-slide-id="${slide.id}"]`) as HTMLElement | null
+    if (!element) {
+      console.warn(`[模板编辑器] 找不到幻灯片元素: ${slide.id}，跳过`)
+      continue
+    }
+
+    try {
+      const dataUrl = await toJpeg(element, {
+        quality: 0.8,
+        canvasWidth: 800,
+        canvasHeight: Math.round(800 * slidesStore.viewportRatio),
+        fontEmbedCSS: '',
+        pixelRatio: 1,
+      })
+
+      const resp = await authFetch(`${SERVER_URL}/templates/${id}/thumbnails/${slide.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageData: dataUrl }),
+      })
+
+      if (resp.ok) {
+        successCount++
+        console.log(`[模板编辑器] 缩略图已上传: ${slide.id}`)
+      } else {
+        console.warn(`[模板编辑器] 缩略图上传失败: ${slide.id}`)
+      }
+    } catch (err) {
+      console.warn(`[模板编辑器] 生成缩略图异常: ${slide.id}`, err)
+    }
+  }
+
+  console.log(`[模板编辑器] 缩略图生成完成 ${successCount}/${typedSlides.length}`)
+}
+
 // 发布模板（先保存，再更新状态为 published）
 const handlePublish = async () => {
   if (!templateId) return
@@ -166,7 +214,17 @@ const handlePublish = async () => {
       throw new Error(resp?.error || '发布模板失败')
     }
 
-    message.success('模板已发布')
+    const skippedCount = resp?.data?.skippedCount || 0
+    if (skippedCount > 0) {
+      message.success(`模板已发布（已跳过 ${skippedCount} 个未标注页面）`)
+    } else {
+      message.success('模板已发布')
+    }
+
+    // 异步生成缩略图（不阻塞发布流程）
+    generateTemplateThumbnails(templateId).catch(err => {
+      console.warn('[模板编辑器] 缩略图生成失败:', err)
+    })
   } catch (error: any) {
     console.error('[模板编辑器] 发布模板失败:', error)
     message.error(error?.message || '发布模板失败')

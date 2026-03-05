@@ -36,7 +36,7 @@
         </template>
       </div>
       
-      <div class="content" v-loading="{ state: loading, text: '加载中...' }">
+      <div class="content" v-loading="loading" element-loading-text="加载中...">
       <div class="header">
         <div class="types">
           <div class="type" 
@@ -107,6 +107,7 @@ const activeType = ref('all')
 
 const activeCatalog = ref('')
 const loading = ref(false)
+const requestId = ref(0) // 用于防止竞态条件
 
 const insertTemplate = (slide: Slide) => {
   emit('select', slide)
@@ -144,24 +145,38 @@ const switchTab = (tab: 'template' | 'document') => {
 }
 
 const changeCatalog = async (id: string) => {
+  // 生成新的请求ID，用于防止竞态条件
+  const currentRequestId = ++requestId.value
   loading.value = true
   activeCatalog.value = id
-  
+
   try {
+    let newSlides: Slide[] = []
+
     if (activeTab.value === 'template') {
       // 加载模板数据（使用模板服务，会自动处理后端和mock的兼容）
-      slides.value = await getTemplateSlides(id)
+      newSlides = await getTemplateSlides(id)
     } else if (activeTab.value === 'document') {
       // 加载文档数据
       const ret = await getDocument(id)
-      slides.value = ret.documentData.slides
+      newSlides = ret.documentData.slides
     }
-    
+
+    // 检查是否是最新请求，防止竞态条件
+    if (currentRequestId !== requestId.value) {
+      console.log('[模板面板] 请求已过期，忽略结果')
+      return
+    }
+
+    slides.value = newSlides
     loading.value = false
     if (listRef.value) listRef.value.scrollTo(0, 0)
   } catch (error) {
     console.error('[模板面板] 加载数据失败:', error)
-    loading.value = false
+    // 只有最新请求才更新 loading 状态
+    if (currentRequestId === requestId.value) {
+      loading.value = false
+    }
   }
 }
 

@@ -1,8 +1,21 @@
 import axios from './config'
 
-function getAuthHeaders(): HeadersInit {
+// 获取认证请求头（用于 fetch 调用）
+export function getAuthHeaders(): HeadersInit {
   const token = localStorage.getItem('resoft_auth_token')
   return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
+// 带鉴权的 fetch 封装，自动附加 Authorization header
+// 用法与原生 fetch 完全一致，直接替换 fetch() 即可
+export function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  return fetch(url, {
+    ...options,
+    headers: {
+      ...getAuthHeaders(),
+      ...options.headers,
+    },
+  })
 }
 
 // export const SERVER_URL = 'http://localhost:5000'
@@ -164,12 +177,9 @@ export default {
     
     console.log('📤 AIPPT_Outline 请求参数:', body)
     
-    return fetch(`${SERVER_URL}/tools/aippt_outline`, {
+    return authFetch(`${SERVER_URL}/tools/aippt_outline`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAuthHeaders(),
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     }).then(response => {
       console.log('📥 AIPPT_Outline 响应对象:', {
@@ -190,12 +200,9 @@ export default {
     style,
     model,
   }: AIPPTPayload): Promise<any> {
-    return fetch(`${SERVER_URL}/tools/aippt`, {
+    return authFetch(`${SERVER_URL}/tools/aippt`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAuthHeaders(),
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         content,
         language,
@@ -210,12 +217,9 @@ export default {
     content,
     command,
   }: AIWritingPayload): Promise<any> {
-    return fetch(`${SERVER_URL}/tools/ai_writing`, {
+    return authFetch(`${SERVER_URL}/tools/ai_writing`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAuthHeaders(),
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         content,
         command,
@@ -332,12 +336,9 @@ export default {
       fullContent: string
     }
   }): Promise<Response> {
-    return fetch(`${SERVER_URL}/aippt/chat`, {
+    return authFetch(`${SERVER_URL}/aippt/chat`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAuthHeaders(),
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         message,
         context,
@@ -351,8 +352,31 @@ export default {
   },
 
   /**
+   * 按模版页生成内容
+   *
+   * @param elements 模版页文字元素列表 [{textType, text}]
+   * @param topic 用户输入的主题
+   * @param model AI模型
+   */
+  aipptTemplatePageGenerate({
+    elements,
+    topic,
+    model = 'GLM-4.5-Flash',
+  }: {
+    elements: Array<{ textType: string; text: string }>
+    topic: string
+    model?: string
+  }): Promise<Response> {
+    return authFetch(`${SERVER_URL}/aippt/template-page-generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ elements, topic, model }),
+    })
+  },
+
+  /**
    * 图片推荐
-   * 
+   *
    * @param slideData 当前页面数据
    * @param keyword 搜索关键词（可选）
    * @param orientation 图片方向

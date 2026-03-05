@@ -118,8 +118,14 @@
                 :itemCount="msg.data?.itemCount"
                 @select="handleTemplateSelect"
               />
-              
-              <!-- 续写一页 -->
+
+              <!-- 按模版生成 - 模版页选择器（仅步骤1时可交互） -->
+              <TemplatePagePicker
+                v-if="msg.action === 'template_page_pick' && tplPageGenFlow.active && tplPageGenFlow.step === 1"
+                @select="handleTemplatePageSelected"
+              />
+
+              <!-- 续写一页（旧版兼容） -->
               <ContinuePreview
                 v-if="msg.action === 'continue_write'"
                 :slide="msg.data?.slide"
@@ -284,6 +290,7 @@ import type { Slide, PPTElement } from '@/types/slides'
 import TemplateSelector from './TemplateSelector.vue'
 import ContinuePreview from './ContinuePreview.vue'
 import ContentAdjust from './ContentAdjust.vue'
+import TemplatePagePicker from './TemplatePagePicker.vue'
 import Popover from '@/components/Popover.vue'
 import PopoverMenuItem from '@/components/PopoverMenuItem.vue'
 import Select from '@/components/Select.vue'
@@ -331,6 +338,19 @@ const messages = ref<ChatMessage[]>([])
 const messageListRef = ref<HTMLElement | null>(null)
 const inputRef = ref<HTMLTextAreaElement | null>(null)
 const adjustContentMenuVisible = ref(false)
+
+// 按模版页生成流程状态（步骤1: 选模版页，步骤2: 输入主题）
+const tplPageGenFlow = ref<{
+  active: boolean
+  step: 1 | 2
+  selectedSlide: Slide | null
+  selectedTemplateName: string
+}>({
+  active: false,
+  step: 1,
+  selectedSlide: null,
+  selectedTemplateName: '',
+})
 
 // 【新增】智能润色上下文状态
 const polishContext = ref({
@@ -624,15 +644,17 @@ defineExpose({
 })
 
 const quickAction = (action: string) => {
-  // 续写一页：特殊处理，填入话术并聚焦
+  // 续写一页：启动「按模版生成」步骤流程
   if (action === 'continue_write') {
-    inputText.value = CONTINUE_PREFIX
-    nextTick(() => {
-      inputRef.value?.focus()
-      // 光标定位到末尾
-      const len = inputText.value.length
-      inputRef.value?.setSelectionRange(len, len)
+    tplPageGenFlow.value = { active: true, step: 1, selectedSlide: null, selectedTemplateName: '' }
+    messages.value.push({
+      id: genMsgId(),
+      role: 'assistant',
+      content: '请先选择一个模版页面，AI 将分析其布局并根据您的主题生成对应内容：',
+      type: 'edit',
+      action: 'template_page_pick',
     })
+    scrollToBottom()
     return
   }
   
@@ -664,10 +686,10 @@ const sendMessage = async () => {
   
   // 检测续写意图
   const continueTopicContent = parseContinueIntent(text)
-  
+
   // 【新增】检测润色意图
   const polishIntent = parsePolishIntent(text)
-  
+
   // 添加用户消息
   messages.value.push({
     id: genMsgId(),
@@ -676,6 +698,17 @@ const sendMessage = async () => {
   })
   inputText.value = ''
   scrollToBottom()
+
+  // 按模版生成流程步骤2：用户输入主题，调用模版页生成
+  if (tplPageGenFlow.value.active && tplPageGenFlow.value.step === 2) {
+    loading.value = true
+    try {
+      await handleTemplatePageGenerate(text)
+    } finally {
+      loading.value = false
+    }
+    return
+  }
   
   // 续写意图：主题内容为空时提示
   if (text.startsWith(CONTINUE_PREFIX) && !continueTopicContent) {
@@ -1433,18 +1466,163 @@ const handleContinueConfirm = (slide: any) => {
   // 插入到当前页面的下一页
   const insertIndex = slideIndex.value + 1
   slidesStore.addSlide(slide, insertIndex)
-  
+
   // 跳转到新页面
   nextTick(() => {
     slidesStore.updateSlideIndex(insertIndex)
   })
-  
+
   message.success('页面已添加')
 }
 
 // 取消续写
 const handleContinueCancel = () => {
   message.info('已取消')
+}
+
+/**
+ * 按模版生成：步骤1 → 用户选中了某模版页
+ */
+const handleTemplatePageSelected = (slide: Slide, templateName: string) => {
+  tplPageGenFlow.value.selectedSlide = slide
+  tplPageGenFlow.value.selectedTemplateName = templateName
+  tplPageGenFlow.value.step = 2
+
+  messages.value.push({
+    id: genMsgId(),
+    role: 'assistant',
+    content: `✅ 已选择【${templateName}】的页面\n\n请输入这一页的主题或内容描述，AI 将分析该模版布局并生成对应文字：`,
+    type: 'chat',
+  })
+  scrollToBottom()
+
+  inputText.value = ''
+  nextTick(() => inputRef.value?.focus())
+}
+
+/**
+ * 按模版生成：步骤2 → 调用 AI 生成替换文字并插入
+ */
+const handleTemplatePageGenerate = async (topic: string) => {
+  const templateSlide = tplPageGenFlow.value.selectedSlide
+  if (!templateSlide) return
+
+  // 提取条件：type === 'text' 且 textType 有值，或 type === 'shape' 且 text.type 有值
+  const elements: Array<{ id: string; textType: string; content: string }> = []
+
+  for (const el of templateSlide.elements) {
+    if (el.type === 'text' && (el as any).textType) {
+      elements.push({
+        id: el.id,
+        textType: (el as any).textType,
+        content: (el as any).content || '',
+      })
+    } else if (el.type === 'shape' && (el as any).text?.type) {
+      elements.push({
+        id: el.id,
+        textType: (el as any).text.type,
+        content: (el as any).text.content || '',
+      })
+    }
+  }
+
+  if (elements.length === 0) {
+    messages.value.push({
+      id: genMsgId(),
+      role: 'assistant',
+      content: '❌ 该模版页没有标注文字类型的元素，请先在模版编辑中标注',
+      type: 'error',
+    })
+    tplPageGenFlow.value = { active: false, step: 1, selectedSlide: null, selectedTemplateName: '' }
+    return
+  }
+
+  // 显示生成中
+  const processingMsgId = genMsgId()
+  messages.value.push({
+    id: processingMsgId,
+    role: 'assistant',
+    content: `正在分析模版布局并生成内容...`,
+    type: 'chat',
+    streaming: true,
+  })
+  scrollToBottom()
+
+  try {
+    const response = await api.aipptTemplatePageGenerate({
+      elements,
+      topic,
+      model: selectedModel.value,
+    })
+    const result = await response.json()
+
+    const processingMsg = messages.value.find(m => m.id === processingMsgId)
+    if (processingMsg) processingMsg.streaming = false
+
+    if (!result.success || !result.data?.items) {
+      messages.value.push({
+        id: genMsgId(),
+        role: 'assistant',
+        content: `❌ 生成失败：${result.error || '无法生成内容'}，请重试`,
+        type: 'error',
+      })
+      return
+    }
+
+    const items = result.data.items as Array<{ id: string; newContent: string }>
+
+    // 按 ID 精准回填：复制模版页，直接更新对应元素的 content
+    const newElements = templateSlide.elements.map(el => {
+      const matched = items.find(item => item.id === el.id)
+      if (matched && matched.newContent) {
+        if (el.type === 'text') {
+          return { ...el, content: matched.newContent, id: nanoid(10) }
+        } else if (el.type === 'shape' && (el as any).text) {
+          return {
+            ...el,
+            id: nanoid(10),
+            text: { ...(el as any).text, content: matched.newContent },
+          }
+        }
+      }
+      // 其他元素保持原样，但生成新 id
+      return { ...el, id: nanoid(10) }
+    })
+
+    const newSlide: Slide = {
+      ...templateSlide,
+      id: nanoid(10),
+      elements: newElements,
+    }
+
+    // 插入到当前页下方
+    const insertIndex = slideIndex.value + 1
+    slidesStore.addSlide(newSlide, insertIndex)
+    await nextTick()
+    slidesStore.updateSlideIndex(insertIndex)
+
+    messages.value.push({
+      id: genMsgId(),
+      role: 'assistant',
+      content: `🎉 新页面已插入到第 ${insertIndex + 1} 页，已自动跳转！`,
+      type: 'chat',
+    })
+    scrollToBottom()
+    message.success('页面生成成功！')
+  } catch (error: any) {
+    const processingMsg = messages.value.find(m => m.id === processingMsgId)
+    if (processingMsg) processingMsg.streaming = false
+
+    messages.value.push({
+      id: genMsgId(),
+      role: 'assistant',
+      content: `❌ 生成失败：${error.message || '未知错误'}，请重试`,
+      type: 'error',
+    })
+  } finally {
+    // 重置流程状态
+    tplPageGenFlow.value = { active: false, step: 1, selectedSlide: null, selectedTemplateName: '' }
+  }
 }
 
 // 确认调整内容

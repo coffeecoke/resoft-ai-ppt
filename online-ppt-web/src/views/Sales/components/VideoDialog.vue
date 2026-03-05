@@ -333,10 +333,12 @@ const isVideoFormat = computed(() => {
   return videoFormats.includes(format)
 })
 
-// 媒体源 URL
+// 媒体源 URL（<audio>/<video> src 无法携带 Authorization header，用 query token）
 const mediaSrc = computed(() => {
   if (!props.videoDetail?.id) return ''
-  return `/api/sales/transcriptions/${props.videoDetail.id}/audio`
+  const token = localStorage.getItem('resoft_auth_token')
+  const tokenParam = token ? `?token=${encodeURIComponent(token)}` : ''
+  return `/api/sales/transcriptions/${props.videoDetail.id}/audio${tokenParam}`
 })
 
 // 媒体事件处理
