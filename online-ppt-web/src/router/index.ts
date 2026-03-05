@@ -53,6 +53,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '客户关心问题' }
       },
       {
+        path: 'competitor',
+        name: 'SalesCompetitor',
+        component: () => import('@/views/Sales/CompetitorAnalysis.vue'),
+        meta: { title: '竞品分析' }
+      },
+      {
         path: 'profile',
         name: 'SalesProfile',
         component: () => import('@/views/Sales/Profile.vue'),
