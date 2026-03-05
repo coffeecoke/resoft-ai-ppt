@@ -395,4 +395,71 @@ router.post('/:id/thumbnails/:slideId', async (req, res) => {
   }
 })
 
+
+// ─────────────────────────────────────────────
+// POST /templates/:id/cover  上传封面（第一页缩略图）
+// ─────────────────────────────────────────────
+router.post('/:id/cover', async (req, res) => {
+  try {
+    const { id } = req.params
+    const { imageData, slideId } = req.body || {}
+
+    if (!imageData || typeof imageData !== 'string') {
+      return res.status(400).json({ success: false, error: '缺少 imageData 字段' })
+    }
+
+    const matches = imageData.match(/^data:image\/(\w+);base64,(.+)$/)
+    if (!matches) {
+      return res.status(400).json({ success: false, error: 'imageData 格式无效' })
+    }
+
+    const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1]
+    const buffer = Buffer.from(matches[2], 'base64')
+
+    // 保存封面文件
+    ensureDirs()
+    const coverDir = path.join(DATA_DIR, 'covers')
+    if (!fs.existsSync(coverDir)) {
+      fs.mkdirSync(coverDir, { recursive: true })
+    }
+
+    const coverFilename = `${id}.${ext}`
+    const coverPath = path.join(coverDir, coverFilename)
+    fs.writeFileSync(coverPath, buffer)
+
+    // 生成访问 URL
+    const coverUrl = `/covers/${coverFilename}`
+
+    // 更新数据库封面字段
+    const updatedBy = req.user?.id || null
+    await prisma.templates.update({
+      where: { id },
+      data: { cover: coverUrl, updated_by: updatedBy }
+    })
+
+    // 同时更新内容文件中第一页的 thumbnail 字段
+    const meta = await prisma.templates.findUnique({ where: { id } })
+    if (meta) {
+      const absFilePath = path.join(DATA_DIR, meta.content_file_path)
+      if (fs.existsSync(absFilePath)) {
+        try {
+          const templateData = JSON.parse(fs.readFileSync(absFilePath, 'utf-8'))
+          if (Array.isArray(templateData.slides) && templateData.slides.length > 0) {
+            templateData.slides[0].thumbnail = coverUrl
+            fs.writeFileSync(absFilePath, JSON.stringify(templateData, null, 2), 'utf-8')
+          }
+        } catch (e) {
+          console.warn(`[模板封面] 更新模板 JSON 失败：${id}`, e)
+        }
+      }
+    }
+
+    console.log(`[模板封面] 已保存：${id} -> ${coverUrl}`)
+    res.json({ success: true, coverUrl })
+  } catch (error) {
+    console.error('[模板封面] 上传失败:', error)
+    res.status(500).json({ success: false, error: '上传失败：' + error.message })
+  }
+})
+
 export default router

@@ -5,7 +5,7 @@
 import { ref, onUnmounted } from 'vue'
 import { v4 as uuidv4 } from 'uuid'
 import { toJpeg } from 'html-to-image'
-import axios from 'axios'
+import axios from '@/services/config'
 
 interface QueueTask {
   taskId: string

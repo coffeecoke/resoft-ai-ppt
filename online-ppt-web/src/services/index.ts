@@ -9,12 +9,30 @@ export function getAuthHeaders(): HeadersInit {
 // 带鉴权的 fetch 封装，自动附加 Authorization header
 // 用法与原生 fetch 完全一致，直接替换 fetch() 即可
 export function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  const authHeaders = getAuthHeaders()
+
+  // 合并 headers，确保 Authorization 不会被覆盖
+  const mergedHeaders: HeadersInit = {}
+
+  // 先复制 authHeaders
+  Object.assign(mergedHeaders, authHeaders)
+
+  // 再复制 options.headers（如果存在）
+  if (options.headers) {
+    if (Array.isArray(options.headers)) {
+      // 如果是数组形式，直接追加
+      options.headers.forEach(([key, value]) => {
+        mergedHeaders[key] = value
+      })
+    } else {
+      // 如果是对象形式，逐个复制
+      Object.assign(mergedHeaders, options.headers)
+    }
+  }
+
   return fetch(url, {
     ...options,
-    headers: {
-      ...getAuthHeaders(),
-      ...options.headers,
-    },
+    headers: mergedHeaders,
   })
 }
 
