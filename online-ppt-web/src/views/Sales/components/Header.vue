@@ -10,6 +10,7 @@
         <el-menu-item index="ppt"><i class="ri-file-ppt-2-line"></i> 产品介绍PPT</el-menu-item>
         <el-menu-item index="video"><i class="ri-video-on-ai-line"></i> 售前交流</el-menu-item>
         <el-menu-item index="qa"><i class="ri-heart-2-line"></i> 客户问题</el-menu-item>
+        <el-menu-item index="competitor"><i class="ri-bar-chart-box-line"></i> 竞品分析</el-menu-item>
         <el-menu-item index="tender"><i class="ri-file-list-3-line"></i> 招标文件</el-menu-item>
         <el-menu-item index="response"><i class="ri-file-word-line"></i> 响应文件</el-menu-item>
         <el-menu-item index="materials"><i class="ri-git-repository-line"></i> 品牌基础资料</el-menu-item>
@@ -63,6 +64,7 @@ const activeNav = computed(() => {
   }
   if (name === 'SalesProduct') return 'ppt'
   if (name === 'SalesQA') return 'qa'
+  if (name === 'SalesCompetitor') return 'competitor'
   return 'recommend'
 })
 
@@ -71,6 +73,8 @@ const handleNav = (key) => {
     router.push('/sales/qa')
   } else if (key === 'ppt') {
     router.push('/sales/product')
+  } else if (key === 'competitor') {
+    router.push('/sales/competitor')
   } else if (key === 'video' || key === 'materials' || key === 'recommend' || key === 'tender' || key === 'response') {
     router.push({ path: '/sales/home', query: { nav: key } })
   }
