@@ -185,9 +185,9 @@ const publishing = ref(false)
 // 返回按钮逻辑
 const goBack = () => {
   if (editMode.value === 'template') {
-    router.push('/ppt/admin/templates')
+    router.push('/admin/document/template')
   } else if (editMode.value === 'document') {
-    router.push('/ppt/docs')
+    router.push('/admin/document/document')
   }
 }
 

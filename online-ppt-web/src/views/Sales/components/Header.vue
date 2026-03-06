@@ -26,6 +26,8 @@
           <el-divider direction="vertical" />
           <el-link :underline="false" @click="goToProfile"><i class="ri-user-2-line" style="margin-right:4px"></i> {{ authStore.user?.name || authStore.user?.username || '用户' }}</el-link>
           <el-divider direction="vertical" />
+          <el-link :underline="false" @click="goToAdmin"><i class="ri-settings-3-line" style="margin-right:4px"></i> 后台管理系统</el-link>
+          <el-divider direction="vertical" />
           <el-link type="danger" :underline="false" @click="handleLogout"><i class="ri-logout-circle-r-line" style="margin-right:4px"></i> 退出</el-link>
         </div>
       </div>
@@ -78,6 +80,10 @@ const handleNav = (key) => {
 
 const goToProfile = () => {
   router.push('/sales/profile')
+}
+
+const goToAdmin = () => {
+  router.push('/admin')
 }
 
 const openPendingDrawer = () => {

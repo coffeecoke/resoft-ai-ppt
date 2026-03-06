@@ -43,8 +43,8 @@ export function useThumbnailQueue(options: ThumbnailQueueOptions = {}) {
         taskId
       })
 
-      if (!response.data.success) {
-        throw new Error(response.data.message || '创建任务失败')
+      if (!response.success) {
+        throw new Error(response.message || '创建任务失败')
       }
 
       // 2. 建立WebSocket连接
