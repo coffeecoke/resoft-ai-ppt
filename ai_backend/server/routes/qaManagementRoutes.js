@@ -168,10 +168,14 @@ router.get('/concerns/export', async (req, res) => {
       classificationStatus,
       category,
       intent,
-      questionSource
+      questionSource,
+      reviewStatus
     } = req.query;
 
     const where = {};
+    if (reviewStatus && ['pending', 'approved', 'rejected'].includes(reviewStatus)) {
+      where.review_status = reviewStatus;
+    }
     if (transcriptionName) {
       const transcriptions = await prisma.transcriptions.findMany({
         where: { name: { contains: transcriptionName } },
@@ -327,11 +331,17 @@ router.get('/concerns', async (req, res) => {
       classificationStatus,
       category,
       intent,
-      questionSource // 新增：问题发起方筛选
+      questionSource, // 问题发起方筛选
+      reviewStatus // 审核状态：pending | approved | rejected
     } = req.query;
 
     // 构建查询条件
     const where = {};
+
+    // 审核状态筛选
+    if (reviewStatus && ['pending', 'approved', 'rejected'].includes(reviewStatus)) {
+      where.review_status = reviewStatus;
+    }
 
     // 音频名称筛选（通过转录记录名称模糊匹配）
     if (transcriptionName) {
@@ -646,6 +656,9 @@ router.get('/concerns', async (req, res) => {
         transcription_id: concern.transcription_id,
         transcription_name: transcriptionData ? transcriptionData.name : '-', // 音频名称
         transcription_speaker_roles: transcriptionData ? transcriptionData.speaker_roles : null, // 角色映射信息
+        review_status: concern.review_status ?? 'pending',
+        reviewed_at: concern.reviewed_at,
+        reviewer_id: concern.reviewer_id,
         createdAt: concern.created_at,
         updatedAt: concern.updated_at,
         // 分类信息
@@ -678,6 +691,349 @@ router.get('/concerns', async (req, res) => {
       success: false,
       error: error.message || '查询失败'
     });
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+// ---------- 审核相关：时间解析与对话上下文 ----------
+/** 解析时间范围字符串为秒数，支持 "[00:10-00:30]" 或 "00:10-00:30" */
+function parseTimeRangeToSeconds(rangeStr) {
+  if (!rangeStr || typeof rangeStr !== 'string') return { start: null, end: null };
+  const trimmed = rangeStr.trim().replace(/^\[|\]$/g, '');
+  if (!trimmed.includes('-')) return { start: null, end: null };
+  const parts = trimmed.split('-').map(s => s.trim());
+  if (parts.length !== 2) return { start: null, end: null };
+  const parseOne = (s) => {
+    const p = s.split(':');
+    if (p.length === 2) return parseInt(p[0], 10) * 60 + parseFloat(p[1]);
+    if (p.length === 3) return parseInt(p[0], 10) * 3600 + parseInt(p[1], 10) * 60 + parseFloat(p[2]);
+    return 0;
+  };
+  return { start: parseOne(parts[0]), end: parseOne(parts[1]) };
+}
+
+/**
+ * GET /api/qa/concerns/:id/review-context
+ * 获取单个问答对的审核上下文：来源对话片段 + 上2条 + 下2条
+ */
+router.get('/concerns/:id/review-context', async (req, res) => {
+  const prisma = new PrismaClient();
+  try {
+    const { id: concernId } = req.params;
+    if (!concernId) {
+      return res.status(400).json({ success: false, error: '问答对ID不能为空' });
+    }
+
+    const concern = await prisma.concerns.findUnique({
+      where: { id: concernId },
+      include: { concern_categories: true }
+    });
+    if (!concern) {
+      return res.status(404).json({ success: false, error: '问答对不存在' });
+    }
+    if (!concern.transcription_id) {
+      return res.json({
+        success: true,
+        data: {
+          concern: formatConcernForReview(concern),
+          dialogueContext: [],
+          contextStartIndex: 0,
+          sourceIndexInContext: -1
+        }
+      });
+    }
+
+    const transcription = await prisma.transcriptions.findUnique({
+      where: { id: concern.transcription_id },
+      select: { id: true, name: true, dialogues: true }
+    });
+    if (!transcription) {
+      return res.json({
+        success: true,
+        data: {
+          concern: formatConcernForReview(concern),
+          dialogueContext: [],
+          contextStartIndex: 0,
+          sourceIndexInContext: -1
+        }
+      });
+    }
+
+    let dialogues = transcription.dialogues;
+    if (typeof dialogues === 'string') {
+      try {
+        dialogues = JSON.parse(dialogues);
+      } catch (e) {
+        dialogues = [];
+      }
+    }
+    if (!Array.isArray(dialogues) || dialogues.length === 0) {
+      return res.json({
+        success: true,
+        data: {
+          concern: formatConcernForReview(concern),
+          dialogueContext: [],
+          contextStartIndex: 0,
+          sourceIndexInContext: -1
+        }
+      });
+    }
+
+    const tr1 = parseTimeRangeToSeconds(concern.time_range1 || concern.time_range || '');
+    const qaStart = tr1.start;
+    const qaEnd = tr1.end ?? tr1.start;
+    const qaStart2 = concern.time_range2 ? parseTimeRangeToSeconds(concern.time_range2).start : null;
+    const qaEnd2 = concern.time_range2 ? parseTimeRangeToSeconds(concern.time_range2).end : null;
+    const rangeStart = qaStart !== null ? qaStart : (qaStart2 !== null ? qaStart2 : 0);
+    const rangeEnd = (qaEnd2 !== null && qaEnd2 > (qaEnd || 0)) ? qaEnd2 : (qaEnd !== null ? qaEnd : rangeStart);
+
+    const withSeconds = dialogues.map((d, i) => {
+      const raw = (d.timeRange || d.startTime || '').toString().replace(/^\[|\]$/g, '');
+      const parts = raw.includes('-') ? raw.split('-').map(s => s.trim()) : [];
+      const parseOne = (s) => {
+        if (!s) return 0;
+        const p = s.split(':');
+        if (p.length === 2) return parseInt(p[0], 10) * 60 + parseFloat(p[1]);
+        if (p.length === 3) return parseInt(p[0], 10) * 3600 + parseInt(p[1], 10) * 60 + parseFloat(p[2]);
+        return 0;
+      };
+      const start = parts.length >= 1 ? parseOne(parts[0]) : 0;
+      const end = parts.length >= 2 ? parseOne(parts[1]) : start;
+      return { index: i, start, end, ...d };
+    });
+
+    let centerIndex = 0;
+    for (let i = 0; i < withSeconds.length; i++) {
+      const d = withSeconds[i];
+      const overlap = (d.start <= rangeEnd && (d.end >= rangeStart || d.end === 0));
+      if (overlap || (d.start >= rangeStart && centerIndex === 0)) {
+        centerIndex = i;
+        if (overlap) break;
+      }
+    }
+
+    const contextAbove = 3; // 上3条
+    const contextBelow = 4; // 下4条
+    const startIdx = Math.max(0, centerIndex - contextAbove);
+    const endIdx = Math.min(withSeconds.length - 1, centerIndex + contextBelow);
+    const dialogueContext = withSeconds.slice(startIdx, endIdx + 1).map((d, i) => ({
+      indexInFull: d.index,
+      position: startIdx + i,
+      timeRange: d.timeRange || d.startTime || '',
+      speaker: d.speaker || d.speakerName || '',
+      text: d.text || d.correctedText || d.originalText || '',
+      isSource: startIdx + i === centerIndex
+    }));
+    const sourceIndexInContext = centerIndex >= startIdx && centerIndex <= endIdx ? centerIndex - startIdx : -1;
+
+    res.json({
+      success: true,
+      data: {
+        concern: formatConcernForReview(concern),
+        dialogueContext,
+        contextStartIndex: startIdx,
+        sourceIndexInContext,
+        transcriptionName: transcription.name
+      }
+    });
+  } catch (error) {
+    console.error('获取审核上下文失败:', error);
+    res.status(500).json({ success: false, error: error.message || '获取失败' });
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+function formatConcernForReview(concern) {
+  return {
+    id: concern.id,
+    question: concern.question,
+    answer: concern.answer,
+    category: concern.category,
+    category_code: concern.category_code,
+    intent_code: concern.intent_code,
+    time_range1: concern.time_range1,
+    time_range2: concern.time_range2,
+    question_speaker: concern.question_speaker,
+    answer_speaker: concern.answer_speaker,
+    transcription_id: concern.transcription_id,
+    review_status: concern.review_status ?? 'pending',
+    reviewed_at: concern.reviewed_at,
+    reviewer_id: concern.reviewer_id,
+    concern_categories: concern.concern_categories ? {
+      id: concern.concern_categories.id,
+      code: concern.concern_categories.code,
+      name: concern.concern_categories.name,
+      level: concern.concern_categories.level,
+      type: concern.concern_categories.type
+    } : null
+  };
+}
+
+/**
+ * POST /api/qa/concerns/:id/review
+ * 提交单条审核。Body: { action: 'approve'|'reject'|'modify_approve', remark?: string, content_after?: { question?, answer?, category_code?, intent_code? } }
+ */
+router.post('/concerns/:id/review', async (req, res) => {
+  const prisma = new PrismaClient();
+  try {
+    const { id: concernId } = req.params;
+    const { action, remark, content_after } = req.body || {};
+    if (!concernId) {
+      return res.status(400).json({ success: false, error: '问答对ID不能为空' });
+    }
+    if (!['approve', 'reject', 'modify_approve'].includes(action)) {
+      return res.status(400).json({ success: false, error: 'action 必须为 approve、reject 或 modify_approve' });
+    }
+
+    const concern = await prisma.concerns.findUnique({ where: { id: concernId } });
+    if (!concern) {
+      return res.status(404).json({ success: false, error: '问答对不存在' });
+    }
+
+    const reviewerId = req.body.reviewer_id || req.headers['x-reviewer-id'] || null;
+    const now = new Date();
+
+    const recordId = `rev_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    const contentBefore = action === 'modify_approve' || action === 'reject' ? {
+      question: concern.question,
+      answer: concern.answer,
+      category_code: concern.category_code,
+      intent_code: concern.intent_code
+    } : null;
+
+    if (action === 'approve' || action === 'modify_approve') {
+      const updateData = {
+        review_status: 'approved',
+        reviewed_at: now,
+        reviewer_id: reviewerId
+      };
+      if (action === 'modify_approve' && content_after && typeof content_after === 'object') {
+        if (content_after.question !== undefined) updateData.question = content_after.question;
+        if (content_after.answer !== undefined) updateData.answer = content_after.answer;
+        if (content_after.category_code !== undefined) updateData.category_code = content_after.category_code;
+        if (content_after.intent_code !== undefined) updateData.intent_code = content_after.intent_code;
+      }
+      await prisma.concerns.update({
+        where: { id: concernId },
+        data: updateData
+      });
+      await prisma.concern_review_records.create({
+        data: {
+          id: recordId,
+          concern_id: concernId,
+          action: action === 'modify_approve' ? 'modify_approve' : 'approve',
+          reviewer_id: reviewerId,
+          review_time: now,
+          remark: remark || null,
+          content_before: contentBefore,
+          content_after: action === 'modify_approve' && content_after ? content_after : null
+        }
+      });
+    } else {
+      await prisma.concerns.update({
+        where: { id: concernId },
+        data: {
+          review_status: 'rejected',
+          reviewed_at: now,
+          reviewer_id: reviewerId
+        }
+      });
+      await prisma.concern_review_records.create({
+        data: {
+          id: recordId,
+          concern_id: concernId,
+          action: 'reject',
+          reviewer_id: reviewerId,
+          review_time: now,
+          remark: remark || null,
+          content_before: contentBefore,
+          content_after: null
+        }
+      });
+    }
+
+    res.json({
+      success: true,
+      message: action === 'reject' ? '已拒绝' : (action === 'modify_approve' ? '已修改并通过' : '已通过'),
+      data: { concernId, review_status: action === 'reject' ? 'rejected' : 'approved' }
+    });
+  } catch (error) {
+    console.error('提交审核失败:', error);
+    res.status(500).json({ success: false, error: error.message || '提交失败' });
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+/**
+ * POST /api/qa/review/batch-approve
+ * Body: { concernIds: string[] }
+ */
+router.post('/review/batch-approve', async (req, res) => {
+  const prisma = new PrismaClient();
+  try {
+    const { concernIds } = req.body || {};
+    if (!Array.isArray(concernIds) || concernIds.length === 0) {
+      return res.status(400).json({ success: false, error: '请提供 concernIds 数组' });
+    }
+    const reviewerId = req.body.reviewer_id || req.headers['x-reviewer-id'] || null;
+    const now = new Date();
+
+    const result = await prisma.concerns.updateMany({
+      where: { id: { in: concernIds } },
+      data: {
+        review_status: 'approved',
+        reviewed_at: now,
+        reviewer_id: reviewerId
+      }
+    });
+
+    res.json({
+      success: true,
+      message: `已批量通过 ${result.count} 条`,
+      data: { count: result.count }
+    });
+  } catch (error) {
+    console.error('批量通过失败:', error);
+    res.status(500).json({ success: false, error: error.message || '操作失败' });
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+/**
+ * POST /api/qa/review/batch-reject
+ * Body: { concernIds: string[], remark?: string }
+ */
+router.post('/review/batch-reject', async (req, res) => {
+  const prisma = new PrismaClient();
+  try {
+    const { concernIds, remark } = req.body || {};
+    if (!Array.isArray(concernIds) || concernIds.length === 0) {
+      return res.status(400).json({ success: false, error: '请提供 concernIds 数组' });
+    }
+    const reviewerId = req.body.reviewer_id || req.headers['x-reviewer-id'] || null;
+    const now = new Date();
+
+    const result = await prisma.concerns.updateMany({
+      where: { id: { in: concernIds } },
+      data: {
+        review_status: 'rejected',
+        reviewed_at: now,
+        reviewer_id: reviewerId
+      }
+    });
+
+    res.json({
+      success: true,
+      message: `已批量拒绝 ${result.count} 条`,
+      data: { count: result.count }
+    });
+  } catch (error) {
+    console.error('批量拒绝失败:', error);
+    res.status(500).json({ success: false, error: error.message || '操作失败' });
   } finally {
     await prisma.$disconnect();
   }

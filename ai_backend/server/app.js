@@ -19,6 +19,7 @@ const sessionsRoutes = require('./routes/sessionsRoutes')
 const autoProcessRoutes = require('./routes/autoProcessRoutes')
 const qaManagementRoutes = require('./routes/qaManagementRoutes')
 const presalesAnalysisRoutes = require('./routes/presalesAnalysisRoutes')
+const intelligentScraperRoutes = require('./routes/intelligentScraperRoutes')
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -58,6 +59,7 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }))
 // 静态文件服务
 app.use(express.static(path.join(__dirname, '../frontend')))
 app.use('/output', express.static(path.join(__dirname, '../output')))
+app.use('/scraper_output', express.static(path.join(__dirname, '../scraper_output')))
 
 // ==================== AI管理后台路由（新架构） ====================
 const adminRoutes = require('./routes')
@@ -87,6 +89,9 @@ app.use('/api/qa', qaManagementRoutes)
 
 // 路由：售前交流综合分析（新增）
 app.use('/api/presales-analysis', presalesAnalysisRoutes)
+
+// 路由：智能信息爬取（采招网）（新增）
+app.use('/api/scraper', intelligentScraperRoutes)
 
 // 路由：文件提取接口
 app.post('/api/extract', upload.single('file'), async (req, res) => {

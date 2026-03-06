@@ -174,27 +174,52 @@ router.get('/analyze/:documentId', async (req, res) => {
 })
 
 /**
+ * GET /api/ppt-analysis/results
+ * 获取分析结果：无参数时返回全部，有 documentId 时返回指定文档
+ * Query: documentId (可选)
+ */
+router.get('/results', async (req, res) => {
+  try {
+    const documentId = req.query.documentId || req.params.documentId
+    
+    const results = documentId
+      ? await pptAnalysisService.getAnalysisResults(documentId)
+      : await pptAnalysisService.getAllAnalysisResults()
+    
+    const doc = results[0]
+    res.json({
+      success: true,
+      documentId: documentId || null,
+      documentName: doc ? doc.documentName : null,
+      total: results.length,
+      results
+    })
+  } catch (error) {
+    console.error('获取分析结果错误:', error)
+    res.status(500).json({
+      success: false,
+      message: error.message || '获取分析结果失败'
+    })
+  }
+})
+
+/**
  * GET /api/ppt-analysis/results/:documentId
- * 获取指定文档的分析结果
+ * 获取指定文档的分析结果（兼容旧接口）
  */
 router.get('/results/:documentId', async (req, res) => {
   try {
     const { documentId } = req.params
-    
-    // 验证文档是否存在
     const document = await prisma.documents.findUnique({
       where: { id: documentId }
     })
-    
     if (!document) {
       return res.status(404).json({
         success: false,
         message: '文档不存在'
       })
     }
-    
     const results = await pptAnalysisService.getAnalysisResults(documentId)
-    
     res.json({
       success: true,
       documentId,
@@ -202,7 +227,6 @@ router.get('/results/:documentId', async (req, res) => {
       total: results.length,
       results
     })
-    
   } catch (error) {
     console.error('获取分析结果错误:', error)
     res.status(500).json({
@@ -705,6 +729,58 @@ router.post('/correct-single', async (req, res) => {
     res.status(500).json({
       success: false,
       message: error.message || '纠偏失败'
+    })
+  }
+})
+
+/**
+ * POST /api/ppt-analysis/review
+ * 单条审核：通过 / 拒绝 / 修改后通过
+ * Body: { thumbnailId, action: 'approve'|'reject'|'modify_approve', reviewerId?, categoryCode?, remark? }
+ * modify_approve 时传 categoryCode 表示修改后的分类
+ */
+router.post('/review', async (req, res) => {
+  try {
+    const { thumbnailId, action, reviewerId, categoryCode, remark } = req.body
+    if (!thumbnailId || !action) {
+      return res.status(400).json({
+        success: false,
+        message: 'thumbnailId 和 action 为必填'
+      })
+    }
+    const contentAfter = (action === 'modify_approve' && categoryCode) ? { categoryCode } : null
+    const result = await pptAnalysisService.reviewSingle(thumbnailId, action, reviewerId || null, contentAfter, remark || null)
+    res.json({ success: true, ...result })
+  } catch (error) {
+    console.error('审核失败:', error)
+    res.status(500).json({
+      success: false,
+      message: error.message || '审核失败'
+    })
+  }
+})
+
+/**
+ * POST /api/ppt-analysis/review/batch
+ * 批量审核：批量通过 / 批量拒绝
+ * Body: { thumbnailIds: string[], action: 'approve'|'reject', reviewerId?, remark? }
+ */
+router.post('/review/batch', async (req, res) => {
+  try {
+    const { thumbnailIds, action, reviewerId, remark } = req.body
+    if (!Array.isArray(thumbnailIds)) {
+      return res.status(400).json({
+        success: false,
+        message: 'thumbnailIds 必须为数组'
+      })
+    }
+    const result = await pptAnalysisService.reviewBatch(thumbnailIds, action, reviewerId || null, remark || null)
+    res.json({ success: true, ...result })
+  } catch (error) {
+    console.error('批量审核失败:', error)
+    res.status(500).json({
+      success: false,
+      message: error.message || '批量审核失败'
     })
   }
 })
