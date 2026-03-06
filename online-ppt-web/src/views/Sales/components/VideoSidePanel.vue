@@ -19,7 +19,7 @@
               @click="handleTranscriptClick(index)"
             >
               <div class="transcript-header">
-                <span class="transcript-speaker">{{ item.speaker }}</span>
+                <span class="transcript-speaker" :class="getSpeakerClass(item.speaker)">{{ item.speaker }}</span>
                 <span class="transcript-time">{{ item.time }}</span>
               </div>
               <div class="transcript-text">{{ item.content }}</div>
@@ -65,7 +65,6 @@
                 <!-- 标题区域 -->
                 <div class="report-item-header">
                   <div class="report-item-title-row">
-                    <span class="report-company-name">{{ item.company || videoDetail.customerName || videoDetail.customer || '南方电网' }}</span>
                     <span class="report-category-name">{{ item.category || '资质与案例' }}</span>
                     <span 
                       v-if="item.expertApproved"
@@ -89,6 +88,7 @@
 
                 <!-- 问题 -->
                 <div class="report-item-question">
+                  <span class="report-item-question-text">{{ item.q }}</span>
                   <span
                     v-if="item.time"
                     class="report-item-time qa-time-clickable"
@@ -96,7 +96,6 @@
                   >
                     {{ item.time }}
                   </span>
-                  <span class="report-item-question-text">{{ item.q }}</span>
                 </div>
                 
                 <!-- 系统答案 -->
@@ -505,6 +504,15 @@ const handleToggleLike = (index) => {
 // 处理 Q&A 时间点击
 const handleQATimeClick = (qaItem, index) => {
   emit('qa-time-click', qaItem, index)
+}
+
+// 获取说话人的样式类
+const getSpeakerClass = (speaker) => {
+  if (speaker === '我方') return 'speaker-our'
+  if (speaker === '客户') return 'speaker-customer'
+  // 未分类的 speaker（如 SPEAKER_1, SPEAKER_2 等）使用默认样式
+  if (speaker && speaker.startsWith('SPEAKER_')) return 'speaker-default'
+  return ''
 }
 </script>
 
@@ -1034,7 +1042,19 @@ const handleQATimeClick = (qaItem, index) => {
     border-left: 3px solid #3b82f6;
 
     .transcript-speaker {
-      color: #2563eb;
+      font-weight: 600;
+    }
+
+    .speaker-our {
+      background: #bfdbfe;
+    }
+
+    .speaker-customer {
+      background: #fed7aa;
+    }
+
+    .speaker-default {
+      background: #e5e7eb;
     }
 
     .transcript-time {
@@ -1056,10 +1076,26 @@ const handleQATimeClick = (qaItem, index) => {
 }
 
 .transcript-speaker {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #374151;
-  transition: color 0.3s;
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 4px;
+  transition: all 0.3s;
+}
+
+.speaker-our {
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
+.speaker-customer {
+  color: #c2410c;
+  background: #ffedd5;
+}
+
+.speaker-default {
+  color: #6b7280;
+  background: #f3f4f6;
 }
 
 .transcript-time {
