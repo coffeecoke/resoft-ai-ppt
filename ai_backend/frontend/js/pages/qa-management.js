@@ -15,7 +15,8 @@ let qaState = {
     classificationStatus: '',
     category: '',
     intent: '',
-    questionSource: '' // 新增：问题发起方筛选
+    questionSource: '',
+    reviewStatus: '' // 审核状态：pending | approved | rejected
   },
   selectedIds: new Set(),
   allSelected: false,
@@ -124,11 +125,16 @@ window.classifyAllQAs = function() {
   window.saveReclassify = saveReclassify;
     window.toggleSelectAll = toggleSelectAll;
     window.toggleSelectQA = toggleSelectQA;
-    window.applyFilters = applyFilters;
-    window.resetFilters = resetFilters;
-    window.changePage = changePage;
-    window.changePageSize = changePageSize;
-    window.exportQAList = exportQAList;
+  window.applyFilters = applyFilters;
+  window.resetFilters = resetFilters;
+  window.changePage = changePage;
+  window.changePageSize = changePageSize;
+  window.exportQAList = exportQAList;
+  window.openQAReview = openQAReview;
+  window.closeQAReview = closeQAReview;
+  window.submitQAReview = submitQAReview;
+  window.batchApprove = batchApprove;
+  window.batchReject = batchReject;
     
     // 标记初始化完成
     _qaFunctionsInitialized = true;
@@ -462,7 +468,10 @@ async function loadQAList() {
       params.append('intent', qaState.filters.intent);
     }
     if (qaState.filters.questionSource) {
-      params.append('questionSource', qaState.filters.questionSource); // 新增
+      params.append('questionSource', qaState.filters.questionSource);
+    }
+    if (qaState.filters.reviewStatus) {
+      params.append('reviewStatus', qaState.filters.reviewStatus);
     }
     
     const response = await fetch(`${API_BASE}/qa/concerns?${params.toString()}`);
@@ -483,7 +492,7 @@ async function loadQAList() {
     
     // 渲染列表
     if (!list || list.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; padding: 40px; color: #999;">暂无问答对数据</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="11" style="text-align: center; padding: 40px; color: #999;">暂无问答对数据</td></tr>';
       document.getElementById('qa-pagination').style.display = 'none';
       return;
     }
@@ -510,6 +519,11 @@ async function loadQAList() {
       // 创建时间
       const createdAt = qa.createdAt ? new Date(qa.createdAt).toLocaleString('zh-CN') : '-';
       
+      // 审核状态
+      const reviewStatus = qa.review_status || 'pending';
+      const reviewStatusText = { pending: '待审核', approved: '已通过', rejected: '已拒绝' }[reviewStatus] || reviewStatus;
+      const reviewBadge = `<span class="classification-badge badge-review-${reviewStatus}">${escapeHtml(reviewStatusText)}</span>`;
+      
       // 问题/回答截断
       const questionText = qa.question ? (qa.question.length > 50 ? qa.question.substring(0, 50) + '...' : qa.question) : '-';
       const answerText = qa.answer ? (qa.answer.length > 50 ? qa.answer.substring(0, 50) + '...' : qa.answer) : '-';
@@ -528,8 +542,10 @@ async function loadQAList() {
           <td>${intentInfo}</td>
           <td title="${qa.transcription_id ? escapeHtml(qa.transcription_id) : ''}">${qa.transcription_name ? escapeHtml(qa.transcription_name) : '-'}</td>
           <td>${escapeHtml(timeRangeDisplay)}</td>
+          <td>${reviewBadge}</td>
           <td>${escapeHtml(createdAt)}</td>
           <td>
+            <button class="btn btn-sm btn-primary" onclick="openQAReview('${qa.id}')" title="审核">📋</button>
             <button class="btn btn-sm btn-primary" onclick="classifySingleQA('${qa.id}')" title="单独分类">🏷️</button>
             <button class="btn btn-sm btn-info" onclick="viewQADetail('${qa.id}')" title="查看详情">👁️</button>
           </td>
@@ -542,7 +558,7 @@ async function loadQAList() {
     
   } catch (error) {
     console.error('加载问答对列表失败:', error);
-    tbody.innerHTML = `<tr><td colspan="10" style="text-align: center; padding: 40px; color: #f5222d;">加载失败: ${error.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" style="text-align: center; padding: 40px; color: #f5222d;">加载失败: ${error.message}</td></tr>`;
     showToast('加载失败: ' + error.message, 'error');
   }
 }
@@ -605,9 +621,10 @@ applyFilters = function() {
   qaState.filters.classificationStatus = document.getElementById('qa-filter-classification-status')?.value || '';
   qaState.filters.category = document.getElementById('qa-filter-category')?.value || '';
   qaState.filters.intent = document.getElementById('qa-filter-intent')?.value || '';
-  qaState.filters.questionSource = document.getElementById('qa-filter-question-source')?.value || ''; // 新增
-  qaState.currentPage = 1; // 重置到第一页
-  qaState.selectedIds.clear(); // 清空选择
+  qaState.filters.questionSource = document.getElementById('qa-filter-question-source')?.value || '';
+  qaState.filters.reviewStatus = document.getElementById('qa-filter-review-status')?.value || '';
+  qaState.currentPage = 1;
+  qaState.selectedIds.clear();
   loadQAList();
 }
 
@@ -619,13 +636,16 @@ resetFilters = function() {
   document.getElementById('qa-filter-classification-status').value = '';
   document.getElementById('qa-filter-category').value = '';
   document.getElementById('qa-filter-intent').value = '';
-  document.getElementById('qa-filter-question-source').value = ''; // 新增
+  document.getElementById('qa-filter-question-source').value = '';
+  const reviewEl = document.getElementById('qa-filter-review-status');
+  if (reviewEl) reviewEl.value = '';
   qaState.filters = {
     transcriptionName: '',
     classificationStatus: '',
     category: '',
     intent: '',
-    questionSource: '' // 新增
+    questionSource: '',
+    reviewStatus: ''
   };
   qaState.currentPage = 1;
   qaState.selectedIds.clear();
@@ -659,6 +679,9 @@ async function exportQAList() {
     }
     if (qaState.filters.questionSource) {
       params.append('questionSource', qaState.filters.questionSource);
+    }
+    if (qaState.filters.reviewStatus) {
+      params.append('reviewStatus', qaState.filters.reviewStatus);
     }
     const response = await fetch(`${API_BASE}/qa/concerns/export?${params.toString()}`);
     const result = await response.json();
@@ -1518,6 +1541,267 @@ closeClassificationOverlay = function() {
   const overlay = document.getElementById('qa-classification-overlay');
   if (overlay) {
     overlay.style.display = 'none';
+  }
+}
+
+// ---------- 审核：打开审核弹窗、渲染上下文、提交审核、批量通过/拒绝 ----------
+let qaReviewCurrentId = null;
+
+/**
+ * 打开审核弹窗，加载审核上下文（来源对话上3+本+下4）
+ */
+async function openQAReview(concernId) {
+  const modal = document.getElementById('qa-review-modal');
+  const body = document.getElementById('qa-review-body');
+  if (!modal || !body) return;
+  qaReviewCurrentId = concernId;
+  body.innerHTML = '<div style="text-align: center; padding: 40px; color: #999;">加载中...</div>';
+  modal.style.display = 'flex';
+  try {
+    const res = await fetch(`${API_BASE}/qa/concerns/${concernId}/review-context`);
+    const result = await res.json();
+    if (!result.success) {
+      throw new Error(result.error || '获取审核上下文失败');
+    }
+    renderQAReviewBody(result.data);
+  } catch (err) {
+    console.error('加载审核上下文失败:', err);
+    body.innerHTML = `<div style="text-align: center; padding: 40px; color: #f5222d;">${escapeHtml(err.message || '加载失败')}</div><button class="btn btn-secondary" onclick="closeQAReview()" style="margin-top: 12px;">关闭</button>`;
+  }
+}
+
+function closeQAReview() {
+  qaReviewCurrentId = null;
+  const modal = document.getElementById('qa-review-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+/**
+ * 渲染审核弹窗内容：对话上下文（上3+本+下4）+ 问答对内容 + 通过/拒绝/修改后通过
+ */
+function renderQAReviewBody(data) {
+  const body = document.getElementById('qa-review-body');
+  if (!body) return;
+  const concern = data.concern || {};
+  const dialogueContext = data.dialogueContext || [];
+  const transcriptionName = data.transcriptionName || '';
+
+  const dialogueHtml = dialogueContext.map((d, i) => {
+    const cls = d.isSource ? 'qa-review-dialogue-source' : '';
+    const label = d.isSource ? ' [来源]' : '';
+    return `
+      <div class="${cls}" style="padding: 10px 12px; margin-bottom: 8px; border-radius: 4px; border: 1px solid #e8e8e8;">
+        <div style="font-size: 12px; color: #666; margin-bottom: 4px;">
+          ${escapeHtml(d.timeRange || '')} · ${escapeHtml(d.speaker || '')}${label}
+        </div>
+        <div style="white-space: pre-wrap; word-break: break-word;">${escapeHtml(d.text || '')}</div>
+      </div>
+    `;
+  }).join('');
+
+  const reviewStatus = concern.review_status || 'pending';
+  const canReview = reviewStatus === 'pending';
+  const categoryLabel = concern.concern_categories ? `${concern.concern_categories.code} ${concern.concern_categories.name}` : (concern.category_code || '未分类');
+  const intentLabel = concern.intent_code ? (qaState.intentMap.get(concern.intent_code)?.name || concern.intent_code) : '未分类';
+  const currentCategory = concern.concern_categories ? concern.concern_categories.code : (concern.category_code || '');
+  const currentIntent = concern.intent_code || '';
+
+  const list = qaState.categoriesFullList || [];
+  const categoryList = list.filter(c => c.level === 2).sort((a, b) => {
+    const codeA = (a.code || '').split('.').map(Number);
+    const codeB = (b.code || '').split('.').map(Number);
+    for (let i = 0; i < Math.max(codeA.length, codeB.length); i++) {
+      const n = (codeA[i] || 0) - (codeB[i] || 0);
+      if (n !== 0) return n;
+    }
+    return 0;
+  });
+  const intentList = list.filter(c => c.level === 3).sort((a, b) => (a.code || '').localeCompare(b.code || ''));
+  const categoryOptions = categoryList.map(c => `<option value="${escapeHtml(c.code)}" ${c.code === currentCategory ? 'selected' : ''}>${escapeHtml(c.code)} ${escapeHtml(c.name)}</option>`).join('');
+  const intentOptions = intentList.map(c => `<option value="${escapeHtml(c.code)}" ${c.code === currentIntent ? 'selected' : ''}>${escapeHtml(c.code)} ${escapeHtml(c.name)}</option>`).join('');
+
+  body.innerHTML = `
+    <div style="margin-bottom: 20px;">
+      <h4 style="margin: 0 0 8px 0; font-size: 14px; color: #262626;">📎 来源对话片段（上3条 · 本片段 · 下4条） · ${escapeHtml(transcriptionName)}</h4>
+      <div style="max-height: 220px; overflow-y: auto; background: #fafafa; border-radius: 6px; padding: 12px;">
+        ${dialogueHtml || '<div style="color: #999;">暂无对话上下文</div>'}
+      </div>
+    </div>
+    <div style="margin-bottom: 20px;">
+      <h4 style="margin: 0 0 8px 0; font-size: 14px; color: #262626;">❓ 问题</h4>
+      <div style="background: #fff; border: 1px solid #e8e8e8; border-radius: 4px; padding: 12px; min-height: 50px;" id="qa-review-question-display">${escapeHtml(concern.question || '')}</div>
+      <textarea id="qa-review-question-edit" style="display: none; width: 100%; min-height: 60px; padding: 10px; border: 1px solid #d9d9d9; border-radius: 4px; font-size: 14px;" placeholder="修改后通过时在此编辑问题">${escapeHtml(concern.question || '')}</textarea>
+    </div>
+    <div style="margin-bottom: 20px;">
+      <h4 style="margin: 0 0 8px 0; font-size: 14px; color: #262626;">💬 回答</h4>
+      <div style="background: #fff; border: 1px solid #e8e8e8; border-radius: 4px; padding: 12px; min-height: 50px;" id="qa-review-answer-display">${escapeHtml(concern.answer || '')}</div>
+      <textarea id="qa-review-answer-edit" style="display: none; width: 100%; min-height: 80px; padding: 10px; border: 1px solid #d9d9d9; border-radius: 4px; font-size: 14px;" placeholder="修改后通过时在此编辑回答">${escapeHtml(concern.answer || '')}</textarea>
+    </div>
+    <div style="margin-bottom: 20px;">
+      <h4 style="margin: 0 0 8px 0; font-size: 14px; color: #262626;">🏷️ 问题类型</h4>
+      <div id="qa-review-type-display" style="background: #fafafa; border: 1px solid #e8e8e8; border-radius: 4px; padding: 12px; font-size: 13px;">
+        分类类别：${escapeHtml(categoryLabel)} · 问题性质：${escapeHtml(intentLabel)}
+        ${reviewStatus !== 'pending' ? ` · 审核状态：<span class="classification-badge badge-review-${reviewStatus}">${reviewStatus === 'approved' ? '已通过' : '已拒绝'}</span>` : ''}
+      </div>
+      <div id="qa-review-type-edit" style="display: none; gap: 10px;">
+        <div>
+          <label style="display: block; margin-bottom: 4px; font-weight: 500; font-size: 13px;">分类类别</label>
+          <select id="qa-review-category-edit" class="form-control" style="width: 100%; max-width: 400px; padding: 8px;">
+            <option value="">-- 请选择或留空 --</option>
+            ${categoryOptions}
+          </select>
+        </div>
+        <div>
+          <label style="display: block; margin-bottom: 4px; font-weight: 500; font-size: 13px;">问题性质</label>
+          <select id="qa-review-intent-edit" class="form-control" style="width: 100%; max-width: 400px; padding: 8px;">
+            <option value="">-- 请选择或留空 --</option>
+            ${intentOptions}
+          </select>
+        </div>
+      </div>
+    </div>
+    <div style="display: flex; flex-wrap: wrap; gap: 12px; padding-top: 16px; border-top: 1px solid #e8e8e8;">
+      ${canReview ? `
+        <button type="button" class="btn btn-success" onclick="submitQAReview('approve')">✅ 通过</button>
+        <button type="button" class="btn btn-warning" onclick="submitQAReview('reject')">❌ 拒绝</button>
+        <button type="button" class="btn btn-primary" id="qa-review-modify-btn" onclick="toggleQAReviewEdit(true)">✏️ 修改后通过</button>
+        <div id="qa-review-modify-actions" style="display: none;">
+          <button type="button" class="btn btn-primary" onclick="submitQAReview('modify_approve')">确认修改并通过</button>
+          <button type="button" class="btn btn-secondary" onclick="toggleQAReviewEdit(false)">取消</button>
+        </div>
+      ` : ''}
+      <button type="button" class="btn btn-secondary" onclick="closeQAReview()">关闭</button>
+    </div>
+  `;
+}
+
+function toggleQAReviewEdit(show) {
+  const displayQ = document.getElementById('qa-review-question-display');
+  const editQ = document.getElementById('qa-review-question-edit');
+  const displayA = document.getElementById('qa-review-answer-display');
+  const editA = document.getElementById('qa-review-answer-edit');
+  const typeDisplay = document.getElementById('qa-review-type-display');
+  const typeEdit = document.getElementById('qa-review-type-edit');
+  const modifyBtn = document.getElementById('qa-review-modify-btn');
+  const actions = document.getElementById('qa-review-modify-actions');
+  if (!editQ || !editA) return;
+  if (show) {
+    if (displayQ) displayQ.style.display = 'none';
+    if (displayA) displayA.style.display = 'none';
+    editQ.style.display = 'block';
+    editA.style.display = 'block';
+    if (typeDisplay) typeDisplay.style.display = 'none';
+    if (typeEdit) { typeEdit.style.display = 'grid'; }
+    if (modifyBtn) modifyBtn.style.display = 'none';
+    if (actions) actions.style.display = 'inline-flex';
+  } else {
+    if (displayQ) displayQ.style.display = 'block';
+    if (displayA) displayA.style.display = 'block';
+    editQ.style.display = 'none';
+    editA.style.display = 'none';
+    if (typeDisplay) typeDisplay.style.display = 'block';
+    if (typeEdit) typeEdit.style.display = 'none';
+    if (modifyBtn) modifyBtn.style.display = 'inline-block';
+    if (actions) actions.style.display = 'none';
+  }
+}
+
+/**
+ * 提交审核：approve | reject | modify_approve
+ */
+async function submitQAReview(action) {
+  if (!qaReviewCurrentId) return;
+  if (action === 'reject' && !window.confirm('确定拒绝该问答对吗？')) return;
+  const body = {
+    action: action === 'modify_approve' ? 'modify_approve' : action,
+    remark: undefined
+  };
+  if (action === 'modify_approve') {
+    const qEdit = document.getElementById('qa-review-question-edit');
+    const aEdit = document.getElementById('qa-review-answer-edit');
+    const catEdit = document.getElementById('qa-review-category-edit');
+    const intentEdit = document.getElementById('qa-review-intent-edit');
+    body.content_after = {
+      question: qEdit ? qEdit.value : undefined,
+      answer: aEdit ? aEdit.value : undefined,
+      category_code: catEdit && catEdit.value !== '' ? catEdit.value : null,
+      intent_code: intentEdit && intentEdit.value !== '' ? intentEdit.value : null
+    };
+  }
+  try {
+    const res = await fetch(`${API_BASE}/qa/concerns/${qaReviewCurrentId}/review`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const result = await res.json();
+    if (!result.success) {
+      throw new Error(result.error || '提交失败');
+    }
+    showToast(result.message || '操作成功', 'success');
+    closeQAReview();
+    loadQAList();
+  } catch (err) {
+    console.error('提交审核失败:', err);
+    showToast(err.message || '提交失败', 'error');
+  }
+}
+
+/**
+ * 批量通过选中的问答对
+ */
+async function batchApprove() {
+  const ids = Array.from(qaState.selectedIds);
+  if (ids.length === 0) {
+    showToast('请先勾选要通过的问答对', 'warning');
+    return;
+  }
+  if (!window.confirm(`确定通过选中的 ${ids.length} 条问答对吗？`)) return;
+  try {
+    const res = await fetch(`${API_BASE}/qa/review/batch-approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ concernIds: ids })
+    });
+    const result = await res.json();
+    if (!result.success) throw new Error(result.error || '操作失败');
+    showToast(result.message || '已批量通过', 'success');
+    qaState.selectedIds.clear();
+    document.querySelectorAll('.qa-select-checkbox').forEach(cb => { cb.checked = false; });
+    const selectAll = document.getElementById('qa-select-all');
+    if (selectAll) selectAll.checked = false;
+    loadQAList();
+  } catch (err) {
+    showToast(err.message || '批量通过失败', 'error');
+  }
+}
+
+/**
+ * 批量拒绝选中的问答对
+ */
+async function batchReject() {
+  const ids = Array.from(qaState.selectedIds);
+  if (ids.length === 0) {
+    showToast('请先勾选要拒绝的问答对', 'warning');
+    return;
+  }
+  if (!window.confirm(`确定拒绝选中的 ${ids.length} 条问答对吗？`)) return;
+  try {
+    const res = await fetch(`${API_BASE}/qa/review/batch-reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ concernIds: ids })
+    });
+    const result = await res.json();
+    if (!result.success) throw new Error(result.error || '操作失败');
+    showToast(result.message || '已批量拒绝', 'success');
+    qaState.selectedIds.clear();
+    document.querySelectorAll('.qa-select-checkbox').forEach(cb => { cb.checked = false; });
+    const selectAll = document.getElementById('qa-select-all');
+    if (selectAll) selectAll.checked = false;
+    loadQAList();
+  } catch (err) {
+    showToast(err.message || '批量拒绝失败', 'error');
   }
 }
 

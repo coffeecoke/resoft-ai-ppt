@@ -90,17 +90,41 @@ model thumbnails {
   page_type_confidence Float? /// AI分析置信度（0-1）
   analyzed_at          DateTime? /// AI分析时间
 
+  // 审核：待审核→已通过/已拒绝，修改后通过记录在 slide_analysis_review_records
+  review_status String  @default("pending") @db.VarChar(20) /// pending=待审核, approved=已通过, rejected=已拒绝
+  reviewed_at   DateTime? /// 审核时间
+  reviewer_id   String?  @db.VarChar(50) /// 审核人ID
+
   // 时间戳
   generated_at DateTime @default(now()) /// 生成时间
 
   // 关联
-  documents documents @relation(fields: [document_id], references: [id], onDelete: Cascade)
+  documents                      documents @relation(fields: [document_id], references: [id], onDelete: Cascade)
+  slide_analysis_review_records    slide_analysis_review_records[]
 
   @@unique([document_id, slide_id], map: "uk_document_slide")
   @@index([document_id], map: "idx_document_id")
   @@index([page_type], map: "idx_page_type")
   @@index([slide_id], map: "idx_slide_id")
   @@index([slide_index], map: "idx_slide_index")
+  @@index([review_status], map: "idx_thumbnails_review_status")
+}
+
+/// PPT 分析结果审核历史（修改后通过等记录）
+model slide_analysis_review_records {
+  id           String   @id @db.VarChar(50) /// 主键
+  thumbnail_id String   @db.VarChar(100) /// 关联 thumbnails.id
+  action       String   @db.VarChar(20) /// approve=通过, reject=拒绝, modify_approve=修改后通过
+  content_before Json? /// 修改前 { page_type, page_type_confidence }
+  content_after  Json? /// 修改后（仅 modify_approve 时有值）
+  reviewer_id  String?  @db.VarChar(50) /// 审核人ID
+  review_time  DateTime @default(now()) /// 审核时间
+  remark       String?  @db.Text /// 备注（拒绝原因等）
+
+  thumbnails thumbnails @relation(fields: [thumbnail_id], references: [id], onDelete: Cascade)
+
+  @@index([thumbnail_id], map: "idx_sar_thumbnail_id")
+  @@index([review_time], map: "idx_sar_review_time")
 }
 
 /// 幻灯片合并内容表（用于存储提取的幻灯片文本内容）
@@ -327,17 +351,42 @@ model concerns {
   expert_advice   String? @db.Text /// 专家建议内容
   expert_reviewer String? @db.VarChar(100) /// 专家审核人
 
+  /// 审核：待审核→已通过/已拒绝，修改后通过记录在 concern_review_records
+  review_status String  @default("pending") @db.VarChar(20) /// pending=待审核, approved=已通过, rejected=已拒绝
+  reviewed_at   DateTime? /// 审核时间
+  reviewer_id   String? @db.VarChar(50) /// 审核人ID
+
   created_at        DateTime            @default(now()) /// 创建时间
   updated_at        DateTime            @updatedAt /// 更新时间（自动更新）
   document_concerns document_concerns[]
   session_concerns  session_concerns[]
   concern_categories concern_categories? @relation(fields: [category_code], references: [code])
+  concern_review_records concern_review_records[]
 
   @@index([category], map: "idx_category")
   @@index([category_code], map: "idx_category_code")
   @@index([intent_code], map: "idx_intent_code")
   @@index([status], map: "idx_status")
   @@index([transcription_id], map: "idx_transcription_id")
+  @@index([review_status], map: "idx_review_status")
+}
+
+/// 问答对审核/修改历史（修改后通过时记录前后内容）
+model concern_review_records {
+  id          String   @id @db.VarChar(50) /// 主键
+  concern_id  String   @db.VarChar(50) /// 关联 concerns.id
+  action      String   @db.VarChar(30) /// approve=通过, reject=拒绝, modify_approve=修改后通过
+  reviewer_id String?  @db.VarChar(50) /// 审核人ID
+  review_time DateTime @default(now()) /// 审核时间
+  remark      String?  @db.Text /// 备注（拒绝原因等）
+  content_before Json? /// 修改前内容 { question, answer, category_code, intent_code }
+  content_after  Json? /// 修改后内容（仅 modify_approve 时有值）
+  created_at  DateTime @default(now())
+
+  concerns concerns @relation(fields: [concern_id], references: [id], onDelete: Cascade)
+
+  @@index([concern_id], map: "idx_concern_review_concern_id")
+  @@index([review_time], map: "idx_concern_review_time")
 }
 
 // ==================== 系统配置相关表 ====================
@@ -651,20 +700,20 @@ model presales_analysis_results {
   @@index([status], map: "idx_presales_analysis_status")
 }
 
-<<<<<<< HEAD
-// ==================== 招投标关键词导出（爬取内容） ====================
+// ==================== 招投标爬取/导出信息表（爬取内容） ====================
 
-/// 招投标关键词导出记录表（按 Excel 结构 + 投标保证金）
+/// 招投标爬取信息表（关键字、类型、地域、项目信息、业主/中标/代理、时间、详情页等）
+/// 用于：智能爬虫写入、Excel 导入导出、列表筛选与详情查看
 model bidding_keyword_exports {
-  id String @id @db.VarChar(50) /// 主键，使用来源 ID（Excel 的 ID 列）或生成
+  id String @id @db.VarChar(50) /// 主键（爬取时可用详情页唯一标识生成，或雪花ID）
 
-  /// 关键字（Excel 列：关键字）
+  /// 关键字（爬取/筛选用）
   keyword String @db.VarChar(100)
-  /// 类型（Excel 列：类型）
+  /// 类型（如：招标公告、中标公告）
   record_type String? @db.VarChar(50)
-  /// 细分类型（Excel 列：细分类型）
+  /// 细分类型
   sub_type String? @db.VarChar(100)
-  /// 标题（Excel 列：标题）
+  /// 标题
   title String? @db.Text
   /// 省份/直辖市
   province String? @db.VarChar(50)
@@ -672,9 +721,11 @@ model bidding_keyword_exports {
   city String? @db.VarChar(50)
   /// 区/县
   district String? @db.VarChar(50)
-  /// 开工/交货/服务周期
+  /// 信息详情（项目详情/正文摘要）
+  project_detail String? @db.Text
+  /// 开工/交货/服务周期（扩展）
   cycle_info String? @db.VarChar(255)
-  /// 发布时间（存原始字符串便于导入，如 2025/12/03）
+  /// 发布时间（原始字符串，如 2025/12/03）
   publish_time_str String? @db.VarChar(50)
   /// 标书获取时间
   doc_fetch_time_str String? @db.VarChar(100)
@@ -684,11 +735,11 @@ model bidding_keyword_exports {
   project_budget String? @db.VarChar(255)
   /// 中标金额
   winning_amount String? @db.VarChar(255)
-  /// 资金来源
+  /// 资金来源（扩展）
   fund_source String? @db.VarChar(255)
   /// 招标方式
   bidding_method String? @db.VarChar(100)
-  /// 评标方法
+  /// 评标方法（扩展）
   evaluation_method String? @db.VarChar(100)
   /// 项目业主
   project_owner String? @db.VarChar(255)
@@ -706,23 +757,23 @@ model bidding_keyword_exports {
   bidding_agent String? @db.VarChar(255)
   /// 投标截止时间（原始字符串）
   bid_deadline_str String? @db.VarChar(100)
-  /// 详情页地址
+  /// 详情页地址（用于去重、回查）
   detail_url String? @db.VarChar(500)
-  /// 投标保证金（新增字段）
+  /// 投标保证金（扩展）
   bid_bond String? @db.VarChar(255)
-  /// 项目详情
-  project_detail String? @db.Text
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
+  @@unique([detail_url], map: "uk_bidding_detail_url")
   @@index([keyword], map: "idx_bidding_keyword")
   @@index([record_type], map: "idx_bidding_record_type")
   @@index([province], map: "idx_bidding_province")
   @@index([city], map: "idx_bidding_city")
   @@index([project_no], map: "idx_bidding_project_no")
   @@index([publish_time_str], map: "idx_bidding_publish_time")
-=======
+}
+
 // ==================== 用户认证相关表 ====================
 
 /// 用户表
@@ -764,5 +815,4 @@ model audit_logs {
   @@index([action], map: "idx_audit_action")
   @@index([resource], map: "idx_audit_resource")
   @@index([created_at], map: "idx_audit_created_at")
->>>>>>> dev-0302
 }
