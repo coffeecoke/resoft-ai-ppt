@@ -3240,14 +3240,19 @@ body {
   top: 0;
   left: 6px;
   z-index: 10;
-  background: transparent;
-  border-radius: 4px;
-  padding: 2px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 .thumb-checkbox .el-checkbox {
   --el-checkbox-checked-bg-color: #006DF9;
   --el-checkbox-checked-border-color: #006DF9;
+  --el-checkbox-border: 2px solid #d1d5db;
+}
+.thumb-checkbox .el-checkbox__inner {
+  border: 1px solid #9ca3af !important;
+  width: 16px !important;
+  height: 16px !important;
+}
+.thumb-checkbox .el-checkbox__input.is-checked .el-checkbox__inner {
+  border-color: #006DF9 !important;
 }
 .thumb-image-wrapper {
   position: relative;

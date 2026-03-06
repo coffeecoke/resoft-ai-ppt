@@ -1724,4 +1724,41 @@ const handleClose = (value) => {
     transform: scale(1);
   }
 }
+
+/* 收藏按钮向左移动 */
+.v-actions {
+  margin-right: 15px;
+}
+</style>
+
+<style lang="scss">
+/* 关闭按钮样式（需要穿透 scoped） */
+.video-dialog {
+  .el-dialog__headerbtn {
+    top: 10px;
+    right: 10px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.95);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+    transition: all 0.3s ease;
+
+    &:hover {
+      background: #fff;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+      transform: scale(1.05);
+    }
+
+    .el-dialog__close {
+      color: #6b7280;
+      font-size: 18px;
+      font-weight: bold;
+    }
+
+    &:hover .el-dialog__close {
+      color: #374151;
+    }
+  }
+}
 </style>
