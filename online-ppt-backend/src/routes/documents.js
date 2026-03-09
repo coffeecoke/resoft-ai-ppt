@@ -293,6 +293,7 @@ router.put('/:id', async (req, res) => {
       slides: docData.slides,
       theme: docData.theme,
       title: docData.title,
+      name: docData.title,   // 同步更新 name，保持与文档列表一致
       width: docData.width,
       height: docData.height
     })

@@ -93,12 +93,6 @@ const routes: RouteRecordRaw[] = [
             component: () => import('@/views/Admin/TemplateList.vue'),
             meta: { title: '模板管理' }
           },
-          {
-            path: 'template-editor/:id?',
-            name: 'TemplateEditor',
-            component: () => import('@/views/Admin/TemplateEditor.vue'),
-            meta: { title: '模板编辑器' }
-          },
         ]
       },
       {

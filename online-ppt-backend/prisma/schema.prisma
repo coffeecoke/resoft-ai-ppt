@@ -700,80 +700,6 @@ model presales_analysis_results {
   @@index([status], map: "idx_presales_analysis_status")
 }
 
-// ==================== 招投标爬取/导出信息表（爬取内容） ====================
-
-/// 招投标爬取信息表（关键字、类型、地域、项目信息、业主/中标/代理、时间、详情页等）
-/// 用于：智能爬虫写入、Excel 导入导出、列表筛选与详情查看
-model bidding_keyword_exports {
-  id String @id @db.VarChar(50) /// 主键（爬取时可用详情页唯一标识生成，或雪花ID）
-
-  /// 关键字（爬取/筛选用）
-  keyword String @db.VarChar(100)
-  /// 类型（如：招标公告、中标公告）
-  record_type String? @db.VarChar(50)
-  /// 细分类型
-  sub_type String? @db.VarChar(100)
-  /// 标题
-  title String? @db.Text
-  /// 省份/直辖市
-  province String? @db.VarChar(50)
-  /// 城市
-  city String? @db.VarChar(50)
-  /// 区/县
-  district String? @db.VarChar(50)
-  /// 信息详情（项目详情/正文摘要）
-  project_detail String? @db.Text
-  /// 开工/交货/服务周期（扩展）
-  cycle_info String? @db.VarChar(255)
-  /// 发布时间（原始字符串，如 2025/12/03）
-  publish_time_str String? @db.VarChar(50)
-  /// 标书获取时间
-  doc_fetch_time_str String? @db.VarChar(100)
-  /// 项目编号
-  project_no String? @db.VarChar(100)
-  /// 项目预算（金额或说明）
-  project_budget String? @db.VarChar(255)
-  /// 中标金额
-  winning_amount String? @db.VarChar(255)
-  /// 资金来源（扩展）
-  fund_source String? @db.VarChar(255)
-  /// 招标方式
-  bidding_method String? @db.VarChar(100)
-  /// 评标方法（扩展）
-  evaluation_method String? @db.VarChar(100)
-  /// 项目业主
-  project_owner String? @db.VarChar(255)
-  /// 业主联系人
-  owner_contact String? @db.VarChar(100)
-  /// 业主联系电话
-  owner_phone String? @db.VarChar(50)
-  /// 中标单位
-  winning_unit String? @db.VarChar(255)
-  /// 中标单位联系人
-  winning_unit_contact String? @db.VarChar(100)
-  /// 中标单位联系电话
-  winning_unit_phone String? @db.VarChar(50)
-  /// 招标代理
-  bidding_agent String? @db.VarChar(255)
-  /// 投标截止时间（原始字符串）
-  bid_deadline_str String? @db.VarChar(100)
-  /// 详情页地址（用于去重、回查）
-  detail_url String? @db.VarChar(500)
-  /// 投标保证金（扩展）
-  bid_bond String? @db.VarChar(255)
-
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
-
-  @@unique([detail_url], map: "uk_bidding_detail_url")
-  @@index([keyword], map: "idx_bidding_keyword")
-  @@index([record_type], map: "idx_bidding_record_type")
-  @@index([province], map: "idx_bidding_province")
-  @@index([city], map: "idx_bidding_city")
-  @@index([project_no], map: "idx_bidding_project_no")
-  @@index([publish_time_str], map: "idx_bidding_publish_time")
-}
-
 // ==================== 用户认证相关表 ====================
 
 /// 用户表
@@ -815,4 +741,165 @@ model audit_logs {
   @@index([action], map: "idx_audit_action")
   @@index([resource], map: "idx_audit_resource")
   @@index([created_at], map: "idx_audit_created_at")
+}
+
+// ==================== 招投标文件分析相关表 ====================
+
+/// 招标文件表（存储上传的招标文件及AI分析结果）
+model tender_documents {
+  id              String  @id @db.VarChar(50)
+  name            String  @db.VarChar(255) /// 文件名称
+  file_path       String  @db.VarChar(500) /// 原始文件存储路径
+  file_type       String  @db.VarChar(20) /// 文件类型（pdf, docx, doc）
+  file_size       BigInt  @default(0) /// 文件大小（字节）
+  raw_text        String? @db.LongText /// 提取的纯文本内容（用于AI分析）
+  raw_html_path   String? @db.VarChar(500) /// HTML文件路径（保留表格/图片结构，存磁盘不入库）
+  analysis_result Json?   /// AI分析结果（评分标准、资质要求、技术要求等）
+  directory_json  Json?   /// 生成的投标目录结构（JSON树）
+  status          String  @default("uploaded") @db.VarChar(20) /// uploaded=已上传, extracting=提取中, analyzing=分析中, completed=已完成, failed=失败
+  error_message   String? @db.Text /// 错误信息
+  model_name      String? @db.VarChar(100) /// 使用的AI模型
+  project_name    String? @db.VarChar(255) /// 招标项目名称（AI提取）
+  bid_deadline    String? @db.VarChar(100) /// 投标截止时间（AI提取）
+  budget          String? @db.VarChar(100) /// 预算金额（AI提取）
+  created_by      String? @db.VarChar(50) /// 创建人ID
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  bid_directory_items bid_directory_items[]
+  bid_compositions    bid_compositions[]
+
+  @@index([status], map: "idx_tender_status")
+  @@index([created_by], map: "idx_tender_created_by")
+  @@index([created_at], map: "idx_tender_created_at")
+}
+
+/// 投标目录项（根据招标文件AI生成的投标文件目录树）
+model bid_directory_items {
+  id              String  @id @db.VarChar(50)
+  tender_id       String  @db.VarChar(50) /// 关联招标文件ID
+  parent_id       String? @db.VarChar(50) /// 父目录ID（支持层级）
+  title           String  @db.VarChar(500) /// 目录标题
+  level           Int     @default(1) /// 层级（1=章, 2=节, 3=小节）
+  sort_order      Int     @default(0) /// 排序
+  default_content      String? @db.LongText /// AI生成的默认文本内容
+  default_html_content String? @db.LongText /// AI生成的默认HTML内容（含表格）- 仅用于小片段，大内容走文件
+  user_content         String? @db.LongText /// 用户编辑后的内容
+  content_status  String  @default("empty") @db.VarChar(20) /// empty=空, ai_generated=AI已生成, user_edited=用户已编辑
+  section_type    String? @db.VarChar(50) /// 章节类型（cover_letter, technical_solution等）
+  scoring_weight  Float?  /// 评分权重（从招标文件提取）
+  docx_file_path  String? @db.VarChar(500) /// 该章节对应的 .docx 片段路径
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  tender_documents tender_documents @relation(fields: [tender_id], references: [id], onDelete: Cascade)
+  parent           bid_directory_items?  @relation("bid_directory_hierarchy", fields: [parent_id], references: [id], onDelete: Cascade)
+  children         bid_directory_items[] @relation("bid_directory_hierarchy")
+
+  @@index([tender_id], map: "idx_biddir_tender_id")
+  @@index([parent_id], map: "idx_biddir_parent_id")
+  @@index([level], map: "idx_biddir_level")
+  @@index([sort_order], map: "idx_biddir_sort_order")
+}
+
+/// 投标文件表（存储上传的已有投标文件，用于拆分复用）
+model bid_documents {
+  id           String  @id @db.VarChar(50)
+  name         String  @db.VarChar(255) /// 文件名称
+  file_path    String  @db.VarChar(500) /// 原始文件存储路径
+  file_type    String  @db.VarChar(20) /// 文件类型
+  file_size    BigInt  @default(0) /// 文件大小（字节）
+  raw_text     String? @db.LongText /// 提取的纯文本（用于AI分析）
+  raw_html_path String? @db.VarChar(500) /// HTML文件路径（保留表格/图片，存磁盘不入库）
+  status       String  @default("uploaded") @db.VarChar(20) /// uploaded=已上传, extracting=提取中, splitting=拆分中, completed=已完成, failed=失败
+  error_message String? @db.Text /// 错误信息
+  model_name   String? @db.VarChar(100) /// 使用的AI模型
+  section_count Int    @default(0) /// 拆分出的章节数
+  source_info  String? @db.VarChar(255) /// 来源信息（哪个项目/客户的投标）
+  industry     String? @db.VarChar(100) /// 行业
+  project_type String? @db.VarChar(100) /// 项目类型（IT、工程、咨询等）
+  created_by   String? @db.VarChar(50)
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  bid_sections bid_sections[]
+
+  @@index([status], map: "idx_biddoc_status")
+  @@index([industry], map: "idx_biddoc_industry")
+  @@index([project_type], map: "idx_biddoc_project_type")
+  @@index([created_by], map: "idx_biddoc_created_by")
+  @@index([created_at], map: "idx_biddoc_created_at")
+}
+
+/// 投标章节表（投标文件拆分后的独立章节，可复用）
+model bid_sections {
+  id              String  @id @db.VarChar(50)
+  bid_document_id String  @db.VarChar(50) /// 关联投标文件ID
+  title           String  @db.VarChar(500) /// 章节标题
+  content         String? @db.LongText /// 章节纯文本内容（用于AI分析和全文搜索）
+  html_content_path String? @db.VarChar(500) /// 章节HTML文件路径（保留表格/图片，存磁盘不入库）
+  content_length  Int     @default(0) /// 内容长度
+  section_type    String  @default("other") @db.VarChar(50) /// 章节类型
+  level           Int     @default(1) /// 章节层级
+  sort_order      Int     @default(0) /// 排序
+  tags            Json?   /// 标签（JSON数组，用于检索）
+  quality_score   Float?  /// AI评估的质量分数（0-1）
+  is_reusable     Boolean @default(true) /// 是否可复用
+  docx_file_path  String? @db.VarChar(500) /// 拆分出的 .docx 片段路径
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  bid_documents          bid_documents           @relation(fields: [bid_document_id], references: [id], onDelete: Cascade)
+  bid_composition_items  bid_composition_items[]
+
+  @@index([bid_document_id], map: "idx_bidsec_document_id")
+  @@index([section_type], map: "idx_bidsec_type")
+  @@index([is_reusable], map: "idx_bidsec_reusable")
+  @@index([quality_score], map: "idx_bidsec_quality")
+  @@fulltext([content], map: "ft_bidsec_content")
+  @@fulltext([title], map: "ft_bidsec_title")
+}
+
+/// 投标组合表（用户基于招标目录组合的投标文件）
+model bid_compositions {
+  id          String  @id @db.VarChar(50)
+  name        String  @db.VarChar(255) /// 组合名称
+  tender_id   String? @db.VarChar(50) /// 关联的招标文件ID（可选）
+  description String? @db.Text /// 描述
+  status      String  @default("draft") @db.VarChar(20) /// draft=草稿, completed=已完成, exported=已导出
+  docx_file_path String? @db.VarChar(500) /// 合并后的完整 .docx 路径
+  template_name  String? @db.VarChar(255) /// 使用的模板名称
+  created_by  String? @db.VarChar(50)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  tender_documents      tender_documents?       @relation(fields: [tender_id], references: [id])
+  bid_composition_items bid_composition_items[]
+
+  @@index([tender_id], map: "idx_bidcomp_tender_id")
+  @@index([status], map: "idx_bidcomp_status")
+  @@index([created_by], map: "idx_bidcomp_created_by")
+  @@index([created_at], map: "idx_bidcomp_created_at")
+}
+
+/// 投标组合明细（组合中引用的章节）
+model bid_composition_items {
+  id             String  @id @db.VarChar(50)
+  composition_id String  @db.VarChar(50) /// 关联组合ID
+  section_id     String? @db.VarChar(50) /// 引用的章节ID（从章节库选择时）
+  title          String  @db.VarChar(500) /// 章节标题
+  custom_content String? @db.LongText /// 自定义/编辑后的内容
+  sort_order     Int     @default(0) /// 排序
+  level          Int     @default(1) /// 章节层级
+  source_type    String  @default("custom") @db.VarChar(20) /// custom=手写, reference=引用章节, ai_generated=AI生成
+  docx_file_path String? @db.VarChar(500) /// 该项对应的 .docx 片段路径
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  bid_compositions bid_compositions @relation(fields: [composition_id], references: [id], onDelete: Cascade)
+  bid_sections     bid_sections?    @relation(fields: [section_id], references: [id])
+
+  @@index([composition_id], map: "idx_bidcompitem_comp_id")
+  @@index([section_id], map: "idx_bidcompitem_sec_id")
+  @@index([sort_order], map: "idx_bidcompitem_sort")
 }

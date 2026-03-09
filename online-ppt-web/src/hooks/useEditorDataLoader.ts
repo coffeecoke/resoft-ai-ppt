@@ -56,11 +56,13 @@ export function useEditorDataLoader() {
         slidesStore.setSlides(stateData.slides)
         slidesStore.setViewportSize(stateData.width)
 
-        // 【新增】但仍需要从后端获取最新的 metadata（包括 status）
+        // 【新增】但仍需要从后端获取最新的 metadata（包括 status 和 name）
         if (documentId) {
           try {
             const resp = await getDocument(documentId)
             slidesStore.setMetadata(resp.metadata)
+            // 以 DB 中的 name 为准，覆盖 state 里可能过时的 title
+            if (resp.metadata.name) slidesStore.setTitle(resp.metadata.name)
             console.log('[编辑器] 已加载文档状态:', resp.metadata.status)
           } catch (error) {
             console.warn('[编辑器] 获取文档状态失败，将按草稿处理:', error)
@@ -81,7 +83,8 @@ export function useEditorDataLoader() {
         // 保存 metadata（新增）
         slidesStore.setMetadata(resp.metadata)
 
-        slidesStore.setTitle(data.title)
+        // 以 DB 中的 name 为准（与文档列表保持一致），JSON 的 title 作为兜底
+        slidesStore.setTitle(resp.metadata.name || data.title)
         slidesStore.setTheme(data.theme)
         slidesStore.setSlides(data.slides)
         slidesStore.setViewportSize(data.width)

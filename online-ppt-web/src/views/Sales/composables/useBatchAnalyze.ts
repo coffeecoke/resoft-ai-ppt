@@ -6,7 +6,7 @@
 
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { SERVER_URL, getAuthHeaders } from '@/services'
+import { SERVER_URL, authFetch } from '@/services'
 import { usePptDialogAiStore } from '@/store/Sales/pptDialogAi'
 
 interface PendingItem {
@@ -99,12 +99,9 @@ export function useBatchAnalyze() {
         console.log('[批量分析] API地址:', `${API_BASE_URL}/sales/batch-operations/analyze`)
 
         // 使用 fetch 实现SSE
-        fetch(`${API_BASE_URL}/sales/batch-operations/analyze`, {
+        authFetch(`${API_BASE_URL}/sales/batch-operations/analyze`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...getAuthHeaders()
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(requestBody)
         })
           .then(async (response) => {

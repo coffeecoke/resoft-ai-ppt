@@ -176,6 +176,7 @@ const {
   saving,
   save: saveDocument,
   generateThumbnailsForPublish,
+  generateTemplateThumbnailsForPublish,
 } = useEditorSave()
 
 // 发布状态（仅模板模式使用）
@@ -184,9 +185,9 @@ const publishing = ref(false)
 // 返回按钮逻辑
 const goBack = () => {
   if (editMode.value === 'template') {
-    router.push('/ppt/admin/templates')
+    router.push('/admin/document/template')
   } else if (editMode.value === 'document') {
-    router.push('/ppt/docs')
+    router.push('/admin/document/document')
   }
 }
 
@@ -230,12 +231,12 @@ const handlePublish = async () => {
       console.log('[EditorHeader] 发布文档，开始生成预览图')
       generateThumbnailsForPublish()
     }
-    
+
     // 根据模式调用不同的发布接口
     const url = editMode.value === 'template'
       ? `${SERVER_URL}/templates/${currentId.value}/publish`
       : `${SERVER_URL}/documents/${currentId.value}/publish`
-    
+
     const resp = await axios.post(url)
     if (!resp?.success) {
       throw new Error(resp?.error || '发布失败')
@@ -243,6 +244,13 @@ const handlePublish = async () => {
 
     const modeName = editMode.value === 'template' ? '模板' : '文档'
     message.success(`${modeName}已发布`)
+
+    // 模板模式：发布后异步生成所有已标注页面的缩略图
+    if (editMode.value === 'template') {
+      generateTemplateThumbnailsForPublish().catch(err => {
+        console.warn('[EditorHeader] 模板缩略图生成失败:', err)
+      })
+    }
   } catch (error: any) {
     console.error('[EditorHeader] 发布失败:', error)
     const { default: message } = await import('@/utils/message')

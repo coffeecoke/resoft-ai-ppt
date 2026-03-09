@@ -5,7 +5,7 @@
 import { ref, onUnmounted } from 'vue'
 import { v4 as uuidv4 } from 'uuid'
 import { toJpeg } from 'html-to-image'
-import axios from 'axios'
+import axios from '@/services/config'
 
 interface QueueTask {
   taskId: string
@@ -43,8 +43,8 @@ export function useThumbnailQueue(options: ThumbnailQueueOptions = {}) {
         taskId
       })
 
-      if (!response.data.success) {
-        throw new Error(response.data.message || '创建任务失败')
+      if (!response.success) {
+        throw new Error(response.message || '创建任务失败')
       }
 
       // 2. 建立WebSocket连接
@@ -215,11 +215,11 @@ export function useThumbnailQueue(options: ThumbnailQueueOptions = {}) {
     const host = location.host
     const wsUrl = `${protocol}//${host}/ws/thumbnail-progress?taskId=${taskId}`
 
-    console.log(`[WebSocket] 连接地址: ${wsUrl}`)
+    if (import.meta.env.DEV) console.log(`[WebSocket] 连接地址: ${wsUrl}`)
     ws.value = new WebSocket(wsUrl)
 
     ws.value.onopen = () => {
-      console.log(`[WebSocket] 已连接: ${taskId}`)
+      if (import.meta.env.DEV) console.log(`[WebSocket] 已连接: ${taskId}`)
     }
 
     ws.value.onmessage = (event) => {
@@ -282,7 +282,7 @@ export function useThumbnailQueue(options: ThumbnailQueueOptions = {}) {
     }
 
     ws.value.onclose = () => {
-      console.log('[WebSocket] 连接关闭')
+      if (import.meta.env.DEV) console.log('[WebSocket] 连接关闭')
     }
   }
 

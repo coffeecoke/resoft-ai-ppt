@@ -1,5 +1,6 @@
 import { ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
+import { throttle } from 'lodash'
 import { useSlidesStore } from '@/store'
 import type { Slide } from '@/types/slides'
 
@@ -98,77 +99,82 @@ export default () => {
         count++
       }
     })
-    if (count > 0) {
+    if (import.meta.env.DEV && count > 0) {
       console.log(`[变更追踪] 标记了 ${count} 个没有缩略图的幻灯片`)
     }
   }
 
+  // 用于在 stopTracking 时停止 watch 与节流，避免内存泄漏
+  let stopWatch: (() => void) | null = null
+  let throttledRunTrack: ReturnType<typeof throttle<(...args: any[]) => void>> | null = null
+
   /**
    * 监听幻灯片变化
-   * 当幻灯片数组发生变化时，自动标记变更
+   * 当幻灯片数组发生变化时，自动标记变更（节流回调以减轻内存与 CPU 压力）
    */
   const startTracking = (checkMissingThumbnails = true) => {
     let hasCheckedMissing = false
+    // 先停止之前的 watch（若存在），避免重复注册
+    if (stopWatch) {
+      stopWatch()
+      stopWatch = null
+    }
+    if (throttledRunTrack) {
+      throttledRunTrack.cancel()
+      throttledRunTrack = null
+    }
 
-    // 监听幻灯片变化
-    watch(
+    throttledRunTrack = throttle((newSlides: Slide[], oldSlides: Slide[] | undefined) => {
+      // 首次加载数据时（从空数组变为有数据）
+      if ((!oldSlides || oldSlides.length === 0) && newSlides.length > 0) {
+        if (checkMissingThumbnails && !hasCheckedMissing) {
+          markSlidesWithoutThumbnail()
+          hasCheckedMissing = true
+        }
+        createSnapshot()
+        return
+      }
+
+      if (oldSlides && oldSlides.length > 0) {
+        const snapshotIds = new Set(lastSnapshot.value.keys())
+        const newSlideIds: string[] = []
+
+        newSlides.forEach(slide => {
+          if (!snapshotIds.has(slide.id)) {
+            markSlideChanged(slide.id)
+            newSlideIds.push(slide.id)
+          } else {
+            const currentContent = JSON.stringify(slide.elements)
+            const snapshotContent = lastSnapshot.value.get(slide.id)
+            if (snapshotContent && snapshotContent !== currentContent) {
+              markSlideChanged(slide.id)
+            }
+          }
+        })
+      }
+    }, 1500, { leading: true, trailing: true })
+
+    stopWatch = watch(
       () => slides.value,
       (newSlides, oldSlides) => {
-        console.log(`[变更追踪] watch 触发 - 新:${newSlides.length}个, 旧:${oldSlides?.length || 0}个`)
-
-        // 首次加载数据时（从空数组变为有数据）
-        if ((!oldSlides || oldSlides.length === 0) && newSlides.length > 0) {
-          console.log(`[变更追踪] 首次加载 ${newSlides.length} 个幻灯片`)
-          // 检查缺失的预览图（只检查一次）
-          if (checkMissingThumbnails && !hasCheckedMissing) {
-            markSlidesWithoutThumbnail()
-            hasCheckedMissing = true
-            console.log(`[变更追踪] 当前变更列表:`, Array.from(changedSlideIds.value))
-          }
-          createSnapshot()
-          return
-        }
-
-        // 如果已经有数据，正常处理变更
-        if (oldSlides && oldSlides.length > 0) {
-          // 使用快照中的 ID 集合（代表上次保存时的状态）
-          const snapshotIds = new Set(lastSnapshot.value.keys())
-          const newSlideIds: string[] = []
-
-          newSlides.forEach(slide => {
-            if (!snapshotIds.has(slide.id)) {
-              // 新增的幻灯片（新建或复制）- 快照中没有这个 ID
-              markSlideChanged(slide.id)
-              newSlideIds.push(slide.id)
-              console.log(`[变更追踪] 检测到新增幻灯片: ${slide.id}`)
-            } else {
-              // 使用快照对比内容变更（对比"上次保存"和"当前内容"）
-              const currentContent = JSON.stringify(slide.elements)
-              const snapshotContent = lastSnapshot.value.get(slide.id)
-
-              if (snapshotContent && snapshotContent !== currentContent) {
-                markSlideChanged(slide.id)
-                console.log(`[变更追踪] 检测到内容变更: ${slide.id}`)
-              }
-            }
-          })
-
-          if (newSlideIds.length > 0) {
-            console.log(`[变更追踪] 共新增 ${newSlideIds.length} 个幻灯片，当前变更列表:`, Array.from(changedSlideIds.value))
-          }
-
-          // ⚠️ 不再自动更新快照
-          // 快照只在保存时手动更新，这样可以用于对比"上次保存"和"当前内容"
-        }
+        throttledRunTrack?.(newSlides, oldSlides)
       },
       { deep: true, immediate: true }
     )
   }
 
   /**
-   * 停止追踪
+   * 停止追踪（停止 watch 并清空状态，避免内存泄漏）
    */
   const stopTracking = () => {
+    if (stopWatch) {
+      stopWatch()
+      stopWatch = null
+    }
+    if (throttledRunTrack) {
+      throttledRunTrack.cancel()
+      throttledRunTrack = null
+    }
     clearChangedSlides()
     lastSnapshot.value.clear()
   }

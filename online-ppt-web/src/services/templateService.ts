@@ -9,7 +9,7 @@
 
 import type { Slide, PPTElement, TextType } from '@/types/slides'
 import { useSlidesStore } from '@/store'
-import api, { SERVER_URL, getAuthHeaders } from './index'
+import api, { SERVER_URL, authFetch } from './index'
 import axios from './config'
 
 // 模板信息接口（与后端 template-index.json 对齐的子集）
@@ -37,9 +37,7 @@ export interface FilterOptions {
 export async function getTemplateList(): Promise<TemplateInfo[]> {
   try {
     // 优先从后端获取模板列表
-    const resp = await fetch(`${SERVER_URL}/templates`, {
-      headers: { ...getAuthHeaders() }
-    })
+    const resp = await authFetch(`${SERVER_URL}/templates`)
     if (resp.ok) {
       const json = await resp.json()
       const list = (json.data?.list || []) as any[]
@@ -100,9 +98,7 @@ export async function getTemplateSlides(templateId: string): Promise<Slide[]> {
   try {
     // 优先：从后端模板接口获取（新建/管理后的模板）
     try {
-      const resp = await fetch(`${SERVER_URL}/templates/${templateId}`, {
-        headers: { ...getAuthHeaders() }
-      })
+      const resp = await authFetch(`${SERVER_URL}/templates/${templateId}`)
       if (resp.ok) {
         const json = await resp.json()
         const data = json.data || {}

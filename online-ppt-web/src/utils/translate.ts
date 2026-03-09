@@ -1,7 +1,7 @@
 /**
  * 翻译工具函数
  */
-import { getAuthHeaders } from '@/services'
+import { authFetch } from '@/services'
 
 /**
  * 检测字符串是否包含中文
@@ -18,12 +18,9 @@ export function hasChinese(text: string): boolean {
 export async function translateToEnglish(chineseText: string): Promise<string> {
   try {
     // 使用 fetch 调用后端 AI 翻译
-    const response = await fetch('/api/translate', {
+    const response = await authFetch('/api/translate', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAuthHeaders(),
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         text: chineseText,
         from: 'zh',
