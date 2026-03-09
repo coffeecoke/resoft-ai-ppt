@@ -1,8 +1,8 @@
 <template>
   <div class="sidebar" :class="{ collapsed: isCollapsed }">
-    <div class="logo">
+    <div class="logo" @click="goHome" style="cursor: pointer;">
       <img v-if="!isCollapsed" src="/logo.png" alt="Logo" class="logo-img" />
-      <span v-if="!isCollapsed" class="logo-text">售前工作台管理</span>
+      <span v-if="!isCollapsed" class="logo-text">售前工作台</span>
       <span v-else class="logo-text-mini">管理</span>
     </div>
     
@@ -42,11 +42,16 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { adminMenus } from '@/configs/adminMenu'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 
 const route = useRoute()
+const router = useRouter()
+
+const goHome = () => {
+  router.push('/sales/home')
+}
 
 // 折叠状态
 const isCollapsed = ref(false)

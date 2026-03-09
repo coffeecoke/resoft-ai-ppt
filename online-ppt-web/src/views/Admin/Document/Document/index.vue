@@ -343,6 +343,7 @@
 <script lang="ts" setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { openEditorTab } from '@/utils/openEditor'
 import {
   getDocumentList,
   createDocument,
@@ -637,12 +638,8 @@ const handleCreate = async () => {
       }],
     }
     
-    // 跳转到PPT编辑器页面，通过Router State传递数据（优化首次加载）
-    router.push({
-      path: '/ppt/editor',
-      query: { documentId: resp.data.id },
-      state: { documentData }
-    })
+    // 跳转到PPT编辑器页面，复用已打开的页签（优化首次加载）
+    openEditorTab('/ppt/editor', { documentId: resp.data.id }, resp.data.id, documentData)
   } catch (error: any) {
     console.error('[文档管理] 创建文档失败:', error)
     message.error(error?.message || '创建文档失败')
@@ -658,7 +655,7 @@ const handlePPTXFileChange = (files: FileList) => {
 }
 
 const openEditor = (id: string) => {
-  router.push(`/ppt/editor?documentId=${id}`)
+  openEditorTab('/ppt/editor', { documentId: id }, id)
 }
 
 const handleDelete = async (id: string, name: string) => {

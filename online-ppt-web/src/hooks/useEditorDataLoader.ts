@@ -43,10 +43,13 @@ export function useEditorDataLoader() {
     loading.value = true
     
     try {
-      // 优先使用router state中的数据
+      // 优先使用router state中的数据，其次读 sessionStorage（window.open 新建页签时写入）
       const stateData = history.state?.documentData
-      
+        || (documentId ? JSON.parse(sessionStorage.getItem(`editor_init_${documentId}`) || 'null') : null)
+
       if (stateData) {
+        // 用完即清，避免刷新时重复使用过时数据
+        if (documentId) sessionStorage.removeItem(`editor_init_${documentId}`)
         console.log('[编辑器] 使用创建时的缓存数据（秒开）')
         loadingMessage.value = '正在加载文档...'
 
