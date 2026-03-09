@@ -681,24 +681,27 @@ model templates {
 
 /// 用户表
 model users {
-  id            String    @id @db.VarChar(50)
-  username      String    @unique @db.VarChar(100)  /// 登录账号
-  name          String    @db.VarChar(100)           /// 姓名（显示用）
-  department    String?   @db.VarChar(100)           /// 部门
-  email         String?   @unique @db.VarChar(255)  /// 邮箱（可选）
-  password_hash String?   @db.VarChar(255)          /// bcrypt哈希，SSO用户可为空
-  role          String    @default("user") @db.VarChar(20)   /// "admin" | "user"
-  status        String    @default("active") @db.VarChar(20) /// "active" | "disabled"
-  cas_username  String?   @unique @db.VarChar(100)  /// 期2 CAS SSO绑定账号
-  last_login_at DateTime?
-  login_count   Int       @default(0)
-  created_by    String?   @db.VarChar(50)            /// 创建人ID
-  created_at    DateTime  @default(now())
-  updated_at    DateTime  @updatedAt
+  id              String    @id @db.VarChar(50)
+  username        String    @unique @db.VarChar(100)  /// 登录账号
+  name            String    @db.VarChar(100)           /// 姓名（显示用）
+  department_id   String?   @db.VarChar(50)            /// 所属部门ID（关联部门表）
+  department_name String?   @db.VarChar(100)           /// 所属部门名称（冗余，避免频繁join）
+  email           String?   @unique @db.VarChar(255)  /// 邮箱（可选）
+  password_hash   String?   @db.VarChar(255)          /// bcrypt哈希，SSO用户可为空
+  role            String    @default("user") @db.VarChar(20)   /// "admin" | "user"
+  status          String    @default("active") @db.VarChar(20) /// "active" | "disabled"
+  cas_username    String?   @unique @db.VarChar(100)  /// 期2 CAS SSO绑定账号
+  last_login_at   DateTime?
+  login_count     Int       @default(0)
+  created_by      String?   @db.VarChar(50)            /// 创建人ID
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  departments departments? @relation(fields: [department_id], references: [id])
 
   @@index([role], map: "idx_users_role")
   @@index([status], map: "idx_users_status")
-  @@index([department], map: "idx_users_department")
+  @@index([department_id], map: "idx_users_department_id")
 }
 
 /// 审计日志表
@@ -718,4 +721,116 @@ model audit_logs {
   @@index([action], map: "idx_audit_action")
   @@index([resource], map: "idx_audit_resource")
   @@index([created_at], map: "idx_audit_created_at")
+}
+
+// ==================== 外部系统同步相关表 ====================
+
+/// 部门表（树形层级结构，从外部系统同步）
+model departments {
+  id         String   @id @db.VarChar(50)           /// 部门唯一标识
+  name       String   @db.VarChar(255)              /// 部门名称（如 华东大区、售前支持团队）
+  parent_id  String?  @db.VarChar(50)               /// 父部门ID，顶级部门为 null
+  code       String?  @db.VarChar(100)              /// 部门代码（如 HQ-001）
+  level      Int      @default(1)                   /// 层级深度（1=根节点）
+  sort_order Int      @default(0)                   /// 同级排序权重
+  leader     String?  @db.VarChar(100)              /// 部门负责人
+  phone      String?  @db.VarChar(50)               /// 联系电话
+  email      String?  @db.VarChar(255)              /// 邮箱
+  status     String   @default("active") @db.VarChar(20) /// active=启用，disabled=停用
+  created_at DateTime @default(now())               /// 创建时间
+  updated_at DateTime @updatedAt                    /// 更新时间
+
+  /// 自关联（树形父子关系）
+  parent   departments?  @relation("dept_tree", fields: [parent_id], references: [id])
+  children departments[] @relation("dept_tree")
+
+  /// 反向关联
+  users users[]
+
+  @@index([parent_id], map: "idx_departments_parent_id")
+  @@index([status], map: "idx_departments_status")
+  @@index([level], map: "idx_departments_level")
+}
+
+/// 线索分类表（从外部系统同步）
+model lead_categories {
+  id         String   @id @db.VarChar(50)           /// 分类唯一标识
+  name       String   @db.VarChar(255)              /// 分类名称
+  code       String?  @unique @db.VarChar(100)      /// 分类代码（唯一稳定）
+  sort_order Int      @default(0)                   /// 排序权重
+  is_active  Boolean  @default(true)                /// 是否启用
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  leads leads[]
+
+  @@index([is_active], map: "idx_lead_categories_is_active")
+}
+
+/// 客户类型表（如城商行、外资行、股份制银行，从外部系统同步）
+model customer_types {
+  id         String   @id @db.VarChar(50)           /// 类型唯一标识
+  name       String   @db.VarChar(255)              /// 类型名称（如 城商行、外资行）
+  code       String   @unique @db.VarChar(100)      /// 类型代码（如 CITY_BANK），唯一且稳定
+  sort_order Int      @default(0)                   /// 排序权重（控制筛选栏顺序）
+  is_active  Boolean  @default(true)                /// 是否启用
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  customers customers[]
+
+  @@index([is_active], map: "idx_customer_types_is_active")
+}
+
+/// 客户表（从外部系统同步）
+model customers {
+  id         String   @id @db.VarChar(50)           /// 客户唯一标识
+  name       String   @db.VarChar(255)              /// 客户名称（如 XX城商行）
+  short_name String?  @db.VarChar(100)              /// 客户简称（界面简短展示）
+  type_id    String?  @db.VarChar(50)               /// 客户类型ID
+  type_name  String?  @db.VarChar(100)              /// 客户类型名称（冗余）
+  industry   String?  @db.VarChar(100)              /// 所属行业
+  region     String?  @db.VarChar(100)              /// 所在地区/省份（如 华东、浙江省）
+  owner_id   String?  @db.VarChar(50)               /// 客户负责人用户ID
+  owner_name String?  @db.VarChar(100)              /// 客户负责人姓名（冗余）
+  status     String   @default("active") @db.VarChar(20) /// active=活跃，inactive=非活跃
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt                    /// 最后更新时间（用于增量同步）
+
+  customer_type customer_types? @relation(fields: [type_id], references: [id])
+  leads         leads[]
+
+  @@index([type_id], map: "idx_customers_type_id")
+  @@index([industry], map: "idx_customers_industry")
+  @@index([region], map: "idx_customers_region")
+  @@index([status], map: "idx_customers_status")
+  @@index([updated_at], map: "idx_customers_updated_at")
+}
+
+/// 线索表（从外部系统同步）
+model leads {
+  id            String   @id @db.VarChar(50)        /// 线索唯一标识
+  name          String   @db.VarChar(255)            /// 线索名称/标题（如 XX银行-一表通 商务洽谈）
+  category_id   String?  @db.VarChar(50)             /// 线索分类ID
+  category_name String?  @db.VarChar(255)            /// 线索分类名称（冗余）
+  customer_id   String?  @db.VarChar(50)             /// 关联客户ID
+  customer_name String?  @db.VarChar(255)            /// 客户名称（未关联时也存文本）
+  industry      String?  @db.VarChar(100)            /// 所属行业（如 城商行、农商行）
+  product_ids   Json?                                /// 关联产品ID数组
+  product_names String?  @db.VarChar(500)            /// 关联产品名称（冗余，逗号分隔）
+  owner_id      String?  @db.VarChar(50)             /// 负责人用户ID
+  owner_name    String?  @db.VarChar(100)            /// 负责人姓名（冗余）
+  status        String   @default("new") @db.VarChar(20) /// new=新建，following=跟进中，converted=已转化，lost=已丢失
+  source        String?  @db.VarChar(100)            /// 线索来源（如 展会、转介绍、官网）
+  created_at    DateTime @default(now())             /// 创建时间
+  updated_at    DateTime @updatedAt                  /// 最后更新时间（用于增量同步）
+
+  lead_category lead_categories? @relation(fields: [category_id], references: [id])
+  customer      customers?       @relation(fields: [customer_id], references: [id])
+
+  @@index([category_id], map: "idx_leads_category_id")
+  @@index([customer_id], map: "idx_leads_customer_id")
+  @@index([owner_id], map: "idx_leads_owner_id")
+  @@index([status], map: "idx_leads_status")
+  @@index([updated_at], map: "idx_leads_updated_at")
 }

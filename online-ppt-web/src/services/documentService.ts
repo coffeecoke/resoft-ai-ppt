@@ -98,6 +98,7 @@ export async function getDocumentList(options: {
   pageSize?: number
   status?: 'draft' | 'published' | 'archived'
   category?: string
+  tag?: string
   keyword?: string
 } = {}): Promise<DocumentMetadata[]> {
   try {
@@ -106,6 +107,7 @@ export async function getDocumentList(options: {
     if (options.pageSize) params.append('pageSize', options.pageSize.toString())
     if (options.status) params.append('status', options.status)
     if (options.category) params.append('category', options.category)
+    if (options.tag) params.append('tag', options.tag)
     if (options.keyword) params.append('keyword', options.keyword)
 
     const url = `${SERVER_URL}/documents${params.toString() ? `?${params.toString()}` : ''}`
