@@ -745,8 +745,6 @@ model audit_logs {
   @@index([resource], map: "idx_audit_resource")
   @@index([created_at], map: "idx_audit_created_at")
 }
-
-<<<<<<< HEAD
 // ==================== 招投标文件分析相关表 ====================
 
 /// 招标文件表（存储上传的招标文件及AI分析结果）
@@ -1017,5 +1015,5 @@ model leads {
   @@index([owner_id], map: "idx_leads_owner_id")
   @@index([status], map: "idx_leads_status")
   @@index([updated_at], map: "idx_leads_updated_at")
->>>>>>> 2218670c06888b0929660099d6f9d881c16c69c7
+
 }
