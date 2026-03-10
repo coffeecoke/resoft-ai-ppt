@@ -91,17 +91,41 @@ model thumbnails {
   page_type_confidence Float? /// AI分析置信度（0-1）
   analyzed_at          DateTime? /// AI分析时间
 
+  // 审核：待审核→已通过/已拒绝，修改后通过记录在 slide_analysis_review_records
+  review_status String  @default("pending") @db.VarChar(20) /// pending=待审核, approved=已通过, rejected=已拒绝
+  reviewed_at   DateTime? /// 审核时间
+  reviewer_id   String?  @db.VarChar(50) /// 审核人ID
+
   // 时间戳
   generated_at DateTime @default(now()) /// 生成时间
 
   // 关联
-  documents documents @relation(fields: [document_id], references: [id], onDelete: Cascade)
+  documents  documents @relation(fields: [document_id], references: [id], onDelete: Cascade)
+  slide_analysis_review_records    slide_analysis_review_records[]
 
   @@unique([document_id, slide_id], map: "uk_document_slide")
   @@index([document_id], map: "idx_document_id")
   @@index([page_type], map: "idx_page_type")
   @@index([slide_id], map: "idx_slide_id")
   @@index([slide_index], map: "idx_slide_index")
+  @@index([review_status], map: "idx_thumbnails_review_status")
+}
+
+/// PPT 分析结果审核历史（修改后通过等记录）
+model slide_analysis_review_records {
+  id           String   @id @db.VarChar(50) /// 主键
+  thumbnail_id String   @db.VarChar(100) /// 关联 thumbnails.id
+  action       String   @db.VarChar(20) /// approve=通过, reject=拒绝, modify_approve=修改后通过
+  content_before Json? /// 修改前 { page_type, page_type_confidence }
+  content_after  Json? /// 修改后（仅 modify_approve 时有值）
+  reviewer_id  String?  @db.VarChar(50) /// 审核人ID
+  review_time  DateTime @default(now()) /// 审核时间
+  remark       String?  @db.Text /// 备注（拒绝原因等）
+
+  thumbnails thumbnails @relation(fields: [thumbnail_id], references: [id], onDelete: Cascade)
+
+  @@index([thumbnail_id], map: "idx_sar_thumbnail_id")
+  @@index([review_time], map: "idx_sar_review_time")
 }
 
 /// 幻灯片合并内容表（用于存储提取的幻灯片文本内容）
@@ -328,17 +352,42 @@ model concerns {
   expert_advice   String? @db.Text /// 专家建议内容
   expert_reviewer String? @db.VarChar(100) /// 专家审核人
 
+  /// 审核：待审核→已通过/已拒绝，修改后通过记录在 concern_review_records
+  review_status String  @default("pending") @db.VarChar(20) /// pending=待审核, approved=已通过, rejected=已拒绝
+  reviewed_at   DateTime? /// 审核时间
+  reviewer_id   String? @db.VarChar(50) /// 审核人ID
+
   created_at        DateTime            @default(now()) /// 创建时间
   updated_at        DateTime            @updatedAt /// 更新时间（自动更新）
   document_concerns document_concerns[]
   session_concerns  session_concerns[]
   concern_categories concern_categories? @relation(fields: [category_code], references: [code])
+  concern_review_records concern_review_records[]
 
   @@index([category], map: "idx_category")
   @@index([category_code], map: "idx_category_code")
   @@index([intent_code], map: "idx_intent_code")
   @@index([status], map: "idx_status")
   @@index([transcription_id], map: "idx_transcription_id")
+  @@index([review_status], map: "idx_review_status")
+}
+
+/// 问答对审核/修改历史（修改后通过时记录前后内容）
+model concern_review_records {
+  id          String   @id @db.VarChar(50) /// 主键
+  concern_id  String   @db.VarChar(50) /// 关联 concerns.id
+  action      String   @db.VarChar(30) /// approve=通过, reject=拒绝, modify_approve=修改后通过
+  reviewer_id String?  @db.VarChar(50) /// 审核人ID
+  review_time DateTime @default(now()) /// 审核时间
+  remark      String?  @db.Text /// 备注（拒绝原因等）
+  content_before Json? /// 修改前内容 { question, answer, category_code, intent_code }
+  content_after  Json? /// 修改后内容（仅 modify_approve 时有值）
+  created_at  DateTime @default(now())
+
+  concerns concerns @relation(fields: [concern_id], references: [id], onDelete: Cascade)
+
+  @@index([concern_id], map: "idx_concern_review_concern_id")
+  @@index([review_time], map: "idx_concern_review_time")
 }
 
 // ==================== 系统配置相关表 ====================
@@ -681,24 +730,27 @@ model templates {
 
 /// 用户表
 model users {
-  id            String    @id @db.VarChar(50)
-  username      String    @unique @db.VarChar(100)  /// 登录账号
-  name          String    @db.VarChar(100)           /// 姓名（显示用）
-  department    String?   @db.VarChar(100)           /// 部门
-  email         String?   @unique @db.VarChar(255)  /// 邮箱（可选）
-  password_hash String?   @db.VarChar(255)          /// bcrypt哈希，SSO用户可为空
-  role          String    @default("user") @db.VarChar(20)   /// "admin" | "user"
-  status        String    @default("active") @db.VarChar(20) /// "active" | "disabled"
-  cas_username  String?   @unique @db.VarChar(100)  /// 期2 CAS SSO绑定账号
-  last_login_at DateTime?
-  login_count   Int       @default(0)
-  created_by    String?   @db.VarChar(50)            /// 创建人ID
-  created_at    DateTime  @default(now())
-  updated_at    DateTime  @updatedAt
+  id              String    @id @db.VarChar(50)
+  username        String    @unique @db.VarChar(100)  /// 登录账号
+  name            String    @db.VarChar(100)           /// 姓名（显示用）
+  department_id   String?   @db.VarChar(50)            /// 所属部门ID（关联部门表）
+  department_name String?   @db.VarChar(100)           /// 所属部门名称（冗余，避免频繁join）
+  email           String?   @unique @db.VarChar(255)  /// 邮箱（可选）
+  password_hash   String?   @db.VarChar(255)          /// bcrypt哈希，SSO用户可为空
+  role            String    @default("user") @db.VarChar(20)   /// "admin" | "user"
+  status          String    @default("active") @db.VarChar(20) /// "active" | "disabled"
+  cas_username    String?   @unique @db.VarChar(100)  /// 期2 CAS SSO绑定账号
+  last_login_at   DateTime?
+  login_count     Int       @default(0)
+  created_by      String?   @db.VarChar(50)            /// 创建人ID
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  departments departments? @relation(fields: [department_id], references: [id])
 
   @@index([role], map: "idx_users_role")
   @@index([status], map: "idx_users_status")
-  @@index([department], map: "idx_users_department")
+  @@index([department_id], map: "idx_users_department_id")
 }
 
 /// 审计日志表
@@ -718,4 +770,278 @@ model audit_logs {
   @@index([action], map: "idx_audit_action")
   @@index([resource], map: "idx_audit_resource")
   @@index([created_at], map: "idx_audit_created_at")
+}
+// ==================== 招投标文件分析相关表 ====================
+
+/// 招标文件表（存储上传的招标文件及AI分析结果）
+model tender_documents {
+  id              String  @id @db.VarChar(50)
+  name            String  @db.VarChar(255) /// 文件名称
+  file_path       String  @db.VarChar(500) /// 原始文件存储路径
+  file_type       String  @db.VarChar(20) /// 文件类型（pdf, docx, doc）
+  file_size       BigInt  @default(0) /// 文件大小（字节）
+  raw_text        String? @db.LongText /// 提取的纯文本内容（用于AI分析）
+  raw_html_path   String? @db.VarChar(500) /// HTML文件路径（保留表格/图片结构，存磁盘不入库）
+  analysis_result Json?   /// AI分析结果（评分标准、资质要求、技术要求等）
+  directory_json  Json?   /// 生成的投标目录结构（JSON树）
+  status          String  @default("uploaded") @db.VarChar(20) /// uploaded=已上传, extracting=提取中, analyzing=分析中, completed=已完成, failed=失败
+  error_message   String? @db.Text /// 错误信息
+  model_name      String? @db.VarChar(100) /// 使用的AI模型
+  project_name    String? @db.VarChar(255) /// 招标项目名称（AI提取）
+  bid_deadline    String? @db.VarChar(100) /// 投标截止时间（AI提取）
+  budget          String? @db.VarChar(100) /// 预算金额（AI提取）
+  created_by      String? @db.VarChar(50) /// 创建人ID
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  bid_directory_items bid_directory_items[]
+  bid_compositions    bid_compositions[]
+
+  @@index([status], map: "idx_tender_status")
+  @@index([created_by], map: "idx_tender_created_by")
+  @@index([created_at], map: "idx_tender_created_at")
+}
+
+/// 投标目录项（根据招标文件AI生成的投标文件目录树）
+model bid_directory_items {
+  id              String  @id @db.VarChar(50)
+  tender_id       String  @db.VarChar(50) /// 关联招标文件ID
+  parent_id       String? @db.VarChar(50) /// 父目录ID（支持层级）
+  title           String  @db.VarChar(500) /// 目录标题
+  level           Int     @default(1) /// 层级（1=章, 2=节, 3=小节）
+  sort_order      Int     @default(0) /// 排序
+  default_content      String? @db.LongText /// AI生成的默认文本内容
+  default_html_content String? @db.LongText /// AI生成的默认HTML内容（含表格）- 仅用于小片段，大内容走文件
+  user_content         String? @db.LongText /// 用户编辑后的内容
+  content_status  String  @default("empty") @db.VarChar(20) /// empty=空, ai_generated=AI已生成, user_edited=用户已编辑
+  section_type    String? @db.VarChar(50) /// 章节类型（cover_letter, technical_solution等）
+  scoring_weight  Float?  /// 评分权重（从招标文件提取）
+  docx_file_path  String? @db.VarChar(500) /// 该章节对应的 .docx 片段路径
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  tender_documents tender_documents @relation(fields: [tender_id], references: [id], onDelete: Cascade)
+  parent           bid_directory_items?  @relation("bid_directory_hierarchy", fields: [parent_id], references: [id], onDelete: Cascade)
+  children         bid_directory_items[] @relation("bid_directory_hierarchy")
+
+  @@index([tender_id], map: "idx_biddir_tender_id")
+  @@index([parent_id], map: "idx_biddir_parent_id")
+  @@index([level], map: "idx_biddir_level")
+  @@index([sort_order], map: "idx_biddir_sort_order")
+}
+
+/// 投标文件表（存储上传的已有投标文件，用于拆分复用）
+model bid_documents {
+  id           String  @id @db.VarChar(50)
+  name         String  @db.VarChar(255) /// 文件名称
+  file_path    String  @db.VarChar(500) /// 原始文件存储路径
+  file_type    String  @db.VarChar(20) /// 文件类型
+  file_size    BigInt  @default(0) /// 文件大小（字节）
+  raw_text     String? @db.LongText /// 提取的纯文本（用于AI分析）
+  raw_html_path String? @db.VarChar(500) /// HTML文件路径（保留表格/图片，存磁盘不入库）
+  status       String  @default("uploaded") @db.VarChar(20) /// uploaded=已上传, extracting=提取中, splitting=拆分中, completed=已完成, failed=失败
+  error_message String? @db.Text /// 错误信息
+  model_name   String? @db.VarChar(100) /// 使用的AI模型
+  section_count Int    @default(0) /// 拆分出的章节数
+  source_info  String? @db.VarChar(255) /// 来源信息（哪个项目/客户的投标）
+  industry     String? @db.VarChar(100) /// 行业
+  project_type String? @db.VarChar(100) /// 项目类型（IT、工程、咨询等）
+  created_by   String? @db.VarChar(50)
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  bid_sections bid_sections[]
+
+  @@index([status], map: "idx_biddoc_status")
+  @@index([industry], map: "idx_biddoc_industry")
+  @@index([project_type], map: "idx_biddoc_project_type")
+  @@index([created_by], map: "idx_biddoc_created_by")
+  @@index([created_at], map: "idx_biddoc_created_at")
+}
+
+/// 投标章节表（投标文件拆分后的独立章节，可复用）
+model bid_sections {
+  id              String  @id @db.VarChar(50)
+  bid_document_id String  @db.VarChar(50) /// 关联投标文件ID
+  title           String  @db.VarChar(500) /// 章节标题
+  content         String? @db.LongText /// 章节纯文本内容（用于AI分析和全文搜索）
+  html_content_path String? @db.VarChar(500) /// 章节HTML文件路径（保留表格/图片，存磁盘不入库）
+  content_length  Int     @default(0) /// 内容长度
+  section_type    String  @default("other") @db.VarChar(50) /// 章节类型
+  level           Int     @default(1) /// 章节层级
+  sort_order      Int     @default(0) /// 排序
+  tags            Json?   /// 标签（JSON数组，用于检索）
+  quality_score   Float?  /// AI评估的质量分数（0-1）
+  is_reusable     Boolean @default(true) /// 是否可复用
+  docx_file_path  String? @db.VarChar(500) /// 拆分出的 .docx 片段路径
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+   parent_section_id String? @db.VarChar(50) /// ???ID?1????null?2?????1??
+
+  bid_documents          bid_documents           @relation(fields: [bid_document_id], references: [id], onDelete: Cascade)
+  bid_composition_items  bid_composition_items[]
+
+  @@index([bid_document_id], map: "idx_bidsec_document_id")
+  @@index([section_type], map: "idx_bidsec_type")
+  @@index([is_reusable], map: "idx_bidsec_reusable")
+  @@index([parent_section_id], map: "idx_bidsec_parent_id")
+  @@index([quality_score], map: "idx_bidsec_quality")
+  @@fulltext([content], map: "ft_bidsec_content")
+  @@fulltext([title], map: "ft_bidsec_title")
+}
+
+/// 投标组合表（用户基于招标目录组合的投标文件）
+model bid_compositions {
+  id          String  @id @db.VarChar(50)
+  name        String  @db.VarChar(255) /// 组合名称
+  tender_id   String? @db.VarChar(50) /// 关联的招标文件ID（可选）
+  description String? @db.Text /// 描述
+  status      String  @default("draft") @db.VarChar(20) /// draft=草稿, completed=已完成, exported=已导出
+  docx_file_path String? @db.VarChar(500) /// 合并后的完整 .docx 路径
+  template_name  String? @db.VarChar(255) /// 使用的模板名称
+  created_by  String? @db.VarChar(50)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  tender_documents      tender_documents?       @relation(fields: [tender_id], references: [id])
+  bid_composition_items bid_composition_items[]
+
+  @@index([tender_id], map: "idx_bidcomp_tender_id")
+  @@index([status], map: "idx_bidcomp_status")
+  @@index([created_by], map: "idx_bidcomp_created_by")
+  @@index([created_at], map: "idx_bidcomp_created_at")
+}
+
+/// 投标组合明细（组合中引用的章节）
+model bid_composition_items {
+  id             String  @id @db.VarChar(50)
+  composition_id String  @db.VarChar(50) /// 关联组合ID
+  section_id     String? @db.VarChar(50) /// 引用的章节ID（从章节库选择时）
+  title          String  @db.VarChar(500) /// 章节标题
+  custom_content String? @db.LongText /// 自定义/编辑后的内容
+  sort_order     Int     @default(0) /// 排序
+  level          Int     @default(1) /// 章节层级
+  source_type    String  @default("custom") @db.VarChar(20) /// custom=手写, reference=引用章节, ai_generated=AI生成
+  docx_file_path String? @db.VarChar(500) /// 该项对应的 .docx 片段路径
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  bid_compositions bid_compositions @relation(fields: [composition_id], references: [id], onDelete: Cascade)
+  bid_sections     bid_sections?    @relation(fields: [section_id], references: [id])
+
+  @@index([composition_id], map: "idx_bidcompitem_comp_id")
+  @@index([section_id], map: "idx_bidcompitem_sec_id")
+  @@index([sort_order], map: "idx_bidcompitem_sort")
+}
+// ==================== 外部系统同步相关表 ====================
+
+/// 部门表（树形层级结构，从外部系统同步）
+model departments {
+  id         String   @id @db.VarChar(50)           /// 部门唯一标识
+  name       String   @db.VarChar(255)              /// 部门名称（如 华东大区、售前支持团队）
+  parent_id  String?  @db.VarChar(50)               /// 父部门ID，顶级部门为 null
+  code       String?  @db.VarChar(100)              /// 部门代码（如 HQ-001）
+  level      Int      @default(1)                   /// 层级深度（1=根节点）
+  sort_order Int      @default(0)                   /// 同级排序权重
+  leader     String?  @db.VarChar(100)              /// 部门负责人
+  phone      String?  @db.VarChar(50)               /// 联系电话
+  email      String?  @db.VarChar(255)              /// 邮箱
+  status     String   @default("active") @db.VarChar(20) /// active=启用，disabled=停用
+  created_at DateTime @default(now())               /// 创建时间
+  updated_at DateTime @updatedAt                    /// 更新时间
+
+  /// 自关联（树形父子关系）
+  parent   departments?  @relation("dept_tree", fields: [parent_id], references: [id])
+  children departments[] @relation("dept_tree")
+
+  /// 反向关联
+  users users[]
+
+  @@index([parent_id], map: "idx_departments_parent_id")
+  @@index([status], map: "idx_departments_status")
+  @@index([level], map: "idx_departments_level")
+}
+
+/// 线索分类表（从外部系统同步）
+model lead_categories {
+  id         String   @id @db.VarChar(50)           /// 分类唯一标识
+  name       String   @db.VarChar(255)              /// 分类名称
+  code       String?  @unique @db.VarChar(100)      /// 分类代码（唯一稳定）
+  sort_order Int      @default(0)                   /// 排序权重
+  is_active  Boolean  @default(true)                /// 是否启用
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  leads leads[]
+
+  @@index([is_active], map: "idx_lead_categories_is_active")
+}
+
+/// 客户类型表（如城商行、外资行、股份制银行，从外部系统同步）
+model customer_types {
+  id         String   @id @db.VarChar(50)           /// 类型唯一标识
+  name       String   @db.VarChar(255)              /// 类型名称（如 城商行、外资行）
+  code       String   @unique @db.VarChar(100)      /// 类型代码（如 CITY_BANK），唯一且稳定
+  sort_order Int      @default(0)                   /// 排序权重（控制筛选栏顺序）
+  is_active  Boolean  @default(true)                /// 是否启用
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  customers customers[]
+
+  @@index([is_active], map: "idx_customer_types_is_active")
+}
+
+/// 客户表（从外部系统同步）
+model customers {
+  id         String   @id @db.VarChar(50)           /// 客户唯一标识
+  name       String   @db.VarChar(255)              /// 客户名称（如 XX城商行）
+  short_name String?  @db.VarChar(100)              /// 客户简称（界面简短展示）
+  type_id    String?  @db.VarChar(50)               /// 客户类型ID
+  type_name  String?  @db.VarChar(100)              /// 客户类型名称（冗余）
+  industry   String?  @db.VarChar(100)              /// 所属行业
+  region     String?  @db.VarChar(100)              /// 所在地区/省份（如 华东、浙江省）
+  owner_id   String?  @db.VarChar(50)               /// 客户负责人用户ID
+  owner_name String?  @db.VarChar(100)              /// 客户负责人姓名（冗余）
+  status     String   @default("active") @db.VarChar(20) /// active=活跃，inactive=非活跃
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt                    /// 最后更新时间（用于增量同步）
+
+  customer_type customer_types? @relation(fields: [type_id], references: [id])
+  leads         leads[]
+
+  @@index([type_id], map: "idx_customers_type_id")
+  @@index([industry], map: "idx_customers_industry")
+  @@index([region], map: "idx_customers_region")
+  @@index([status], map: "idx_customers_status")
+  @@index([updated_at], map: "idx_customers_updated_at")
+}
+
+/// 线索表（从外部系统同步）
+model leads {
+  id            String   @id @db.VarChar(50)        /// 线索唯一标识
+  name          String   @db.VarChar(255)            /// 线索名称/标题（如 XX银行-一表通 商务洽谈）
+  category_id   String?  @db.VarChar(50)             /// 线索分类ID
+  category_name String?  @db.VarChar(255)            /// 线索分类名称（冗余）
+  customer_id   String?  @db.VarChar(50)             /// 关联客户ID
+  customer_name String?  @db.VarChar(255)            /// 客户名称（未关联时也存文本）
+  industry      String?  @db.VarChar(100)            /// 所属行业（如 城商行、农商行）
+  product_ids   Json?                                /// 关联产品ID数组
+  product_names String?  @db.VarChar(500)            /// 关联产品名称（冗余，逗号分隔）
+  owner_id      String?  @db.VarChar(50)             /// 负责人用户ID
+  owner_name    String?  @db.VarChar(100)            /// 负责人姓名（冗余）
+  status        String   @default("new") @db.VarChar(20) /// new=新建，following=跟进中，converted=已转化，lost=已丢失
+  source        String?  @db.VarChar(100)            /// 线索来源（如 展会、转介绍、官网）
+  created_at    DateTime @default(now())             /// 创建时间
+  updated_at    DateTime @updatedAt                  /// 最后更新时间（用于增量同步）
+
+  lead_category lead_categories? @relation(fields: [category_id], references: [id])
+  customer      customers?       @relation(fields: [customer_id], references: [id])
+
+  @@index([category_id], map: "idx_leads_category_id")
+  @@index([customer_id], map: "idx_leads_customer_id")
+  @@index([owner_id], map: "idx_leads_owner_id")
+  @@index([status], map: "idx_leads_status")
+  @@index([updated_at], map: "idx_leads_updated_at")
+
 }

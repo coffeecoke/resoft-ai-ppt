@@ -326,6 +326,8 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
+import { openEditorTab } from '@/utils/openEditor'
+import { duplicateDocument } from '@/services/documentService'
 import { MagicStick, Download } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { authFetch } from '@/services'
@@ -989,32 +991,33 @@ const addSelectedToPendingList = () => {
 
 /**
  * 使用当前PPT再编辑
- * 跳转到编辑器页面，打开当前documentId的文档
+ * 静默复制一份为个人副本（tag=personal），然后新页签打开编辑器
  */
 const editCurrentPPT = async () => {
   if (!props.documentId) {
     ElMessage.error('文档ID不存在，无法编辑')
     return
   }
-  
+
   try {
-    ElMessage.info('正在打开编辑器...')
-    
+    ElMessage.info('正在创建副本...')
+
+    const resp = await duplicateDocument(props.documentId) as any
+    if (!resp?.success || !resp?.data?.id) {
+      throw new Error(resp?.error || '创建副本失败')
+    }
+
     // 关闭当前弹框
     handleClose(false)
-    
-    // 跳转到编辑器页面，传递documentId参数
-    await router.push({
-      path: '/ppt/editor',
-      query: {
-        documentId: props.documentId
-      }
-    })
-    
-    console.log('[PPT弹框] 跳转到编辑器，documentId:', props.documentId)
-  } catch (error) {
-    console.error('[PPT弹框] 跳转失败:', error)
-    ElMessage.error('跳转编辑器失败')
+
+    // 新页签打开副本
+    openEditorTab('/ppt/editor', { documentId: resp.data.id }, resp.data.id)
+
+    ElMessage.success('副本已创建，正在打开编辑器')
+    console.log('[PPT弹框] 创建副本并打开编辑器，newId:', resp.data.id)
+  } catch (error: any) {
+    console.error('[PPT弹框] 创建副本失败:', error)
+    ElMessage.error(error?.message || '创建副本失败')
   }
 }
 

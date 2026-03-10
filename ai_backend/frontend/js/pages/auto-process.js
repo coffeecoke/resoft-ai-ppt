@@ -2,7 +2,8 @@
  * 自动跑批监控页面（PPT + 音频）
  */
 
-const AUTO_API_BASE = 'http://localhost:3000/api/auto-process';
+// 使用相对路径，与当前页面同源，避免端口/域名写死导致加载失败
+const AUTO_API_BASE = '/api/auto-process';
 let autoRefreshInterval = null;
 let autoCurrentStatus = null;
 let currentAutoProcessTab = 'ppt'; // 'ppt' or 'audio' or 'qa'
@@ -110,8 +111,8 @@ function showToast(message, type = 'info') {
 (async function() {
   console.log('🤖 自动跑批监控页面初始化...');
   
-  // ✅ 等待关键DOM元素存在
-  await waitForElement('auto-status-text');
+  // ✅ 等待关键DOM元素存在（PPT 状态文案容器）
+  await waitForElement('status-text');
   
   await autoLoadStatus();
   await autoLoadConfig();
@@ -180,9 +181,14 @@ async function autoLoadStatus() {
     if (result.success) {
       autoCurrentStatus = result.data;
       autoRenderStatus(result.data);
+    } else {
+      const statusText = document.getElementById('status-text');
+      if (statusText) statusText.textContent = '加载失败：' + (result.error || '未知错误');
     }
   } catch (error) {
     console.error('❌ 加载状态失败:', error);
+    const statusText = document.getElementById('status-text');
+    if (statusText) statusText.textContent = '加载失败';
   }
 }
 
@@ -583,13 +589,14 @@ async function audioLoadStatus() {
     if (result.success) {
       audioCurrentStatus = result.data;
       audioUpdateStatusUI(result.data);
+    } else {
+      const statusText = document.getElementById('audio-status-text');
+      if (statusText) statusText.textContent = '加载失败：' + (result.error || '未知错误');
     }
   } catch (error) {
     console.error('❌ 加载音频跑批状态失败:', error);
     const statusText = document.getElementById('audio-status-text');
-    if (statusText) {
-      statusText.textContent = '加载失败';
-    }
+    if (statusText) statusText.textContent = '加载失败';
   }
 }
 
@@ -907,13 +914,14 @@ async function qaLoadStatus() {
     if (result.success) {
       qaCurrentStatus = result.data;
       qaUpdateStatusUI(result.data);
+    } else {
+      const statusText = document.getElementById('qa-status-text');
+      if (statusText) statusText.textContent = '加载失败：' + (result.error || '未知错误');
     }
   } catch (error) {
     console.error('❌ 加载问答对提取跑批状态失败:', error);
     const statusText = document.getElementById('qa-status-text');
-    if (statusText) {
-      statusText.textContent = '加载失败';
-    }
+    if (statusText) statusText.textContent = '加载失败';
   }
 }
 

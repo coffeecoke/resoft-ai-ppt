@@ -162,22 +162,30 @@
   <div class="card">
     <div class="card-header">
       <h2>📊 分析结果</h2>
-      <button onclick="refreshPptResults()" class="btn btn-secondary">🔄 刷新</button>
+      <div class="card-header-actions">
+        <span id="ppt-results-summary" class="text-muted" style="margin-right: 12px;"></span>
+        <button id="ppt-batch-approve-btn" onclick="batchReviewPptResults('approve')" class="btn btn-secondary btn-sm" style="display: none;">批量通过</button>
+        <button id="ppt-batch-reject-btn" onclick="batchReviewPptResults('reject')" class="btn btn-secondary btn-sm" style="display: none;">批量拒绝</button>
+        <button onclick="refreshPptResults()" class="btn btn-secondary">🔄 刷新</button>
+      </div>
     </div>
     <div class="card-body">
       <div id="ppt-results-empty" class="empty-state">
-        <p>请先选择文档并完成分析</p>
+        <p>暂无分析结果，请先在「批量分析」中完成分析</p>
       </div>
       <div id="ppt-results-table" class="table-container" style="display: none;">
         <table class="data-table">
           <thead>
             <tr>
+              <th style="width: 40px;"><input type="checkbox" id="ppt-results-select-all" onclick="togglePptResultsSelectAll()" title="全选待审核" /></th>
+              <th>PPT名称</th>
               <th>页面索引</th>
               <th>缩略图</th>
               <th>页面ID</th>
               <th>分类名称</th>
               <th>分类代码</th>
               <th>置信度</th>
+              <th>审核状态</th>
               <th>分析时间</th>
               <th>操作</th>
             </tr>
@@ -262,6 +270,12 @@
 
 <style>
 /* 标签页样式 */
+.card-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .nav-tabs {
   display: flex;
   gap: 10px;
@@ -579,6 +593,17 @@
   border-color: #ffc53d;
   color: #fff;
 }
+
+/* 审核状态徽章 */
+.review-status-badge { padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+.review-status-badge.review-pending { background: #fff7e6; color: #fa8c16; border: 1px solid #ffd591; }
+.review-status-badge.review-approved { background: #f6ffed; color: #52c41a; border: 1px solid #b7eb8f; }
+.review-status-badge.review-rejected { background: #fff2f0; color: #ff4d4f; border: 1px solid #ffccc7; }
+.doc-name-cell { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; }
+.btn-success { background: #52c41a; border-color: #52c41a; color: #fff; }
+.btn-success:hover { background: #73d13d; border-color: #73d13d; color: #fff; }
+.btn-danger { background: #ff4d4f; border-color: #ff4d4f; color: #fff; }
+.btn-danger:hover { background: #ff7875; border-color: #ff7875; color: #fff; }
 
 /* 所有文件列表 */
 .files-list {

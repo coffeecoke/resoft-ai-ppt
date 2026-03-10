@@ -289,7 +289,10 @@ ${slideText}
             data: {
               page_type: analysisResult.category_code,
               page_type_confidence: analysisResult.confidence,
-              analyzed_at: new Date()
+              analyzed_at: new Date(),
+              review_status: 'pending',
+              reviewed_at: null,
+              reviewer_id: null
             }
           })
           
@@ -360,8 +363,7 @@ ${slideText}
   }
   
   /**
-   * 获取文档的分析结果
-   * 
+   * 获取文档的分析结果（支持审核状态）
    * @param {string} documentId - 文档ID
    * @returns {Promise<Array>} 分析结果列表
    */
@@ -369,61 +371,226 @@ ${slideText}
     const thumbnails = await prisma.thumbnails.findMany({
       where: {
         document_id: documentId,
-        page_type: {
-          not: null
-        }
+        page_type: { not: null }
       },
-      orderBy: {
-        slide_index: 'asc'
-      },
+      orderBy: { slide_index: 'asc' },
       select: {
         id: true,
+        document_id: true,
         slide_id: true,
         slide_index: true,
         page_type: true,
         page_type_confidence: true,
         analyzed_at: true,
-        url: true  // 添加缩略图URL
+        url: true,
+        review_status: true,
+        reviewed_at: true,
+        reviewer_id: true,
+        documents: { select: { name: true } }
       }
     })
-    
-    // 关联分类信息：直接查询 product_catalogs 表（不通过产品）
-    const results = []
-    
-    // 批量查询所有分类，建立 code -> name 映射（提高性能）
-    const allCategories = await prisma.product_catalogs.findMany({
-      where: {
-        is_active: true
-      },
+    return await this._mapThumbnailsToResults(thumbnails)
+  }
+
+  /**
+   * 获取所有文档的分析结果（用于分析结果页全量展示）
+   * @returns {Promise<Array>} 分析结果列表，含 documentName
+   */
+  async getAllAnalysisResults() {
+    const thumbnails = await prisma.thumbnails.findMany({
+      where: { page_type: { not: null } },
+      orderBy: [
+        { document_id: 'asc' },
+        { slide_index: 'asc' }
+      ],
       select: {
-        code: true,
-        name: true
+        id: true,
+        document_id: true,
+        slide_id: true,
+        slide_index: true,
+        page_type: true,
+        page_type_confidence: true,
+        analyzed_at: true,
+        url: true,
+        review_status: true,
+        reviewed_at: true,
+        reviewer_id: true,
+        documents: { select: { name: true } }
       }
     })
-    
+    return await this._mapThumbnailsToResults(thumbnails)
+  }
+
+  async _mapThumbnailsToResults(thumbnails) {
+    const results = []
+    const allCategories = await prisma.product_catalogs.findMany({
+      where: { is_active: true },
+      select: { code: true, name: true }
+    })
     const categoryMap = new Map()
-    allCategories.forEach(cat => {
-      if (cat.code) {
-        categoryMap.set(cat.code, cat.name)
-      }
-    })
-    
+    allCategories.forEach(cat => { if (cat.code) categoryMap.set(cat.code, cat.name) })
+
     for (const thumb of thumbnails) {
-      const categoryName = categoryMap.get(thumb.page_type)
-      
+      const doc = thumb.documents || {}
       results.push({
         thumbnailId: thumb.id,
+        documentId: thumb.document_id,
+        documentName: doc.name || '未命名',
         slideId: thumb.slide_id,
         slideIndex: thumb.slide_index,
         categoryCode: thumb.page_type,
-        categoryName: categoryName || '未知分类',
+        categoryName: categoryMap.get(thumb.page_type) || '未知分类',
         confidence: thumb.page_type_confidence,
         analyzedAt: thumb.analyzed_at,
-        thumbnailUrl: thumb.url || null  // 添加缩略图URL
+        thumbnailUrl: thumb.url || null,
+        reviewStatus: thumb.review_status || 'pending',
+        reviewedAt: thumb.reviewed_at,
+        reviewerId: thumb.reviewer_id
       })
     }
-    
     return results
+  }
+
+  /**
+   * 单条审核：通过 / 拒绝 / 修改后通过
+   * @param {string} thumbnailId - 缩略图ID
+   * @param {string} action - approve | reject | modify_approve
+   * @param {string} [reviewerId] - 审核人ID
+   * @param {Object} [contentAfter] - 修改后内容 { categoryCode }，仅 modify_approve 时传
+   * @param {string} [remark] - 备注
+   */
+  async reviewSingle(thumbnailId, action, reviewerId = null, contentAfter = null, remark = null) {
+    const thumb = await prisma.thumbnails.findUnique({
+      where: { id: thumbnailId },
+      select: { id: true, document_id: true, slide_id: true, page_type: true, page_type_confidence: true, review_status: true }
+    })
+    if (!thumb) throw new Error('分析记录不存在')
+    if (thumb.review_status !== 'pending' && action !== 'modify_approve') {
+      throw new Error('仅待审核状态可执行通过/拒绝')
+    }
+
+    const contentBefore = { page_type: thumb.page_type, page_type_confidence: thumb.page_type_confidence }
+    const now = new Date()
+    const recordId = `sar_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+
+    if (action === 'modify_approve' && contentAfter && contentAfter.categoryCode) {
+      const category = await prisma.product_catalogs.findFirst({
+        where: { code: contentAfter.categoryCode, is_active: true },
+        select: { code: true, name: true }
+      })
+      if (!category) throw new Error('分类代码不存在')
+      await prisma.$transaction([
+        prisma.thumbnails.update({
+          where: { id: thumbnailId },
+          data: {
+            page_type: category.code,
+            page_type_confidence: 1.0,
+            review_status: 'approved',
+            reviewed_at: now,
+            reviewer_id: reviewerId
+          }
+        }),
+        prisma.slide_analysis_review_records.create({
+          data: {
+            id: recordId,
+            thumbnail_id: thumbnailId,
+            action: 'modify_approve',
+            content_before: contentBefore,
+            content_after: { page_type: category.code, page_type_confidence: 1.0 },
+            reviewer_id: reviewerId,
+            remark
+          }
+        })
+      ])
+      return { success: true, reviewStatus: 'approved', categoryCode: category.code, categoryName: category.name }
+    }
+
+    if (action === 'approve') {
+      await prisma.$transaction([
+        prisma.thumbnails.update({
+          where: { id: thumbnailId },
+          data: { review_status: 'approved', reviewed_at: now, reviewer_id: reviewerId }
+        }),
+        prisma.slide_analysis_review_records.create({
+          data: {
+            id: recordId,
+            thumbnail_id: thumbnailId,
+            action: 'approve',
+            content_before: contentBefore,
+            reviewer_id: reviewerId,
+            remark
+          }
+        })
+      ])
+      return { success: true, reviewStatus: 'approved' }
+    }
+
+    if (action === 'reject') {
+      await prisma.$transaction([
+        prisma.thumbnails.update({
+          where: { id: thumbnailId },
+          data: { review_status: 'rejected', reviewed_at: now, reviewer_id: reviewerId }
+        }),
+        prisma.slide_analysis_review_records.create({
+          data: {
+            id: recordId,
+            thumbnail_id: thumbnailId,
+            action: 'reject',
+            content_before: contentBefore,
+            reviewer_id: reviewerId,
+            remark
+          }
+        })
+      ])
+      return { success: true, reviewStatus: 'rejected' }
+    }
+
+    throw new Error('不支持的审核操作: ' + action)
+  }
+
+  /**
+   * 批量审核：批量通过 / 批量拒绝
+   * @param {string[]} thumbnailIds - 缩略图ID列表
+   * @param {string} action - approve | reject
+   * @param {string} [reviewerId] - 审核人ID
+   * @param {string} [remark] - 备注
+   */
+  async reviewBatch(thumbnailIds, action, reviewerId = null, remark = null) {
+    if (!thumbnailIds || thumbnailIds.length === 0) throw new Error('请选择要审核的记录')
+    if (action !== 'approve' && action !== 'reject') throw new Error('批量仅支持通过或拒绝')
+
+    const thumbs = await prisma.thumbnails.findMany({
+      where: { id: { in: thumbnailIds }, page_type: { not: null }, review_status: 'pending' }
+    })
+    const now = new Date()
+    const updates = thumbs.map(t => ({
+      id: t.id,
+      content_before: { page_type: t.page_type, page_type_confidence: t.page_type_confidence }
+    }))
+
+    await prisma.$transaction([
+      prisma.thumbnails.updateMany({
+        where: { id: { in: thumbs.map(t => t.id) } },
+        data: {
+          review_status: action === 'approve' ? 'approved' : 'rejected',
+          reviewed_at: now,
+          reviewer_id: reviewerId
+        }
+      }),
+      ...thumbs.map((t, i) =>
+        prisma.slide_analysis_review_records.create({
+          data: {
+            id: `sar_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 9)}`,
+            thumbnail_id: t.id,
+            action: action === 'approve' ? 'approve' : 'reject',
+            content_before: updates[i].content_before,
+            reviewer_id: reviewerId,
+            remark
+          }
+        })
+      )
+    ])
+    return { success: true, count: thumbs.length, reviewStatus: action === 'approve' ? 'approved' : 'rejected' }
   }
 }
 

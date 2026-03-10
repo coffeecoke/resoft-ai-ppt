@@ -161,13 +161,14 @@ router.get('/', async (req, res) => {
       pageSize = 20,
       category,
       status,
+      tag,
       sourceDocumentId,
       sortBy = 'updatedAt',
       order = 'desc',
       keyword,
     } = req.query
 
-    let list = await documentService.getAll({ category, status, sourceDocumentId })
+    let list = await documentService.getAll({ category, status, tag, sourceDocumentId })
 
     // 搜索（关键词匹配名称）
     let filtered = list
@@ -431,13 +432,13 @@ router.post('/:id/duplicate', async (req, res) => {
     }
 
     // 准备复制数据
-    const newName = `${sourceDoc.name} - 副本`
+    const newName = `${sourceDoc.name}（副本）`
     const newDocumentData = {
       ...sourceDoc,
       title: newName
     }
 
-    // 创建新文档
+    // 创建新文档（tag 固定为 personal，表示个人副本）
     const newMeta = await documentService.create({
       name: newName,
       sourceDocumentId: id,
@@ -448,7 +449,7 @@ router.post('/:id/duplicate', async (req, res) => {
       industry: sourceDoc.industry,
       audience: sourceDoc.audience,
       language: sourceDoc.language,
-      tag: sourceDoc.tag || 'public',
+      tag: 'personal',
       initialSlides: newDocumentData.slides,
       theme: newDocumentData.theme,
       width: newDocumentData.width,

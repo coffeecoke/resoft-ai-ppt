@@ -2,6 +2,12 @@
 <div class="page-header">
   <h1>🏷️ 问答对管理</h1>
   <div class="header-actions">
+    <button class="btn btn-success" id="qa-batch-approve-btn" onclick="batchApprove()" title="批量通过选中项">
+      <span class="icon">✅</span> 批量通过
+    </button>
+    <button class="btn btn-warning" id="qa-batch-reject-btn" onclick="batchReject()" title="批量拒绝选中项">
+      <span class="icon">❌</span> 批量拒绝
+    </button>
     <button class="btn btn-primary" id="qa-batch-classify-btn" onclick="startBatchClassification()">
       <span class="icon">🤖</span> 批量分类选中项
     </button>
@@ -65,6 +71,15 @@
       </select>
     </div>
     <div class="filter-group">
+      <label for="qa-filter-review-status">审核状态：</label>
+      <select id="qa-filter-review-status" class="form-control" style="width: 120px;">
+        <option value="">全部</option>
+        <option value="pending">待审核</option>
+        <option value="approved">已通过</option>
+        <option value="rejected">已拒绝</option>
+      </select>
+    </div>
+    <div class="filter-group">
       <button class="btn btn-primary" onclick="applyFilters()">🔍 筛选</button>
       <button class="btn btn-secondary" onclick="resetFilters()">🔄 重置</button>
     </div>
@@ -87,13 +102,14 @@
           <th style="width: 100px;">问题性质</th>
           <th style="width: 200px;">音频名称</th>
           <th style="width: 120px;">时间范围</th>
+          <th style="width: 90px;">审核状态</th>
           <th style="width: 150px;">创建时间</th>
-          <th style="width: 100px;">操作</th>
+          <th style="width: 140px;">操作</th>
         </tr>
       </thead>
       <tbody id="qa-list-tbody">
         <tr>
-          <td colspan="10" class="loading">加载中...</td>
+          <td colspan="11" class="loading">加载中...</td>
         </tr>
       </tbody>
     </table>
@@ -160,6 +176,19 @@
       <button onclick="closeQADetail()" title="关闭" style="border: none; background: none; cursor: pointer; font-size: 24px; color: #999; padding: 0; line-height: 1;">✖</button>
     </div>
     <div class="modal-body" id="qa-detail-body" style="padding: 24px;">
+      <div style="text-align: center; padding: 40px; color: #999;">加载中...</div>
+    </div>
+  </div>
+</div>
+
+<!-- 审核弹窗：显示来源对话上下文（上3+本+下4）+ 通过/拒绝/修改后通过 -->
+<div class="modal" id="qa-review-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999; align-items: center; justify-content: center; overflow-y: auto; padding: 20px;" onclick="if(event.target === this) closeQAReview()">
+  <div class="modal-content" style="max-width: 900px; width: 95%; background: white; border-radius: 8px; padding: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.15); max-height: 90vh; overflow-y: auto; margin: auto;" onclick="event.stopPropagation()">
+    <div class="modal-header" style="padding: 16px 24px; border-bottom: 1px solid #e0e0e0; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; background: white; z-index: 1;">
+      <h3 style="margin: 0; font-size: 18px;">📋 问答对审核</h3>
+      <button onclick="closeQAReview()" title="关闭" style="border: none; background: none; cursor: pointer; font-size: 22px; color: #999;">✖</button>
+    </div>
+    <div class="modal-body" id="qa-review-body" style="padding: 24px;">
       <div style="text-align: center; padding: 40px; color: #999;">加载中...</div>
     </div>
   </div>
@@ -238,6 +267,15 @@
 .badge-unclassified {
   background: #f0f0f0;
   color: #999;
+}
+
+.badge-review-pending { background: #fff7e6; color: #fa8c16; }
+.badge-review-approved { background: #f6ffed; color: #52c41a; }
+.badge-review-rejected { background: #fff2f0; color: #f5222d; }
+
+.qa-review-dialogue-source {
+  background: #e6f7ff;
+  border-left: 4px solid #1890ff;
 }
 
 .pagination-container {

@@ -82,8 +82,8 @@
               >
                 <div class="thumb" @click="openPpt(ppt)">
                   <img :src="ppt.thumbnail" :alt="ppt.title" />
-                  <span class="badge" :class="ppt.tag === 'public' ? 'badge-public' : 'badge-practical'">
-                    {{ ppt.tag === 'public' ? 'AI生成' : '回传' }}
+                  <span class="badge" :class="ppt.tag === 'practical' ? 'badge-practical' : 'badge-public'">
+                    {{ ppt.tag === 'practical' ? '回传' : ppt.tag === 'personal' ? '我的副本' : 'AI生成' }}
                   </span>
                 </div>
                 <div class="meta">
@@ -428,7 +428,7 @@
 
 <script setup lang="ts">
 
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { VideoPlay, MagicStick, Upload, UploadFilled } from '@element-plus/icons-vue'
@@ -439,13 +439,36 @@ import { uploadSalesPpt } from '@/services/salesService'
 import type { UploadSalesPptParams } from '@/services/salesService'
 import { parsePPTXToSlides } from '@/utils/pptxParser'
 import { PRODUCTS, INDUSTRIES, AUDIENCES, LANGUAGES } from '@/configs/salesConstants'
+import { getDocumentList } from '@/services/documentService'
 const router = useRouter()
+
+// 加载个人副本 PPT（tag=personal），追加到 ppts 列表
+const loadPersonalPpts = async () => {
+  try {
+    const list = await getDocumentList({ tag: 'personal', pageSize: 100 })
+    const personalItems = list.map(doc => ({
+      id: doc.id,
+      title: doc.name,
+      date: doc.updatedAt ? doc.updatedAt.slice(0, 10) : '',
+      author: '我',
+      tag: 'personal',
+      thumbnail: doc.cover || '',
+    }))
+    ppts.value = [...ppts.value, ...personalItems]
+  } catch (error) {
+    console.warn('[Profile] 加载个人副本失败:', error)
+  }
+}
+
+onMounted(() => {
+  loadPersonalPpts()
+})
 
 const activeTab = ref('ppts')
 const sessionFilter = ref('all')
 const pptFilter = ref('all')
 const collectionFilter = ref('all')
-const pptTypeFilter = ref('all') // 'all' 全部, 'practical' 回传, 'public' AI生成
+const pptTypeFilter = ref('all') // 'all' 全部, 'practical' 回传, 'public' AI生成（含个人副本）
 
 // PPT详情对话框状态
 const pptDialogVisible = ref(false)
@@ -734,17 +757,20 @@ const filteredSessions = computed(() => {
 // 筛选后的PPT
 const filteredPPTs = computed(() => {
   let result = ppts.value
-  
+
   // 先按类型过滤（全部/回传/AI生成）
-  if (pptTypeFilter.value !== 'all') {
-    result = result.filter(p => p.tag === pptTypeFilter.value)
+  if (pptTypeFilter.value === 'practical') {
+    result = result.filter(p => p.tag === 'practical')
+  } else if (pptTypeFilter.value === 'public') {
+    // AI生成 tab：包含 public 和个人副本（personal）
+    result = result.filter(p => p.tag === 'public' || p.tag === 'personal')
   }
-  
+
   // 再按其他筛选条件过滤
   if (pptFilter.value !== 'all') {
     result = result.filter(p => p.tag === pptFilter.value)
   }
-  
+
   return result
 })
 

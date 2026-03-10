@@ -1,0 +1,53 @@
+<div class="content-body">
+  <div class="page-header">
+    <h1>🕷️ 智能信息爬取</h1>
+    <p class="text-muted">中国采招网：按关键词爬取招标/中标等公告，结果保存至本机目录。</p>
+  </div>
+
+  <div class="card" style="margin-bottom: 24px;">
+    <div class="card-title">运行说明</div>
+    <ul style="margin: 0; padding-left: 20px; color: var(--text-secondary);">
+      <li>账号密码请在服务器 <code>ai_backend/python_services/intelligent_scraper/config.ini</code> 中配置。</li>
+      <li>首次使用需安装 Python 依赖：<code>pip install playwright pdfplumber</code>，并执行 <code>playwright install chromium</code>。</li>
+      <li>执行爬取时会打开浏览器（可配置 headless），请勿关闭。</li>
+    </ul>
+  </div>
+
+  <div class="card" style="margin-bottom: 24px;">
+    <div class="card-title">本次爬取参数</div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; max-width: 800px;">
+      <div>
+        <label style="display: block; margin-bottom: 6px; font-weight: 600;">关键词（多个用英文逗号分隔）</label>
+        <input type="text" id="scraper-keywords" class="input" placeholder="招标公告, 中标公示" style="width: 100%; padding: 8px 12px;">
+      </div>
+      <div>
+        <label style="display: block; margin-bottom: 6px; font-weight: 600;">每词最多页数</label>
+        <input type="number" id="scraper-max-pages" class="input" min="1" value="1" style="width: 100%; padding: 8px 12px;">
+      </div>
+      <div>
+        <label style="display: block; margin-bottom: 6px; font-weight: 600;">开始日期 (YYYY-MM-DD)</label>
+        <input type="text" id="scraper-start-date" class="input" placeholder="留空不限制" style="width: 100%; padding: 8px 12px;">
+      </div>
+      <div>
+        <label style="display: block; margin-bottom: 6px; font-weight: 600;">结束日期 (YYYY-MM-DD)</label>
+        <input type="text" id="scraper-end-date" class="input" placeholder="留空不限制" style="width: 100%; padding: 8px 12px;">
+      </div>
+    </div>
+    <div style="margin-top: 16px;">
+      <button type="button" class="btn btn-primary" id="scraper-btn-load">从配置加载</button>
+      <button type="button" class="btn btn-success" id="scraper-btn-run" style="margin-left: 8px;">开始爬取</button>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom: 24px;">
+    <div class="card-title">运行日志</div>
+    <pre id="scraper-log" style="background: #1e1e1e; color: #d4d4d4; padding: 16px; border-radius: 8px; max-height: 320px; overflow: auto; font-size: 12px; white-space: pre-wrap; word-break: break-all;">（点击「开始爬取」后日志将显示在此）</pre>
+  </div>
+
+  <div class="card">
+    <div class="card-title">爬取结果（按关键词）</div>
+    <div id="scraper-results-list">
+      <div class="loading">加载中...</div>
+    </div>
+  </div>
+</div>

@@ -183,8 +183,8 @@ function switchPptTab(tabName) {
   // 根据标签加载数据
   if (tabName === 'all-files') {
     loadAllPptFiles();
-  } else if (tabName === 'results' && pptCurrentDocument) {
-    refreshPptResults();
+  } else if (tabName === 'results') {
+    refreshPptResults();  // 分析结果页始终刷新，支持全量展示
   } else if (tabName === 'statistics' && pptCurrentDocument) {
     refreshPptStatistics();
   }
@@ -644,38 +644,38 @@ async function startPptBatchAnalysis() {
 
 // ==================== 分析结果 ====================
 
-// 刷新分析结果
+// 刷新分析结果（全量：不传 documentId 则加载所有文档的分析结果）
 async function refreshPptResults() {
-  if (!pptCurrentDocument) {
-    pptShowToast('请先选择文档', 'error');
-    return;
-  }
-
   try {
-    console.log('📡 加载分析结果...');
-
-    const response = await fetch(`${PPT_API_BASE}/results/${pptCurrentDocument.id}`);
+    console.log('📡 加载分析结果（全量）...');
+    const url = pptCurrentDocument
+      ? `${PPT_API_BASE}/results/${pptCurrentDocument.id}`
+      : `${PPT_API_BASE}/results`;
+    const response = await fetch(url);
     const result = await response.json();
-    
     console.log('📦 分析结果响应:', result);
 
     if (result.success && result.results && result.results.length > 0) {
       pptAnalysisResults = result.results;
       console.log('✅ 加载了', pptAnalysisResults.length, '条分析结果');
-      
-      // 加载缩略图（如果结果中没有缩略图URL）
-      const hasThumbnails = pptAnalysisResults.some(r => r.thumbnailUrl);
-      if (!hasThumbnails) {
-        await loadPptThumbnails(pptCurrentDocument.id);
+      // 按文档加载缩略图（多文档时按 documentId 分别请求）
+      const docIds = [...new Set(pptAnalysisResults.map(r => r.documentId).filter(Boolean))];
+      for (const docId of docIds) {
+        const hasThumbnails = pptAnalysisResults.some(r => r.documentId === docId && r.thumbnailUrl);
+        if (!hasThumbnails) await loadPptThumbnails(docId);
       }
-      
       renderPptResults();
+      updatePptResultsSummary();
       document.getElementById('ppt-results-empty').style.display = 'none';
       document.getElementById('ppt-results-table').style.display = 'block';
     } else {
+      pptAnalysisResults = [];
       console.log('⚠️ 暂无分析结果');
       document.getElementById('ppt-results-empty').style.display = 'block';
       document.getElementById('ppt-results-table').style.display = 'none';
+      document.getElementById('ppt-results-summary').textContent = '';
+      document.getElementById('ppt-batch-approve-btn').style.display = 'none';
+      document.getElementById('ppt-batch-reject-btn').style.display = 'none';
     }
   } catch (error) {
     console.error('❌ 加载分析结果失败:', error);
@@ -683,32 +683,62 @@ async function refreshPptResults() {
   }
 }
 
-// 渲染分析结果
+// 更新分析结果汇总（待审核数、已通过数等）
+function updatePptResultsSummary() {
+  const pending = pptAnalysisResults.filter(r => (r.reviewStatus || r.review_status) === 'pending').length;
+  const approved = pptAnalysisResults.filter(r => (r.reviewStatus || r.review_status) === 'approved').length;
+  const rejected = pptAnalysisResults.filter(r => (r.reviewStatus || r.review_status) === 'rejected').length;
+  const el = document.getElementById('ppt-results-summary');
+  if (el) el.textContent = `共 ${pptAnalysisResults.length} 条 · 待审核 ${pending} · 已通过 ${approved} · 已拒绝 ${rejected}`;
+  const showBatch = pending > 0;
+  document.getElementById('ppt-batch-approve-btn').style.display = showBatch ? 'inline-block' : 'none';
+  document.getElementById('ppt-batch-reject-btn').style.display = showBatch ? 'inline-block' : 'none';
+}
+
+// 渲染分析结果（含 PPT 名称、审核状态、批量勾选、审核操作）
 function renderPptResults() {
   const tbody = document.getElementById('ppt-results-tbody');
-  
+  const docIdForThumb = pptCurrentDocument ? pptCurrentDocument.id : null;
+
   tbody.innerHTML = pptAnalysisResults.map(result => {
-    // 使用正确的字段名(根据后端API返回的数据结构)
     const slideIndex = result.slideIndex !== undefined ? result.slideIndex : result.slide_index;
     const slideId = result.slideId || result.slide_id;
+    const documentId = result.documentId || result.document_id || docIdForThumb;
+    const documentName = result.documentName || result.document_name || (pptCurrentDocument && pptCurrentDocument.name) || '未命名';
     const categoryName = result.categoryName || result.category_name || '-';
     const categoryCode = result.categoryCode || result.category_code || '-';
     const confidence = ((result.confidence || 0) * 100).toFixed(0);
     const analyzedAt = result.analyzedAt || result.analyzed_at;
     const analyzedTime = analyzedAt ? new Date(analyzedAt).toLocaleString('zh-CN') : '-';
-    
-    // 获取缩略图URL
-    let thumbnailUrl = result.thumbnailUrl || getThumbnailUrl(pptCurrentDocument.id, slideId);
-    // 如果是相对路径，拼接服务器地址
+    const reviewStatus = result.reviewStatus || result.review_status || 'pending';
+    const statusText = { pending: '待审核', approved: '已通过', rejected: '已拒绝' }[reviewStatus] || reviewStatus;
+    const statusClass = { pending: 'review-pending', approved: 'review-approved', rejected: 'review-rejected' }[reviewStatus] || '';
+    const isPending = reviewStatus === 'pending';
+    const thumbnailId = result.thumbnailId || result.thumbnail_id || '';
+
+    let thumbnailUrl = result.thumbnailUrl || (documentId ? getThumbnailUrl(documentId, slideId) : null);
     if (thumbnailUrl && !thumbnailUrl.startsWith('http')) {
       thumbnailUrl = `${THUMBNAIL_SERVER_BASE}${thumbnailUrl.startsWith('/') ? '' : '/'}${thumbnailUrl}`;
     }
-    const thumbnailDisplay = thumbnailUrl 
+    const thumbnailDisplay = thumbnailUrl
       ? `<img src="${thumbnailUrl}" class="thumbnail-img" alt="缩略图" onclick="viewThumbnail('${thumbnailUrl}', ${slideIndex + 1})" title="点击查看大图">`
       : '<span class="text-muted">无缩略图</span>';
 
+    const checkbox = isPending
+      ? `<input type="checkbox" class="ppt-result-cb" data-thumbnail-id="${thumbnailId}" data-doc-id="${documentId}" data-slide-id="${slideId}">`
+      : '<input type="checkbox" disabled>';
+    const reanalyzeArg = documentId ? `'${slideId}', ${slideIndex + 1}, '${documentId}'` : `'${slideId}', ${slideIndex + 1}`;
+    const actions = isPending
+      ? `<button class="btn btn-sm btn-success" onclick="singleReviewPpt('${thumbnailId}', 'approve')" title="通过">通过</button>
+         <button class="btn btn-sm btn-danger" onclick="singleReviewPpt('${thumbnailId}', 'reject')" title="拒绝">拒绝</button>
+         <button class="btn btn-sm btn-warning" onclick="openModifyApproveModal('${thumbnailId}', '${slideId}', ${slideIndex + 1}, '${documentId}', '${(documentName || '').toString().replace(/'/g, "\\'")}', '${categoryCode}', '${(categoryName || '').toString().replace(/'/g, "\\'")}')" title="修改分类后通过">修改后通过</button>
+         <button class="btn btn-sm btn-secondary" onclick="reanalyzeSingleSlide(${reanalyzeArg})" title="纠偏分类">🔄 纠偏</button>`
+      : `<button class="btn btn-sm btn-secondary" onclick="reanalyzeSingleSlide(${reanalyzeArg})" title="纠偏分类">🔄 纠偏</button>`;
+
     return `
       <tr>
+        <td>${checkbox}</td>
+        <td><span class="doc-name-cell">${documentName}</span></td>
         <td>${slideIndex + 1}</td>
         <td class="thumbnail-cell">${thumbnailDisplay}</td>
         <td class="code">${slideId}</td>
@@ -720,47 +750,174 @@ function renderPptResults() {
             <span class="confidence-text">${confidence}%</span>
           </div>
         </td>
+        <td><span class="review-status-badge ${statusClass}">${statusText}</span></td>
         <td>${analyzedTime}</td>
-        <td>
-          <button class="btn btn-sm btn-warning" onclick="reanalyzeSingleSlide('${slideId}', ${slideIndex + 1})" title="重新分析该页面类型">
-            🔄 纠偏
-          </button>
-        </td>
+        <td>${actions}</td>
       </tr>
     `;
   }).join('');
 }
 
-// 获取缩略图URL（如果结果中没有，则从thumbnails API获取）
+// 全选/反选（仅勾选待审核项）
+function togglePptResultsSelectAll() {
+  const all = document.getElementById('ppt-results-select-all');
+  const checkboxes = document.querySelectorAll('.ppt-result-cb');
+  checkboxes.forEach(cb => { cb.checked = all ? all.checked : false; });
+}
+
+// 单条审核：通过 / 拒绝
+async function singleReviewPpt(thumbnailId, action) {
+  try {
+    const response = await fetch(`${PPT_API_BASE}/review`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ thumbnailId, action })
+    });
+    const result = await response.json();
+    if (result.success) {
+      pptShowToast(action === 'approve' ? '已通过' : '已拒绝', 'success');
+      refreshPptResults();
+    } else {
+      pptShowToast(result.message || '操作失败', 'error');
+    }
+  } catch (error) {
+    pptShowToast('网络错误: ' + error.message, 'error');
+  }
+}
+
+// 打开「修改后通过」弹窗（选新分类后调用审核接口）
+function openModifyApproveModal(thumbnailId, slideId, slideIndex, documentId, documentName, currentCategoryCode, currentCategoryName) {
+  const doc = pptCurrentDocument || { id: documentId, name: documentName };
+  const currentResult = pptAnalysisResults.find(r => (r.slideId || r.slide_id) === slideId && (r.documentId || r.document_id) === documentId);
+  let thumbnailUrl = currentResult && (currentResult.thumbnailUrl || getThumbnailUrl(documentId, slideId));
+  if (thumbnailUrl && !thumbnailUrl.startsWith('http')) thumbnailUrl = `${THUMBNAIL_SERVER_BASE}${thumbnailUrl.startsWith('/') ? '' : '/'}${thumbnailUrl}`;
+  if (!pptCategories || pptCategories.length === 0) loadPptCategories().then(() => showModifyApproveModal(thumbnailId, slideIndex, thumbnailUrl, currentCategoryCode, currentCategoryName));
+  else showModifyApproveModal(thumbnailId, slideIndex, thumbnailUrl, currentCategoryCode, currentCategoryName);
+}
+
+function showModifyApproveModal(thumbnailId, slideIndex, thumbnailUrl, currentCategoryCode, currentCategoryName) {
+  const categoryOptions = [];
+  if (pptCategories && pptCategories.length > 0) {
+    pptCategories.forEach(level1 => {
+      categoryOptions.push({ code: level1.code, name: level1.name, level: 1 });
+      if (level1.children && level1.children.length > 0) {
+        level1.children.forEach(level2 => {
+          categoryOptions.push({ code: level2.code, name: `${level1.name} > ${level2.name}`, level: 2 });
+        });
+      }
+    });
+  }
+  const categorySelectOptions = categoryOptions.map(cat =>
+    `<option value="${cat.code}" ${cat.code === currentCategoryCode ? 'selected' : ''}>${cat.name}</option>`
+  ).join('');
+
+  const modal = document.createElement('div');
+  modal.id = 'ppt-modify-approve-modal';
+  modal.className = 'ppt-modal-overlay';
+  modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:10000;';
+  const modalContent = document.createElement('div');
+  modalContent.style.cssText = 'background:white;border-radius:8px;padding:24px;max-width:600px;width:90%;box-shadow:0 4px 20px rgba(0,0,0,0.3);';
+  modalContent.innerHTML = `
+    <h2 style="margin:0 0 16px 0;font-size:18px;">修改后通过 - 第 ${slideIndex} 页</h2>
+    ${thumbnailUrl ? `<div style="text-align:center;margin-bottom:16px;"><img src="${thumbnailUrl}" style="max-width:100%;max-height:300px;border-radius:4px;" alt="缩略图"></div>` : ''}
+    <div style="margin-bottom:16px;">
+      <label style="display:block;margin-bottom:8px;font-weight:500;">当前分类：</label>
+      <div style="padding:8px 12px;background:#f5f5f5;border-radius:4px;">${currentCategoryName} (${currentCategoryCode})</div>
+    </div>
+    <div style="margin-bottom:20px;">
+      <label style="display:block;margin-bottom:8px;font-weight:500;">选择新分类：</label>
+      <select id="ppt-modify-category-select" class="form-control" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:4px;">${categorySelectOptions}</select>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button id="ppt-modify-cancel" class="btn btn-secondary">取消</button>
+      <button id="ppt-modify-submit" class="btn btn-primary">确定（修改后通过）</button>
+    </div>
+  `;
+  modal.appendChild(modalContent);
+  document.body.appendChild(modal);
+
+  document.getElementById('ppt-modify-cancel').onclick = () => modal.remove();
+  document.getElementById('ppt-modify-submit').onclick = async () => {
+    const categoryCode = document.getElementById('ppt-modify-category-select').value;
+    if (!categoryCode) { pptShowToast('请选择分类', 'error'); return; }
+    document.getElementById('ppt-modify-submit').disabled = true;
+    try {
+      const response = await fetch(`${PPT_API_BASE}/review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ thumbnailId, action: 'modify_approve', categoryCode })
+      });
+      const result = await response.json();
+      if (result.success) {
+        pptShowToast('已修改并通过', 'success');
+        modal.remove();
+        refreshPptResults();
+      } else {
+        pptShowToast(result.message || '操作失败', 'error');
+        document.getElementById('ppt-modify-submit').disabled = false;
+      }
+    } catch (error) {
+      pptShowToast('网络错误: ' + error.message, 'error');
+      document.getElementById('ppt-modify-submit').disabled = false;
+    }
+  };
+  modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+}
+
+// 批量审核
+async function batchReviewPptResults(action) {
+  const checkboxes = document.querySelectorAll('.ppt-result-cb:checked');
+  const thumbnailIds = [...checkboxes].map(cb => cb.getAttribute('data-thumbnail-id')).filter(Boolean);
+  if (thumbnailIds.length === 0) {
+    pptShowToast('请先勾选待审核项', 'warning');
+    return;
+  }
+  if (!confirm(`确定要批量${action === 'approve' ? '通过' : '拒绝'}选中的 ${thumbnailIds.length} 条记录吗？`)) return;
+  try {
+    const response = await fetch(`${PPT_API_BASE}/review/batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ thumbnailIds, action })
+    });
+    const result = await response.json();
+    if (result.success) {
+      pptShowToast(`已批量${action === 'approve' ? '通过' : '拒绝'} ${result.count} 条`, 'success');
+      refreshPptResults();
+    } else {
+      pptShowToast(result.message || '操作失败', 'error');
+    }
+  } catch (error) {
+    pptShowToast('网络错误: ' + error.message, 'error');
+  }
+}
+
+// 获取缩略图URL（多文档时按 documentId_slideId 缓存）
 function getThumbnailUrl(documentId, slideId) {
-  // 如果已经有缓存，直接返回
-  if (pptThumbnailCache && pptThumbnailCache[slideId]) {
-    let url = pptThumbnailCache[slideId];
-    // 如果是相对路径，拼接服务器地址
+  if (!documentId || !slideId) return null;
+  const key = `${documentId}_${slideId}`;
+  if (pptThumbnailCache && pptThumbnailCache[key]) {
+    let url = pptThumbnailCache[key];
     if (url && !url.startsWith('http')) {
       url = `${THUMBNAIL_SERVER_BASE}${url.startsWith('/') ? '' : '/'}${url}`;
     }
     return url;
   }
-  // 否则返回null，后续可以通过API获取
   return null;
 }
 
-// 缩略图缓存
+// 缩略图缓存 key: documentId_slideId
 let pptThumbnailCache = {};
 
-// 加载文档的所有缩略图
+// 加载指定文档的缩略图（合并到缓存，不清空其他文档）
 async function loadPptThumbnails(documentId) {
   try {
     const response = await fetch(`${THUMBNAIL_SERVER_BASE}/api/thumbnails/document/${documentId}`);
     const result = await response.json();
-    
     if (result.success && result.data && result.data.thumbnails) {
-      pptThumbnailCache = {};
       result.data.thumbnails.forEach(thumb => {
-        pptThumbnailCache[thumb.slideId] = thumb.url;
+        pptThumbnailCache[`${documentId}_${thumb.slideId}`] = thumb.url;
       });
-      console.log('✅ 加载了', Object.keys(pptThumbnailCache).length, '个缩略图');
+      console.log('✅ 加载了文档', documentId, '的', result.data.thumbnails.length, '个缩略图');
     }
   } catch (error) {
     console.error('❌ 加载缩略图失败:', error);
@@ -805,47 +962,37 @@ function viewThumbnail(url, slideIndex) {
   };
 }
 
-// 手动纠偏单个页面（人为调整分类）
-async function reanalyzeSingleSlide(slideId, slideIndex) {
-  if (!pptCurrentDocument) {
-    pptShowToast('请先选择文档', 'error');
+// 手动纠偏单个页面（人为调整分类）。documentId 可选，全量结果页时必传以定位文档
+async function reanalyzeSingleSlide(slideId, slideIndex, documentId) {
+  const docId = documentId || (pptCurrentDocument && pptCurrentDocument.id);
+  if (!docId) {
+    pptShowToast('无法定位文档', 'error');
     return;
   }
-  
-  // 获取当前结果
-  const currentResult = pptAnalysisResults.find(r => 
-    (r.slideId || r.slide_id) === slideId
+  const currentDoc = pptCurrentDocument && pptCurrentDocument.id === docId
+    ? pptCurrentDocument
+    : { id: docId, name: (pptAnalysisResults.find(r => (r.documentId || r.document_id) === docId) || {}).documentName || '未命名' };
+
+  const currentResult = pptAnalysisResults.find(r =>
+    (r.slideId || r.slide_id) === slideId && (r.documentId || r.document_id) === docId
   );
-  
   if (!currentResult) {
     pptShowToast('未找到该页面的分析结果', 'error');
     return;
   }
-  
-  // 获取缩略图URL
-  let thumbnailUrl = currentResult.thumbnailUrl || getThumbnailUrl(pptCurrentDocument.id, slideId);
+
+  let thumbnailUrl = currentResult.thumbnailUrl || getThumbnailUrl(docId, slideId);
   if (thumbnailUrl && !thumbnailUrl.startsWith('http')) {
-    thumbnailUrl = `http://localhost:5001${thumbnailUrl.startsWith('/') ? '' : '/'}${thumbnailUrl}`;
+    thumbnailUrl = `${THUMBNAIL_SERVER_BASE}${thumbnailUrl.startsWith('/') ? '' : '/'}${thumbnailUrl}`;
   }
-  
-  // 获取当前分类
   const currentCategoryCode = currentResult.categoryCode || currentResult.category_code || '';
   const currentCategoryName = currentResult.categoryName || currentResult.category_name || '未知分类';
-  
-  // 加载分类列表
-  if (!pptCategories || pptCategories.length === 0) {
-    await loadPptCategories();
-  }
-  
-  // 构建分类选项（扁平化，包含一级和二级分类）
+
+  if (!pptCategories || pptCategories.length === 0) await loadPptCategories();
   const categoryOptions = [];
   if (pptCategories && pptCategories.length > 0) {
     pptCategories.forEach(level1 => {
-      categoryOptions.push({
-        code: level1.code,
-        name: level1.name,
-        level: 1
-      });
+      categoryOptions.push({ code: level1.code, name: level1.name, level: 1 });
       if (level1.children && level1.children.length > 0) {
         level1.children.forEach(level2 => {
           categoryOptions.push({
@@ -857,20 +1004,22 @@ async function reanalyzeSingleSlide(slideId, slideIndex) {
       }
     });
   }
-  
-  // 显示纠偏对话框
+
   showCorrectCategoryModal({
     slideId,
     slideIndex,
     thumbnailUrl,
     currentCategoryCode,
     currentCategoryName,
-    categoryOptions
+    categoryOptions,
+    documentId: docId,
+    documentName: currentDoc.name
   });
 }
 
 // 显示纠偏分类对话框
-function showCorrectCategoryModal({ slideId, slideIndex, thumbnailUrl, currentCategoryCode, currentCategoryName, categoryOptions }) {
+function showCorrectCategoryModal({ slideId, slideIndex, thumbnailUrl, currentCategoryCode, currentCategoryName, categoryOptions, documentId, documentName }) {
+  const docId = documentId || (pptCurrentDocument && pptCurrentDocument.id);
   // 创建模态框
   const modal = document.createElement('div');
   modal.id = 'ppt-correct-modal';
@@ -971,7 +1120,7 @@ function showCorrectCategoryModal({ slideId, slideIndex, thumbnailUrl, currentCa
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          documentId: pptCurrentDocument.id,
+          documentId: docId,
           slideId: slideId,
           categoryCode: selectedCategoryCode
         })
