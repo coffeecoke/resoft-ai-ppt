@@ -876,6 +876,7 @@ model bid_sections {
   docx_file_path  String? @db.VarChar(500) /// 拆分出的 .docx 片段路径
   created_at      DateTime @default(now())
   updated_at      DateTime @updatedAt
+   parent_section_id String? @db.VarChar(50) /// ???ID?1????null?2?????1??
 
   bid_documents          bid_documents           @relation(fields: [bid_document_id], references: [id], onDelete: Cascade)
   bid_composition_items  bid_composition_items[]
@@ -883,6 +884,7 @@ model bid_sections {
   @@index([bid_document_id], map: "idx_bidsec_document_id")
   @@index([section_type], map: "idx_bidsec_type")
   @@index([is_reusable], map: "idx_bidsec_reusable")
+  @@index([parent_section_id], map: "idx_bidsec_parent_id")
   @@index([quality_score], map: "idx_bidsec_quality")
   @@fulltext([content], map: "ft_bidsec_content")
   @@fulltext([title], map: "ft_bidsec_title")
