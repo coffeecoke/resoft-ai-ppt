@@ -4250,9 +4250,10 @@ body {
   z-index: 2;
 }
 .ppt-card .meta { padding: 10px 12px; }
-.ppt-card .title { font-size: 14px; line-height: 1.4; }
+.ppt-card .title { font-size: 14px; font-weight: bold; line-height: 1.4; }
 .ppt-card .sub { 
-  color: #666; 
+  color: #999;
+  line-height:24px; 
   font-size: 12px; 
   margin-top: 6px; 
   
