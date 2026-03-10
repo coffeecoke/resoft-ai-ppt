@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
-  url      = env("DATABASE_URL")
+  provider          = "mysql"
+  url               = env("DATABASE_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
 // ==================== PPT文档相关表 ====================
@@ -99,7 +100,7 @@ model thumbnails {
   generated_at DateTime @default(now()) /// 生成时间
 
   // 关联
-  documents                      documents @relation(fields: [document_id], references: [id], onDelete: Cascade)
+  documents  documents @relation(fields: [document_id], references: [id], onDelete: Cascade)
   slide_analysis_review_records    slide_analysis_review_records[]
 
   @@unique([document_id, slide_id], map: "uk_document_slide")
@@ -700,6 +701,31 @@ model presales_analysis_results {
   @@index([status], map: "idx_presales_analysis_status")
 }
 
+// ==================== PPT模版相关表 ====================
+
+/// PPT模版表
+model templates {
+  id                String   @id @db.VarChar(50)          /// 模版ID，如 template_1
+  name              String   @db.VarChar(255)              /// 模版名称
+  cover             String?  @db.VarChar(500)              /// 封面图URL（文件路径）
+  category          String   @default("official") @db.VarChar(50)  /// 分类：official=官方，community=社区，user=用户
+  origin            String?  @db.VarChar(255)              /// 来源描述
+  status            String   @default("draft") @db.VarChar(20)     /// 状态：draft=草稿，published=已发布，archived=已归档
+  slide_count       Int      @default(0)                   /// 幻灯片页数
+  content_file_path String   @db.VarChar(500)              /// 内容JSON文件路径（与 documents 表设计一致）
+
+  // 审计字段
+  created_by  String?  @db.VarChar(50)   /// 创建人用户ID（内置模版为 null）
+  updated_by  String?  @db.VarChar(50)   /// 最后修改人用户ID
+  created_at  DateTime @default(now())   /// 创建时间
+  updated_at  DateTime @updatedAt        /// 更新时间（自动更新）
+
+  @@index([status],     map: "idx_templates_status")
+  @@index([category],   map: "idx_templates_category")
+  @@index([created_by], map: "idx_templates_created_by")
+  @@index([created_at], map: "idx_templates_created_at")
+}
+
 // ==================== 用户认证相关表 ====================
 
 /// 用户表
@@ -904,7 +930,7 @@ model bid_composition_items {
   @@index([composition_id], map: "idx_bidcompitem_comp_id")
   @@index([section_id], map: "idx_bidcompitem_sec_id")
   @@index([sort_order], map: "idx_bidcompitem_sort")
-=======
+}
 // ==================== 外部系统同步相关表 ====================
 
 /// 部门表（树形层级结构，从外部系统同步）
