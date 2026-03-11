@@ -1,19 +1,5 @@
 <template>
   <div class="side-block analysis-report">
-    <div class="report-header">
-      <h4 class="sub-head">分析报告</h4>
-      <el-button
-        v-if="hasAnalysis"
-        size="small"
-        type="primary"
-        :icon="Download"
-        @click="downloadReport"
-        class="download-btn"
-      >
-        下载报告
-      </el-button>
-    </div>
-
     <!-- 加载中 -->
     <div v-if="loading" class="analysis-loading">
       <el-icon class="is-loading"><Loading /></el-icon>
@@ -27,7 +13,18 @@
     </div>
 
     <!-- Markdown 内容 -->
-    <div v-else class="markdown-content" v-html="renderedMarkdown"></div>
+    <div v-else class="markdown-content">
+      <el-button
+        size="small"
+        type="primary"
+        :icon="Download"
+        @click="downloadReport"
+        class="download-btn"
+      >
+        下载报告
+      </el-button>
+      <div v-html="renderedMarkdown"></div>
+    </div>
   </div>
 </template>
 
@@ -262,26 +259,7 @@ onMounted(() => {
 <style scoped lang="scss">
 /* 分析报告样式 */
 .analysis-report {
-  .report-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 16px;
-    padding-bottom: 12px;
-    border-bottom: 1px solid #e5e7eb;
-  }
-
-  .sub-head {
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: #1f2937;
-    margin: 0;
-    flex: 1;
-  }
-
-  .download-btn {
-    flex-shrink: 0;
-  }
+  // 样式已移至 markdown-content
 }
 
 /* 加载状态 */
@@ -324,9 +302,17 @@ onMounted(() => {
 
 /* Markdown 内容样式 */
 .markdown-content {
+  position: relative;
   font-size: 14px;
   color: #374151;
   line-height: 1.8;
+
+  .download-btn {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    z-index: 10;
+  }
 
   :deep(h1) {
     font-size: 20px;
@@ -343,7 +329,7 @@ onMounted(() => {
     color: #1f2937;
     margin: 20px 0 12px 0;
     padding-left: 12px;
-    border-left: 3px solid #2563eb;
+    border-left: 5px solid #2563eb;
   }
 
   :deep(h3) {
