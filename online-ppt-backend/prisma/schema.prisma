@@ -980,6 +980,7 @@ model lead_categories {
 /// 客户类型表（如城商行、外资行、股份制银行，从外部系统同步）
 model customer_types {
   id         String   @id @db.VarChar(50)           /// 类型唯一标识
+  p_id       String?  @db.VarChar(50)               /// 父类型ID
   name       String   @db.VarChar(255)              /// 类型名称（如 城商行、外资行）
   code       String   @unique @db.VarChar(100)      /// 类型代码（如 CITY_BANK），唯一且稳定
   sort_order Int      @default(0)                   /// 排序权重（控制筛选栏顺序）
