@@ -63,6 +63,18 @@ router.get('/scenes', async (req, res) => {
         description: '从对话中提取客户提问和我方回答的问答对',
         icon: 'question-circle',
       },
+      {
+        code: 'tender_analysis',
+        name: '招标文件分析',
+        description: '分析招标文件，提取关键信息并生成投标目录结构',
+        icon: 'file-text',
+      },
+      {
+        code: 'bid_analysis',
+        name: '投标文件分析',
+        description: '拆分投标文件为可复用章节，并进行分类打标',
+        icon: 'file-copy',
+      },
     ];
     
     // 获取各场景的统计信息

@@ -6,6 +6,9 @@
 // 加载环境变量
 require('dotenv').config()
 
+// BigInt 序列化支持（Prisma 的 BigInt 字段无法被 JSON.stringify 直接处理）
+BigInt.prototype.toJSON = function () { return Number(this) }
+
 const express = require('express')
 const multer = require('multer')
 const path = require('path')
@@ -20,6 +23,9 @@ const autoProcessRoutes = require('./routes/autoProcessRoutes')
 const qaManagementRoutes = require('./routes/qaManagementRoutes')
 const presalesAnalysisRoutes = require('./routes/presalesAnalysisRoutes')
 const intelligentScraperRoutes = require('./routes/intelligentScraperRoutes')
+const tenderAnalysisRoutes = require('./routes/tenderAnalysisRoutes')
+const bidAnalysisRoutes = require('./routes/bidAnalysisRoutes')
+const bidCompositionRoutes = require('./routes/bidCompositionRoutes')
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -60,6 +66,8 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }))
 app.use(express.static(path.join(__dirname, '../frontend')))
 app.use('/output', express.static(path.join(__dirname, '../output')))
 app.use('/scraper_output', express.static(path.join(__dirname, '../scraper_output')))
+app.use('/lib/jszip', express.static(path.join(__dirname, '../node_modules/jszip/dist')))
+app.use('/lib/docx-preview', express.static(path.join(__dirname, '../node_modules/docx-preview/dist')))
 
 // ==================== AI管理后台路由（新架构） ====================
 const adminRoutes = require('./routes')
@@ -92,6 +100,15 @@ app.use('/api/presales-analysis', presalesAnalysisRoutes)
 
 // 路由：智能信息爬取（采招网）（新增）
 app.use('/api/scraper', intelligentScraperRoutes)
+
+// 路由：招标文件分析（新增）
+app.use('/api/tender-analysis', tenderAnalysisRoutes)
+
+// 路由：投标文件分析（新增）
+app.use('/api/bid-analysis', bidAnalysisRoutes)
+
+// 路由：投标文件组合（新增）
+app.use('/api/bid-composition', bidCompositionRoutes)
 
 // 路由：文件提取接口
 app.post('/api/extract', upload.single('file'), async (req, res) => {
@@ -362,6 +379,23 @@ app.listen(PORT, () => {
   console.log('  - 分析会话: POST   /api/presales-analysis/analyze/session/:id')
   console.log('  - 流式分析: POST   /api/presales-analysis/analyze/stream')
   console.log('  - 测试路由: GET    /api/presales-analysis/test')
+  console.log('')
+  console.log('  [招标文件分析 - 新增 🆕]')
+  console.log('  - 上传文件: POST   /api/tender-analysis/upload')
+  console.log('  - 触发分析: POST   /api/tender-analysis/analyze/:tenderId')
+  console.log('  - 文件列表: GET    /api/tender-analysis/list')
+  console.log('  - 投标目录: GET    /api/tender-analysis/:tenderId/directory')
+  console.log('  - 导出Word: GET    /api/tender-analysis/:tenderId/export-docx')
+  console.log('')
+  console.log('  [投标文件分析 - 新增 🆕]')
+  console.log('  - 上传文件: POST   /api/bid-analysis/upload')
+  console.log('  - 触发拆分: POST   /api/bid-analysis/analyze/:bidDocId')
+  console.log('  - 搜索章节: GET    /api/bid-analysis/sections/search')
+  console.log('')
+  console.log('  [投标文件组合 - 新增 🆕]')
+  console.log('  - 创建组合: POST   /api/bid-composition')
+  console.log('  - 组合详情: GET    /api/bid-composition/:id')
+  console.log('  - 导入目录: POST   /api/bid-composition/:id/import-directory/:tenderId')
   console.log('')
   console.log('🤖 支持的AI模型 (20+):')
   console.log('  🔥 推荐: gpt-4o-mini, gpt-4o, deepseek-chat')

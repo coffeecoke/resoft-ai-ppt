@@ -1,0 +1,190 @@
+<!-- 投标文件分析页面 -->
+<div class="page-header">
+  <h1>📑 投标文件分析</h1>
+  <p class="page-description">上传已有投标文件，AI自动拆分为可复用的章节库</p>
+  <div class="header-actions">
+    <button class="btn btn-primary" onclick="showBidUploadDialog()">
+      <span class="icon">📤</span> 上传投标文件
+    </button>
+    <button class="btn btn-secondary" onclick="loadBidList()">
+      <span class="icon">🔄</span> 刷新列表
+    </button>
+  </div>
+</div>
+
+<!-- 上传对话框 -->
+<dialog id="bid-upload-dialog" style="max-width:500px;width:90%;">
+  <div class="dialog-content">
+    <div class="dialog-header">
+      <h2>📤 上传投标文件</h2>
+      <button class="icon-btn" onclick="closeBidUploadDialog()">✕</button>
+    </div>
+    <div class="dialog-body">
+      <div id="bid-dropzone" style="border:2px dashed var(--border-color,#ddd);border-radius:8px;padding:40px 20px;text-align:center;cursor:pointer;transition:border-color .2s;">
+        <p style="font-size:36px;margin:0;">📄</p>
+        <p style="margin:8px 0 4px;font-weight:500;">点击或拖拽文件到此处</p>
+        <p style="font-size:12px;color:var(--text-secondary);">支持 PDF / Word (.docx/.doc) / TXT</p>
+        <input type="file" id="bid-file-input" accept=".pdf,.docx,.doc,.txt" hidden>
+      </div>
+      <div id="bid-selected-file" style="display:none;margin-top:12px;padding:10px;background:var(--bg-secondary,#f5f5f5);border-radius:6px;">
+        <span id="bid-file-name"></span>
+        <span id="bid-file-size" style="color:var(--text-secondary);margin-left:8px;"></span>
+      </div>
+      <div style="margin-top:12px;">
+        <label style="font-size:13px;font-weight:500;">来源信息 (可选)</label>
+        <input type="text" id="bid-source-info" placeholder="如：XX项目投标" style="width:100%;padding:8px;margin-top:4px;border:1px solid var(--border-color,#ddd);border-radius:6px;">
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <div style="flex:1;">
+          <label style="font-size:13px;font-weight:500;">行业</label>
+          <input type="text" id="bid-industry" placeholder="如：金融" style="width:100%;padding:8px;margin-top:4px;border:1px solid var(--border-color,#ddd);border-radius:6px;">
+        </div>
+        <div style="flex:1;">
+          <label style="font-size:13px;font-weight:500;">项目类型</label>
+          <input type="text" id="bid-project-type" placeholder="如：IT" style="width:100%;padding:8px;margin-top:4px;border:1px solid var(--border-color,#ddd);border-radius:6px;">
+        </div>
+      </div>
+    </div>
+    <div class="dialog-actions">
+      <button class="btn btn-secondary" onclick="closeBidUploadDialog()">取消</button>
+      <button class="btn btn-primary" id="bid-upload-btn" onclick="doBidUpload()" disabled>上传</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- 拆分进度对话框 -->
+<dialog id="bid-progress-dialog" style="max-width:600px;width:90%;">
+  <div class="dialog-content">
+    <div class="dialog-header"><h2>⏳ AI 拆分中...</h2></div>
+    <div class="dialog-body">
+      <div style="background:var(--bg-secondary,#eee);border-radius:8px;height:8px;margin-bottom:16px;">
+        <div id="bid-progress-bar" style="width:0%;height:100%;background:var(--primary,#4F46E5);border-radius:8px;transition:width .3s;"></div>
+      </div>
+      <div id="bid-progress-log" style="max-height:300px;overflow-y:auto;font-size:13px;line-height:1.7;"></div>
+    </div>
+  </div>
+</dialog>
+
+<!-- 章节详情对话框 -->
+<dialog id="bid-sections-dialog" style="max-width:900px;width:95%;max-height:90vh;">
+  <div class="dialog-content" style="display:flex;flex-direction:column;max-height:90vh;">
+    <div class="dialog-header">
+      <h2 id="bid-sections-title">📑 拆分章节列表</h2>
+      <button class="icon-btn" onclick="closeSectionsDialog()">✕</button>
+    </div>
+    <div class="dialog-body" style="flex:1;overflow:auto;padding:16px 20px;">
+      <div id="bid-sections-container"></div>
+    </div>
+    <div class="dialog-actions">
+      <button class="btn btn-secondary" onclick="closeSectionsDialog()">关闭</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- 标签页切换 -->
+<div style="display:flex;gap:12px;margin-bottom:16px;">
+  <button class="btn btn-secondary" id="tab-files" onclick="switchBidTab('files')" style="font-weight:600;">📁 投标文件</button>
+  <button class="btn btn-secondary" id="tab-sections" onclick="switchBidTab('sections')">🔍 章节库搜索</button>
+  <button class="btn btn-secondary" id="tab-types" onclick="switchBidTab('types')">⚙️ 分类管理</button>
+</div>
+
+<!-- Tab 1: 投标文件列表 -->
+<div class="card" id="bid-files-panel">
+  <div class="card-header">
+    <h2>📁 投标文件列表</h2>
+    <span id="bid-total-count" style="color:var(--text-secondary);">共 0 条</span>
+  </div>
+  <div class="card-body">
+    <div id="bid-loading" style="display:none;text-align:center;padding:40px;"><div class="spinner"></div><p>加载中...</p></div>
+    <div id="bid-empty" style="display:none;text-align:center;padding:40px;color:var(--text-secondary);">
+      <p style="font-size:48px;">📭</p><p>暂无投标文件，请点击上方按钮上传</p>
+    </div>
+    <table id="bid-table" class="data-table" style="display:none;">
+      <thead>
+        <tr>
+          <th>文件名</th>
+          <th>行业</th>
+          <th>类型</th>
+          <th>状态</th>
+          <th>章节数</th>
+          <th>上传时间</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="bid-list-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Tab 2: 章节库搜索 -->
+<div class="card" id="bid-sections-panel" style="display:none;">
+  <div class="card-header">
+    <h2>🔍 章节库搜索</h2>
+  </div>
+  <div class="card-body">
+    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+      <input type="text" id="bid-search-keyword" placeholder="关键词搜索..." style="flex:1;min-width:200px;padding:8px 12px;border:1px solid var(--border-color,#ddd);border-radius:6px;">
+      <select id="bid-search-type" style="padding:8px 12px;border:1px solid var(--border-color,#ddd);border-radius:6px;">
+        <option value="">全部类型</option>
+      </select>
+      <button class="btn btn-primary" onclick="searchSections()">搜索</button>
+    </div>
+    <div id="bid-search-results"></div>
+  </div>
+</div>
+
+<!-- Tab 3: 分类管理 -->
+<div class="card" id="bid-types-panel" style="display:none;">
+  <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+    <h2>⚙️ 章节分类管理</h2>
+    <button class="btn btn-primary" onclick="showAddTypeDialog()">+ 新增分类</button>
+  </div>
+  <div class="card-body">
+    <p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px;">
+      这里的分类会实时同步到 AI 识别逻辑和搜索筛选。修改后下次分析自动生效（无需重启服务）。
+    </p>
+    <table class="data-table" id="types-table">
+      <thead>
+        <tr>
+          <th style="width:40px;">排序</th>
+          <th style="width:180px;">代码</th>
+          <th style="width:140px;">名称</th>
+          <th>说明</th>
+          <th style="width:80px;">状态</th>
+          <th style="width:100px;">操作</th>
+        </tr>
+      </thead>
+      <tbody id="types-table-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- 新增/编辑分类对话框 -->
+<dialog id="type-dialog" style="border:none;border-radius:12px;padding:0;min-width:440px;box-shadow:0 8px 32px rgba(0,0,0,.15);">
+  <div style="padding:24px;">
+    <h3 id="type-dialog-title" style="margin:0 0 20px;">新增分类</h3>
+    <input type="hidden" id="type-edit-id">
+    <div style="display:flex;flex-direction:column;gap:14px;">
+      <div>
+        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">类型代码 <span style="color:red;">*</span><span style="color:var(--text-secondary);font-weight:400;font-size:12px;">（英文+下划线，如 my_type）</span></label>
+        <input id="type-code" type="text" placeholder="如：my_custom_type" style="width:100%;padding:8px 12px;border:1px solid var(--border-color,#ddd);border-radius:6px;box-sizing:border-box;">
+      </div>
+      <div>
+        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">显示名称 <span style="color:red;">*</span></label>
+        <input id="type-name" type="text" placeholder="如：合同附件" style="width:100%;padding:8px 12px;border:1px solid var(--border-color,#ddd);border-radius:6px;box-sizing:border-box;">
+      </div>
+      <div>
+        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">说明 <span style="color:red;">*</span><span style="color:var(--text-secondary);font-weight:400;font-size:12px;">（AI 会根据此说明判断章节归类）</span></label>
+        <textarea id="type-description" rows="3" placeholder="如：合同正文、附件清单等" style="width:100%;padding:8px 12px;border:1px solid var(--border-color,#ddd);border-radius:6px;box-sizing:border-box;resize:vertical;"></textarea>
+      </div>
+      <div>
+        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">排序</label>
+        <input id="type-sort" type="number" value="50" min="0" style="width:120px;padding:8px 12px;border:1px solid var(--border-color,#ddd);border-radius:6px;">
+      </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:20px;">
+      <button class="btn btn-secondary" onclick="closeTypeDialog()">取消</button>
+      <button class="btn btn-primary" onclick="saveType()">保存</button>
+    </div>
+  </div>
+</dialog>

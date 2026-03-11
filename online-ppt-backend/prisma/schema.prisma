@@ -1046,3 +1046,18 @@ model leads {
   @@index([updated_at], map: "idx_leads_updated_at")
 
 }
+
+/// 投标章节类型表（技术方案、商务条款等）
+model bid_section_types {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique @db.VarChar(50)  /// 类型编码，如 technical_solution
+  name        String   @db.VarChar(100)         /// 显示名称
+  description String   @db.VarChar(500)         /// 描述，用于 AI Prompt
+  sort_order  Int      @default(0)              /// 排序序号
+  is_active   Boolean  @default(true)           /// 是否启用
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  @@index([is_active], map: "idx_bidsectype_active")
+  @@index([sort_order], map: "idx_bidsectype_sort")
+}

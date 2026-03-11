@@ -1,0 +1,105 @@
+<!-- 招标文件分析页面 -->
+<div class="page-header">
+  <h1>📋 招标文件分析</h1>
+  <p class="page-description">上传招标文件，AI自动提取关键信息并生成投标目录结构</p>
+  <div class="header-actions">
+    <button class="btn btn-primary" onclick="showUploadDialog()">
+      <span class="icon">📤</span> 上传招标文件
+    </button>
+    <button class="btn btn-secondary" onclick="loadTenderList()">
+      <span class="icon">🔄</span> 刷新列表
+    </button>
+  </div>
+</div>
+
+<!-- 上传对话框 -->
+<dialog id="tender-upload-dialog" style="max-width:500px;width:90%;">
+  <div class="dialog-content">
+    <div class="dialog-header">
+      <h2>📤 上传招标文件</h2>
+      <button class="icon-btn" onclick="closeUploadDialog()">✕</button>
+    </div>
+    <div class="dialog-body">
+      <div id="tender-dropzone" style="border:2px dashed var(--border-color,#ddd);border-radius:8px;padding:40px 20px;text-align:center;cursor:pointer;transition:border-color .2s;">
+        <p style="font-size:36px;margin:0;">📄</p>
+        <p style="margin:8px 0 4px;font-weight:500;">点击或拖拽文件到此处</p>
+        <p style="font-size:12px;color:var(--text-secondary);">支持 PDF / Word (.docx/.doc) / TXT</p>
+        <input type="file" id="tender-file-input" accept=".pdf,.docx,.doc,.txt" hidden>
+      </div>
+      <div id="tender-selected-file" style="display:none;margin-top:12px;padding:10px;background:var(--bg-secondary,#f5f5f5);border-radius:6px;">
+        <span id="tender-file-name"></span>
+        <span id="tender-file-size" style="color:var(--text-secondary);margin-left:8px;"></span>
+      </div>
+    </div>
+    <div class="dialog-actions">
+      <button class="btn btn-secondary" onclick="closeUploadDialog()">取消</button>
+      <button class="btn btn-primary" id="tender-upload-btn" onclick="doUpload()" disabled>上传</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- 分析进度对话框 -->
+<dialog id="tender-progress-dialog" style="max-width:600px;width:90%;">
+  <div class="dialog-content">
+    <div class="dialog-header">
+      <h2>⏳ AI 分析中...</h2>
+    </div>
+    <div class="dialog-body">
+      <div id="tender-progress-bar-wrap" style="background:var(--bg-secondary,#eee);border-radius:8px;height:8px;margin-bottom:16px;">
+        <div id="tender-progress-bar" style="width:0%;height:100%;background:var(--primary,#4F46E5);border-radius:8px;transition:width .3s;"></div>
+      </div>
+      <div id="tender-progress-log" style="max-height:300px;overflow-y:auto;font-size:13px;line-height:1.7;"></div>
+    </div>
+  </div>
+</dialog>
+
+<!-- Word 在线预览对话框 -->
+<dialog id="tender-directory-dialog" style="max-width:1100px;width:95%;max-height:95vh;">
+  <div class="dialog-content" style="display:flex;flex-direction:column;max-height:95vh;">
+    <div class="dialog-header" style="display:flex;align-items:center;justify-content:space-between;">
+      <h2 id="tender-dir-title">📄 投标文件预览</h2>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="btn btn-sm btn-primary" id="tender-download-btn" onclick="downloadCurrentDocx()" style="display:none;">📥 下载Word</button>
+        <button class="icon-btn" onclick="closeDirectoryDialog()">✕</button>
+      </div>
+    </div>
+    <div class="dialog-body" style="flex:1;overflow:auto;padding:0;background:#f0f0f0;min-height:500px;">
+      <div id="tender-docx-loading" style="display:none;text-align:center;padding:80px 20px;">
+        <div class="spinner"></div><p style="margin-top:12px;">正在生成 Word 预览...</p>
+      </div>
+      <div id="tender-docx-error" style="display:none;text-align:center;padding:80px 20px;color:red;"></div>
+      <div id="tender-docx-preview" style="background:#fff;max-width:900px;margin:16px auto;box-shadow:0 2px 12px rgba(0,0,0,0.15);min-height:400px;"></div>
+    </div>
+    <div class="dialog-actions">
+      <button class="btn btn-secondary" onclick="closeDirectoryDialog()">关闭</button>
+    </div>
+  </div>
+</dialog>
+<!-- 文件列表 -->
+<div class="card">
+  <div class="card-header">
+    <h2>📁 招标文件列表</h2>
+    <span id="tender-total-count" style="color:var(--text-secondary);">共 0 条</span>
+  </div>
+  <div class="card-body">
+    <div id="tender-loading" style="display:none;text-align:center;padding:40px;">
+      <div class="spinner"></div><p>加载中...</p>
+    </div>
+    <div id="tender-empty" style="display:none;text-align:center;padding:40px;color:var(--text-secondary);">
+      <p style="font-size:48px;">📭</p><p>暂无招标文件，请点击上方按钮上传</p>
+    </div>
+    <table id="tender-table" class="data-table" style="display:none;">
+      <thead>
+        <tr>
+          <th>文件名</th>
+          <th>项目名称</th>
+          <th>状态</th>
+          <th>目录数</th>
+          <th>上传时间</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="tender-list-tbody"></tbody>
+    </table>
+  </div>
+</div>

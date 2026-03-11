@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AI管理后台</title>
   <link rel="stylesheet" href="css/common.css">
+  <script src="/lib/jszip/jszip.min.js"></script>
+  <script src="/lib/docx-preview/docx-preview.min.js"></script>
 </head>
 <body>
   <div class="layout">
@@ -46,6 +48,14 @@
         <a href="#scraper" class="menu-item" data-page="scraper">
           <span>🕷️</span> 智能信息爬取
         </a>
+        
+        <div class="menu-group">招投标管理</div>
+        <a href="#tender-analysis" class="menu-item" data-page="tender-analysis">
+          <span>📋</span> 招标文件分析
+        </a>
+        <a href="#bid-analysis" class="menu-item" data-page="bid-analysis">
+          <span>📑</span> 投标文件分析
+        </a>
       </nav>
     </aside>
     
@@ -77,6 +87,8 @@
         'document-manage': './pages/document-manage.html',
         'presales-analysis': './pages/presales-analysis.html',
         'scraper': './pages/scraper.html',
+        'tender-analysis': './pages/tender-analysis.html',
+        'bid-analysis': './pages/bid-analysis.html',
       },
       
       // 加载页面

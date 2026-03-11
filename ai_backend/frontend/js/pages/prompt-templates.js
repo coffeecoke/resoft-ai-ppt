@@ -124,6 +124,8 @@ function renderPromptList(prompts) {
       'qa_classification': '问答对分类',
       'ppt_analysis': 'PPT分析',
       'presales_analysis': '售前交流综合分析',
+      'tender_analysis': '招标文件分析',
+      'bid_analysis': '投标文件分析',
       'document_extract': '文档提取',
       'document_manage': '文档管理',
       'general': '通用'
@@ -218,6 +220,8 @@ function viewPrompt(prompt) {
     'qa_classification': '问答对分类',
     'ppt_analysis': 'PPT分析',
     'presales_analysis': '售前交流综合分析',
+    'tender_analysis': '招标文件分析',
+    'bid_analysis': '投标文件分析',
     'document_extract': '文档提取',
     'document_manage': '文档管理',
     'general': '通用'
