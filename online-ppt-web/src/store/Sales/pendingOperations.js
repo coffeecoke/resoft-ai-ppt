@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 
 const STORAGE_KEY = 'pending-operations-list'
 
@@ -55,18 +55,33 @@ export const usePendingOperationsStore = defineStore('pendingOperations', () => 
     // 检查是否已存在
     const exists = pendingList.value.find(p => p.id === item.id && p.type === item.type)
     if (!exists) {
-      pendingList.value.push({
+      const base = {
         id: item.id,
-        type: item.type || 'ppt', // 'ppt' | 'video' | 'document'
+        type: item.type || 'ppt',
         title: item.title,
-        documentId: item.documentId, // 文档ID（必须，用于后端查询）
-        slideIds: item.slideIds || [], // 幻灯片ID数组（可为空表示整个PPT）
-        thumbnail: item.thumbnail,
-        tag: item.tag || '公共版',
+        documentId: item.documentId || '',
+        tag: item.tag || '',
         date: item.date || new Date().toISOString().split('T')[0],
-        slides: item.slides || [], // 保留用于兼容（可选）
-        selected: item.selected !== undefined ? item.selected : true // 默认选中
-      })
+        selected: item.selected !== undefined ? item.selected : true,
+      }
+
+      if (item.type === 'response-section') {
+        // 响应文件章节专用字段
+        pendingList.value.push({
+          ...base,
+          documentName: item.documentName || '',
+          level: item.level || 1,
+          parent_section_id: item.parent_section_id || null,
+        })
+      } else {
+        // PPT / video / document 类型
+        pendingList.value.push({
+          ...base,
+          slideIds: item.slideIds || [],
+          thumbnail: item.thumbnail,
+          slides: item.slides || [],
+        })
+      }
     }
   }
 
@@ -78,10 +93,57 @@ export const usePendingOperationsStore = defineStore('pendingOperations', () => 
     }
   }
 
+  // 移除某文档的所有响应文件章节
+  const removeDocumentSections = (documentId) => {
+    pendingList.value = pendingList.value.filter(
+      i => !(i.type === 'response-section' && i.documentId === documentId)
+    )
+  }
+
+  // 级联移除章节（移除自身及所有后代子节点）
+  const removeSectionCascade = (sectionId) => {
+    const idsToRemove = new Set([sectionId])
+    let changed = true
+    while (changed) {
+      changed = false
+      for (const item of pendingList.value) {
+        if (
+          item.type === 'response-section' &&
+          item.parent_section_id &&
+          idsToRemove.has(item.parent_section_id) &&
+          !idsToRemove.has(item.id)
+        ) {
+          idsToRemove.add(item.id)
+          changed = true
+        }
+      }
+    }
+    pendingList.value = pendingList.value.filter(
+      i => !(i.type === 'response-section' && idsToRemove.has(i.id))
+    )
+  }
+
+  // 拖拽排序后替换 response-section 列表顺序
+  const reorderSections = (newOrderedSections) => {
+    const others = pendingList.value.filter(i => i.type !== 'response-section')
+    pendingList.value = [...others, ...newOrderedSections]
+  }
+
   // 清空待操作列表
   const clearPending = () => {
     pendingList.value = []
   }
+
+  // --- Getters ---
+  // 响应文件章节项（保持拖拽顺序）
+  const responseSectionItems = computed(() =>
+    pendingList.value.filter(i => i.type === 'response-section')
+  )
+
+  // 非响应文件项（PPT / video / document，排除整篇响应文件条目）
+  const otherItems = computed(() =>
+    pendingList.value.filter(i => i.type !== 'response-section' && i.type !== 'response')
+  )
 
   // 批量AI分析
   const batchAnalyze = async (selectedItems) => {
@@ -140,8 +202,13 @@ export const usePendingOperationsStore = defineStore('pendingOperations', () => 
 
   return {
     pendingList,
+    responseSectionItems,
+    otherItems,
     addToPending,
     removeFromPending,
+    removeDocumentSections,
+    removeSectionCascade,
+    reorderSections,
     clearPending,
     batchAnalyze,
     batchDownload

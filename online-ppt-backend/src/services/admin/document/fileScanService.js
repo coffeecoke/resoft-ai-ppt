@@ -1,6 +1,6 @@
 /**
  * 文件扫描服务
- * 
+ *
  * 负责扫描源目录、处理文件、管理处理历史
  */
 
@@ -9,6 +9,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import dotenv from 'dotenv'
 import * as prismaClient from '@prisma/client'
+import mammoth from 'mammoth'
 import { generateDocumentId } from '../../../utils/idGenerator.js'
 import pptxService from '../../pptxService.js'
 import { documentService } from '../../documentService.js'
@@ -166,7 +167,8 @@ class FileScanService {
       
       // 根据文件类型解析
       let documentData = null
-      
+      let document
+
       if (fileType === '.pptx') {
         // 解析 PPTX
         const result = await pptxService.parsePPTX(filePath, { fixedViewport: true })
@@ -182,38 +184,40 @@ class FileScanService {
         throw new Error(`不支持的文件类型: ${fileType}`)
       }
       
-      // 查询是否已存在 documentId
-      const existingRecord = await prisma.file_scan_history.findUnique({
-        where: { file_path: filePath }
-      })
-      
-      const documentName = path.basename(fileName, fileType)
-      let document
-      
-      if (existingRecord?.document_id) {
-        // 如果 documentId 存在，执行更新操作（覆盖 JSON）
-        console.log(`[文件扫描] 文档已存在，执行更新操作: ${existingRecord.document_id}`)
-        document = await documentService.update(existingRecord.document_id, {
-          name: documentName,
-          slides: documentData.slides,  // 使用 slides 而不是 initialSlides
-          theme: documentData.theme,
-          width: documentData.width,
-          height: documentData.height
+      // PPTX：走原有 documentService 创建/更新流程
+      if (fileType === '.pptx') {
+        // 查询是否已存在 documentId
+        const existingRecord = await prisma.file_scan_history.findUnique({
+          where: { file_path: filePath }
         })
-        console.log(`[文件扫描] 更新成功: ${fileName} -> ${document.id}`)
-      } else {
-        // 如果 documentId 不存在，执行创建操作
-        document = await documentService.create({
-          name: documentName,
-          category: 'uncategorized',
-          status: 'draft',
-          tag: 'practical',  // 扫描导入的文档标记为实战版
-          initialSlides: documentData.slides,
-          theme: documentData.theme,
-          width: documentData.width,
-          height: documentData.height
-        })
-        console.log(`[文件扫描] 创建成功: ${fileName} -> ${document.id}`)
+
+        const documentName = path.basename(fileName, fileType)
+
+        if (existingRecord?.document_id) {
+          // 如果 documentId 存在，执行更新操作（覆盖 JSON）
+          console.log(`[文件扫描] 文档已存在，执行更新操作: ${existingRecord.document_id}`)
+          document = await documentService.update(existingRecord.document_id, {
+            name: documentName,
+            slides: documentData.slides,
+            theme: documentData.theme,
+            width: documentData.width,
+            height: documentData.height
+          })
+          console.log(`[文件扫描] 更新成功: ${fileName} -> ${document.id}`)
+        } else {
+          // 如果 documentId 不存在，执行创建操作
+          document = await documentService.create({
+            name: documentName,
+            category: 'uncategorized',
+            status: 'draft',
+            tag: 'practical',
+            initialSlides: documentData.slides,
+            theme: documentData.theme,
+            width: documentData.width,
+            height: documentData.height
+          })
+          console.log(`[文件扫描] 创建成功: ${fileName} -> ${document.id}`)
+        }
       }
       
       const processedTime = new Date()
@@ -448,4 +452,42 @@ class FileScanService {
 }
 
 export default new FileScanService()
+
+/**
+ * 从 Markdown 文本中按标题切分章节
+ *
+ * @param {string} markdown - mammoth 输出的 Markdown 字符串
+ * @returns {Array<{title: string, level: number, content: string}>}
+ */
+function extractSectionsFromMarkdown(markdown) {
+  const lines = markdown.split('\n')
+  const sections = []
+  let currentSection = null
+  const contentLines = []
+
+  const flush = () => {
+    if (currentSection) {
+      currentSection.content = contentLines.join('\n').trim()
+      sections.push({ ...currentSection })
+      contentLines.length = 0
+    }
+  }
+
+  for (const line of lines) {
+    const headingMatch = line.match(/^(#{1,4})\s+(.+)$/)
+    if (headingMatch) {
+      flush()
+      currentSection = {
+        title: headingMatch[2].trim(),
+        level: headingMatch[1].length,
+        content: '',
+      }
+    } else if (currentSection) {
+      contentLines.push(line)
+    }
+  }
+  flush()
+
+  return sections
+}
 

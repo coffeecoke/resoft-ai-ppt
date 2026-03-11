@@ -223,8 +223,7 @@
     <ResponseFileDialog
       v-model:visible="dialogs.responseFileDialogVisible.value"
       :title="dialogs.responseFileTitle.value"
-      :slides="dialogs.responseFileSlides.value"
-      :response-toc-sections="responseTocSections"
+      :file-id="dialogs.responseFileId.value"
     />
     
     <!-- ✅ 已有组件：视频对话框（替换掉内联的el-dialog） -->

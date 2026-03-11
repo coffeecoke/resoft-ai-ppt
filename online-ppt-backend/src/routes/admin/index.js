@@ -6,6 +6,7 @@
 
 import { Router } from 'express'
 import fileScanRouter from './fileScan.js'
+import bidDocumentsRouter from './bid-documents.js'
 import dictRouter from './system/dict.js'
 import roleRouter from './system/role.js'
 import userRouter from './system/user.js'
@@ -16,6 +17,7 @@ const router = Router()
 
 // 注册子路由
 router.use('/file-scan', fileScanRouter)
+router.use('/bid-documents', bidDocumentsRouter)
 
 // 系统管理路由
 router.use('/system/dict', dictRouter)
