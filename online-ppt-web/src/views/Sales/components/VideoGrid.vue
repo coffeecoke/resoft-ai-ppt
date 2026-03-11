@@ -23,10 +23,11 @@
         <span v-if="item.duration" class="video-duration">{{ item.duration }}</span>
       </div>
 
-      <!-- 音频卡片：渐变背景 + 音波 + 耳机图标 -->
+      <!-- 音频卡片：默认底图 + 半透明黑遮罩 + 蓝色音波 + 耳机图标 -->
       <div v-else class="thumb is-audio">
         <div class="audio-bg">
-          <!-- 音波纹 -->
+          <div class="audio-bg-overlay"></div>
+          <!-- 音波纹（系统蓝） -->
           <div class="audio-wave-bars">
             <span class="bar" style="--delay: 0s; --h: 10%;"></span>
             <span class="bar" style="--delay: 0.15s; --h: 18%;"></span>
@@ -106,11 +107,22 @@ const handleVideoClick = (item) => {
 .audio-bg {
   width: 100%;
   height: 100%;
-  background: linear-gradient(135deg, #374151 0%, #1f2937 100%);
+  background-image: url('/audio-bg-default.png');
+  background-size: cover;
+  background-position: center;
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
+}
+
+.audio-bg-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  pointer-events: none;
 }
 
 .audio-wave-bars {
@@ -124,12 +136,13 @@ const handleVideoClick = (item) => {
   justify-content: center;
   gap: 4px;
   padding: 0 20px;
+  z-index: 1;
 }
 
 .audio-wave-bars .bar {
   width: 4px;
   height: var(--h, 50%);
-  background: #f97316;
+  background: #2563eb;
   border-radius: 2px;
   animation: bar-bounce 1.5s ease-in-out infinite;
   animation-delay: var(--delay, 0s);
@@ -147,18 +160,19 @@ const handleVideoClick = (item) => {
 .audio-icon {
   width: 56px;
   height: 56px;
-  background: rgba(249, 115, 22, 0.2);
+  background: rgba(255, 255, 255, 0.6);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1;
   backdrop-filter: blur(4px);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
 }
 
 .audio-icon i {
   font-size: 28px;
-  color: #f97316;
+  color: #2563eb;
 }
 
 .thumb.is-audio .video-duration {

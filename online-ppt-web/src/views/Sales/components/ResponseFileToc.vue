@@ -327,16 +327,18 @@ const handleAddToPending = () => {
 }
 
 .check-icon {
-  width: 12px;
-  height: 12px;
+  width: 16px;
+  height: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid #fff;
+  border: 2px solid #fff;
   border-radius: 50%;
-  font-size: 8px;
+  font-size: 11px;
   color: #006DF9;
   flex-shrink: 0;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 109, 249, 0.3);
 }
 
 .toc-footer {
