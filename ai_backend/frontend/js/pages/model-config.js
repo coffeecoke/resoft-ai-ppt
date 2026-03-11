@@ -246,7 +246,9 @@ function getSceneName(scene) {
     'presales_analysis': '售前交流综合分析',
     'document_extract': '文档提取',
     'document_manage': '文档管理',
-    'general': '通用'
+    'general': '通用',
+    'tender_analysis': '招标文件分析',
+    'bid_analysis': '投标文件分析'
   };
   return sceneMap[scene] || scene || '未分类';
 }
