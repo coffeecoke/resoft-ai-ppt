@@ -23,7 +23,7 @@
               <i class="ri-folder-download-line"></i>
               下载
             </el-button>
-            <el-button size="small" @click="pendingDrawerVisible = !pendingDrawerVisible">
+            <el-button size="small" @click="openPendingDrawer">
               <i class="ri-list-check-3"></i>
               待操作
             </el-button>
@@ -147,16 +147,16 @@
     </div>
   </el-dialog>
 
-  <!-- 待操作列表抽屉：放在 el-dialog 外部，避免嵌套 teleport 导致 renderSlot null 错误 -->
-  <PendingOperationsDrawer v-model:visible="pendingDrawerVisible" />
+  <!-- 响应文件章节抽屉：放在 el-dialog 外部，避免嵌套 teleport 导致 renderSlot null 错误 -->
+  <ResponseSectionDrawer v-model:visible="pendingDrawerVisible" />
 </template>
 
 <script setup lang="ts">
 import { ref, computed, nextTick, watch, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
-import { usePendingOperationsStore } from '@/store/Sales/pendingOperations'
+import { useResponseSectionStore } from '@/store/Sales/responseSectionStore'
 import { usePptDialogAiStore } from '@/store/Sales/pptDialogAi'
-import PendingOperationsDrawer from '@/components/Sales/PendingOperationsDrawer.vue'
+import ResponseSectionDrawer from './ResponseSectionDrawer.vue'
 import ResponseFileToc from './ResponseFileToc.vue'
 import { responseFileSidebarData } from '@/configs/salesData'
 import { getBidDocumentDetail, fetchBidDocumentBuffer, type BidSection } from '@/services/bidDocumentService'
@@ -173,7 +173,7 @@ const emit = defineEmits(['update:visible', 'close'])
 // 右侧栏数据
 const sidebarData = computed(() => responseFileSidebarData)
 
-const pendingStore = usePendingOperationsStore()
+const pendingStore = useResponseSectionStore()
 const pptDialogAiStore = usePptDialogAiStore()
 
 // 内容相关状态
@@ -188,12 +188,13 @@ const docxContentRef = ref<HTMLElement | null>(null)
 const aiPanelVisible = ref(false)
 const aiInputText = ref('')
 const pendingDrawerVisible = ref(false)
+const openPendingDrawer = () => { pendingDrawerVisible.value = true }
 const isFavorited = ref(false)
 const favoriteCount = ref(12)
 
 // 已勾选的章节 ID（从 pending store 计算，用于双向联动）
 const pendingSectionIdsForThisDoc = computed(() =>
-  pendingStore.responseSectionItems
+  pendingStore.sectionList
     .filter((i: any) => i.documentId === props.fileId)
     .map((i: any) => i.id)
 )
@@ -276,26 +277,27 @@ const scrollToHeading = (section: BidSection) => {
 }
 
 // 「选中→待操作」按钮：当前文档全量替换（先清再加，避免重复）
-const handleAddToPending = (sections: BidSection[]) => {
+const handleAddToPending = (sections: (BidSection & { isHeaderOnly?: boolean })[]) => {
   // 清掉该文档在待操作中的所有章节
   pendingStore.removeDocumentSections(props.fileId)
 
-  // 把当前勾选的全部加入
+  // 按树序把完全选中 + 半选标题行全部加入
   for (const section of sections) {
-    pendingStore.addToPending({
+    pendingStore.addSection({
       id: section.id,
-      type: 'response-section',
       title: section.title,
       documentId: props.fileId,
       documentName: props.title,
       level: section.level,
       parent_section_id: section.parent_section_id || null,
+      isHeaderOnly: section.isHeaderOnly || false,
       tag: '响应文件',
       date: new Date().toISOString().split('T')[0],
     })
   }
 
-  ElMessage.success(`已更新待操作列表（${sections.length} 个章节）`)
+  const realCount = sections.filter(s => !s.isHeaderOnly).length
+  ElMessage.success(`已更新待操作列表（${realCount} 个章节）`)
   pendingDrawerVisible.value = true
 }
 
@@ -304,8 +306,11 @@ const handleDownloadSelected = async (sections: BidSection[]) => {
   try {
     const { mergeDownloadSections } = await import('../composables/useMergeDownload')
     // 前端去重：父节点已包含子节点内容，过滤掉被覆盖的子节点
-    const filteredIds = filterRedundantChildren(sections)
-    await mergeDownloadSections(filteredIds, props.title || '响应文件')
+    const filteredIds = new Set(filterRedundantChildren(sections))
+    const mergeSections = sections
+      .filter(s => filteredIds.has(s.id))
+      .map(s => ({ id: s.id, headerOnly: false }))
+    await mergeDownloadSections(mergeSections, props.title || '响应文件')
     ElMessage.success('下载成功')
   } catch (err: any) {
     ElMessage.error(err.message || '下载失败')

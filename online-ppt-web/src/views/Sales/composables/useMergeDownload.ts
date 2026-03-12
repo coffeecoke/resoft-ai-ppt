@@ -3,11 +3,18 @@
  */
 import { SERVER_URL, authFetch } from '@/services'
 
-export async function mergeDownloadSections(sectionIds: string[], name?: string) {
+export interface MergeSection {
+  id: string
+  headerOnly?: boolean
+  title?: string
+  level?: number
+}
+
+export async function mergeDownloadSections(sections: MergeSection[], name?: string) {
   const response = await authFetch(`${SERVER_URL}/sales/bid-compositions/merge-download`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sectionIds, name }),
+    body: JSON.stringify({ sections, name }),
   })
 
   if (!response.ok) {

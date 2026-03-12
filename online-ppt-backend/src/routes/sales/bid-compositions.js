@@ -26,56 +26,68 @@ function resolveFilePath(relativePath) {
  * POST /api/sales/bid-compositions/merge-download
  * 合并选中章节的 docx 片段为一个完整文档并下载
  *
- * Body: { sectionIds: string[], name?: string }
+ * Body:
+ *   sections: Array<{ id: string, headerOnly?: boolean, title?: string, level?: number }>
+ *   name?: string
  */
 router.post('/merge-download', async (req, res) => {
   try {
-    const { sectionIds, name } = req.body
+    const { sections: inputSections, name } = req.body
 
-    if (!Array.isArray(sectionIds) || sectionIds.length === 0) {
+    if (!Array.isArray(inputSections) || inputSections.length === 0) {
       return res.status(400).json({ success: false, message: '请选择至少一个章节' })
     }
 
-    // 查询章节信息
-    const sections = await prisma.bid_sections.findMany({
-      where: { id: { in: sectionIds } },
-      select: {
-        id: true,
-        title: true,
-        docx_file_path: true,
-      },
-    })
+    // 分离：正常章节 vs 仅标题行
+    const realIds = inputSections.filter(s => !s.headerOnly).map(s => s.id)
 
-    // 按 sectionIds 输入顺序排列
-    const ordered = sectionIds
-      .map(id => sections.find(s => s.id === id))
-      .filter(Boolean)
+    // 查询正常章节的数据库记录
+    const dbSections = realIds.length
+      ? await prisma.bid_sections.findMany({
+          where: { id: { in: realIds } },
+          select: { id: true, title: true, level: true, docx_file_path: true },
+        })
+      : []
 
-    if (ordered.length === 0) {
-      return res.status(404).json({ success: false, message: '未找到对应的章节' })
+    const dbMap = new Map(dbSections.map(s => [s.id, s]))
+
+    // 按前端传入顺序构建合并任务列表
+    const mergeTasks = []
+    for (const item of inputSections) {
+      if (item.headerOnly) {
+        // 标题行：只插入 heading 段落
+        mergeTasks.push({
+          type: 'heading',
+          title: item.title || '',
+          level: item.level || 1,
+        })
+      } else {
+        const dbSection = dbMap.get(item.id)
+        if (!dbSection) continue // 数据库无记录，跳过
+
+        if (!dbSection.docx_file_path) {
+          return res.status(400).json({
+            success: false,
+            message: `章节「${dbSection.title}」没有关联的 docx 文件`,
+          })
+        }
+        const absPath = resolveFilePath(dbSection.docx_file_path)
+        if (!fs.existsSync(absPath)) {
+          return res.status(404).json({
+            success: false,
+            message: `章节「${dbSection.title}」的 docx 文件不存在`,
+          })
+        }
+        mergeTasks.push({ type: 'docx', path: absPath })
+      }
     }
 
-    // 解析文件绝对路径，并校验文件存在
-    const docxPaths = []
-    for (const section of ordered) {
-      if (!section.docx_file_path) {
-        return res.status(400).json({
-          success: false,
-          message: `章节「${section.title}」没有关联的 docx 文件`,
-        })
-      }
-      const absPath = resolveFilePath(section.docx_file_path)
-      if (!fs.existsSync(absPath)) {
-        return res.status(404).json({
-          success: false,
-          message: `章节「${section.title}」的 docx 文件不存在`,
-        })
-      }
-      docxPaths.push(absPath)
+    if (!mergeTasks.some(t => t.type === 'docx')) {
+      return res.status(400).json({ success: false, message: '没有可合并的 docx 章节' })
     }
 
     // 合并
-    const buffer = docxMergeService.merge(docxPaths)
+    const buffer = docxMergeService.mergeWithHeadings(mergeTasks)
 
     // 返回下载
     const fileName = encodeURIComponent(name || '合并文档') + '.docx'

@@ -70,6 +70,7 @@ export function useEditorDataLoader() {
           } catch (error) {
             console.warn('[编辑器] 获取文档状态失败，将按草稿处理:', error)
           }
+          slidesStore.setLoadedId(documentId)
         }
 
         return
@@ -91,13 +92,15 @@ export function useEditorDataLoader() {
         slidesStore.setTheme(data.theme)
         slidesStore.setSlides(data.slides)
         slidesStore.setViewportSize(data.width)
+        slidesStore.setLoadedId(documentId)
 
         // 标记已加载
         loadedIds.add(documentId)
         console.log('[编辑器] 文档数据加载完成，已标记:', documentId)
       } else if (templateId) {
-        // 模板编辑器暂不处理，保持原有逻辑
-        console.log('[编辑器] 模板编辑模式，跳过数据加载')
+        // 模板数据由 PPT/Layout.vue 的 loadSlidesForRoute 负责加载，此处只标记 ID
+        // loadedId 由 Layout.vue 在数据加载成功后设置
+        console.log('[编辑器] 模板编辑模式，跳过数据加载（由 Layout.vue 负责）')
         loadedIds.add(templateId)
       }
     } catch (error) {

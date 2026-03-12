@@ -142,7 +142,17 @@ const getCheckedSections = (): BidSection[] => {
 }
 
 const handleAddToPending = () => {
-  const sections = getCheckedSections()
+  // 获取完全选中的 key 集合
+  const checkedKeys = new Set<string>(treeRef.value?.getCheckedKeys() || [])
+  // getCheckedNodes(false, true) 包含完全选中 + 半选（indeterminate）节点，顺序为 DFS 树序
+  const allNodes: BidSection[] = treeRef.value?.getCheckedNodes(false, true) || []
+
+  // 标记每个节点是否为半选（标题行）
+  const sections = allNodes.map(node => ({
+    ...node,
+    isHeaderOnly: !checkedKeys.has(node.id),
+  }))
+
   if (!sections.length) return
   emit('add-to-pending', sections)
 }

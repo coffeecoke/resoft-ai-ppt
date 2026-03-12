@@ -28,6 +28,7 @@ export interface SlidesState {
   viewportRatio: number
   templates: SlideTemplate[]
   metadata: DocumentMetadata | null
+  loadedId: string | null  // 当前 store 里实际加载的文档/模板 ID，用于防止导航切换时的数据错保
 }
 
 export const useSlidesStore = defineStore('slides', {
@@ -58,6 +59,7 @@ export const useSlidesStore = defineStore('slides', {
     // 这里只保留一个空数组作为占位，避免旧代码访问报错。
     templates: [], // 模板
     metadata: null, // 文档元信息
+    loadedId: null, // 当前实际加载到 store 的文档/模板 ID
   }),
 
   getters: {
@@ -135,6 +137,10 @@ export const useSlidesStore = defineStore('slides', {
 
     setMetadata(metadata: DocumentMetadata | null) {
       this.metadata = metadata
+    },
+
+    setLoadedId(id: string | null) {
+      this.loadedId = id
     },
 
     addSlide(slide: Slide | Slide[]) {

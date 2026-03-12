@@ -72,6 +72,8 @@ const loadSlidesForRoute = async () => {
   if (templateId) {
     // 从后端加载指定模板数据
     try {
+      // 清空 loadedId，防止加载过程中的 race condition（旧 slides + 新 ID 触发自动保存）
+      slidesStore.setLoadedId(null)
       const resp = await authFetch(`${SERVER_URL}/templates/${templateId}`)
       if (resp.ok) {
         const json = await resp.json()
@@ -102,6 +104,7 @@ const loadSlidesForRoute = async () => {
           mainStore.setMarkupPanelState(true)
           // 标记已加载的 templateId
           loadedTemplateId = templateId
+          slidesStore.setLoadedId(templateId)
           return
         }
         throw new Error('模板数据格式错误')
@@ -115,6 +118,8 @@ const loadSlidesForRoute = async () => {
   } else if (documentId) {
     // 从后端加载指定文档数据
     try {
+      // 清空 loadedId，防止加载过程中的 race condition
+      slidesStore.setLoadedId(null)
       const resp = await authFetch(`${SERVER_URL}/documents/${documentId}`)
       if (resp.ok) {
         const json = await resp.json()
@@ -144,6 +149,7 @@ const loadSlidesForRoute = async () => {
           // 文档模式不打开标注面板
           // 标记已加载的 documentId
           loadedDocumentId = documentId
+          slidesStore.setLoadedId(documentId)
           return
         }
         throw new Error('文档数据格式错误')

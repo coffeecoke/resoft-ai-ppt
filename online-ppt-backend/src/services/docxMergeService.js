@@ -191,6 +191,164 @@ class DocxMergeService {
 
     return baseZip.toBuffer()
   }
+  /**
+   * 带标题行的混合合并
+   *
+   * @param {Array<{type:'docx'|'heading', path?:string, title?:string, level?:number}>} tasks
+   * @returns {Buffer}
+   */
+  mergeWithHeadings(tasks, options = {}) {
+    const { pageBreak = true } = options
+
+    // 找第一个 docx 作为骨架
+    const firstDocxIndex = tasks.findIndex(t => t.type === 'docx')
+    if (firstDocxIndex === -1) throw new Error('没有可合并的 docx 文件')
+
+    const baseZip = new AdmZip(tasks[firstDocxIndex].path)
+    let baseDocXml = baseZip.readAsText('word/document.xml')
+    let baseRels = baseZip.readAsText('word/_rels/document.xml.rels') || ''
+    let baseContentTypes = baseZip.readAsText('[Content_Types].xml') || ''
+
+    const existingMedia = new Set()
+    baseZip.getEntries().forEach(e => {
+      if (e.entryName.startsWith('word/media/')) existingMedia.add(e.entryName)
+    })
+
+    const bodyMatch = baseDocXml.match(/<w:body>([\s\S]*)<\/w:body>/)
+    if (!bodyMatch) throw new Error('无法解析基础文档的 body')
+
+    let bodyContent = bodyMatch[1]
+    const sectPrMatch = bodyContent.match(/<w:sectPr[\s\S]*<\/w:sectPr>\s*$/)
+    const sectPr = sectPrMatch ? sectPrMatch[0] : ''
+    if (sectPr) bodyContent = bodyContent.slice(0, bodyContent.lastIndexOf(sectPr))
+
+    let maxRid = 0
+    for (const m of baseRels.matchAll(/Id="rId(\d+)"/g)) {
+      maxRid = Math.max(maxRid, parseInt(m[1]))
+    }
+
+    const registeredExtensions = new Set()
+    for (const m of baseContentTypes.matchAll(/Extension="([^"]+)"/g)) {
+      registeredExtensions.add(m[1].toLowerCase())
+    }
+
+    let docxCounter = 0 // 用于 rId 偏移
+
+    for (let taskIdx = 0; taskIdx < tasks.length; taskIdx++) {
+      const task = tasks[taskIdx]
+
+      if (task.type === 'heading') {
+        // 插入标题段落 XML
+        const styleVal = `Heading${Math.min(task.level || 1, 6)}`
+        const headingXml = `<w:p><w:pPr><w:pStyle w:val="${styleVal}"/></w:pPr><w:r><w:t>${escapeXml(task.title || '')}</w:t></w:r></w:p>`
+        bodyContent += headingXml
+        continue
+      }
+
+      // type === 'docx'
+      if (taskIdx === firstDocxIndex) {
+        docxCounter++
+        continue // 骨架已经是 bodyContent 初始值
+      }
+
+      docxCounter++
+      const fragZip = new AdmZip(task.path)
+      const fragDocXml = fragZip.readAsText('word/document.xml')
+      const fragRels = fragZip.readAsText('word/_rels/document.xml.rels') || ''
+      if (!fragDocXml) continue
+
+      const fragBodyMatch = fragDocXml.match(/<w:body>([\s\S]*)<\/w:body>/)
+      if (!fragBodyMatch) continue
+      let fragBody = fragBodyMatch[1]
+
+      const fragSectPrMatch = fragBody.match(/<w:sectPr[\s\S]*<\/w:sectPr>\s*$/)
+      if (fragSectPrMatch) fragBody = fragBody.slice(0, fragBody.lastIndexOf(fragSectPrMatch[0]))
+
+      const ridOffset = maxRid + (docxCounter * 1000)
+      const relEntries = []
+      const relRegex = /<Relationship\s+Id="rId(\d+)"\s+Type="([^"]+)"\s+Target="([^"]+)"[^/]*\/>/g
+      let relMatch
+      while ((relMatch = relRegex.exec(fragRels)) !== null) {
+        const origNum = parseInt(relMatch[1])
+        relEntries.push({
+          origId: `rId${origNum}`,
+          newId: `rId${origNum + ridOffset}`,
+          type: relMatch[2],
+          target: relMatch[3],
+        })
+      }
+
+      const mediaRenames = new Map()
+      for (const rel of relEntries) {
+        if (!rel.target.startsWith('media/')) continue
+        const origPath = `word/${rel.target}`
+        const fragEntry = fragZip.getEntry(origPath)
+        if (!fragEntry) continue
+
+        let newMediaName = rel.target
+        const newPath = `word/${newMediaName}`
+        if (existingMedia.has(newPath)) {
+          const ext = newMediaName.substring(newMediaName.lastIndexOf('.'))
+          const baseName = newMediaName.substring(6, newMediaName.lastIndexOf('.'))
+          newMediaName = `media/${baseName}_f${docxCounter}${ext}`
+        }
+        const finalPath = `word/${newMediaName}`
+        if (!existingMedia.has(finalPath)) {
+          baseZip.addFile(finalPath, fragEntry.getData())
+          existingMedia.add(finalPath)
+          const ext = newMediaName.substring(newMediaName.lastIndexOf('.') + 1).toLowerCase()
+          if (!registeredExtensions.has(ext)) {
+            const mimeMap = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', bmp: 'image/bmp', tif: 'image/tiff', tiff: 'image/tiff', emf: 'image/x-emf', wmf: 'image/x-wmf' }
+            const mime = mimeMap[ext]
+            if (mime) {
+              baseContentTypes = baseContentTypes.replace('</Types>', `<Default Extension="${ext}" ContentType="${mime}"/></Types>`)
+              registeredExtensions.add(ext)
+            }
+          }
+        }
+        mediaRenames.set(rel.target, newMediaName)
+      }
+
+      for (const rel of relEntries) {
+        const escOrigId = rel.origId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        fragBody = fragBody.replace(
+          new RegExp(`(r:embed="|r:link="|r:id=")${escOrigId}"`, 'g'),
+          `$1${rel.newId}"`
+        )
+      }
+
+      for (const rel of relEntries) {
+        const target = mediaRenames.get(rel.target) || rel.target
+        baseRels = baseRels.replace('</Relationships>', `<Relationship Id="${rel.newId}" Type="${rel.type}" Target="${target}"/></Relationships>`)
+        maxRid = Math.max(maxRid, parseInt(rel.newId.replace('rId', '')))
+      }
+
+      if (pageBreak) {
+        bodyContent += '<w:p><w:r><w:br w:type="page"/></w:r></w:p>'
+      }
+      bodyContent += fragBody
+    }
+
+    const newDocXml = baseDocXml.replace(
+      /<w:body>[\s\S]*<\/w:body>/,
+      `<w:body>${bodyContent}${sectPr}</w:body>`
+    )
+
+    baseZip.updateFile('word/document.xml', Buffer.from(newDocXml, 'utf-8'))
+    if (baseRels) baseZip.updateFile('word/_rels/document.xml.rels', Buffer.from(baseRels, 'utf-8'))
+    baseZip.updateFile('[Content_Types].xml', Buffer.from(baseContentTypes, 'utf-8'))
+
+    return baseZip.toBuffer()
+  }
+}
+
+function escapeXml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
 }
 
 export default new DocxMergeService()

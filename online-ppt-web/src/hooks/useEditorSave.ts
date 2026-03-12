@@ -190,6 +190,13 @@ export function useEditorSave() {
       return
     }
 
+    // 防止 race condition：URL 已切换到新 ID 但 store 里还是旧数据
+    // loadedId 只有在数据真正加载完毕后才会被设置
+    if (slidesStore.loadedId !== id) {
+      console.warn(`[useEditorSave] loadedId(${slidesStore.loadedId}) !== currentId(${id})，数据尚未加载完毕，跳过保存`)
+      return
+    }
+
     if (saving.value) return
 
     saving.value = true
@@ -272,7 +279,12 @@ export function useEditorSave() {
             const reason = noThumbnail ? '无缩略图' : firstSlideChanged ? '检测到变更' : '有未保存变更'
             if (import.meta.env.DEV) console.log(`[useEditorSave] 手动保存模板，生成封面 (原因: ${reason})`)
             // 延迟 100ms 确保 DOM 已更新，异步不阻塞保存
+            // 注意：用闭包捕获 id，100ms 内若切换了模板需再次校验
             setTimeout(() => {
+              if (slidesStore.loadedId !== id) {
+                if (import.meta.env.DEV) console.warn('[useEditorSave] 封面生成时 loadedId 已变更，跳过')
+                return
+              }
               generateTemplateCoverDirect(id).catch(err => {
                 console.warn('[useEditorSave] 模板封面生成失败:', err)
               })
