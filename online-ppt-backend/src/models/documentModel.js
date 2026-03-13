@@ -54,6 +54,7 @@ function serializeBigInt(obj) {
       else if (key === 'updated_at') newKey = 'updatedAt'
       else if (key === 'last_opened_at') newKey = 'lastOpenedAt'
       else if (key === 'view_count') newKey = 'viewCount'
+      else if (key === 'created_by') newKey = 'createdBy'
       
       result[newKey] = serializeBigInt(value)
     }
@@ -150,6 +151,7 @@ export const documentModel = {
           language: data.language,
           source_document_id: data.sourceDocumentId,
           source_document_name: data.sourceDocumentName,
+          created_by: data.createdBy || undefined,
           created_at: new Date(),
           updated_at: new Date()
         }

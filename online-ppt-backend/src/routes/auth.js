@@ -11,6 +11,59 @@ const prisma = new PrismaClient()
 const JWT_SECRET = process.env.JWT_SECRET || 'resoft-ppt-secret-change-in-production'
 const JWT_EXPIRES = '8h'
 
+// 外部系统登录验证
+async function verifyExternalLogin(username, password) {
+  const loginUrl = process.env.EXTERNAL_LOGIN_URL
+  if (!loginUrl) {
+    console.error('[外部登录] 未配置 EXTERNAL_LOGIN_URL')
+    return { success: false }
+  }
+
+  try {
+    // Step 1: GET 页面获取 session cookie 和 ViewState
+    const getRes = await fetch(loginUrl, { signal: AbortSignal.timeout(10000) })
+    const cookie = getRes.headers.get('set-cookie')?.split(';')[0]
+    const html = await getRes.text()
+    const vsMatch = html.match(/id="__VIEWSTATE"\s+value="([^"]*)"/)
+    const vsgMatch = html.match(/id="__VIEWSTATEGENERATOR"\s+value="([^"]*)"/)
+
+    // Step 2: POST 验证
+    const body = new URLSearchParams({
+      __VIEWSTATE: vsMatch?.[1] || '',
+      __VIEWSTATEGENERATOR: vsgMatch?.[1] || '',
+      txtUserName: username,
+      txtPassword: password,
+      btnLogin: '登录',
+    })
+    const postRes = await fetch(loginUrl, {
+      method: 'POST',
+      redirect: 'manual',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        ...(cookie ? { 'Cookie': cookie } : {}),
+      },
+      body,
+      signal: AbortSignal.timeout(10000),
+    })
+
+    if (postRes.status === 302) {
+      const location = postRes.headers.get('location')
+      if (location) {
+        const uid = new URL(location).searchParams.get('uid')
+        if (uid) {
+          console.log(`[外部登录] 验证成功: uid=${uid}`)
+          return { success: true, uid }
+        }
+      }
+    }
+    console.log(`[外部登录] 验证失败: status=${postRes.status}`)
+    return { success: false }
+  } catch (err) {
+    console.error('[外部登录] 请求异常:', err.message)
+    return { success: false }
+  }
+}
+
 // POST /auth/login
 router.post('/login', async (req, res) => {
   try {
@@ -20,35 +73,83 @@ router.post('/login', async (req, res) => {
     }
 
     const user = await prisma.users.findUnique({ where: { username } })
-    if (!user || user.status !== 'active') {
-      return res.status(401).json({ error: '用户名或密码错误' })
-    }
-    if (!user.password_hash) {
-      return res.status(401).json({ error: '该账号不支持密码登录' })
+
+    // admin 用户 → 本地密码验证
+    if (user?.role === 'admin') {
+      if (user.status !== 'active') {
+        return res.status(401).json({ error: '账号已被禁用' })
+      }
+      if (!user.password_hash) {
+        return res.status(401).json({ error: '该账号不支持密码登录' })
+      }
+      const valid = await bcrypt.compare(password, user.password_hash)
+      if (!valid) {
+        return res.status(401).json({ error: '用户名或密码错误' })
+      }
+      // admin 验证通过，生成 token
+      const payload = { userId: user.id, username: user.username, name: user.name, role: user.role }
+      const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES })
+      await prisma.users.update({
+        where: { id: user.id },
+        data: { last_login_at: new Date(), login_count: { increment: 1 } },
+      })
+      await prisma.audit_logs.create({
+        data: {
+          id: crypto.randomUUID(),
+          user_id: user.id,
+          username: user.username,
+          action: 'login',
+          resource: 'auth',
+          detail: '本地验证',
+          ip_address: req.ip,
+          user_agent: req.headers['user-agent']?.slice(0, 500),
+        },
+      })
+      return res.json({
+        token,
+        user: { userId: user.id, username: user.username, name: user.name, role: user.role, department: user.department_name },
+      })
     }
 
-    const valid = await bcrypt.compare(password, user.password_hash)
-    if (!valid) {
+    // 普通用户 → 外部系统验证
+    const result = await verifyExternalLogin(username, password)
+    if (!result.success) {
       return res.status(401).json({ error: '用户名或密码错误' })
     }
 
-    const payload = { userId: user.id, username: user.username, name: user.name, role: user.role }
+    // 查找或创建本地用户
+    let localUser = user
+    if (!localUser) {
+      localUser = await prisma.users.create({
+        data: {
+          id: crypto.randomUUID(),
+          username: result.uid,
+          name: result.uid,
+          role: 'user',
+          status: 'active',
+        },
+      })
+      console.log(`[外部登录] 自动创建用户: ${result.uid}`)
+    } else if (localUser.status !== 'active') {
+      return res.status(401).json({ error: '账号已被禁用' })
+    }
+
+    const payload = { userId: localUser.id, username: localUser.username, name: localUser.name, role: localUser.role }
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES })
 
-    // 更新最后登录时间
     await prisma.users.update({
-      where: { id: user.id },
+      where: { id: localUser.id },
       data: { last_login_at: new Date(), login_count: { increment: 1 } },
     })
 
-    // 记录审计日志
     await prisma.audit_logs.create({
       data: {
         id: crypto.randomUUID(),
-        user_id: user.id,
-        username: user.username,
+        user_id: localUser.id,
+        username: localUser.username,
         action: 'login',
         resource: 'auth',
+        detail: '外部验证',
         ip_address: req.ip,
         user_agent: req.headers['user-agent']?.slice(0, 500),
       },
@@ -56,7 +157,7 @@ router.post('/login', async (req, res) => {
 
     res.json({
       token,
-      user: { userId: user.id, username: user.username, name: user.name, role: user.role, department: user.department },
+      user: { userId: localUser.id, username: localUser.username, name: localUser.name, role: localUser.role, department: localUser.department_name },
     })
   } catch (err) {
     console.error('[登录] 错误:', err)

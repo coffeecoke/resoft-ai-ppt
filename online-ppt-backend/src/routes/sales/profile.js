@@ -74,7 +74,7 @@ router.post('/ppt/upload', async (req, res) => {
       audience: (Array.isArray(audience) && audience.length > 0) ? audience : undefined,
       language: language || undefined,
       initialSlides: slides,  // 传入初始幻灯片数据
-      // userId: req.user?.id,  // TODO: 未来从session获取
+      createdBy: req.user?.username,
     })
     
     console.log(`[Sales Profile] PPT回传成功: ${meta.id} - ${name}`)
@@ -107,12 +107,7 @@ router.get('/ppt/list', async (req, res) => {
     }
     
     let list = await documentService.getAll(filter)
-    
-    // TODO: 未来按用户过滤
-    // if (req.user?.id) {
-    //   list = list.filter(item => item.userId === req.user.id)
-    // }
-    
+
     res.json({
       success: true,
       data: list

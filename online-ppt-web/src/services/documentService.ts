@@ -100,6 +100,7 @@ export async function getDocumentList(options: {
   category?: string
   tag?: string
   keyword?: string
+  mine?: boolean
 } = {}): Promise<DocumentMetadata[]> {
   try {
     const params = new URLSearchParams()
@@ -109,6 +110,7 @@ export async function getDocumentList(options: {
     if (options.category) params.append('category', options.category)
     if (options.tag) params.append('tag', options.tag)
     if (options.keyword) params.append('keyword', options.keyword)
+    if (options.mine) params.append('mine', 'true')
 
     const url = `${SERVER_URL}/documents${params.toString() ? `?${params.toString()}` : ''}`
     const resp = await axios.get(url) as DocumentListResponse

@@ -107,7 +107,8 @@ export const documentService = {
       if (query.status) filter.status = query.status
       if (query.tag) filter.tag = query.tag
       if (query.sourceDocumentId) filter.source_document_id = query.sourceDocumentId
-      
+      if (query.createdBy) filter.created_by = query.createdBy
+
       return await documentModel.findAll(filter)
     } else {
       return jsonOps.readIndex()

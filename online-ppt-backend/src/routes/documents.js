@@ -136,7 +136,8 @@ router.post('/create', async (req, res) => {
       audience,
       language,
       initialSlides,
-      tag
+      tag,
+      createdBy: req.user?.username,
     })
 
     const creationType = initialSlides ? `基于PPTX(${initialSlides.length}页)` : sourceDocumentId ? `基于: ${sourceDocumentId}` : '空白'
@@ -166,9 +167,15 @@ router.get('/', async (req, res) => {
       sortBy = 'updatedAt',
       order = 'desc',
       keyword,
+      mine,
     } = req.query
 
-    let list = await documentService.getAll({ category, status, tag, sourceDocumentId })
+    const filter = { category, status, tag, sourceDocumentId }
+    if (mine === 'true' && req.user?.username) {
+      filter.createdBy = req.user.username
+    }
+
+    let list = await documentService.getAll(filter)
 
     // 搜索（关键词匹配名称）
     let filtered = list
