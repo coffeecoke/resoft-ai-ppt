@@ -223,6 +223,21 @@ export async function updateDocument(id: string, params: UpdateDocumentParams): 
 }
 
 /**
+ * 增量保存：只更新指定的页面数据，不重写整个文档
+ * 适用于：用户只编辑了部分页面时，避免传输全量 slides
+ *
+ * @param id 文档ID
+ * @param slides 变更的页面数组（每项必须含 id 字段）
+ */
+export async function patchDocumentSlides(id: string, slides: any[]): Promise<{
+  success: boolean
+  data?: { updatedSlideIds: string[]; updatedAt: string }
+  error?: string
+}> {
+  return axios.patch(`${SERVER_URL}/documents/${id}/slides`, { slides })
+}
+
+/**
  * 删除文档
  * 
  * @param id 文档ID
@@ -399,6 +414,37 @@ export async function recordDocumentView(documentId: string): Promise<{
       error: error.response?.data?.error || error.message || '记录阅读失败'
     }
   }
+}
+
+/**
+ * 插入页面（立即持久化，不等自动保存）
+ */
+export async function insertDocumentSlide(
+  documentId: string,
+  slide: any,
+  index: number
+): Promise<{ success: boolean; error?: string }> {
+  return axios.post(`${SERVER_URL}/documents/${documentId}/slides/insert`, { slide, index })
+}
+
+/**
+ * 删除页面（立即持久化，支持批量）
+ */
+export async function deleteDocumentSlides(
+  documentId: string,
+  slideIds: string[]
+): Promise<{ success: boolean; error?: string }> {
+  return axios.delete(`${SERVER_URL}/documents/${documentId}/slides`, { data: { slideIds } })
+}
+
+/**
+ * 重新排序页面（立即持久化）
+ */
+export async function reorderDocumentSlides(
+  documentId: string,
+  slideIds: string[]
+): Promise<{ success: boolean; error?: string }> {
+  return axios.patch(`${SERVER_URL}/documents/${documentId}/slides/reorder`, { slideIds })
 }
 
 export default {

@@ -112,13 +112,12 @@ export default {
 </script>
 
 <script lang="ts" setup>
-import { ref, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useMainStore } from '@/store'
 import useGlobalHotkey from '@/hooks/useGlobalHotkey'
 import usePasteEvent from '@/hooks/usePasteEvent'
-import { useEditorSave } from '@/hooks/useEditorSave'
-import { useEditorDataLoader } from '@/hooks/useEditorDataLoader'
+import { useThumbnailProgressStore } from '@/store'
 
 import EditorHeader from './EditorHeader/index.vue'
 import Canvas from './Canvas/index.vue'
@@ -158,23 +157,20 @@ const closeAIPPTDialog = () => mainStore.setAIPPTDialogState(false)
 
 const remarkHeight = ref(40)
 
-// 数据加载
-const { loading: dataLoading, loadingMessage } = useEditorDataLoader()
+// 数据由 Layout.vue 负责加载，Editor 渲染时数据必然已就绪
+const dataLoading = ref(false)
+const loadingMessage = ref('')
 
-// 获取缩略图生成状态(新队列系统)
-const {
-  showProgressModal,
-  showMiniProgress,
-  minimizeProgress,
-  expandProgress,
-  currentTask
-} = useEditorSave()
+// 进度条状态从 store 读取，不实例化 useEditorSave（避免重复注册副作用）
+const thumbnailProgressStore = useThumbnailProgressStore()
+const showProgressModal = computed(() => thumbnailProgressStore.showProgressModal)
+const showMiniProgress = computed(() => thumbnailProgressStore.showMiniProgress)
+const currentTask = computed(() => thumbnailProgressStore.currentTask)
 
-// 关闭任务
-const closeTask = () => {
-  showProgressModal.value = false
-  showMiniProgress.value = false
-}
+// 进度条操作方法
+const closeTask = () => thumbnailProgressStore.clearTask()
+const minimizeProgress = () => thumbnailProgressStore.setShowMiniProgress(true)
+const expandProgress = () => thumbnailProgressStore.setShowProgressModal(true)
 
 useGlobalHotkey()
 usePasteEvent()

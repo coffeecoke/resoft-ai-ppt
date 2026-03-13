@@ -1,13 +1,22 @@
 /**
  * 缩略图队列生成 Hooks
  * 与后端队列配合,实现异步生成和进度推送
+ *
+ * 截图策略：离屏渲染
+ * - 每个 slide 在截图时临时挂载到屏幕外的隐藏容器（position:fixed; left:-9999px）
+ * - 截完后立即销毁容器，不常驻 DOM，内存占用极低
+ * - 完全不依赖左侧缩略图列表的 DOM，支持虚拟滚动
  */
-import { ref, onUnmounted } from 'vue'
+import { createApp, defineComponent, h, onUnmounted } from 'vue'
+import { createPinia } from 'pinia'
 import { v4 as uuidv4 } from 'uuid'
 import { toJpeg } from 'html-to-image'
 import axios from '@/services/config'
+import { useThumbnailProgressStore, useSlidesStore } from '@/store'
+import ThumbnailSlide from '@/views/components/ThumbnailSlide/index.vue'
+import type { Slide } from '@/types/slides'
 
-interface QueueTask {
+export interface QueueTask {
   taskId: string
   documentId: string
   slideIds: string[]
@@ -20,13 +29,19 @@ interface ThumbnailQueueOptions {
   onProgress?: (progress: { total: number; completed: number; failed: number }) => void
   onCompleted?: () => void
   onError?: (error: string) => void
+  /** 并发截图数量，默认 2，图片多时建议设为 1 */
+  concurrency?: number
+  /** 是否跳过已有 thumbnail 的页面，默认 true */
+  skipExisting?: boolean
 }
 
 export function useThumbnailQueue(options: ThumbnailQueueOptions = {}) {
-  const currentTask = ref<QueueTask | null>(null)
-  const ws = ref<WebSocket | null>(null)
-  const showProgressModal = ref(false)
-  const showMiniProgress = ref(false)
+  const progressStore = useThumbnailProgressStore()
+  const slidesStore = useSlidesStore()
+  let ws: WebSocket | null = null
+
+  const concurrency = options.concurrency ?? 2
+  const skipExisting = options.skipExisting ?? false
 
   /**
    * 创建生成任务
@@ -35,11 +50,23 @@ export function useThumbnailQueue(options: ThumbnailQueueOptions = {}) {
   async function createTask(documentId: string, slideIds: string[], showModal = false): Promise<string> {
     const taskId = uuidv4()
 
-    // 1. 调用后端创建任务
+    // 过滤已有缩略图的页面
+    const filteredIds = skipExisting
+      ? slideIds.filter(id => {
+          const slide = slidesStore.slides.find(s => s.id === id)
+          return !slide || !(slide as any).thumbnail
+        })
+      : slideIds
+
+    if (filteredIds.length === 0) {
+      if (import.meta.env.DEV) console.log('[ThumbnailQueue] 所有页面已有缩略图，跳过')
+      return taskId
+    }
+
     try {
       const response = await axios.post('/api/thumbnail-tasks', {
         documentId,
-        slideIds,
+        slideIds: filteredIds,
         taskId
       })
 
@@ -47,27 +74,23 @@ export function useThumbnailQueue(options: ThumbnailQueueOptions = {}) {
         throw new Error(response.message || '创建任务失败')
       }
 
-      // 2. 建立WebSocket连接
       connectWebSocket(taskId)
 
-      // 3. 显示进度提示（模态框或迷你进度条）
-      currentTask.value = {
+      progressStore.setTask({
         taskId,
         documentId,
-        slideIds,
+        slideIds: filteredIds,
         status: 'processing',
-        progress: { total: slideIds.length, completed: 0, failed: 0 }
-      }
+        progress: { total: filteredIds.length, completed: 0, failed: 0 }
+      })
 
-      // 根据参数决定显示方式
       if (showModal) {
-        showProgressModal.value = true
+        progressStore.setShowProgressModal(true)
       } else {
-        showMiniProgress.value = true
+        progressStore.setShowMiniProgress(true)
       }
 
-      // 4. 开始前端生成并上传
-      await processSlides(taskId, documentId, slideIds)
+      await processSlides(taskId, documentId, filteredIds)
 
       return taskId
     } catch (error: any) {
@@ -77,17 +100,74 @@ export function useThumbnailQueue(options: ThumbnailQueueOptions = {}) {
   }
 
   /**
-   * 处理slides生成
+   * 处理slides生成（按并发数分批）
    */
   async function processSlides(taskId: string, documentId: string, slideIds: string[]) {
-    const concurrency = 5 // 每批5个并发
-
     for (let i = 0; i < slideIds.length; i += concurrency) {
       const chunk = slideIds.slice(i, i + concurrency)
       await Promise.all(chunk.map(slideId =>
         generateAndUploadSlide(taskId, documentId, slideId)
       ))
     }
+  }
+
+  /**
+   * 离屏渲染：把 slide 数据挂到屏幕外容器截图
+   * position:fixed + left:-9999px 保证元素有完整布局但用户看不到
+   */
+  async function renderSlideOffscreen(slide: Slide, viewportRatio: number): Promise<HTMLElement> {
+    return new Promise((resolve) => {
+      const WIDTH = 1000
+      const HEIGHT = Math.round(WIDTH * viewportRatio)
+
+      const container = document.createElement('div')
+      container.style.cssText = `
+        position: fixed;
+        left: -9999px;
+        top: 0;
+        width: ${WIDTH}px;
+        height: ${HEIGHT}px;
+        overflow: hidden;
+        pointer-events: none;
+        z-index: -1;
+      `
+      document.body.appendChild(container)
+
+      // 用 pinia 实例共享 store 数据给离屏组件
+      const pinia = createPinia()
+
+      const OffscreenComp = defineComponent({
+        setup() {
+          return () => h(ThumbnailSlide, {
+            slide,
+            size: WIDTH,
+            visible: true,
+          })
+        }
+      })
+
+      const app = createApp(OffscreenComp)
+      app.use(pinia)
+
+      // 同步主 store 数据到离屏 pinia（viewportRatio/viewportSize/theme）
+      const offscreenSlidesStore = useSlidesStore(pinia)
+      offscreenSlidesStore.$patch({
+        viewportRatio: slidesStore.viewportRatio,
+        viewportSize: slidesStore.viewportSize,
+        theme: slidesStore.theme,
+      })
+
+      app.mount(container)
+
+      // 等待一帧确保 DOM 渲染完毕
+      requestAnimationFrame(() => {
+        const el = container.querySelector('[data-slide-id]') as HTMLElement
+        resolve(el || container)
+        // cleanup 由调用方负责，传回 container 引用
+        ;(el || container).__offscreen_container__ = container
+        ;(el || container).__offscreen_app__ = app
+      })
+    })
   }
 
   /**
@@ -98,28 +178,37 @@ export function useThumbnailQueue(options: ThumbnailQueueOptions = {}) {
     documentId: string,
     slideId: string
   ): Promise<{ success: boolean; slideId: string }> {
-    try {
-      // 查找slide元素
-      const element = findSlideElement(slideId)
+    let container: HTMLElement | null = null
+    let app: ReturnType<typeof createApp> | null = null
 
-      if (!element) {
-        console.warn(`[ThumbnailQueue] 找不到slide元素: ${slideId}`)
+    try {
+      const slide = slidesStore.slides.find(s => s.id === slideId)
+      if (!slide) {
+        console.warn(`[ThumbnailQueue] 找不到 slide 数据: ${slideId}`)
+        updateProgress(false)
         return { success: false, slideId }
       }
 
-      // 生成dataURL
+      // 优先复用已在 DOM 中的元素（如虚拟列表刚好渲染了该页）
+      let element = document.querySelector(`[data-slide-id="${slideId}"]`) as HTMLElement | null
+
+      if (!element) {
+        // DOM 中不存在，离屏渲染
+        element = await renderSlideOffscreen(slide, slidesStore.viewportRatio)
+        container = (element as any).__offscreen_container__ || null
+        app = (element as any).__offscreen_app__ || null
+      }
+
       const dataUrl = await toJpeg(element, {
         quality: 0.8,
         canvasWidth: 800,
-        canvasHeight: 450,
+        canvasHeight: Math.round(800 * slidesStore.viewportRatio),
         fontEmbedCSS: '',
-        pixelRatio: 1
+        pixelRatio: 1,
       })
 
-      // 将dataURL转换为Blob
       const blob = await fetch(dataUrl).then(res => res.blob())
 
-      // 上传到后端
       const formData = new FormData()
       formData.append('file', blob, `${slideId}.jpg`)
       formData.append('taskId', taskId)
@@ -130,41 +219,41 @@ export function useThumbnailQueue(options: ThumbnailQueueOptions = {}) {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
 
-      // 更新进度
       updateProgress(true)
-
       return { success: true, slideId }
     } catch (error: any) {
       console.error(`[ThumbnailQueue] 生成失败: ${slideId}`, error)
-
-      // 更新进度
       updateProgress(false)
-
       return { success: false, slideId }
+    } finally {
+      // 销毁离屏容器，释放内存
+      if (app) app.unmount()
+      if (container && container.parentNode) container.parentNode.removeChild(container)
     }
   }
 
   /**
-   * 更新本地进度（前端生成时使用）
+   * 更新本地进度
    */
   function updateProgress(success: boolean) {
-    if (!currentTask.value) return
+    const task = progressStore.currentTask
+    if (!task) return
 
-    if (success) {
-      currentTask.value.progress.completed++
-    } else {
-      currentTask.value.progress.failed++
+    const updated = {
+      ...task,
+      progress: { ...task.progress }
     }
+    if (success) updated.progress.completed++
+    else updated.progress.failed++
 
-    // 触发进度回调
     if (options.onProgress) {
-      options.onProgress(currentTask.value.progress)
+      options.onProgress(updated.progress)
     }
 
-    // 检查是否全部完成
-    const { total, completed, failed } = currentTask.value.progress
+    const { total, completed, failed } = updated.progress
     if (completed + failed >= total) {
-      currentTask.value.status = failed > 0 ? 'failed' : 'completed'
+      updated.status = failed > 0 ? 'failed' : 'completed'
+      progressStore.setTask(updated)
 
       if (failed === 0 && options.onCompleted) {
         options.onCompleted()
@@ -172,104 +261,60 @@ export function useThumbnailQueue(options: ThumbnailQueueOptions = {}) {
         options.onError(`${failed} 个缩略图生成失败`)
       }
 
-      setTimeout(() => {
-        closeTask()
-      }, 2000)
+      setTimeout(() => closeTask(), 2000)
+    } else {
+      progressStore.setTask(updated)
     }
-  }
-
-  /**
-   * 查找slide元素
-   * 复用现有的查找逻辑
-   */
-  function findSlideElement(slideId: string): HTMLElement | null {
-    // 策略1: 通过data-slide-id属性查找
-    let element = document.querySelector(`[data-slide-id="${slideId}"]`) as HTMLElement
-
-    if (element) return element
-
-    // 策略2: 在缩略图列表中查找
-    element = document.querySelector(`.thumbnail-list [data-slide-id="${slideId}"]`) as HTMLElement
-
-    if (element) return element
-
-    // 策略3: 遍历所有.thumbnail-slide元素
-    const thumbnailSlides = document.querySelectorAll('.thumbnail-slide')
-    for (const slide of thumbnailSlides) {
-      if (slide.getAttribute('data-slide-id') === slideId) {
-        return slide as HTMLElement
-      }
-    }
-
-    console.warn(`[ThumbnailQueue] 未找到slide元素: ${slideId}`)
-    return null
   }
 
   /**
    * 连接WebSocket
    */
   function connectWebSocket(taskId: string) {
-    // 开发环境下，WebSocket 通过 Vite 代理到后端
-    // 生产环境下，使用当前 host
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
     const host = location.host
     const wsUrl = `${protocol}//${host}/ws/thumbnail-progress?taskId=${taskId}`
 
     if (import.meta.env.DEV) console.log(`[WebSocket] 连接地址: ${wsUrl}`)
-    ws.value = new WebSocket(wsUrl)
+    ws = new WebSocket(wsUrl)
 
-    ws.value.onopen = () => {
+    ws.onopen = () => {
       if (import.meta.env.DEV) console.log(`[WebSocket] 已连接: ${taskId}`)
     }
 
-    ws.value.onmessage = (event) => {
+    ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data)
-
-        if (currentTask.value) {
-          currentTask.value.progress = {
-            total: data.total || currentTask.value.progress.total,
-            completed: data.completed || 0,
-            failed: data.failed || 0
+        const task = progressStore.currentTask
+        if (task) {
+          const updated = {
+            ...task,
+            progress: {
+              total: data.total || task.progress.total,
+              completed: data.completed || 0,
+              failed: data.failed || 0,
+            },
+            status: data.status as QueueTask['status'],
           }
-          currentTask.value.status = data.status
+          progressStore.setTask(updated)
 
-          // 触发进度回调
-          if (options.onProgress) {
-            options.onProgress(currentTask.value.progress)
-          }
+          if (options.onProgress) options.onProgress(updated.progress)
 
-          // 完成后关闭连接
           if (data.status === 'completed') {
-            if (options.onCompleted) {
-              options.onCompleted()
-            }
-
-            // 迷你进度条完成后自动隐藏（1秒），模态框需要用户手动关闭（2秒后可关闭）
-            const autoCloseDelay = showMiniProgress.value ? 1000 : 2000
+            if (options.onCompleted) options.onCompleted()
+            const autoCloseDelay = progressStore.showMiniProgress ? 1000 : 2000
             setTimeout(() => {
-              if (showMiniProgress.value) {
-                // 迷你进度条自动完全关闭
+              if (progressStore.showMiniProgress) {
                 closeTask()
               } else {
-                // 模态框只关闭 WebSocket，保留显示让用户手动关闭
-                if (ws.value) {
-                  ws.value.close()
-                  ws.value = null
-                }
+                if (ws) { ws.close(); ws = null }
               }
             }, autoCloseDelay)
           }
 
-          // 失败处理
           if (data.status === 'failed') {
-            if (options.onError) {
-              options.onError(data.error || '生成失败')
-            }
-
-            setTimeout(() => {
-              closeTask()
-            }, 3000)
+            if (options.onError) options.onError(data.error || '生成失败')
+            setTimeout(() => closeTask(), 3000)
           }
         }
       } catch (error) {
@@ -277,75 +322,55 @@ export function useThumbnailQueue(options: ThumbnailQueueOptions = {}) {
       }
     }
 
-    ws.value.onerror = (error) => {
-      console.error('[WebSocket] 连接错误:', error)
-    }
-
-    ws.value.onclose = () => {
-      if (import.meta.env.DEV) console.log('[WebSocket] 连接关闭')
-    }
+    ws.onerror = (error) => console.error('[WebSocket] 连接错误:', error)
+    ws.onclose = () => { if (import.meta.env.DEV) console.log('[WebSocket] 连接关闭') }
   }
 
   /**
    * 关闭任务
    */
   function closeTask() {
-    if (ws.value) {
-      ws.value.close()
-      ws.value = null
-    }
-
-    showProgressModal.value = false
-    showMiniProgress.value = false
-    currentTask.value = null
+    if (ws) { ws.close(); ws = null }
+    progressStore.clearTask()
   }
 
   /**
-   * 最小化进度条(切换到mini进度条)
+   * 最小化进度条
    */
   function minimizeProgress() {
-    showProgressModal.value = false
-    showMiniProgress.value = true
+    progressStore.setShowMiniProgress(true)
   }
 
   /**
-   * 展开进度条(切换到模态框)
+   * 展开进度条
    */
   function expandProgress() {
-    showProgressModal.value = true
-    showMiniProgress.value = false
+    progressStore.setShowProgressModal(true)
   }
 
   /**
    * 计算进度百分比
    */
   function progressPercentage(): number {
-    if (!currentTask.value) return 0
-
-    const { total, completed } = currentTask.value.progress
+    const task = progressStore.currentTask
+    if (!task) return 0
+    const { total, completed } = task.progress
     return total > 0 ? Math.floor((completed / total) * 100) : 0
   }
 
-  // 清理
-  onUnmounted(() => {
-    closeTask()
-  })
+  onUnmounted(() => closeTask())
 
   return {
-    // 状态
-    currentTask,
-    showProgressModal,
-    showMiniProgress,
+    // 状态（从 store 读取，全局共享）
+    currentTask: progressStore,
+    showProgressModal: progressStore,
+    showMiniProgress: progressStore,
 
     // 方法
     createTask,
     closeTask,
     minimizeProgress,
     expandProgress,
-
-    // 工具方法
     progressPercentage
   }
 }
-
-export default useThumbnailQueue

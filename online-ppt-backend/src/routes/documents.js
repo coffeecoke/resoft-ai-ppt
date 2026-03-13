@@ -472,6 +472,98 @@ router.post('/:id/duplicate', async (req, res) => {
   }
 })
 
+// 增量保存：只更新指定 slideId 的页面，不重写整个文档
+// 前端在编辑结束后调用，只传变更的页
+router.patch('/:id/slides', async (req, res) => {  try {
+    const { id } = req.params
+    const { slides } = req.body || {}
+
+    if (!Array.isArray(slides) || slides.length === 0) {
+      return res.status(400).json({ success: false, error: '缺少 slides 数据或格式错误' })
+    }
+
+    // 校验每一项必须有 id 字段
+    if (slides.some(s => !s.id)) {
+      return res.status(400).json({ success: false, error: 'slides 每一项必须包含 id 字段' })
+    }
+
+    await documentService.updateSlides(id, slides)
+
+    console.log(`[文档] 增量更新 ${slides.length} 页: ${id} [${slides.map(s => s.id).join(', ')}]`)
+
+    res.json({
+      success: true,
+      data: { updatedSlideIds: slides.map(s => s.id), updatedAt: new Date().toISOString() },
+    })
+  } catch (error) {
+    console.error('[文档] 增量保存失败:', error)
+    res.status(500).json({ success: false, error: error.message || '增量保存失败' })
+  }
+})
+
+// 插入页面（按 index 位置，立即持久化）
+router.post('/:id/slides/insert', async (req, res) => {
+  try {
+    const { id } = req.params
+    const { slide, index } = req.body || {}
+
+    if (!slide || !slide.id) {
+      return res.status(400).json({ success: false, error: '缺少 slide 数据或 slide.id' })
+    }
+    if (typeof index !== 'number' || index < 0) {
+      return res.status(400).json({ success: false, error: 'index 必须为非负整数' })
+    }
+
+    await documentService.insertSlide(id, slide, index)
+    console.log(`[文档] 插入页面 index=${index} slideId=${slide.id}: ${id}`)
+
+    res.json({ success: true, data: { slideId: slide.id, index } })
+  } catch (error) {
+    console.error('[文档] 插入页面失败:', error)
+    res.status(500).json({ success: false, error: error.message || '插入页面失败' })
+  }
+})
+
+// 删除页面（立即持久化）
+router.delete('/:id/slides', async (req, res) => {
+  try {
+    const { id } = req.params
+    const { slideIds } = req.body || {}
+
+    if (!Array.isArray(slideIds) || slideIds.length === 0) {
+      return res.status(400).json({ success: false, error: '缺少 slideIds 数组' })
+    }
+
+    await documentService.deleteSlide(id, slideIds)
+    console.log(`[文档] 删除页面 [${slideIds.join(', ')}]: ${id}`)
+
+    res.json({ success: true, data: { deletedSlideIds: slideIds } })
+  } catch (error) {
+    console.error('[文档] 删除页面失败:', error)
+    res.status(500).json({ success: false, error: error.message || '删除页面失败' })
+  }
+})
+
+// 重新排序页面（立即持久化）
+router.patch('/:id/slides/reorder', async (req, res) => {
+  try {
+    const { id } = req.params
+    const { slideIds } = req.body || {}
+
+    if (!Array.isArray(slideIds) || slideIds.length === 0) {
+      return res.status(400).json({ success: false, error: '缺少 slideIds 数组' })
+    }
+
+    await documentService.reorderSlides(id, slideIds)
+    console.log(`[文档] 重新排序 ${slideIds.length} 页: ${id}`)
+
+    res.json({ success: true, data: { slideIds } })
+  } catch (error) {
+    console.error('[文档] 重新排序失败:', error)
+    res.status(500).json({ success: false, error: error.message || '重新排序失败' })
+  }
+})
+
 // 重命名文档
 // 修改文档基础信息（原重命名接口）
 router.patch('/:id/metadata', async (req, res) => {

@@ -1,13 +1,12 @@
 import { ref, computed, watch, onUnmounted } from 'vue'
-import { throttle } from 'lodash'
 import { useRoute } from 'vue-router'
-import { toJpeg } from 'html-to-image'
-import { useSlidesStore } from '@/store'
+import { useSlidesStore, useSnapshotStore, useThumbnailProgressStore } from '@/store'
 import axios from '@/services/config'
 import { SERVER_URL } from '@/services'
-import { getDocument } from '@/services/documentService'
+import { getDocument, patchDocumentSlides } from '@/services/documentService'
 import useSlideChangeTracker from './useSlideChangeTracker'
-import useThumbnailQueue from './useThumbnailQueue'
+import { useThumbnailQueue } from './useThumbnailQueue'
+import { captureSlideToJpeg } from './useOffscreenCapture'
 
 export type EditMode = 'template' | 'document' | 'normal'
 
@@ -31,6 +30,10 @@ export interface EditorData {
 export function useEditorSave() {
   const route = useRoute()
   const slidesStore = useSlidesStore()
+  const snapshotStore = useSnapshotStore()
+
+  // 待保存的 slideId 集合（增量感知：只记录真实被编辑过的页）
+  const pendingSlideIds = new Set<string>()
 
   // 识别编辑模式
   const editMode = computed<EditMode>(() => {
@@ -54,14 +57,7 @@ export function useEditorSave() {
   } = useSlideChangeTracker()
 
   // 缩略图队列生成器
-  const {
-    createTask,
-    currentTask,
-    showProgressModal,
-    showMiniProgress,
-    minimizeProgress,
-    expandProgress,
-  } = useThumbnailQueue({
+  const { createTask } = useThumbnailQueue({
     onProgress: (progress) => {
       if (import.meta.env.DEV) console.log('[useEditorSave] 缩略图生成进度:', progress)
     },
@@ -73,9 +69,16 @@ export function useEditorSave() {
     }
   })
 
-  // 生成状态(兼容旧代码)
-  const generatingThumbnails = ref(false)
-  const thumbnailProgress = ref({ current: 0, total: 0 })
+  // 进度条 UI 状态从 store 读取（全局单例，避免多实例重复注册副作用）
+  const thumbnailProgressStore = useThumbnailProgressStore()
+  const showProgressModal = computed(() => thumbnailProgressStore.showProgressModal)
+  const showMiniProgress = computed(() => thumbnailProgressStore.showMiniProgress)
+  const currentTask = computed(() => thumbnailProgressStore.currentTask)
+  const minimizeProgress = () => thumbnailProgressStore.setShowMiniProgress(true)
+  const expandProgress = () => thumbnailProgressStore.setShowProgressModal(true)
+
+  // 是否正在生成缩略图（来自 store）
+  const generatingThumbnails = computed(() => thumbnailProgressStore.currentTask !== null)
 
   /**
    * 判断文档是否已发布
@@ -100,31 +103,19 @@ export function useEditorSave() {
 
   /**
    * 异步生成缩略图(使用新队列系统)
-   * @param documentId - 文档ID
-   * @param slides - 要生成的slides数组
-   * @param showModal - 是否显示模态框（默认false，自动保存时使用迷你进度条）
    */
   const generateThumbnailsAsync = async (documentId: string, slides: any[], showModal = false) => {
     if (!slides || slides.length === 0) {
       if (import.meta.env.DEV) console.log('[useEditorSave] 没有需要生成的缩略图')
       return
     }
-
     try {
-      generatingThumbnails.value = true
-      thumbnailProgress.value = { current: 0, total: slides.length }
-
       const slideIds = slides.map(s => s.id)
-      if (import.meta.env.DEV) console.log(`[useEditorSave] 启动缩略图生成任务: ${slideIds.length} 个slides (${showModal ? '模态框' : '迷你进度条'})`)
-
+      if (import.meta.env.DEV) console.log(`[useEditorSave] 启动缩略图生成任务: ${slideIds.length} 个slides`)
       await createTask(documentId, slideIds, showModal)
-
-      if (import.meta.env.DEV) console.log('[useEditorSave] 缩略图生成任务已创建')
     } catch (error: any) {
       console.error('[useEditorSave] 创建缩略图生成任务失败:', error)
       throw error
-    } finally {
-      generatingThumbnails.value = false
     }
   }
 
@@ -137,20 +128,15 @@ export function useEditorSave() {
     if (slides.length === 0) return
 
     const firstSlide = slides[0]
-    const element = document.querySelector(`[data-slide-id="${firstSlide.id}"]`) as HTMLElement | null
-    if (!element) {
-      if (import.meta.env.DEV) console.warn('[useEditorSave] 找不到第一页 DOM 元素，跳过模板封面生成')
-      return
-    }
 
     try {
-      const dataUrl = await toJpeg(element, {
-        quality: 0.8,
-        canvasWidth: 800,
-        canvasHeight: Math.round(800 * slidesStore.viewportRatio),
-        fontEmbedCSS: '',
-        pixelRatio: 1,
-      })
+      const dataUrl = await captureSlideToJpeg(
+        firstSlide,
+        slidesStore.viewportRatio,
+        slidesStore.viewportSize,
+        slidesStore.theme,
+        { width: 800 }
+      )
 
       await axios.post(`${SERVER_URL}/templates/${templateId}/cover`, {
         imageData: dataUrl,
@@ -202,25 +188,36 @@ export function useEditorSave() {
     saving.value = true
     try {
       const data = getEditorData()
-      
-      let url = ''
-      let requestBody: any = {
-        autoSave,
-      }
 
-      if (mode === 'template') {
-        url = `${SERVER_URL}/templates/${id}`
-        // 兼容后端接口：如果后端支持data字段，优先使用；否则使用templateData
-        requestBody.templateData = data
-        requestBody.data = data
-      } else if (mode === 'document') {
-        url = `${SERVER_URL}/documents/${id}`
-        // 兼容后端接口：如果后端支持data字段，优先使用；否则使用documentData
-        requestBody.documentData = data
-        requestBody.data = data
-      }
+      let resp: any
 
-      const resp = await axios.put(url, requestBody)
+      // 增量保存：文档模式 + 只有部分页面变更时，只传变更的页
+      if (mode === 'document' && pendingSlideIds.size > 0 && pendingSlideIds.size < data.slides.length) {
+        const changedSlides = data.slides.filter(s => pendingSlideIds.has(s.id))
+        if (import.meta.env.DEV) {
+          console.log(`[useEditorSave] 增量保存：${changedSlides.length}/${data.slides.length} 页`)
+        }
+        resp = await patchDocumentSlides(id, changedSlides)
+      } else {
+        // 全量保存：模板模式、首次保存（pendingSlideIds 为空）、或全部页面都变更
+        let url = ''
+        const requestBody: any = { autoSave }
+
+        if (mode === 'template') {
+          url = `${SERVER_URL}/templates/${id}`
+          requestBody.templateData = data
+          requestBody.data = data
+        } else {
+          url = `${SERVER_URL}/documents/${id}`
+          requestBody.documentData = data
+          requestBody.data = data
+        }
+
+        if (import.meta.env.DEV) {
+          console.log(`[useEditorSave] 全量保存：${data.slides.length} 页`)
+        }
+        resp = await axios.put(url, requestBody)
+      }
 
       if (!resp?.success) {
         throw new Error(resp?.error || '保存失败')
@@ -233,34 +230,42 @@ export function useEditorSave() {
       lastSaveTime.value = Date.now()
       hasUnsavedChanges.value = false
 
-      if (generateCover && id && mode === 'document') {
+      // 文档模式：合并"封面生成"和"已发布页缩略图生成"为一次调用，避免并发重复上传
+      if (mode === 'document' && id && !generatingThumbnails.value) {
         const slides = slidesStore.slides
         if (slides.length > 0) {
-          const firstSlide = slides[0]
           const changedSlides = getChangedSlides()
+          const firstSlide = slides[0]
 
-          // 智能判断生成条件：
-          // 1. 第一页没有缩略图（首次生成）
-          // 2. 第一页在变更列表中（明确检测到变更）
-          // 3. 有未保存的变更（用户修改了内容，即使变更追踪没检测到）
-          const noThumbnail = !firstSlide.thumbnail
-          const firstSlideChanged = changedSlides.some(s => s.id === firstSlide.id)
-          const hasChanges = hadUnsavedChanges
+          // 收集需要生成缩略图的页面集合（用 Map 去重）
+          const toGenerateMap = new Map<string, any>()
 
-          const needGenerate = noThumbnail || firstSlideChanged || hasChanges
-
-          if (needGenerate) {
-            // 检查是否已有生成任务在进行中（避免与发布时的生成任务冲突）
-            if (generatingThumbnails.value) {
-              if (import.meta.env.DEV) console.log('[useEditorSave] 已有缩略图生成任务在进行中，跳过保存时的封面生成')
-            } else {
-              const reason = noThumbnail ? '无缩略图' : firstSlideChanged ? '检测到变更' : '有未保存变更'
-              if (import.meta.env.DEV) console.log(`[useEditorSave] 手动保存文档，生成第一页缩略图作为封面 (原因: ${reason})`)
-              // 异步生成，不阻塞保存流程，使用迷你进度条
-              generateThumbnailsAsync(id, [firstSlide], false)
+          // 条件1：generateCover=true 时，封面页（第一页）需要生成
+          // 手动保存（!autoSave）时强制生成封面，不做变更判断
+          // 自动保存时仍按旧逻辑：无缩略图 / 第一页有变更 / 有未保存变更 才生成
+          if (generateCover) {
+            const isManualSave = !autoSave
+            const noThumbnail = !firstSlide.thumbnail
+            const firstSlideChanged = changedSlides.some(s => s.id === firstSlide.id)
+            if (isManualSave || noThumbnail || firstSlideChanged || hadUnsavedChanges) {
+              toGenerateMap.set(firstSlide.id, firstSlide)
             }
-          } else {
-            if (import.meta.env.DEV) console.log('[useEditorSave] 第一页未变更且已有缩略图，跳过封面生成')
+          }
+
+          // 条件2：已发布文档，所有变更页都需要生成缩略图
+          const published = await isPublished()
+          if (published) {
+            for (const s of changedSlides) {
+              toGenerateMap.set(s.id, s)
+            }
+          }
+
+          const toGenerate = Array.from(toGenerateMap.values())
+          if (toGenerate.length > 0) {
+            if (import.meta.env.DEV) {
+              console.log(`[useEditorSave] 合并缩略图生成：${toGenerate.length} 页 (封面=${generateCover}, 已发布=${published})`)
+            }
+            generateThumbnailsAsync(id, toGenerate, false)
           }
         }
       }
@@ -271,15 +276,15 @@ export function useEditorSave() {
         if (slides.length > 0) {
           const firstSlide = slides[0]
           const changedSlides = getChangedSlides()
+          const isManualSave = !autoSave
           const noThumbnail = !firstSlide.thumbnail
           const firstSlideChanged = changedSlides.some(s => s.id === firstSlide.id)
-          const needGenerate = noThumbnail || firstSlideChanged || hadUnsavedChanges
+          // 手动保存时强制生成封面；自动保存时仍按变更判断
+          const needGenerate = isManualSave || noThumbnail || firstSlideChanged || hadUnsavedChanges
 
           if (needGenerate) {
-            const reason = noThumbnail ? '无缩略图' : firstSlideChanged ? '检测到变更' : '有未保存变更'
+            const reason = isManualSave ? '手动保存' : noThumbnail ? '无缩略图' : firstSlideChanged ? '检测到变更' : '有未保存变更'
             if (import.meta.env.DEV) console.log(`[useEditorSave] 手动保存模板，生成封面 (原因: ${reason})`)
-            // 延迟 100ms 确保 DOM 已更新，异步不阻塞保存
-            // 注意：用闭包捕获 id，100ms 内若切换了模板需再次校验
             setTimeout(() => {
               if (slidesStore.loadedId !== id) {
                 if (import.meta.env.DEV) console.warn('[useEditorSave] 封面生成时 loadedId 已变更，跳过')
@@ -295,19 +300,10 @@ export function useEditorSave() {
         }
       }
 
-      // 【新增】已发布文档：保存时生成变更页面的缩略图
-      if (mode === 'document' && await isPublished()) {
-        const changedSlides = getChangedSlides()
-        if (changedSlides.length > 0 && !generatingThumbnails.value) {
-          if (import.meta.env.DEV) console.log(`[useEditorSave] 已发布文档，保存时生成 ${changedSlides.length} 个变更页面的缩略图`)
-          // 使用迷你进度条，不影响编辑体验
-          generateThumbnailsAsync(id, changedSlides, false)
-        }
-      }
-
       // 保存成功后，清空变更记录并更新快照
       clearChangedSlides()
-      createSnapshot()  // 【修复】更新快照，以便下次能检测到新的变更
+      createSnapshot()  // 更新快照，以便下次能检测到新的变更
+      pendingSlideIds.clear()  // 清空增量变更记录
       
       return resp
     } catch (error) {
@@ -367,23 +363,24 @@ export function useEditorSave() {
     }
   }
 
-  // 监听 slides 变化，自动标记为有变更（节流避免频繁触发导致内存压力）
-  const throttledMarkAsChanged = throttle(() => {
-    markAsChanged()
-  }, 2000, { leading: true, trailing: true })
+  // 监听快照指针变化（addHistorySnapshot 完成 = 真实编辑操作完成的信号）
+  // 替代原来的 watch slides deep，精准感知编辑操作，不会被纯 UI 状态变化误触发
   watch(
-    () => slidesStore.slides,
+    () => snapshotStore.snapshotCursor,
     () => {
-      throttledMarkAsChanged()
-    },
-    { deep: true }
+      if (editMode.value === 'normal') return
+      // 收集本次编辑涉及的 slideId（来自 snapshotStore.lastEditedSlideId）
+      const editedId = snapshotStore.lastEditedSlideId
+      if (editedId) pendingSlideIds.add(editedId)
+      markAsChanged()
+    }
   )
 
   // 清理
   onUnmounted(() => {
-    throttledMarkAsChanged.cancel()
     stopAutoSave()
     stopTracking()
+    pendingSlideIds.clear()
   })
 
   /**
@@ -404,19 +401,14 @@ export function useEditorSave() {
     let successCount = 0
 
     for (const slide of typedSlides) {
-      const element = document.querySelector(`[data-slide-id="${slide.id}"]`) as HTMLElement | null
-      if (!element) {
-        console.warn(`[useEditorSave] 找不到幻灯片元素: ${slide.id}，跳过`)
-        continue
-      }
       try {
-        const dataUrl = await toJpeg(element, {
-          quality: 0.8,
-          canvasWidth: 800,
-          canvasHeight: Math.round(800 * slidesStore.viewportRatio),
-          fontEmbedCSS: '',
-          pixelRatio: 1,
-        })
+        const dataUrl = await captureSlideToJpeg(
+          slide,
+          slidesStore.viewportRatio,
+          slidesStore.viewportSize,
+          slidesStore.theme,
+          { width: 800 }
+        )
         await axios.post(`${SERVER_URL}/templates/${id}/thumbnails/${slide.id}`, {
           imageData: dataUrl,
         })
@@ -478,10 +470,8 @@ export function useEditorSave() {
     save,
     markAsChanged,
     generatingThumbnails,
-    thumbnailProgress,
     generateThumbnailsForPublish,
     generateTemplateThumbnailsForPublish,
-    // 新增: 进度UI相关
     currentTask,
     showProgressModal,
     showMiniProgress,

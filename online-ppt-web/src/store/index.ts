@@ -4,6 +4,7 @@ import { useSnapshotStore } from './snapshot'
 import { useKeyboardStore } from './keyboard'
 import { useScreenStore } from './screen'
 import { useAuthStore } from './auth'
+import { useThumbnailProgressStore } from './thumbnailProgress'
 
 export {
   useMainStore,
@@ -12,4 +13,5 @@ export {
   useKeyboardStore,
   useScreenStore,
   useAuthStore,
+  useThumbnailProgressStore,
 }

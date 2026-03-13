@@ -507,12 +507,8 @@ router.post('/upload-from-queue', upload.single('file'), async (req, res) => {
     // 找到对应的 slide
     const slide = doc.slides?.find(s => s.id === slideId)
     if (!slide) {
-      console.error(`[缩略图队列] 幻灯片不存在: ${slideId}`)
-
-      // 通知队列上传失败
-      thumbnailQueue.markUploadComplete(taskId, slideId, { success: false, error: '幻灯片不存在' })
-
-      return res.status(404).json({ success: false, error: '幻灯片不存在' })
+      console.warn(`[缩略图队列] 幻灯片不存在（可能保存尚未完成）: ${slideId}，继续写入缩略图文件`)
+      // 不中断，缩略图文件已写入，等后续保存完成后 thumbnail 字段会在下次同步时更新
     }
 
     // 更新文档 JSON 中的 thumbnail 字段（保留兼容性）
@@ -535,7 +531,7 @@ router.post('/upload-from-queue', upload.single('file'), async (req, res) => {
 
     // 保存到数据库
     const thumbnailId = `thumb_${documentId}_${slideId}`
-    const slideIndex = doc.slides.findIndex(s => s.id === slideId)
+    const slideIndex = doc.slides?.findIndex(s => s.id === slideId) ?? -1
 
     console.log(`[缩略图队列] 准备写入数据库: thumbnailId=${thumbnailId}, slideIndex=${slideIndex}`)
 
@@ -550,9 +546,9 @@ router.post('/upload-from-queue', upload.single('file'), async (req, res) => {
       size: file.size,
       format: file.mimetype.split('/')[1],
       metadata: {
-        hasText: slide.elements?.some(el => el.type === 'text') || false,
-        hasImage: slide.elements?.some(el => el.type === 'image') || false,
-        elementCount: slide.elements?.length || 0
+        hasText: slide?.elements?.some(el => el.type === 'text') || false,
+        hasImage: slide?.elements?.some(el => el.type === 'image') || false,
+        elementCount: slide?.elements?.length || 0
       }
     })
 

@@ -3,9 +3,8 @@
   <template v-if="isAdminRoute">
     <RouterView />
   </template>
-  <!-- 编辑器/演示/移动端页面需要slides数据 -->
-  <!-- 使用 keep-alive 缓存编辑器组件，避免退出演示时重新挂载导致网络请求 -->
-  <template v-else-if="slides.length">
+  <!-- 文档模式等 useEditorDataLoader 加载完毕；模板/默认模式等 slides 有数据 -->
+  <template v-else-if="slidesStore.editorDataReady || slides.length">
     <KeepAlive :include="['Editor']">
       <RouterView />
     </KeepAlive>
@@ -22,6 +21,7 @@ import { LOCALSTORAGE_KEY_DISCARDED_DB } from '@/configs/storage'
 import { deleteDiscardedDB } from '@/utils/database'
 import { isPC } from '@/utils/common'
 import api, { SERVER_URL, authFetch } from '@/services'
+import { useEditorDataLoader } from '@/hooks/useEditorDataLoader'
 
 import FullscreenSpin from '@/components/FullscreenSpin.vue'
 
@@ -116,50 +116,10 @@ const loadSlidesForRoute = async () => {
       // 失败时继续走默认逻辑
     }
   } else if (documentId) {
-    // 从后端加载指定文档数据
-    try {
-      // 清空 loadedId，防止加载过程中的 race condition
-      slidesStore.setLoadedId(null)
-      const resp = await authFetch(`${SERVER_URL}/documents/${documentId}`)
-      if (resp.ok) {
-        const json = await resp.json()
-        if (json.success && json.data?.documentData) {
-          const { documentData } = json.data
-
-          // 设置文档数据到 store
-          if (documentData.title) {
-            slidesStore.setTitle(documentData.title)
-          }
-          if (documentData.theme) {
-            slidesStore.setTheme(documentData.theme)
-          }
-          if (documentData.width && documentData.height) {
-            slidesStore.setViewportSize(documentData.width)
-            slidesStore.setViewportRatio(documentData.height / documentData.width)
-          }
-          if (documentData.slides && Array.isArray(documentData.slides)) {
-            slidesStore.setSlides(documentData.slides)
-            if (documentData.slides.length > 0) {
-              slidesStore.updateSlideIndex(0)
-            }
-          } else {
-            slidesStore.setSlides([])
-          }
-
-          // 文档模式不打开标注面板
-          // 标记已加载的 documentId
-          loadedDocumentId = documentId
-          slidesStore.setLoadedId(documentId)
-          return
-        }
-        throw new Error('文档数据格式错误')
-      } else {
-        throw new Error('获取文档详情失败')
-      }
-    } catch (error) {
-      console.error('[PPTLayout] 加载文档失败:', error)
-      // 失败时继续走默认逻辑
-    }
+    // 文档数据由 Editor/index.vue 内的 useEditorDataLoader 统一加载（含 metadata）
+    // Layout 不发重复请求，只标记已处理
+    loadedDocumentId = documentId
+    return
   }
 
   // 无 templateId/documentId 或加载失败时：加载默认幻灯片数据
@@ -210,10 +170,16 @@ const handleBeforeUnload = () => {
   localStorage.setItem(LOCALSTORAGE_KEY_DISCARDED_DB, newDiscardedDB)
 }
 
+// 文档模式数据加载（统一在 Layout 层调用，避免子组件挂载前的死锁）
+const { loadEditorData } = useEditorDataLoader()
+
 onMounted(async () => {
   // 管理后台页面不需要初始化slides和IndexedDB
   if (!isAdminRoute.value) {
-    await loadSlidesForRoute()
+    // 先并行跑：loadSlidesForRoute（模板/mock）和 loadEditorData（文档）
+    // documentId 场景：loadSlidesForRoute 会快速 return，loadEditorData 负责加载
+    // templateId 场景：loadSlidesForRoute 负责加载，loadEditorData 快速 return
+    await Promise.all([loadSlidesForRoute(), loadEditorData()])
     await deleteDiscardedDB()
     snapshotStore.initSnapshotDatabase()
     

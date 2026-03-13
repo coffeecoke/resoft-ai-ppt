@@ -29,6 +29,7 @@ export interface SlidesState {
   templates: SlideTemplate[]
   metadata: DocumentMetadata | null
   loadedId: string | null  // 当前 store 里实际加载的文档/模板 ID，用于防止导航切换时的数据错保
+  editorDataReady: boolean // 编辑器数据是否已加载完毕（用于 Layout 的渲染门卫）
 }
 
 export const useSlidesStore = defineStore('slides', {
@@ -60,6 +61,7 @@ export const useSlidesStore = defineStore('slides', {
     templates: [], // 模板
     metadata: null, // 文档元信息
     loadedId: null, // 当前实际加载到 store 的文档/模板 ID
+    editorDataReady: false, // 编辑器数据加载完毕标志
   }),
 
   getters: {
@@ -141,6 +143,10 @@ export const useSlidesStore = defineStore('slides', {
 
     setLoadedId(id: string | null) {
       this.loadedId = id
+    },
+
+    setEditorDataReady(ready: boolean) {
+      this.editorDataReady = ready
     },
 
     addSlide(slide: Slide | Slide[]) {

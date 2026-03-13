@@ -13,6 +13,7 @@ import useHistorySnapshot from '@/hooks/useHistorySnapshot'
 import useAddSlidesOrElements from '@/hooks/useAddSlidesOrElements'
 import { deleteThumbnailsBatch } from '@/services/thumbnailService'
 import { useRoute } from 'vue-router'
+import { insertDocumentSlide, deleteDocumentSlides } from '@/services/documentService'
 
 export default () => {
   const route = useRoute()
@@ -79,6 +80,18 @@ export default () => {
   }
 
   // 创建一页空白页并添加到下一页
+  // 获取当前文档 ID（仅 document 模式有值）
+  const documentId = computed(() => route.query.documentId as string | undefined)
+
+  // 插入页面后立即持久化到后端
+  const persistInsert = (slide: Slide, index: number) => {
+    const docId = documentId.value
+    if (!docId) return
+    insertDocumentSlide(docId, slide, index).catch(err => {
+      console.warn('[useSlideHandler] 插入页面持久化失败:', err)
+    })
+  }
+
   const createSlide = () => {
     const emptySlide: Slide = {
       id: nanoid(10),
@@ -91,6 +104,8 @@ export default () => {
     mainStore.setActiveElementIdList([])
     slidesStore.addSlide(emptySlide)
     addHistorySnapshot()
+    // 立即持久化：新页插在 slideIndex+1
+    persistInsert(emptySlide, slidesStore.slideIndex)
   }
 
   // 根据模板创建新页面
@@ -108,48 +123,37 @@ export default () => {
     mainStore.setActiveElementIdList([])
     slidesStore.addSlide(newSlide)
     addHistorySnapshot()
+    persistInsert(newSlide, slidesStore.slideIndex)
   }
 
   // 将当前页复制一份到下一页
   const copyAndPasteSlide = () => {
     const slide = JSON.parse(JSON.stringify(currentSlide.value))
     addSlidesFromData([slide])
+    // addSlidesFromData 内部会重新生成 id，取最新插入的页面做持久化
+    const newSlide = slidesStore.slides[slidesStore.slideIndex]
+    persistInsert(newSlide, slidesStore.slideIndex)
   }
 
   // 删除当前页，若将删除全部页面，则执行重置幻灯片操作
   const deleteSlide = async (targetSlidesId = selectedSlidesId.value) => {
-    // 获取文档ID（用于删除缩略图）
-    // 文档模式使用 query.documentId，模板模式使用 query.templateId
-    const documentId = (route.query.documentId || route.query.templateId) as string | undefined
+    const docId = documentId.value
 
-    console.log('[删除幻灯片] 开始删除:', {
-      documentId,
-      targetSlidesId,
-      targetSlidesIdLength: targetSlidesId.length
-    })
-
-    // 删除幻灯片缩略图（异步执行，不阻塞删除操作）
-    if (documentId && targetSlidesId.length > 0) {
-      console.log('[删除幻灯片] 调用 deleteThumbnailsBatch API...')
-      deleteThumbnailsBatch(documentId, targetSlidesId).then(result => {
-        if (result.success) {
-          console.log(`[删除幻灯片] 成功删除 ${targetSlidesId.length} 个缩略图`)
-        } else {
-          console.warn('[删除幻灯片] 删除缩略图失败:', result.error)
-        }
-      }).catch(error => {
-        console.warn('[删除幻灯片] 删除缩略图异常:', error)
+    // 删除幻灯片缩略图（异步，不阻塞）
+    if (docId && targetSlidesId.length > 0) {
+      deleteThumbnailsBatch(docId, targetSlidesId).catch(err => {
+        console.warn('[删除幻灯片] 删除缩略图异常:', err)
       })
-    } else {
-      console.log('[删除幻灯片] 跳过删除缩略图:', { documentId, targetSlidesIdLength: targetSlidesId.length })
+      // 立即持久化删除页面
+      deleteDocumentSlides(docId, targetSlidesId).catch(err => {
+        console.warn('[useSlideHandler] 删除页面持久化失败:', err)
+      })
     }
 
-    // 删除幻灯片
     if (slides.value.length === targetSlidesId.length) resetSlides()
     else slidesStore.deleteSlide(targetSlidesId)
 
     mainStore.updateSelectedSlidesIndex([])
-
     addHistorySnapshot()
   }
 

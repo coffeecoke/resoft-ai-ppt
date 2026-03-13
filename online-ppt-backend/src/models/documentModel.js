@@ -225,6 +225,108 @@ export const documentModel = {
     return serializeBigInt(updated)
   },
   
+  /**
+   * 增量更新：只替换指定 slideId 的页面数据，不重写整个 slides 数组
+   * @param {string} id - 文档ID
+   * @param {Array<{id: string, [key: string]: any}>} patchSlides - 需要更新的页面数组（每项必须含 id 字段）
+   */
+  async updateSlides(id, patchSlides) {
+    const doc = await prisma.documents.findUnique({ where: { id } })
+    if (!doc) throw new Error('文档不存在')
+
+    const contentPath = path.join(DATA_DIR, doc.content_file_path)
+    if (!fs.existsSync(contentPath)) throw new Error('文档内容文件不存在')
+
+    const content = JSON.parse(fs.readFileSync(contentPath, 'utf-8'))
+    const patchMap = new Map(patchSlides.map(s => [s.id, s]))
+
+    // 按 slideId 精准替换，保留其余页不变
+    content.slides = content.slides.map(slide =>
+      patchMap.has(slide.id) ? patchMap.get(slide.id) : slide
+    )
+
+    fs.writeFileSync(contentPath, JSON.stringify(content, null, 2))
+
+    const updated = await prisma.documents.update({
+      where: { id },
+      data: {
+        updated_at: new Date(),
+        file_size: BigInt(fs.statSync(contentPath).size),
+      }
+    })
+
+    return serializeBigInt(updated)
+  },
+
+  // 插入页面（按 index 位置插入）
+  async insertSlide(id, slide, index) {
+    const doc = await prisma.documents.findUnique({ where: { id } })
+    if (!doc) throw new Error('文档不存在')
+
+    const contentPath = path.join(DATA_DIR, doc.content_file_path)
+    if (!fs.existsSync(contentPath)) throw new Error('文档内容文件不存在')
+
+    const content = JSON.parse(fs.readFileSync(contentPath, 'utf-8'))
+    const insertAt = Math.max(0, Math.min(index, content.slides.length))
+    content.slides.splice(insertAt, 0, slide)
+
+    fs.writeFileSync(contentPath, JSON.stringify(content, null, 2))
+
+    const updated = await prisma.documents.update({
+      where: { id },
+      data: { updated_at: new Date(), file_size: BigInt(fs.statSync(contentPath).size) }
+    })
+    return serializeBigInt(updated)
+  },
+
+  // 删除指定页面
+  async deleteSlide(id, slideId) {
+    const doc = await prisma.documents.findUnique({ where: { id } })
+    if (!doc) throw new Error('文档不存在')
+
+    const contentPath = path.join(DATA_DIR, doc.content_file_path)
+    if (!fs.existsSync(contentPath)) throw new Error('文档内容文件不存在')
+
+    const content = JSON.parse(fs.readFileSync(contentPath, 'utf-8'))
+    const before = content.slides.length
+    content.slides = content.slides.filter(s => !slideId.includes(s.id))
+
+    if (content.slides.length === before) throw new Error('未找到要删除的页面')
+
+    fs.writeFileSync(contentPath, JSON.stringify(content, null, 2))
+
+    const updated = await prisma.documents.update({
+      where: { id },
+      data: { updated_at: new Date(), file_size: BigInt(fs.statSync(contentPath).size) }
+    })
+    return serializeBigInt(updated)
+  },
+
+  // 重新排序页面
+  async reorderSlides(id, slideIds) {
+    const doc = await prisma.documents.findUnique({ where: { id } })
+    if (!doc) throw new Error('文档不存在')
+
+    const contentPath = path.join(DATA_DIR, doc.content_file_path)
+    if (!fs.existsSync(contentPath)) throw new Error('文档内容文件不存在')
+
+    const content = JSON.parse(fs.readFileSync(contentPath, 'utf-8'))
+    const slideMap = new Map(content.slides.map(s => [s.id, s]))
+
+    // 按新顺序重组，未在 slideIds 中的页面追加到末尾
+    const reordered = slideIds.map(sid => slideMap.get(sid)).filter(Boolean)
+    const remaining = content.slides.filter(s => !slideIds.includes(s.id))
+    content.slides = [...reordered, ...remaining]
+
+    fs.writeFileSync(contentPath, JSON.stringify(content, null, 2))
+
+    const updated = await prisma.documents.update({
+      where: { id },
+      data: { updated_at: new Date(), file_size: BigInt(fs.statSync(contentPath).size) }
+    })
+    return serializeBigInt(updated)
+  },
+
   // 删除文档
   async delete(id) {
     const doc = await prisma.documents.findUnique({ where: { id } })
