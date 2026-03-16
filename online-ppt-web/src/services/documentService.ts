@@ -96,11 +96,11 @@ export interface RenameDocumentParams {
 export async function getDocumentList(options: {
   page?: number
   pageSize?: number
-  status?: 'draft' | 'published' | 'archived'
+  status?: 'draft' | 'published' | 'archived' | ''
   category?: string
   tag?: string
   keyword?: string
-} = {}): Promise<DocumentMetadata[]> {
+} = {}): Promise<{ list: DocumentMetadata[]; total: number; page: number; pageSize: number }> {
   try {
     const params = new URLSearchParams()
     if (options.page) params.append('page', options.page.toString())
@@ -117,7 +117,7 @@ export async function getDocumentList(options: {
       throw new Error(resp?.error || '获取文档列表失败')
     }
 
-    return resp.data.list.map(item => {
+    const list = resp.data.list.map(item => {
       let cover = ''
       if (item.cover && typeof item.cover === 'string') {
         const c = item.cover as string
@@ -145,6 +145,13 @@ export async function getDocumentList(options: {
         name: item.name || '未命名文档',
       } as DocumentMetadata
     })
+
+    return {
+      list,
+      total: resp.data.total ?? list.length,
+      page: resp.data.page ?? 1,
+      pageSize: resp.data.pageSize ?? list.length,
+    }
   } catch (error) {
     console.error('[文档服务] 获取文档列表失败:', error)
     throw error

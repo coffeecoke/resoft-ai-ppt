@@ -497,10 +497,7 @@ router.post('/upload-from-queue', upload.single('file'), async (req, res) => {
     const doc = await documentModel.findById(documentId)
     if (!doc) {
       console.error(`[缩略图队列] 文档不存在: ${documentId}`)
-
-      // 通知队列上传失败
-      thumbnailQueue.markUploadComplete(taskId, slideId, { success: false, error: '文档不存在' })
-
+      thumbnailQueue.reportUpload(taskId, slideId, false)
       return res.status(404).json({ success: false, error: '文档不存在' })
     }
 
@@ -554,12 +551,8 @@ router.post('/upload-from-queue', upload.single('file'), async (req, res) => {
 
     console.log(`[缩略图队列] 数据库写入成功: ${documentId}/${slideId}`)
 
-    // 通知队列上传完成
-    thumbnailQueue.markUploadComplete(taskId, slideId, {
-      success: true,
-      url: thumbnailUrl,
-      slideId
-    })
+    // 通知队列：此张图上传成功，推 WebSocket 进度
+    thumbnailQueue.reportUpload(taskId, slideId, true)
 
     res.json({
       success: true,
@@ -570,13 +563,10 @@ router.post('/upload-from-queue', upload.single('file'), async (req, res) => {
     console.error('[缩略图队列] 上传失败:', error)
     console.error('[缩略图队列] 错误堆栈:', error.stack)
 
-    // 通知队列上传失败
+    // 通知队列：此张图上传失败
     const { taskId, slideId } = req.body
     if (taskId && slideId) {
-      thumbnailQueue.markUploadComplete(taskId, slideId, {
-        success: false,
-        error: error.message
-      })
+      thumbnailQueue.reportUpload(taskId, slideId, false)
     }
 
     res.status(500).json({ success: false, error: '上传失败: ' + error.message })

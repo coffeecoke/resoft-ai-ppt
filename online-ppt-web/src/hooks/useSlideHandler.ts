@@ -14,6 +14,7 @@ import useAddSlidesOrElements from '@/hooks/useAddSlidesOrElements'
 import { deleteThumbnailsBatch } from '@/services/thumbnailService'
 import { useRoute } from 'vue-router'
 import { insertDocumentSlide, deleteDocumentSlides } from '@/services/documentService'
+import { useThumbnailQueue } from '@/hooks/useThumbnailQueue'
 
 export default () => {
   const route = useRoute()
@@ -29,6 +30,7 @@ export default () => {
   const { pasteTextClipboardData } = usePasteTextClipboardData()
   const { addSlidesFromData } = useAddSlidesOrElements()
   const { addHistorySnapshot } = useHistorySnapshot()
+  const { createTask } = useThumbnailQueue()
 
   // 重置幻灯片
   const resetSlides = () => {
@@ -83,13 +85,20 @@ export default () => {
   // 获取当前文档 ID（仅 document 模式有值）
   const documentId = computed(() => route.query.documentId as string | undefined)
 
-  // 插入页面后立即持久化到后端
+  // 插入页面后立即持久化到后端，并触发缩略图生成
   const persistInsert = (slide: Slide, index: number) => {
     const docId = documentId.value
     if (!docId) return
-    insertDocumentSlide(docId, slide, index).catch(err => {
-      console.warn('[useSlideHandler] 插入页面持久化失败:', err)
-    })
+    insertDocumentSlide(docId, slide, index)
+      .then(() => {
+        // 插入成功后立即生成该页缩略图（不管是否已发布，新插入的页没有缩略图）
+        createTask(docId, [slide.id]).catch(err => {
+          console.warn('[useSlideHandler] 新页缩略图生成失败:', err)
+        })
+      })
+      .catch(err => {
+        console.warn('[useSlideHandler] 插入页面持久化失败:', err)
+      })
   }
 
   const createSlide = () => {

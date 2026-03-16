@@ -45,6 +45,8 @@ export function useThumbnailQueue(options: ThumbnailQueueOptions = {}) {
 
   /**
    * 创建生成任务
+   * 策略：先截图 → 再创建后端任务 → 立即上传
+   * 避免后端等待截图时超时（原来先创建任务再截图，截图慢会导致30s超时）
    * @param showModal - 是否显示模态框（默认false，显示迷你进度条）
    */
   async function createTask(documentId: string, slideIds: string[], showModal = false): Promise<string> {
@@ -63,7 +65,22 @@ export function useThumbnailQueue(options: ThumbnailQueueOptions = {}) {
       return taskId
     }
 
+    // 显示进度 UI（截图阶段就开始）
+    progressStore.setTask({
+      taskId,
+      documentId,
+      slideIds: filteredIds,
+      status: 'processing',
+      progress: { total: filteredIds.length, completed: 0, failed: 0 }
+    })
+    if (showModal) {
+      progressStore.setShowProgressModal(true)
+    } else {
+      progressStore.setShowMiniProgress(true)
+    }
+
     try {
+      // 创建后端任务（只登记，不等待）
       const response = await axios.post('/api/thumbnail-tasks', {
         documentId,
         slideIds: filteredIds,
@@ -76,38 +93,32 @@ export function useThumbnailQueue(options: ThumbnailQueueOptions = {}) {
 
       connectWebSocket(taskId)
 
-      progressStore.setTask({
-        taskId,
-        documentId,
-        slideIds: filteredIds,
-        status: 'processing',
-        progress: { total: filteredIds.length, completed: 0, failed: 0 }
-      })
-
-      if (showModal) {
-        progressStore.setShowProgressModal(true)
-      } else {
-        progressStore.setShowMiniProgress(true)
-      }
-
-      await processSlides(taskId, documentId, filteredIds)
+      // 流水线：截完一张立即上传，边截边传，进度均匀增长
+      await captureAndUpload(taskId, documentId, filteredIds)
 
       return taskId
     } catch (error: any) {
-      console.error('[ThumbnailQueue] 创建任务失败:', error)
+      console.error('[ThumbnailQueue] 任务失败:', error)
+      progressStore.clearTask()
       throw error
     }
   }
 
   /**
-   * 处理slides生成（按并发数分批）
+   * 流水线：按并发数分批，每批截图完立即上传，不缓存所有 blob
    */
-  async function processSlides(taskId: string, documentId: string, slideIds: string[]) {
+  async function captureAndUpload(taskId: string, documentId: string, slideIds: string[]) {
     for (let i = 0; i < slideIds.length; i += concurrency) {
       const chunk = slideIds.slice(i, i + concurrency)
-      await Promise.all(chunk.map(slideId =>
-        generateAndUploadSlide(taskId, documentId, slideId)
-      ))
+      // 当前批次：并发截图，截完立即上传
+      await Promise.all(chunk.map(async (slideId) => {
+        const blob = await captureSlideToBlob(slideId)
+        if (blob) {
+          await uploadBlob(taskId, documentId, slideId, blob)
+        } else {
+          updateProgress(false)
+        }
+      }))
     }
   }
 
@@ -159,25 +170,33 @@ export function useThumbnailQueue(options: ThumbnailQueueOptions = {}) {
 
       app.mount(container)
 
-      // 等待一帧确保 DOM 渲染完毕
-      requestAnimationFrame(() => {
+      // 等待一帧确保 DOM 渲染完毕，再等待所有图片加载完成
+      requestAnimationFrame(async () => {
         const el = container.querySelector('[data-slide-id]') as HTMLElement
-        resolve(el || container)
-        // cleanup 由调用方负责，传回 container 引用
-        ;(el || container).__offscreen_container__ = container
-        ;(el || container).__offscreen_app__ = app
+        const target = el || container
+
+        // 等待容器内所有 <img> 加载完毕，避免截图时图片还未渲染
+        const imgs = Array.from(target.querySelectorAll('img')) as HTMLImageElement[]
+        await Promise.all(
+          imgs
+            .filter(img => !img.complete)
+            .map(img => new Promise<void>(res => {
+              img.onload = () => res()
+              img.onerror = () => res() // 加载失败也继续，不卡住
+            }))
+        )
+
+        resolve(target)
+        target.__offscreen_container__ = container
+        target.__offscreen_app__ = app
       })
     })
   }
 
   /**
-   * 生成单个slide并上传
+   * 截图单个 slide，返回 Blob（失败返回 null）
    */
-  async function generateAndUploadSlide(
-    taskId: string,
-    documentId: string,
-    slideId: string
-  ): Promise<{ success: boolean; slideId: string }> {
+  async function captureSlideToBlob(slideId: string): Promise<Blob | null> {
     let container: HTMLElement | null = null
     let app: ReturnType<typeof createApp> | null = null
 
@@ -185,15 +204,17 @@ export function useThumbnailQueue(options: ThumbnailQueueOptions = {}) {
       const slide = slidesStore.slides.find(s => s.id === slideId)
       if (!slide) {
         console.warn(`[ThumbnailQueue] 找不到 slide 数据: ${slideId}`)
-        updateProgress(false)
-        return { success: false, slideId }
+        return null
       }
 
-      // 优先复用已在 DOM 中的元素（如虚拟列表刚好渲染了该页）
+      // 优先复用已在 DOM 中的元素，但必须是已渲染内容（visible=true）
+      // 左侧缩略图懒加载时 visible=false 的节点内部是占位符，不能复用
       let element = document.querySelector(`[data-slide-id="${slideId}"]`) as HTMLElement | null
+      if (element && element.querySelector('.placeholder')) {
+        element = null
+      }
 
       if (!element) {
-        // DOM 中不存在，离屏渲染
         element = await renderSlideOffscreen(slide, slidesStore.viewportRatio)
         container = (element as any).__offscreen_container__ || null
         app = (element as any).__offscreen_app__ || null
@@ -207,28 +228,39 @@ export function useThumbnailQueue(options: ThumbnailQueueOptions = {}) {
         pixelRatio: 1,
       })
 
-      const blob = await fetch(dataUrl).then(res => res.blob())
+      return await fetch(dataUrl).then(res => res.blob())
+    } catch (error: any) {
+      console.error(`[ThumbnailQueue] 截图失败: ${slideId}`, error)
+      return null
+    } finally {
+      if (app) app.unmount()
+      if (container && container.parentNode) container.parentNode.removeChild(container)
+    }
+  }
 
-      const formData = new FormData()
-      formData.append('file', blob, `${slideId}.jpg`)
-      formData.append('taskId', taskId)
-      formData.append('documentId', documentId)
-      formData.append('slideId', slideId)
+  /**
+   * 上传单个 Blob 到后端
+   */
+  async function uploadBlob(
+    taskId: string,
+    documentId: string,
+    slideId: string,
+    blob: Blob
+  ): Promise<void> {
+    const formData = new FormData()
+    formData.append('file', blob, `${slideId}.jpg`)
+    formData.append('taskId', taskId)
+    formData.append('documentId', documentId)
+    formData.append('slideId', slideId)
 
+    try {
       await axios.post('/api/thumbnails/upload-from-queue', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
-
       updateProgress(true)
-      return { success: true, slideId }
     } catch (error: any) {
-      console.error(`[ThumbnailQueue] 生成失败: ${slideId}`, error)
+      console.error(`[ThumbnailQueue] 上传失败: ${slideId}`, error)
       updateProgress(false)
-      return { success: false, slideId }
-    } finally {
-      // 销毁离屏容器，释放内存
-      if (app) app.unmount()
-      if (container && container.parentNode) container.parentNode.removeChild(container)
     }
   }
 

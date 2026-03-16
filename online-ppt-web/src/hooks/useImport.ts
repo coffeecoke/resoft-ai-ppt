@@ -27,7 +27,9 @@ export default () => {
     const reader = new FileReader()
     reader.addEventListener('load', () => {
       try {
-        const { slides } = JSON.parse(reader.result as string)
+        let { slides } = JSON.parse(reader.result as string)
+        // 清除旧缩略图引用，避免发布时误判"已有缩略图"而跳过生成
+        slides = slides.map(({ thumbnail: _t, thumbnailUpdatedAt: _ta, ...rest }: any) => rest as Slide)
         if (cover) {
           slidesStore.updateSlideIndex(0)
           slidesStore.setSlides(slides)
@@ -107,6 +109,9 @@ export default () => {
           const text = new TextDecoder().decode(bytes)
           slides = JSON.parse(decrypt(text)).slides
         }
+
+        // 清除旧缩略图引用，避免发布时误判"已有缩略图"而跳过生成
+        slides = slides.map(({ thumbnail: _t, thumbnailUpdatedAt: _ta, ...rest }: any) => rest as Slide)
 
         if (cover) {
           slidesStore.updateSlideIndex(0)
