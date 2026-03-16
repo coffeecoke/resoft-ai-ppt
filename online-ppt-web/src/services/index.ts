@@ -1,4 +1,6 @@
 import axios from './config'
+import router from '@/router'
+import { useAuthStore } from '@/store/auth'
 
 // 获取认证请求头（用于 fetch 调用）
 export function getAuthHeaders(): HeadersInit {
@@ -33,6 +35,15 @@ export function authFetch(url: string, options: RequestInit = {}): Promise<Respo
   return fetch(url, {
     ...options,
     headers: mergedHeaders,
+  }).then(response => {
+    if (response.status === 401) {
+      useAuthStore().clearAuth()
+      if (router.currentRoute.value.path !== '/login') {
+        router.push({ path: '/login', query: { redirect: router.currentRoute.value.fullPath } })
+      }
+      return Promise.reject(new Error('登录已过期，请重新登录'))
+    }
+    return response
   })
 }
 

@@ -2,66 +2,40 @@
   <aside class="response-file-toc">
     <div class="toc-header">
       <h3 class="sidebar-title">文档目录</h3>
-      <div class="mode-switch-container">
-        <div 
-          class="mode-item" 
-          :class="{ active: wordTocMode === 'single' }" 
-          @click="handleModeChange('single')"
-        >
-          <i class="ri-check-line mode-icon"></i>
-          <span class="mode-text">单选模式</span>
-        </div>
-        <div 
-          class="mode-item" 
-          :class="{ active: wordTocMode === 'multi' }" 
-          @click="handleModeChange('multi')"
-        >
-          <i class="ri-grid-fill mode-icon"></i>
-          <span class="mode-text">多选模式</span>
-        </div>
-      </div>
+      <span v-if="checkedCount > 0" class="checked-count">已选{{ checkedCount }}</span>
     </div>
     <div class="toc-content">
-      <div 
-        v-for="section in responseTocSections" 
-        :key="section.title"
-        class="category-group"
-      >
-        <div 
-          class="category-title"
-          :class="{ 'clickable': wordTocMode === 'multi' }"
-          @click="wordTocMode === 'multi' ? handleSectionClick(section) : null"
-        >
-          <i :class="getSectionIcon(section.title)" class="category-icon"></i>
-          <span>{{ removeNumberPrefix(section.title) }}</span>
-        </div>
-        <div class="category-children">
-          <div 
-            v-for="item in section.items"
-            :key="item"
-            class="category-child-item"
-            :class="{
-              active: responseIndex(item) === activeSlide || selectedSlides.includes(responseIndex(item))
-            }"
-            @click="handleItemClick(item)"
-          >
-            <span class="child-name">{{ item }}</span>
-            <i 
-              v-if="responseIndex(item) === activeSlide || selectedSlides.includes(responseIndex(item))" 
-              class="ri-check-line check-icon"
-            ></i>
-          </div>
-        </div>
+      <div v-if="!treeData.length" class="toc-empty">
+        <span>暂无目录</span>
       </div>
+      <el-tree
+        v-else
+        ref="treeRef"
+        :data="treeData"
+        :props="{ label: 'title', children: 'children' }"
+        node-key="id"
+        default-expand-all
+        highlight-current
+        show-checkbox
+        :check-on-click-node="false"
+        :current-node-key="activeSectionId"
+        @check="handleCheck"
+        class="toc-tree"
+      >
+        <template #default="{ data }">
+          <span class="toc-label" @click.stop="handleLabelClick(data)">{{ data.title }}</span>
+        </template>
+      </el-tree>
     </div>
-    <div class="toc-footer ppt-thumbs-footer">
-      <el-button type="primary" plain style="width: 100%; margin-bottom: 0;" @click="handleAnalyzeSelected">
-        <el-icon><MagicStick /></el-icon> 选中-AI分析
+    <!-- 底部操作按钮（参考 PptDialog 的 ppt-thumbs-footer） -->
+    <div v-if="treeData.length" class="toc-footer">
+      <el-button size="small" :disabled="checkedCount === 0" @click="handleAiAnalyze">
+        <i class="ri-magic-stick-line"></i> 选中-AI分析
       </el-button>
-      <el-button style="width: 100%; margin-bottom: 0;" @click="handleDownloadSelected">
-        <el-icon><Download /></el-icon> 选中-下载
+      <el-button size="small" :disabled="checkedCount === 0" @click="handleDownload">
+        <i class="ri-download-line"></i> 选中-下载
       </el-button>
-      <el-button style="width: 100%;" @click="handleAddToPending">
+      <el-button size="small" type="primary" :disabled="checkedCount === 0" @click="handleAddToPending">
         <i class="ri-list-check-3"></i> 选中-待操作
       </el-button>
     </div>
@@ -69,118 +43,139 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { MagicStick, Download } from '@element-plus/icons-vue'
+import { ref, computed, watch, nextTick } from 'vue'
+import type { BidSection } from '@/services/bidDocumentService'
 
-interface ResponseTocSection {
-  title: string
-  items: string[]
+interface TreeNode extends BidSection {
+  children: TreeNode[]
 }
 
-const props = defineProps({
-  responseTocSections: {
-    type: Array as () => ResponseTocSection[],
-    required: true
-  },
-  activeSlide: {
-    type: Number,
-    default: 0
-  },
-  selectedSlides: {
-    type: Array as () => number[],
-    default: () => []
-  },
-  wordTocMode: {
-    type: String as () => 'single' | 'multi',
-    default: 'single'
+const props = defineProps<{
+  tocSections: BidSection[]
+  activeSectionId?: string
+  selectedSectionIds?: string[]
+}>()
+
+const emit = defineEmits<{
+  'heading-click': [section: BidSection]
+  'add-to-pending': [sections: BidSection[]]
+  'download-selected': [sections: BidSection[]]
+  'analyze-selected': [sections: BidSection[]]
+}>()
+
+const treeRef = ref<any>()
+const checkedCount = ref(0)
+
+// 从平铺列表按 parent_section_id 构建树
+const treeData = computed((): TreeNode[] => {
+  const map = new Map<string, TreeNode>()
+  const roots: TreeNode[] = []
+
+  for (const s of props.tocSections) {
+    map.set(s.id, { ...s, children: [] })
   }
+
+  for (const s of props.tocSections) {
+    const node = map.get(s.id)!
+    if (s.parent_section_id && map.has(s.parent_section_id)) {
+      map.get(s.parent_section_id)!.children.push(node)
+    } else {
+      roots.push(node)
+    }
+  }
+
+  function sortNodes(nodes: TreeNode[]) {
+    nodes.sort((a, b) => a.sort_order - b.sort_order)
+    for (const n of nodes) {
+      if (n.children.length) sortNodes(n.children)
+    }
+  }
+  sortNodes(roots)
+
+  return roots
 })
 
-const emit = defineEmits(['update:wordTocMode', 'item-click', 'analyze-selected', 'download-selected', 'add-to-pending', 'section-select-all'])
-
-// 响应文件目录扁平化
-const responseTocFlat = computed(() => {
-  return props.responseTocSections.flatMap(section =>
-    section.items.map(title => ({ section: section.title, title }))
-  )
-})
-
-const responseIndex = (title: string) => {
-  return responseTocFlat.value.findIndex(t => t.title === title)
+// 勾选变化时更新计数（@check 每次用户操作只触发一次）
+const handleCheck = () => {
+  checkedCount.value = treeRef.value?.getCheckedKeys()?.length || 0
 }
 
-const handleModeChange = (mode: 'single' | 'multi') => {
-  emit('update:wordTocMode', mode)
-}
+// 同步外部 selectedSectionIds → el-tree 勾选状态（待操作列表变更时联动）
+watch(
+  () => props.selectedSectionIds,
+  (newIds, oldIds) => {
+    nextTick(() => {
+      if (!treeRef.value) return
+      if (!oldIds) {
+        // 首次初始化：从 pending store 恢复勾选
+        treeRef.value.setCheckedKeys(newIds || [])
+      } else {
+        // 增量同步：仅处理移除的项（避免覆盖用户本地勾选）
+        const newSet = new Set(newIds || [])
+        for (const id of oldIds) {
+          if (!newSet.has(id)) {
+            treeRef.value.setChecked(id, false, true) // deep=true 级联取消子节点
+          }
+        }
+      }
+      checkedCount.value = treeRef.value.getCheckedKeys()?.length || 0
+    })
+  },
+  { deep: true, immediate: true }
+)
 
-const handleItemClick = (title: string) => {
-  emit('item-click', title)
-}
-
-// 获取一级目录的图标
-const getSectionIcon = (title: string) => {
-  // 去掉编号前缀
-  const cleanTitle = removeNumberPrefix(title)
-  
-  if (cleanTitle.includes('商务')) {
-    return 'ri-briefcase-line'
-  } else if (cleanTitle.includes('技术')) {
-    return 'ri-code-s-slash-line'
-  } else if (cleanTitle.includes('投标')) {
-    return 'ri-file-list-3-line'
+// 同步 activeSectionId 高亮
+watch(
+  () => props.activeSectionId,
+  (key) => {
+    nextTick(() => treeRef.value?.setCurrentKey(key || null))
   }
-  return 'ri-folder-line'
+)
+
+const handleLabelClick = (data: BidSection) => {
+  emit('heading-click', data)
 }
 
-// 去掉标题中的编号前缀（如"一、"、"二、"等）
-const removeNumberPrefix = (title: string) => {
-  return title.replace(/^[一二三四五六七八九十]+[、.]\s*/, '')
+// 获取当前勾选的节点列表（不含半选）
+const getCheckedSections = (): BidSection[] => {
+  return treeRef.value?.getCheckedNodes(false, false) || []
 }
 
-// 处理一级目录点击（多选模式下全选/取消全选该目录下的所有项）
-const handleSectionClick = (section: ResponseTocSection) => {
-  if (props.wordTocMode !== 'multi') return
-  
-  // 获取该目录下所有项的索引
-  const sectionItemIndices = section.items.map(item => responseIndex(item)).filter(idx => idx >= 0)
-  
-  if (sectionItemIndices.length === 0) return
-  
-  // 检查是否全部已选中
-  const allSelected = sectionItemIndices.every(idx => props.selectedSlides.includes(idx))
-  
-  if (allSelected) {
-    // 如果全部已选中，则取消选中该目录下的所有项
-    emit('section-select-all', sectionItemIndices, false)
-  } else {
-    // 如果未全部选中，则选中该目录下的所有项
-    emit('section-select-all', sectionItemIndices, true)
-  }
-}
-
-// 处理选中-AI分析
-const handleAnalyzeSelected = () => {
-  emit('analyze-selected')
-}
-
-// 处理选中-下载
-const handleDownloadSelected = () => {
-  emit('download-selected')
-}
-
-// 处理选中-待操作
 const handleAddToPending = () => {
-  emit('add-to-pending')
+  // 获取完全选中的 key 集合
+  const checkedKeys = new Set<string>(treeRef.value?.getCheckedKeys() || [])
+  // getCheckedNodes(false, true) 包含完全选中 + 半选（indeterminate）节点，顺序为 DFS 树序
+  const allNodes: BidSection[] = treeRef.value?.getCheckedNodes(false, true) || []
+
+  // 标记每个节点是否为半选（标题行）
+  const sections = allNodes.map(node => ({
+    ...node,
+    isHeaderOnly: !checkedKeys.has(node.id),
+  }))
+
+  if (!sections.length) return
+  emit('add-to-pending', sections)
+}
+
+const handleDownload = () => {
+  const sections = getCheckedSections()
+  if (!sections.length) return
+  emit('download-selected', sections)
+}
+
+const handleAiAnalyze = () => {
+  const sections = getCheckedSections()
+  if (!sections.length) return
+  emit('analyze-selected', sections)
 }
 </script>
 
-<style scoped lang="scss">
+<style scoped>
 .response-file-toc {
   width: 240px;
   flex-shrink: 0;
   background: #fff;
   border-radius: 8px;
-  padding: 0;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -189,24 +184,25 @@ const handleAddToPending = () => {
 
 .toc-header {
   flex-shrink: 0;
-  padding: 10px 16px 12px 16px;
+  padding: 10px 16px 8px 16px;
+  border-bottom: 1px solid #f0f0f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .sidebar-title {
-  font-size: 0.8rem;
-  line-height: 1.75rem;
+  font-size: 13px;
+  line-height: 1.5;
   color: #1e293b;
   font-weight: 600;
-  margin: 0 0 10px 0;
-  padding: 0;
-  border-bottom: none;
+  margin: 0;
 }
 
-.mode-switch-container {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 0;
-  padding: 0;
+.checked-count {
+  font-size: 12px;
+  color: #006DF9;
+  font-weight: 500;
 }
 
 .toc-content {
@@ -214,7 +210,7 @@ const handleAddToPending = () => {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 0 16px 16px 16px;
+  padding: 4px 0;
 }
 
 .mode-item {
@@ -341,11 +337,85 @@ const handleAddToPending = () => {
   box-shadow: 0 1px 4px rgba(0, 109, 249, 0.3);
 }
 
+/* 底部按钮区域 */
 .toc-footer {
   flex-shrink: 0;
-  padding: 16px;
-  padding-top: 12px;
-  border-top: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.toc-footer .el-button {
+  width: 100%;
+  margin: 0;
+}
+
+/* el-tree 样式覆盖 */
+.toc-tree {
+  --el-tree-node-hover-bg-color: #f1f5f9;
+  --el-tree-node-content-height: auto;
+  font-size: 12px;
+  color: #374151;
+}
+
+:deep(.el-tree-node__content) {
+  align-items: flex-start;
+  padding: 4px 6px;
+  height: auto;
+  min-height: 28px;
+  border-radius: 4px;
+  margin: 1px 4px;
+  line-height: 1.4;
+}
+
+:deep(.el-tree-node__content:hover) {
+  background: #f1f5f9;
+}
+
+:deep(.el-tree-node.is-current > .el-tree-node__content) {
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 500;
+}
+
+/* el-tree 原生 checkbox 样式微调 */
+:deep(.el-checkbox__inner) {
+  width: 14px;
+  height: 14px;
+}
+
+:deep(.el-checkbox) {
+  margin-right: 4px;
+  flex-shrink: 0;
+}
+
+:deep(.el-tree-node__label) {
+  font-size: 12px;
+  white-space: normal;
+  word-break: break-all;
+  padding: 2px 0;
+}
+
+.toc-label {
+  font-size: 12px;
+  white-space: normal;
+  word-break: break-all;
+  padding: 2px 0;
+  cursor: pointer;
+  flex: 1;
+}
+
+/* 一级节点加粗 */
+:deep(.el-tree > .el-tree-node > .el-tree-node__content .el-tree-node__label) {
+  font-weight: 500;
+  color: #1e293b;
+}
+
+/* 展开/折叠图标 */
+:deep(.el-tree-node__expand-icon) {
+  color: #9ca3af;
+  font-size: 14px;
 }
 </style>
-

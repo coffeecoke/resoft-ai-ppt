@@ -336,9 +336,117 @@ export const documentService = {
     return await this.update(id, { status })
   },
 
+  /**
+   * 增量更新：只替换指定 slideId 的页面，不重写整个文档
+   * @param {string} id - 文档ID
+   * @param {Array<{id: string, [key: string]: any}>} patchSlides - 变更的页面数组
+   */
+  async updateSlides(id, patchSlides) {
+    if (USE_DATABASE || DUAL_WRITE) {
+      return await documentModel.updateSlides(id, patchSlides)
+    }
+
+    // JSON 模式：读取文件，按 id 精准替换
+    const contentPath = path.join(DOCUMENTS_DIR, `${id}.json`)
+    if (!fs.existsSync(contentPath)) throw new Error('文档内容文件不存在')
+
+    const content = JSON.parse(fs.readFileSync(contentPath, 'utf-8'))
+    const patchMap = new Map(patchSlides.map(s => [s.id, s]))
+
+    content.slides = content.slides.map(slide =>
+      patchMap.has(slide.id) ? patchMap.get(slide.id) : slide
+    )
+
+    fs.writeFileSync(contentPath, JSON.stringify(content, null, 2), 'utf-8')
+
+    // 更新索引中的 updatedAt
+    const indexList = jsonOps.readIndex()
+    const metaIndex = indexList.findIndex(item => item.id === id)
+    if (metaIndex !== -1) {
+      indexList[metaIndex].updatedAt = new Date().toISOString()
+      jsonOps.writeIndex(indexList)
+    }
+
+    return indexList[metaIndex] || { id, updatedAt: new Date().toISOString() }
+  },
+
   // 更新最后打开时间
   async updateLastOpenedAt(id) {
     return await this.update(id, { last_opened_at: new Date().toISOString() })
-  }
+  },
+
+  // 插入页面（按 index 位置插入）
+  async insertSlide(id, slide, index) {
+    if (USE_DATABASE || DUAL_WRITE) {
+      return await documentModel.insertSlide(id, slide, index)
+    }
+
+    const contentPath = path.join(DOCUMENTS_DIR, `${id}.json`)
+    if (!fs.existsSync(contentPath)) throw new Error('文档内容文件不存在')
+
+    const content = JSON.parse(fs.readFileSync(contentPath, 'utf-8'))
+    const insertAt = Math.max(0, Math.min(index, content.slides.length))
+    content.slides.splice(insertAt, 0, slide)
+    fs.writeFileSync(contentPath, JSON.stringify(content, null, 2), 'utf-8')
+
+    const indexList = jsonOps.readIndex()
+    const metaIndex = indexList.findIndex(item => item.id === id)
+    if (metaIndex !== -1) {
+      indexList[metaIndex].updatedAt = new Date().toISOString()
+      indexList[metaIndex].slideCount = content.slides.length
+      jsonOps.writeIndex(indexList)
+    }
+    return indexList[metaIndex] || { id, updatedAt: new Date().toISOString() }
+  },
+
+  // 删除指定页面（支持批量）
+  async deleteSlide(id, slideIds) {
+    const ids = Array.isArray(slideIds) ? slideIds : [slideIds]
+
+    if (USE_DATABASE || DUAL_WRITE) {
+      return await documentModel.deleteSlide(id, ids)
+    }
+
+    const contentPath = path.join(DOCUMENTS_DIR, `${id}.json`)
+    if (!fs.existsSync(contentPath)) throw new Error('文档内容文件不存在')
+
+    const content = JSON.parse(fs.readFileSync(contentPath, 'utf-8'))
+    content.slides = content.slides.filter(s => !ids.includes(s.id))
+    fs.writeFileSync(contentPath, JSON.stringify(content, null, 2), 'utf-8')
+
+    const indexList = jsonOps.readIndex()
+    const metaIndex = indexList.findIndex(item => item.id === id)
+    if (metaIndex !== -1) {
+      indexList[metaIndex].updatedAt = new Date().toISOString()
+      indexList[metaIndex].slideCount = content.slides.length
+      jsonOps.writeIndex(indexList)
+    }
+    return indexList[metaIndex] || { id, updatedAt: new Date().toISOString() }
+  },
+
+  // 重新排序页面
+  async reorderSlides(id, slideIds) {
+    if (USE_DATABASE || DUAL_WRITE) {
+      return await documentModel.reorderSlides(id, slideIds)
+    }
+
+    const contentPath = path.join(DOCUMENTS_DIR, `${id}.json`)
+    if (!fs.existsSync(contentPath)) throw new Error('文档内容文件不存在')
+
+    const content = JSON.parse(fs.readFileSync(contentPath, 'utf-8'))
+    const slideMap = new Map(content.slides.map(s => [s.id, s]))
+    const reordered = slideIds.map(sid => slideMap.get(sid)).filter(Boolean)
+    const remaining = content.slides.filter(s => !slideIds.includes(s.id))
+    content.slides = [...reordered, ...remaining]
+    fs.writeFileSync(contentPath, JSON.stringify(content, null, 2), 'utf-8')
+
+    const indexList = jsonOps.readIndex()
+    const metaIndex = indexList.findIndex(item => item.id === id)
+    if (metaIndex !== -1) {
+      indexList[metaIndex].updatedAt = new Date().toISOString()
+      jsonOps.writeIndex(indexList)
+    }
+    return indexList[metaIndex] || { id, updatedAt: new Date().toISOString() }
+  },
 }
 

@@ -33,6 +33,7 @@ export function useDialogs() {
   const responseFileDialogVisible = ref(false)
   const responseFileTitle = ref('')
   const responseFileSlides = ref<any[]>([])
+  const responseFileId = ref('')  // bid_documents.id
 
   // 打开PPT对话框
   const openPpt = async (item: any) => {
@@ -48,20 +49,15 @@ export function useDialogs() {
     // ✅ 先清空slides，避免显示上次的数据
     slides.value = []
     
-    // 如果是响应文件，生成特殊的slides
+    // 如果是响应文件，打开响应文件专用弹窗（docx 预览）
     if (item.type === 'response') {
-      const responseTocFlat = salesData.responseTocSections.flatMap(section =>
-        section.items.map(title => ({ section: section.title, title }))
-      )
-      const pages = responseTocFlat.map((t, idx) => ({
-        id: `w${idx + 1}`,
-        title: t.title,
-        img: `https://dummyimage.com/900x1200/f8fafc/6b7280&text=${encodeURIComponent(t.title)}`
-      }))
-      slides.value = pages
-      dialogVisible.value = true // 响应文件直接打开
-    } else {
-      // 🆕 从API加载真实的缩略图数据
+      responseFileTitle.value = item.title
+      responseFileId.value = item.id  // bid_documents.id
+      responseFileDialogVisible.value = true
+      return
+    }
+
+    // 🆕 从API加载真实的缩略图数据
       if (item.id) {
         try {
           isLoadingSlides.value = true
@@ -121,9 +117,8 @@ export function useDialogs() {
         slides.value = [...salesData.slides]
         dialogVisible.value = true
       }
-    }
   }
-  
+
   const formatDateForVideo = (d: string | null) => {
     if (!d) return ''
     const date = new Date(d)
@@ -255,6 +250,7 @@ export function useDialogs() {
     responseFileDialogVisible,
     responseFileTitle,
     responseFileSlides,
+    responseFileId,
 
     // 统一处理
     openBrandItem,

@@ -497,22 +497,15 @@ router.post('/upload-from-queue', upload.single('file'), async (req, res) => {
     const doc = await documentModel.findById(documentId)
     if (!doc) {
       console.error(`[缩略图队列] 文档不存在: ${documentId}`)
-
-      // 通知队列上传失败
-      thumbnailQueue.markUploadComplete(taskId, slideId, { success: false, error: '文档不存在' })
-
+      thumbnailQueue.reportUpload(taskId, slideId, false)
       return res.status(404).json({ success: false, error: '文档不存在' })
     }
 
     // 找到对应的 slide
     const slide = doc.slides?.find(s => s.id === slideId)
     if (!slide) {
-      console.error(`[缩略图队列] 幻灯片不存在: ${slideId}`)
-
-      // 通知队列上传失败
-      thumbnailQueue.markUploadComplete(taskId, slideId, { success: false, error: '幻灯片不存在' })
-
-      return res.status(404).json({ success: false, error: '幻灯片不存在' })
+      console.warn(`[缩略图队列] 幻灯片不存在（可能保存尚未完成）: ${slideId}，继续写入缩略图文件`)
+      // 不中断，缩略图文件已写入，等后续保存完成后 thumbnail 字段会在下次同步时更新
     }
 
     // 更新文档 JSON 中的 thumbnail 字段（保留兼容性）
@@ -535,7 +528,7 @@ router.post('/upload-from-queue', upload.single('file'), async (req, res) => {
 
     // 保存到数据库
     const thumbnailId = `thumb_${documentId}_${slideId}`
-    const slideIndex = doc.slides.findIndex(s => s.id === slideId)
+    const slideIndex = doc.slides?.findIndex(s => s.id === slideId) ?? -1
 
     console.log(`[缩略图队列] 准备写入数据库: thumbnailId=${thumbnailId}, slideIndex=${slideIndex}`)
 
@@ -550,20 +543,16 @@ router.post('/upload-from-queue', upload.single('file'), async (req, res) => {
       size: file.size,
       format: file.mimetype.split('/')[1],
       metadata: {
-        hasText: slide.elements?.some(el => el.type === 'text') || false,
-        hasImage: slide.elements?.some(el => el.type === 'image') || false,
-        elementCount: slide.elements?.length || 0
+        hasText: slide?.elements?.some(el => el.type === 'text') || false,
+        hasImage: slide?.elements?.some(el => el.type === 'image') || false,
+        elementCount: slide?.elements?.length || 0
       }
     })
 
     console.log(`[缩略图队列] 数据库写入成功: ${documentId}/${slideId}`)
 
-    // 通知队列上传完成
-    thumbnailQueue.markUploadComplete(taskId, slideId, {
-      success: true,
-      url: thumbnailUrl,
-      slideId
-    })
+    // 通知队列：此张图上传成功，推 WebSocket 进度
+    thumbnailQueue.reportUpload(taskId, slideId, true)
 
     res.json({
       success: true,
@@ -574,13 +563,10 @@ router.post('/upload-from-queue', upload.single('file'), async (req, res) => {
     console.error('[缩略图队列] 上传失败:', error)
     console.error('[缩略图队列] 错误堆栈:', error.stack)
 
-    // 通知队列上传失败
+    // 通知队列：此张图上传失败
     const { taskId, slideId } = req.body
     if (taskId && slideId) {
-      thumbnailQueue.markUploadComplete(taskId, slideId, {
-        success: false,
-        error: error.message
-      })
+      thumbnailQueue.reportUpload(taskId, slideId, false)
     }
 
     res.status(500).json({ success: false, error: '上传失败: ' + error.message })

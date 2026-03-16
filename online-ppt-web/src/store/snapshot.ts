@@ -8,12 +8,14 @@ import { useMainStore } from './main'
 export interface ScreenState {
   snapshotCursor: number
   snapshotLength: number
+  lastEditedSlideId: string | null
 }
 
 export const useSnapshotStore = defineStore('snapshot', {
   state: (): ScreenState => ({
-    snapshotCursor: -1, // 历史快照指针
-    snapshotLength: 0, // 历史快照长度
+    snapshotCursor: -1,
+    snapshotLength: 0,
+    lastEditedSlideId: null,
   }),
 
   getters: {
@@ -48,6 +50,10 @@ export const useSnapshotStore = defineStore('snapshot', {
   
     async addSnapshot() {
       const slidesStore = useSlidesStore()
+
+      // 记录本次编辑操作涉及的 slideId（用于增量保存感知）
+      const currentSlide = slidesStore.slides[slidesStore.slideIndex]
+      this.lastEditedSlideId = currentSlide?.id ?? null
 
       // 获取当前indexeddb中全部快照的ID
       const allKeys = await db.snapshots.orderBy('id').keys()

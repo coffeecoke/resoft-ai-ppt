@@ -4,12 +4,12 @@ import { saveAs } from 'file-saver'
 import pptxgen from 'pptxgenjs'
 import tinycolor from 'tinycolor2'
 import { toPng, toJpeg } from 'html-to-image'
+import { strToU8, zipSync } from 'fflate'
 import { useSlidesStore } from '@/store'
 import type { PPTElementOutline, PPTElementShadow, PPTElementLink, Slide } from '@/types/slides'
 import { getElementRange, getLineElementPath, getTableSubThemeColor } from '@/utils/element'
 import { type AST, toAST } from '@/utils/htmlParser'
 import { type SvgPoints, toPoints } from '@/utils/svgPathParser'
-import { encrypt } from '@/utils/crypto'
 import { svg2Base64 } from '@/utils/svg2Base64'
 import message from '@/utils/message'
 
@@ -100,16 +100,89 @@ export default () => {
     }, 200)
   }
   
+  // 将 base64 data URL 转为 Uint8Array 二进制
+  const base64ToBytes = (dataUrl: string): { bytes: Uint8Array; ext: string } | null => {
+    const match = dataUrl.match(/^data:image\/([^;]+);base64,(.+)$/)
+    if (!match) return null
+    const [, mime, b64] = match
+    const ext = mime === 'jpeg' ? 'jpg' : mime
+    try {
+      const binary = atob(b64)
+      const bytes = new Uint8Array(binary.length)
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+      return { bytes, ext }
+    }
+    catch { return null }
+  }
+
+  // 从 slides 中提取所有 base64 图片，替换为 pptist://images/xxx 引用
+  const extractImages = (slides: Slide[]): { processedSlides: Slide[]; imageMap: Record<string, Uint8Array> } => {
+    const imageMap: Record<string, Uint8Array> = {}
+    // 用完整 base64 字符串做 key，精确去重，彻底避免前500字符哈希碰撞
+    const b64ToKey = new Map<string, string>()
+    let imgCounter = 0
+
+    const replaceBase64 = (dataUrl: string): string => {
+      if (!isBase64Image(dataUrl)) return dataUrl
+      const result = base64ToBytes(dataUrl)
+      if (!result) return dataUrl
+      const { bytes, ext } = result
+      const b64Part = dataUrl.split(',')[1] || ''
+      // 相同图片复用同一文件名
+      if (b64ToKey.has(b64Part)) return `pptist://images/${b64ToKey.get(b64Part)}`
+      const key = `img_${imgCounter++}.${ext}`
+      imageMap[key] = bytes
+      b64ToKey.set(b64Part, key)
+      return `pptist://images/${key}`
+    }
+
+    const processedSlides = slides.map(slide => {
+      const s = JSON.parse(JSON.stringify(slide)) as Slide
+
+      // 背景图
+      if (s.background?.type === 'image' && s.background.image?.src) {
+        s.background.image.src = replaceBase64(s.background.image.src)
+      }
+
+      // 元素
+      if (s.elements) {
+        for (const el of s.elements) {
+          if (el.type === 'image' && el.src) (el as any).src = replaceBase64(el.src)
+          if ((el as any).pattern) (el as any).pattern = replaceBase64((el as any).pattern)
+          if (el.type === 'video' && (el as any).poster) (el as any).poster = replaceBase64((el as any).poster)
+        }
+      }
+
+      return s
+    })
+
+    return { processedSlides, imageMap }
+  }
+
   // 导出pptist文件（特有 .pptist 后缀文件）
+  // 新格式：ZIP 包，图片以二进制单独存储，避免大文件时浏览器崩溃
   const exportSpecificFile = (_slides: Slide[]) => {
-    const json = {
+    const { processedSlides, imageMap } = extractImages(_slides)
+
+    const manifest = {
+      version: 2,
       title: title.value,
       width: viewportSize.value,
       height: viewportSize.value * viewportRatio.value,
       theme: theme.value,
-      slides: _slides,
+      slides: processedSlides,
     }
-    const blob = new Blob([encrypt(JSON.stringify(json))], { type: '' })
+
+    const zipFiles: Record<string, Uint8Array> = {
+      'manifest.json': strToU8(JSON.stringify(manifest)),
+    }
+    for (const [key, bytes] of Object.entries(imageMap)) {
+      zipFiles[`images/${key}`] = bytes
+    }
+
+    // level:1 快速压缩，不追求极致压缩率以减少主线程阻塞时间
+    const zipped = zipSync(zipFiles, { level: 1 })
+    const blob = new Blob([zipped], { type: 'application/zip' })
     saveAs(blob, `${title.value}.pptist`)
   }
   

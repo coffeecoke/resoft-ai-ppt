@@ -8,6 +8,7 @@ import type { Ref } from 'vue'
 import { getSalesDocumentList, type DocumentMetadata, getDocumentCoverUrl } from '@/services/documentService'
 import { getTranscriptionList } from '@/services/salesService'
 import { SERVER_URL } from '@/services'
+import { getBidDocumentList, type BidDocument } from '@/services/bidDocumentService'
 
 export function useFilters(dataSource: any, activeProduct: Ref<string>) {
   // 🆕 从API加载的文档列表
@@ -59,6 +60,23 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
 
   // 🆕 页面加载时获取数据
   loadDocuments()
+
+  // 🆕 响应文件（bid_documents）从 API 加载
+  const bidDocumentsFromAPI = ref<BidDocument[]>([])
+  const isLoadingBidDocuments = ref(false)
+  const loadBidDocuments = async () => {
+    try {
+      isLoadingBidDocuments.value = true
+      const result = await getBidDocumentList({ pageSize: 100 })
+      bidDocumentsFromAPI.value = result.list || []
+    } catch (error) {
+      console.error('[Sales首页] 加载响应文件失败:', error)
+      bidDocumentsFromAPI.value = []
+    } finally {
+      isLoadingBidDocuments.value = false
+    }
+  }
+  loadBidDocuments()
 
   // 🆕 交流会议（transcriptions）列表
   // 注意：推荐页和独立视频页现在都使用 VideoPageView 组件，它有自己的 API 调用逻辑
@@ -313,16 +331,33 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
     return list
   })
   
-  // 响应文件列表
+  // 响应文件列表（从 API 加载，回退到 mock 数据）
   const responseFiles = computed(() => {
-    let list = dataSource.responseFiles
-    
-    // 应用responseFilters
+    let list: any[]
+
+    if (bidDocumentsFromAPI.value.length > 0) {
+      // API 数据：将 BidDocument 转换为 ResponseFileItem 格式
+      list = bidDocumentsFromAPI.value.map(doc => ({
+        id: doc.id,
+        title: doc.name,
+        date: doc.created_at?.split('T')[0] || '',
+        type: 'response',
+        fileType: doc.file_type,
+        industry: doc.industry || '',
+        source_info: doc.source_info || '',
+        section_count: doc.section_count,
+      }))
+    } else {
+      // 回退到 mock 数据（API 未返回数据时）
+      list = dataSource.responseFiles
+    }
+
+    // 应用 responseFilters
     if (responseFilters.customerName) {
       const q = responseFilters.customerName.trim().toLowerCase()
       list = list.filter((x: any) => x.title.toLowerCase().includes(q))
     }
-    
+
     return list
   })
   

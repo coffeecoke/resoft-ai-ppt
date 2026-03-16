@@ -96,12 +96,16 @@ export interface RenameDocumentParams {
 export async function getDocumentList(options: {
   page?: number
   pageSize?: number
-  status?: 'draft' | 'published' | 'archived'
+  status?: 'draft' | 'published' | 'archived' | ''
   category?: string
   tag?: string
   keyword?: string
+<<<<<<< HEAD
   mine?: boolean
 } = {}): Promise<DocumentMetadata[]> {
+=======
+} = {}): Promise<{ list: DocumentMetadata[]; total: number; page: number; pageSize: number }> {
+>>>>>>> dev-0310_b1
   try {
     const params = new URLSearchParams()
     if (options.page) params.append('page', options.page.toString())
@@ -119,7 +123,7 @@ export async function getDocumentList(options: {
       throw new Error(resp?.error || '获取文档列表失败')
     }
 
-    return resp.data.list.map(item => {
+    const list = resp.data.list.map(item => {
       let cover = ''
       if (item.cover && typeof item.cover === 'string') {
         const c = item.cover as string
@@ -147,6 +151,13 @@ export async function getDocumentList(options: {
         name: item.name || '未命名文档',
       } as DocumentMetadata
     })
+
+    return {
+      list,
+      total: resp.data.total ?? list.length,
+      page: resp.data.page ?? 1,
+      pageSize: resp.data.pageSize ?? list.length,
+    }
   } catch (error) {
     console.error('[文档服务] 获取文档列表失败:', error)
     throw error
@@ -222,6 +233,21 @@ export async function updateDocument(id: string, params: UpdateDocumentParams): 
     documentData: params.documentData,
     autoSave: params.autoSave !== undefined ? params.autoSave : false,
   })
+}
+
+/**
+ * 增量保存：只更新指定的页面数据，不重写整个文档
+ * 适用于：用户只编辑了部分页面时，避免传输全量 slides
+ *
+ * @param id 文档ID
+ * @param slides 变更的页面数组（每项必须含 id 字段）
+ */
+export async function patchDocumentSlides(id: string, slides: any[]): Promise<{
+  success: boolean
+  data?: { updatedSlideIds: string[]; updatedAt: string }
+  error?: string
+}> {
+  return axios.patch(`${SERVER_URL}/documents/${id}/slides`, { slides })
 }
 
 /**
@@ -401,6 +427,37 @@ export async function recordDocumentView(documentId: string): Promise<{
       error: error.response?.data?.error || error.message || '记录阅读失败'
     }
   }
+}
+
+/**
+ * 插入页面（立即持久化，不等自动保存）
+ */
+export async function insertDocumentSlide(
+  documentId: string,
+  slide: any,
+  index: number
+): Promise<{ success: boolean; error?: string }> {
+  return axios.post(`${SERVER_URL}/documents/${documentId}/slides/insert`, { slide, index })
+}
+
+/**
+ * 删除页面（立即持久化，支持批量）
+ */
+export async function deleteDocumentSlides(
+  documentId: string,
+  slideIds: string[]
+): Promise<{ success: boolean; error?: string }> {
+  return axios.delete(`${SERVER_URL}/documents/${documentId}/slides`, { data: { slideIds } })
+}
+
+/**
+ * 重新排序页面（立即持久化）
+ */
+export async function reorderDocumentSlides(
+  documentId: string,
+  slideIds: string[]
+): Promise<{ success: boolean; error?: string }> {
+  return axios.patch(`${SERVER_URL}/documents/${documentId}/slides/reorder`, { slideIds })
 }
 
 export default {

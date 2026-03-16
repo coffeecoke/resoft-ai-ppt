@@ -76,7 +76,13 @@
             v-contextmenu="contextmenusThumbnailItem"
           >
             <div class="label" :class="{ 'offset-left': index >= 99 }">{{ fillDigit(index + 1, 2) }}</div>
-            <ThumbnailSlide class="thumbnail" :slide="element" :size="120" :visible="index < slidesLoadLimit" />
+            <ThumbnailSlide
+              class="thumbnail"
+              :slide="element"
+              :size="120"
+              :visible="isVisible(index)"
+              :ref="(el: any) => el && observe(el.$el || el, index)"
+            />
   
             <div class="note-flag" v-if="element.notes && element.notes.length" @click="openNotesPanel()">{{ element.notes.length }}</div>
           </div>
@@ -96,6 +102,8 @@ import { fillDigit } from '@/utils/common'
 import { isElementInViewport } from '@/utils/element'
 import type { ContextmenuItem } from '@/components/Contextmenu/types'
 import useSlideHandler from '@/hooks/useSlideHandler'
+import { useRoute } from 'vue-router'
+import { reorderDocumentSlides } from '@/services/documentService'
 import useSectionHandler from '@/hooks/useSectionHandler'
 import useScreening from '@/hooks/useScreening'
 import useLoadSlides from '@/hooks/useLoadSlides'
@@ -108,6 +116,7 @@ import Popover from '@/components/Popover.vue'
 import Modal from '@/components/Modal.vue'
 import Draggable from 'vuedraggable'
 
+const route = useRoute()
 const mainStore = useMainStore()
 const slidesStore = useSlidesStore()
 const keyboardStore = useKeyboardStore()
@@ -115,7 +124,7 @@ const { selectedSlidesIndex: _selectedSlidesIndex, thumbnailsFocus } = storeToRe
 const { slides, slideIndex, currentSlide } = storeToRefs(slidesStore)
 const { ctrlKeyState, shiftKeyState } = storeToRefs(keyboardStore)
 
-const { slidesLoadLimit } = useLoadSlides()
+const { isVisible, observe } = useLoadSlides()
 
 const selectedSlidesIndex = computed(() => [..._selectedSlidesIndex.value, slideIndex.value])
 const selectedSlides = computed(() => slides.value.filter((item, index) => selectedSlidesIndex.value.includes(index)))
@@ -245,6 +254,15 @@ const handleDragEnd = (eventData: { newIndex: number; oldIndex: number }) => {
   const { newIndex, oldIndex } = eventData
   if (newIndex === undefined || oldIndex === undefined || newIndex === oldIndex) return
   sortSlides(newIndex, oldIndex)
+
+  // 立即持久化排序结果（document 模式才调用）
+  const docId = route.query.documentId as string | undefined
+  if (docId) {
+    const slideIds = slides.value.map(s => s.id)
+    reorderDocumentSlides(docId, slideIds).catch(err => {
+      console.warn('[Thumbnails] 排序持久化失败:', err)
+    })
+  }
 }
 
 // 打开批注面板

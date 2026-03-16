@@ -1,4 +1,4 @@
-import { ref, onMounted } from 'vue'
+import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useSlidesStore } from '@/store'
 import { getDocument } from '@/services/documentService'
@@ -41,14 +41,23 @@ export function useEditorDataLoader() {
     }
     
     loading.value = true
+    slidesStore.setEditorDataReady(false)
     
     try {
-      // 优先使用router state中的数据，其次读 sessionStorage（window.open 新建页签时写入）
-      const stateData = history.state?.documentData
+      // 判断是否是用户主动刷新（F5/Ctrl+R）
+      // 刷新时 history.state 里的缓存数据已过时，必须从后端重新加载
+      const isPageReload = performance.navigation?.type === 1
+        || (performance.getEntriesByType?.('navigation')[0] as PerformanceNavigationTiming)?.type === 'reload'
+
+      // 优先使用router state中的数据（仅限首次从列表页导航，不含刷新）
+      // 其次读 sessionStorage（window.open 新建页签时写入）
+      const stateData = !isPageReload && (
+        history.state?.documentData
         || (documentId ? JSON.parse(sessionStorage.getItem(`editor_init_${documentId}`) || 'null') : null)
+      )
 
       if (stateData) {
-        // 用完即清，避免刷新时重复使用过时数据
+        // 用完即清，避免下次刷新时复用
         if (documentId) sessionStorage.removeItem(`editor_init_${documentId}`)
         console.log('[编辑器] 使用创建时的缓存数据（秒开）')
         loadingMessage.value = '正在加载文档...'
@@ -59,19 +68,21 @@ export function useEditorDataLoader() {
         slidesStore.setSlides(stateData.slides)
         slidesStore.setViewportSize(stateData.width)
 
-        // 【新增】但仍需要从后端获取最新的 metadata（包括 status 和 name）
+        // stateData 只含 slides，仍需请求一次获取最新 metadata（status/name）
+        // 注意：这里是唯一一次请求，不会和下面的完整加载重叠
         if (documentId) {
           try {
             const resp = await getDocument(documentId)
             slidesStore.setMetadata(resp.metadata)
-            // 以 DB 中的 name 为准，覆盖 state 里可能过时的 title
             if (resp.metadata.name) slidesStore.setTitle(resp.metadata.name)
             console.log('[编辑器] 已加载文档状态:', resp.metadata.status)
           } catch (error) {
             console.warn('[编辑器] 获取文档状态失败，将按草稿处理:', error)
           }
+          slidesStore.setLoadedId(documentId)
+          loadedIds.add(documentId)
         }
-
+        slidesStore.setEditorDataReady(true)
         return
       }
       
@@ -91,13 +102,16 @@ export function useEditorDataLoader() {
         slidesStore.setTheme(data.theme)
         slidesStore.setSlides(data.slides)
         slidesStore.setViewportSize(data.width)
+        slidesStore.setLoadedId(documentId)
 
         // 标记已加载
         loadedIds.add(documentId)
+        slidesStore.setEditorDataReady(true)
         console.log('[编辑器] 文档数据加载完成，已标记:', documentId)
       } else if (templateId) {
-        // 模板编辑器暂不处理，保持原有逻辑
-        console.log('[编辑器] 模板编辑模式，跳过数据加载')
+        // 模板数据由 PPT/Layout.vue 的 loadSlidesForRoute 负责加载，此处只标记 ID
+        // loadedId 由 Layout.vue 在数据加载成功后设置
+        console.log('[编辑器] 模板编辑模式，跳过数据加载（由 Layout.vue 负责）')
         loadedIds.add(templateId)
       }
     } catch (error) {
@@ -114,10 +128,7 @@ export function useEditorDataLoader() {
     }
   }
   
-  onMounted(() => {
-    loadEditorData()
-  })
-  
+  // 不在 hook 内部注册 onMounted，由调用方决定调用时机
   return {
     loading,
     loadingMessage,
