@@ -750,7 +750,7 @@ model users {
   created_at      DateTime  @default(now())
   updated_at      DateTime  @updatedAt
 
-  departments departments? @relation(fields: [department_id], references: [id])
+  // departments departments? @relation(fields: [department_id], references: [id])
 
   @@index([role], map: "idx_users_role")
   @@index([status], map: "idx_users_status")
@@ -955,11 +955,11 @@ model departments {
   updated_at DateTime @updatedAt                    /// 更新时间
 
   /// 自关联（树形父子关系）
-  parent   departments?  @relation("dept_tree", fields: [parent_id], references: [id])
-  children departments[] @relation("dept_tree")
+  // parent   departments?  @relation("dept_tree", fields: [parent_id], references: [id])
+  // children departments[] @relation("dept_tree")
 
   /// 反向关联
-  users users[]
+  // users users[]
 
   @@index([parent_id], map: "idx_departments_parent_id")
   @@index([status], map: "idx_departments_status")
@@ -976,7 +976,7 @@ model lead_categories {
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
-  leads leads[]
+  // leads leads[]
 
   @@index([is_active], map: "idx_lead_categories_is_active")
 }
@@ -992,7 +992,7 @@ model customer_types {
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
-  customers customers[]
+  // customers customers[]
 
   @@index([is_active], map: "idx_customer_types_is_active")
 }
@@ -1012,8 +1012,8 @@ model customers {
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt                    /// 最后更新时间（用于增量同步）
 
-  customer_type customer_types? @relation(fields: [type_id], references: [id])
-  leads         leads[]
+  // customer_type customer_types? @relation(fields: [type_id], references: [id])
+  // leads         leads[]
 
   @@index([type_id], map: "idx_customers_type_id")
   @@index([industry], map: "idx_customers_industry")
@@ -1039,11 +1039,9 @@ model leads {
   source        String?  @db.VarChar(100)            /// 线索来源（如 展会、转介绍、官网）
   created_at    DateTime @default(now())             /// 创建时间
   updated_at    DateTime @updatedAt                  /// 最后更新时间（用于增量同步）
-
-  lead_category         lead_categories?       @relation(fields: [category_id], references: [id])
-  customer              customers?             @relation(fields: [customer_id], references: [id])
-  communication_reports communication_reports[] /// 交流报备记录
-
+  // lead_category lead_categories? @relation(fields: [category_id], references: [id])
+  // customer      customers?       @relation(fields: [customer_id], references: [id])
+  // communication_reports communication_reports[] /// 交流报备记录
   @@index([category_id], map: "idx_leads_category_id")
   @@index([customer_id], map: "idx_leads_customer_id")
   @@index([owner_id], map: "idx_leads_owner_id")

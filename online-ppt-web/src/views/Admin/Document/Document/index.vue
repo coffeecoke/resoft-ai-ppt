@@ -4,9 +4,9 @@
       <div class="title-area">
         <h2>我的文档</h2>
         <div class="sub-title">
-          <span class="count">共 {{ documents.length }} 个</span>
+          <span class="count">共 {{ total }} 个</span>
           <span class="dot">·</span>
-          <span class="count">当前展示 {{ filteredDocuments.length }} 个</span>
+          <span class="count">当前第 {{ currentPage }} 页，展示 {{ filteredDocuments.length }} 个</span>
         </div>
       </div>
       <div class="header-actions">
@@ -119,7 +119,20 @@
       </div>
     </div>
 
-    <!-- 新建文档对话框 -->
+    <!-- 分页 -->
+    <div v-if="total > pageSize" class="pagination">
+      <button
+        class="page-btn"
+        :disabled="currentPage <= 1"
+        @click="loadDocuments(currentPage - 1)"
+      >上一页</button>
+      <span class="page-info">{{ currentPage }} / {{ Math.ceil(total / pageSize) }}</span>
+      <button
+        class="page-btn"
+        :disabled="currentPage >= Math.ceil(total / pageSize)"
+        @click="loadDocuments(currentPage + 1)"
+      >下一页</button>
+    </div>
     <Modal
       :visible="showCreate"
       :width="480"
@@ -341,7 +354,7 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { openEditorTab } from '@/utils/openEditor'
 import {
@@ -367,6 +380,9 @@ const router = useRouter()
 
 const loading = ref(false)
 const documents = ref<DocumentMetadata[]>([])
+const total = ref(0)
+const currentPage = ref(1)
+const pageSize = 10
 const filterCategory = ref<string>('')
 const filterStatus = ref<string>('published')
 const keyword = ref<string>('')
@@ -467,31 +483,8 @@ const formatFileSize = (bytes: number) => {
 }
 
 const filteredDocuments = computed(() => {
-  let list = documents.value.filter(d => d && d.id)
-  
-  // 状态筛选
-  if (filterStatus.value) {
-    list = list.filter(d => (d.status || 'draft') === filterStatus.value)
-  }
-  
-  // 分类筛选
-  if (filterCategory.value) {
-    list = list.filter(d => d.category === filterCategory.value)
-  }
-  
-  // 关键词搜索
-  const k = keyword.value.trim().toLowerCase()
-  if (k) {
-    list = list.filter(d => {
-      const name = (d.name || '').toLowerCase()
-      const category = (d.category || '').toLowerCase()
-      const id = (d.id || '').toLowerCase()
-      return name.includes(k) || category.includes(k) || id.includes(k)
-    })
-  }
-  
-  // 按更新时间倒序排列（最新的在前）
-  return list.sort((a, b) => {
+  // 后端已处理筛选和分页，前端只做排序
+  return [...documents.value].sort((a, b) => {
     const timeA = new Date(a.updatedAt).getTime()
     const timeB = new Date(b.updatedAt).getTime()
     return timeB - timeA
@@ -509,11 +502,19 @@ const canCreate = computed(() => {
   return true
 })
 
-const loadDocuments = async () => {
+const loadDocuments = async (page = currentPage.value) => {
   try {
     loading.value = true
-    // 不传递任何筛选参数，获取所有文档，由前端计算属性进行筛选
-    documents.value = await getDocumentList()
+    const result = await getDocumentList({
+      page,
+      pageSize,
+      status: filterStatus.value as any || undefined,
+      category: filterCategory.value || undefined,
+      keyword: keyword.value.trim() || undefined,
+    })
+    documents.value = result.list
+    total.value = result.total
+    currentPage.value = page
   } catch (error: any) {
     console.error('[文档管理] 加载文档列表失败:', error)
     message.error(error?.message || '加载文档列表失败')
@@ -521,6 +522,18 @@ const loadDocuments = async () => {
     loading.value = false
   }
 }
+
+// 筛选条件变化时重置到第一页并重新请求
+watch([filterStatus, filterCategory], () => {
+  loadDocuments(1)
+})
+
+// 关键词搜索防抖
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+watch(keyword, () => {
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => loadDocuments(1), 400)
+})
 
 const openCreateModal = () => {
   showCreate.value = true
@@ -1189,6 +1202,43 @@ onMounted(() => {
         }
       }
     }
+  }
+}
+
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  margin-top: 24px;
+  padding: 12px 0;
+
+  .page-btn {
+    padding: 6px 16px;
+    border-radius: 6px;
+    border: 1px solid rgba(15, 23, 42, 0.15);
+    background: #fff;
+    cursor: pointer;
+    font-size: 13px;
+    color: #374151;
+    transition: all 0.2s;
+
+    &:hover:not(:disabled) {
+      border-color: $themeColor;
+      color: $themeColor;
+    }
+
+    &:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+  }
+
+  .page-info {
+    font-size: 13px;
+    color: #6b7280;
+    min-width: 60px;
+    text-align: center;
   }
 }
 </style>

@@ -13,6 +13,8 @@ import batchOperationsRouter from './sales/batch-operations.js'
 import transcriptionsRouter from './sales/transcriptions.js'
 import concernsRouter from './sales/concerns.js'
 import concernCategoriesRouter from './sales/concern-categories.js'
+import bidDocumentsRouter from './sales/bid-documents.js'
+import bidCompositionsRouter from './sales/bid-compositions.js'
 
 const router = express.Router()
 
@@ -31,5 +33,7 @@ router.use('/user', userRouter)
 router.use('/profile', profileRouter)
 router.use('/documents', documentsRouter)
 router.use('/batch-operations', batchOperationsRouter)
+router.use('/bid-documents', bidDocumentsRouter)
+router.use('/bid-compositions', bidCompositionsRouter)
 
 export default router

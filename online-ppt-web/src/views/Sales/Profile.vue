@@ -68,16 +68,25 @@
                   AI生成
                 </div>
               </div>
-              <button class="upload-ppt-btn" type="button" @click="handleUploadPpt">
-                <el-icon><Upload /></el-icon>
-                回传PPT
-              </button>
+              <div class="ppt-action-btns">
+                <button class="create-ppt-btn" type="button" :disabled="creating" @click="handleCreatePpt">
+                  <el-icon><Plus /></el-icon>
+                  {{ creating ? '创建中...' : '新建' }}
+                </button>
+                <button class="upload-ppt-btn" type="button" @click="handleUploadPpt">
+                  <el-icon><Upload /></el-icon>
+                  回传PPT
+                </button>
+              </div>
             </div>
             <div class="ppt-grid">
-              <div 
-                v-for="ppt in filteredPPTs" 
-                :key="ppt.id" 
-                class="ppt-card" 
+              <div v-if="filteredPPTs.length === 0" class="empty-item" style="text-align:center; padding:40px 0; color:#909399; grid-column: 1 / -1;">
+                暂无PPT文档
+              </div>
+              <div
+                v-for="ppt in filteredPPTs"
+                :key="ppt.id"
+                class="ppt-card"
                 style="cursor: pointer;"
               >
                 <div class="thumb" @click="openPpt(ppt)">
@@ -431,7 +440,7 @@
 import { ref, computed, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { VideoPlay, MagicStick, Upload, UploadFilled } from '@element-plus/icons-vue'
+import { VideoPlay, MagicStick, Upload, UploadFilled, Plus } from '@element-plus/icons-vue'
 import Header from './components/Header.vue'
 import PptDialog from './components/PptDialog.vue'
 import { salesData } from '@/configs/salesData'
@@ -439,13 +448,13 @@ import { uploadSalesPpt } from '@/services/salesService'
 import type { UploadSalesPptParams } from '@/services/salesService'
 import { parsePPTXToSlides } from '@/utils/pptxParser'
 import { PRODUCTS, INDUSTRIES, AUDIENCES, LANGUAGES } from '@/configs/salesConstants'
-import { getDocumentList } from '@/services/documentService'
+import { getDocumentList, createDocument } from '@/services/documentService'
 const router = useRouter()
 
 // 加载个人副本 PPT（tag=personal），追加到 ppts 列表
 const loadPersonalPpts = async () => {
   try {
-    const list = await getDocumentList({ tag: 'personal', pageSize: 100 })
+    const list = await getDocumentList({ tag: 'personal', pageSize: 100, mine: true })
     const personalItems = list.map(doc => ({
       id: doc.id,
       title: doc.name,
@@ -457,6 +466,26 @@ const loadPersonalPpts = async () => {
     ppts.value = [...ppts.value, ...personalItems]
   } catch (error) {
     console.warn('[Profile] 加载个人副本失败:', error)
+  }
+}
+
+// 新建PPT
+const creating = ref(false)
+const handleCreatePpt = async () => {
+  if (creating.value) return
+  creating.value = true
+  try {
+    const res = await createDocument({ name: '未命名PPT' })
+    if (res.success && res.data?.id) {
+      router.push(`/ppt/editor?documentId=${res.data.id}`)
+    } else {
+      ElMessage.error(res.error || '创建失败')
+    }
+  } catch (error) {
+    console.error('[Profile] 创建PPT失败:', error)
+    ElMessage.error('创建PPT失败，请重试')
+  } finally {
+    creating.value = false
   }
 }
 
@@ -546,40 +575,7 @@ const sessions = ref([
 ])
 
 // PPT文档数据
-const ppts = ref([
-  { 
-    id: 'p1', 
-    title: '一表通产品介绍PPT（标准版）', 
-    date: '2025-10-31', 
-    author: '售前团队',
-    tag: 'public',
-    thumbnail: 'https://picsum.photos/seed/ppt1/320/180'
-  },
-  { 
-    id: 'p2', 
-    title: '某国有大行一表通售前交流PPT', 
-    date: '2025-10-28', 
-    author: '张三',
-    tag: 'practical',
-    thumbnail: 'https://picsum.photos/seed/ppt2/320/180'
-  },
-  { 
-    id: 'p3', 
-    title: '一表通产品功能详解PPT', 
-    date: '2025-10-25', 
-    author: '售前团队',
-    tag: 'public',
-    thumbnail: 'https://picsum.photos/seed/ppt3/320/180'
-  },
-  { 
-    id: 'p4', 
-    title: '某农商行一表通方案PPT', 
-    date: '2025-10-20', 
-    author: '张三',
-    tag: 'practical',
-    thumbnail: 'https://picsum.photos/seed/ppt4/320/180'
-  }
-])
+const ppts = ref([])
 
 // 收藏数据
 const collections = ref([
