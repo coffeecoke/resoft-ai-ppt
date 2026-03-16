@@ -2150,6 +2150,8 @@ router.get('/:id/qa-pairs', async (req, res) => {
         id: concern.id,
         question: concern.question,
         answer: concern.answer,
+        question_original: concern.question_original ?? null,
+        answer_original: concern.answer_original ?? null,
         category: concern.category, // 兼容旧字段
         category_id: concern.category_id,
         intent_code: concern.intent_code,

@@ -338,6 +338,10 @@ model concerns {
   answer   String? @db.Text /// 回答内容
   status   String  @default("pending") @db.VarChar(20) /// 状态：pending=待回答，answered=已回答
 
+  /// 优化前原文（问答对优化时备份，仅首次优化时写入）
+  question_original String? @db.Text /// 优化前的问题内容
+  answer_original   String? @db.Text /// 优化前的回答内容
+
   // ✅ 新增字段：问答对元数据（用于从转录记录中提取的问答对）
   time_range       String? @db.VarChar(100) /// 问题时间范围 "[00:10-00:30]"（兼容旧数据）
   time_range1      String? @db.VarChar(100) /// 问题时间范围 "[开始时间-结束时间]"

@@ -643,6 +643,8 @@ router.get('/concerns', async (req, res) => {
         id: concern.id,
         question: concern.question,
         answer: concern.answer,
+        question_original: concern.question_original ?? null,
+        answer_original: concern.answer_original ?? null,
         category: concern.category, // 兼容旧字段
         category_id: concern.category_id,
         intent_code: concern.intent_code,
@@ -711,6 +713,86 @@ function parseTimeRangeToSeconds(rangeStr) {
     return 0;
   };
   return { start: parseOne(parts[0]), end: parseOne(parts[1]) };
+}
+
+/**
+ * 获取单个问答对的「前 N 句 / 后 N 句」对话上下文，用于问答对优化
+ * @param {object} prisma - Prisma 实例
+ * @param {string} concernId - 问答对 ID
+ * @param {number} contextAbove - 前文条数（默认 4）
+ * @param {number} contextBelow - 后文条数（默认 4）
+ * @returns {Promise<{ concern, contextBefore: string[], contextAfter: string[] }|null>}
+ */
+async function getOptimizeContextForConcern(prisma, concernId, contextAbove = 4, contextBelow = 4) {
+  const concern = await prisma.concerns.findUnique({ where: { id: concernId } });
+  if (!concern || !concern.transcription_id) return null;
+
+  const transcription = await prisma.transcriptions.findUnique({
+    where: { id: concern.transcription_id },
+    select: { id: true, name: true, dialogues: true }
+  });
+  if (!transcription || !transcription.dialogues) return { concern, contextBefore: [], contextAfter: [] };
+
+  let dialogues = transcription.dialogues;
+  if (typeof dialogues === 'string') {
+    try {
+      dialogues = JSON.parse(dialogues);
+    } catch (e) {
+      dialogues = [];
+    }
+  }
+  if (!Array.isArray(dialogues) || dialogues.length === 0) {
+    return { concern, contextBefore: [], contextAfter: [] };
+  }
+
+  const tr1 = parseTimeRangeToSeconds(concern.time_range1 || concern.time_range || '');
+  const qaStart = tr1.start;
+  const qaEnd = tr1.end ?? tr1.start;
+  const qaStart2 = concern.time_range2 ? parseTimeRangeToSeconds(concern.time_range2).start : null;
+  const qaEnd2 = concern.time_range2 ? parseTimeRangeToSeconds(concern.time_range2).end : null;
+  const rangeStart = qaStart !== null ? qaStart : (qaStart2 !== null ? qaStart2 : 0);
+  const rangeEnd = (qaEnd2 != null && qaEnd2 > (qaEnd || 0)) ? qaEnd2 : (qaEnd != null ? qaEnd : rangeStart);
+
+  const withSeconds = dialogues.map((d, i) => {
+    const raw = (d.timeRange || d.startTime || '').toString().replace(/^\[|\]$/g, '');
+    const parts = raw.includes('-') ? raw.split('-').map(s => s.trim()) : [];
+    const parseOne = (s) => {
+      if (!s) return 0;
+      const p = s.split(':');
+      if (p.length === 2) return parseInt(p[0], 10) * 60 + parseFloat(p[1]);
+      if (p.length === 3) return parseInt(p[0], 10) * 3600 + parseInt(p[1], 10) * 60 + parseFloat(p[2]);
+      return 0;
+    };
+    const start = parts.length >= 1 ? parseOne(parts[0]) : 0;
+    const end = parts.length >= 2 ? parseOne(parts[1]) : start;
+    return { index: i, start, end, ...d };
+  });
+
+  let centerIndex = 0;
+  for (let i = 0; i < withSeconds.length; i++) {
+    const d = withSeconds[i];
+    const overlap = (d.start <= rangeEnd && (d.end >= rangeStart || d.end === 0));
+    if (overlap || (d.start >= rangeStart && centerIndex === 0)) {
+      centerIndex = i;
+      if (overlap) break;
+    }
+  }
+
+  const startIdx = Math.max(0, centerIndex - contextAbove);
+  const endIdx = Math.min(withSeconds.length - 1, centerIndex + contextBelow);
+  const windowList = withSeconds.slice(startIdx, endIdx + 1);
+
+  const formatLine = (d) => {
+    const speaker = d.speaker || d.speakerName || '';
+    const text = d.text || d.correctedText || d.originalText || '';
+    return `${speaker}: ${text}`.trim();
+  };
+
+  const centerInWindow = centerIndex - startIdx;
+  const contextBefore = windowList.slice(0, centerInWindow).map(formatLine);
+  const contextAfter = windowList.slice(centerInWindow + 1).map(formatLine);
+
+  return { concern, contextBefore, contextAfter };
 }
 
 /**
@@ -850,6 +932,8 @@ function formatConcernForReview(concern) {
     id: concern.id,
     question: concern.question,
     answer: concern.answer,
+    question_original: concern.question_original ?? null,
+    answer_original: concern.answer_original ?? null,
     category: concern.category,
     category_code: concern.category_code,
     intent_code: concern.intent_code,
@@ -1034,6 +1118,139 @@ router.post('/review/batch-reject', async (req, res) => {
   } catch (error) {
     console.error('批量拒绝失败:', error);
     res.status(500).json({ success: false, error: error.message || '操作失败' });
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+// ---------- 问答对优化（去语气词 + 前后文补全） ----------
+const transcriptionAiService = require('../services/transcriptionAiService');
+
+/**
+ * POST /api/qa/concerns/:id/optimize
+ * 单条问答对优化：去除语气词，结合前4句/后4句补全主语与句子
+ * Body: { save?: boolean, modelName?: string, promptId?: string }
+ */
+router.post('/concerns/:id/optimize', async (req, res) => {
+  const prisma = new PrismaClient();
+  try {
+    const { id: concernId } = req.params;
+    const { save = false, modelName, promptId } = req.body || {};
+    if (!concernId) {
+      return res.status(400).json({ success: false, error: '问答对ID不能为空' });
+    }
+
+    const ctx = await getOptimizeContextForConcern(prisma, concernId, 4, 4);
+    if (!ctx) {
+      return res.status(404).json({ success: false, error: '问答对不存在或未关联转录' });
+    }
+
+    const { concern, contextBefore, contextAfter } = ctx;
+    const result = await transcriptionAiService.optimizeQAPair(
+      concern.question,
+      concern.answer || '',
+      contextBefore,
+      contextAfter,
+      { modelName, promptId }
+    );
+
+    if (!result.success) {
+      return res.status(500).json({ success: false, error: result.error || '优化失败' });
+    }
+
+    let saved = false;
+    if (save) {
+      const updateData = {
+        question: result.question,
+        answer: result.answer
+      };
+      // 首次优化时保留原文到 question_original / answer_original
+      if (concern.question_original == null && concern.answer_original == null) {
+        updateData.question_original = concern.question ?? '';
+        updateData.answer_original = concern.answer ?? '';
+      }
+      await prisma.concerns.update({
+        where: { id: concernId },
+        data: updateData
+      });
+      saved = true;
+    }
+
+    res.json({
+      success: true,
+      data: {
+        question: result.question,
+        answer: result.answer,
+        saved
+      }
+    });
+  } catch (error) {
+    console.error('问答对优化失败:', error);
+    res.status(500).json({ success: false, error: error.message || '优化失败' });
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+/**
+ * POST /api/qa/optimize-batch
+ * 批量问答对优化
+ * Body: { concernIds: string[], save?: boolean, modelName?: string, promptId?: string }
+ */
+router.post('/optimize-batch', async (req, res) => {
+  const prisma = new PrismaClient();
+  try {
+    const { concernIds, save = false, modelName, promptId } = req.body || {};
+    if (!Array.isArray(concernIds) || concernIds.length === 0) {
+      return res.status(400).json({ success: false, error: '请提供 concernIds 数组' });
+    }
+
+    const results = [];
+
+    for (const cid of concernIds) {
+      const ctx = await getOptimizeContextForConcern(prisma, cid, 4, 4);
+      if (!ctx) {
+        results.push({ id: cid, error: '问答对不存在或未关联转录' });
+        continue;
+      }
+      const { concern, contextBefore, contextAfter } = ctx;
+      const result = await transcriptionAiService.optimizeQAPair(
+        concern.question,
+        concern.answer || '',
+        contextBefore,
+        contextAfter,
+        { modelName, promptId }
+      );
+      if (!result.success) {
+        results.push({ id: cid, error: result.error || '优化失败' });
+        continue;
+      }
+      if (save) {
+        const updateData = { question: result.question, answer: result.answer };
+        if (concern.question_original == null && concern.answer_original == null) {
+          updateData.question_original = concern.question ?? '';
+          updateData.answer_original = concern.answer ?? '';
+        }
+        await prisma.concerns.update({
+          where: { id: cid },
+          data: updateData
+        });
+      }
+      results.push({
+        id: cid,
+        question: result.question,
+        answer: result.answer,
+        saved: !!save
+      });
+    }
+
+    res.json({
+      success: true,
+      data: { results }
+    });
+  } catch (error) {
+    console.error('批量问答对优化失败:', error);
+    res.status(500).json({ success: false, error: error.message || '批量优化失败' });
   } finally {
     await prisma.$disconnect();
   }

@@ -121,6 +121,7 @@ function renderPromptList(prompts) {
       'transcription_correction': '语音转录纠错',
       'role_judgment': '角色判断',
       'qa_extraction': '问答对提取',
+      'qa_optimize': '问答对优化',
       'qa_classification': '问答对分类',
       'ppt_analysis': 'PPT分析',
       'presales_analysis': '售前交流综合分析',
@@ -217,6 +218,7 @@ function viewPrompt(prompt) {
     'transcription_correction': '语音转录纠错',
     'role_judgment': '角色判断',
     'qa_extraction': '问答对提取',
+    'qa_optimize': '问答对优化',
     'qa_classification': '问答对分类',
     'ppt_analysis': 'PPT分析',
     'presales_analysis': '售前交流综合分析',
@@ -226,7 +228,7 @@ function viewPrompt(prompt) {
     'document_manage': '文档管理',
     'general': '通用'
   };
-  
+
   // 填充基本信息
   document.getElementById('view-basic-info').innerHTML = `
     <p><strong>模板名称：</strong>${escapeHtml(prompt.name)}</p>
