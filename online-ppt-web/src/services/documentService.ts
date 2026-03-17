@@ -100,12 +100,8 @@ export async function getDocumentList(options: {
   category?: string
   tag?: string
   keyword?: string
-<<<<<<< HEAD
   mine?: boolean
 } = {}): Promise<DocumentMetadata[]> {
-=======
-} = {}): Promise<{ list: DocumentMetadata[]; total: number; page: number; pageSize: number }> {
->>>>>>> dev-0310_b1
   try {
     const params = new URLSearchParams()
     if (options.page) params.append('page', options.page.toString())
