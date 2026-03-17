@@ -11,6 +11,9 @@
     <button class="btn btn-primary" id="qa-batch-classify-btn" onclick="startBatchClassification()">
       <span class="icon">🤖</span> 批量分类选中项
     </button>
+    <button class="btn btn-info" id="qa-batch-optimize-btn" onclick="batchOptimizeAll()" title="按当前筛选条件一键优化所有问答对（去语气词+前后文补全）">
+      <span class="icon">🔄</span> 一键优化全部
+    </button>
     <button class="btn btn-success" id="qa-select-all-btn" onclick="selectAllQAs()">
       <span class="icon">✅</span> 全选当前页
     </button>
@@ -190,6 +193,23 @@
     </div>
     <div class="modal-body" id="qa-review-body" style="padding: 24px;">
       <div style="text-align: center; padding: 40px; color: #999;">加载中...</div>
+    </div>
+  </div>
+</div>
+
+<!-- 一键优化全部进度遮罩 -->
+<div class="ai-correction-overlay" id="qa-optimize-overlay" style="display: none;">
+  <div class="ai-correction-modal" onclick="event.stopPropagation()">
+    <div class="ai-correction-header">
+      <h3 style="margin: 0;">🔄 一键优化全部</h3>
+      <button class="btn btn-sm btn-secondary" id="qa-optimize-close-btn" onclick="closeOptimizeOverlay()" style="display: none;">✖ 关闭</button>
+    </div>
+    <div class="ai-correction-body" id="qa-optimize-body">
+      <div class="ai-correction-loading">
+        <div class="ai-correction-spinner"></div>
+        <p id="qa-optimize-status">正在获取问答对列表...</p>
+        <p id="qa-optimize-progress" style="font-size: 12px; color: #999; margin-top: 10px;"></p>
+      </div>
     </div>
   </div>
 </div>

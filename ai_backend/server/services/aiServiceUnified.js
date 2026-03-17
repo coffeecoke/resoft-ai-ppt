@@ -29,9 +29,16 @@ class AIService {
         throw new Error(`模型配置缺少API密钥: ${config.name}`);
       }
       
+      // 火山引擎方舟：正确 baseURL 为 .../api/v3，SDK 会追加 /chat/completions；
+      // 若配置成 .../api/v3/responses 会变成 /api/v3/responses/chat/completions 导致 404，此处做规范化
+      let baseURL = config.api_url || '';
+      if (typeof baseURL === 'string' && baseURL.includes('volces.com') && /\/responses\/?(\?|$)/i.test(baseURL)) {
+        baseURL = baseURL.replace(/\/responses\/?(?=\?|$)/i, '');
+      }
+      
       const client = new OpenAI({
         apiKey: config.api_key,
-        baseURL: config.api_url,
+        baseURL,
       });
       
       return { client, config };

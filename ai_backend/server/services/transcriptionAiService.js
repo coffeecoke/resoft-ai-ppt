@@ -1760,6 +1760,177 @@ ${JSON.stringify(sampleDialogues, null, 2)}
   }
 
   /**
+   * 获取默认的「问答对优化」提示词
+   * 用于：去除语气词 + 结合前/后文补全主语与句子完整性
+   */
+  getDefaultQAOptimizePrompt() {
+    return `你是一位资深的对话文本编辑专家，负责对抽取出的问答对进行优化整理。
+
+## 任务说明
+
+对给定的**问题（question）**和**答案（answer）**进行优化，使表达更规范、完整、易读。
+
+## 优化要求
+
+### 1. 去除语气词与口头禅
+
+删除以下类型的词（不改变原意）：
+- 语气词：嗯、啊、呃、哦、哎、唉、哈、呀、嘛、吧、呢、呐、噢、喔
+- 口头禅/填充词：那个、这个、就是、然后、那么、就是说、怎么说呢、怎么说、其实、可能、大概、基本上
+- 重复的顿号、逗号（如「，，」保留一个即可）
+
+### 2. 补全句子（结合上下文）
+
+- **前文**与**后文**是围绕该问答对的对话片段（前4句、后4句），用于帮助理解语境。
+- 若问题或答案缺少**主语**、**指代对象**或**背景**导致不完整，请根据前后文合理补全，使单独阅读时也能看懂。
+- 补全时只做最小必要补充，不添加原文没有的信息，不改变原意。
+
+### 3. 输出规范
+
+- 保持原意与专业术语不变。
+- 输出为**标准书面语**，语句通顺、简洁。
+- 若原文已足够完整且无语气词，可仅做轻微润色或原样输出。
+
+## 输入格式
+
+你将收到 JSON：
+- \`question\`: 原始问题文本
+- \`answer\`: 原始答案文本（可能为空）
+- \`context_before\`: 前文对话片段（前4句），数组，每项为 "说话人: 内容"
+- \`context_after\`: 后文对话片段（后4句），数组，格式同上
+
+## 输出格式（严格 JSON）
+
+只输出一个 JSON 对象，不要任何解释：
+
+\`\`\`json
+{
+  "question": "优化后的问题文本",
+  "answer": "优化后的答案文本（若原answer为空则可为空字符串）"
+}
+\`\`\``;
+  }
+
+  /**
+   * 问答对优化（单条）：去语气词 + 结合前后文补全
+   * @param {string} question - 原始问题
+   * @param {string} answer - 原始答案
+   * @param {string[]} contextBefore - 前文句子（前4句），每项如 "SPEAKER_1: 内容"
+   * @param {string[]} contextAfter - 后文句子（后4句），同上
+   * @param {Object} options - modelName, promptId, systemPrompt
+   * @returns {Promise<{ success: boolean, question?: string, answer?: string, error?: string }>}
+   */
+  async optimizeQAPair(question, answer, contextBefore, contextAfter, options = {}) {
+    const { modelConfigService, promptTemplateService } = require('./index');
+    const SCENE_OPTIMIZE = 'qa_optimize';   // 优先使用「问答对优化」场景的模型和提示词
+    const SCENE_FALLBACK = 'qa_extraction'; // 未配置时回退
+
+    let systemPrompt = options.systemPrompt;
+    if (!systemPrompt && options.promptId) {
+      const prompt = await promptTemplateService.getTemplateById(options.promptId);
+      if (prompt && prompt.prompt) systemPrompt = prompt.prompt;
+    }
+    if (!systemPrompt) {
+      // 优先使用 qa_optimize 场景提示词，若无则用 qa_extraction，最后用内置默认
+      const templates = await promptTemplateService.getTemplatesByScene('qa_optimize').catch(() => []);
+      const active = Array.isArray(templates) ? templates.find(t => t.is_active) : null;
+      if (active && active.prompt) {
+        systemPrompt = active.prompt;
+      } else {
+        const qaTemplates = await promptTemplateService.getTemplatesByScene('qa_extraction').catch(() => []);
+        const qaActive = Array.isArray(qaTemplates) ? qaTemplates.find(t => t.is_active) : null;
+        systemPrompt = (qaActive && qaActive.prompt) ? qaActive.prompt : this.getDefaultQAOptimizePrompt();
+      }
+    }
+
+    // 模型：优先「问答对优化」场景，再回退「问答对提取」、再「语音转录纠错」
+    let modelConfig = null;
+    let modelName = options.modelName;
+    if (!modelName) {
+      try {
+        modelConfig = await modelConfigService.getDefaultModel(SCENE_OPTIMIZE);
+        modelName = modelConfig.code;
+      } catch (e) {
+        const models = await modelConfigService.getModelsByScene(SCENE_OPTIMIZE);
+        const active = (models && models.length) ? (models.find(m => m.is_active) || models[0]) : null;
+        if (active) {
+          modelConfig = await modelConfigService.getModelById(active.id);
+          modelName = modelConfig.code;
+        }
+      }
+      if (!modelConfig) {
+        try {
+          modelConfig = await modelConfigService.getDefaultModel(SCENE_FALLBACK);
+          modelName = modelConfig.code;
+        } catch (_) {}
+      }
+      if (!modelConfig) {
+        try {
+          modelConfig = await modelConfigService.getDefaultModel('transcription_correction');
+        } catch (_) {}
+      }
+    } else {
+      for (const scene of [SCENE_OPTIMIZE, SCENE_FALLBACK, 'transcription_correction']) {
+        const models = await modelConfigService.getModelsByScene(scene).catch(() => []);
+        const matched = models.find(m => m.code === modelName);
+        if (matched) {
+          modelConfig = await modelConfigService.getModelById(matched.id);
+          break;
+        }
+      }
+    }
+    if (!modelConfig) {
+      return { success: false, error: '未找到可用模型，请在「模型配置」中为「问答对优化」场景配置并设为默认' };
+    }
+
+    const userPayload = {
+      question: String(question || '').trim(),
+      answer: String(answer || '').trim(),
+      context_before: Array.isArray(contextBefore) ? contextBefore : [],
+      context_after: Array.isArray(contextAfter) ? contextAfter : []
+    };
+    const userMessage = `请优化以下问答对，只输出一个 JSON 对象（包含 question 和 answer 字段）：\n\n\`\`\`json\n${JSON.stringify(userPayload, null, 2)}\n\`\`\``;
+
+    logger.info('[问答对优化] 发送内容:');
+    logger.info('[问答对优化] ' + JSON.stringify(userPayload, null, 2));
+
+    const { OpenAI } = require('openai');
+    const client = new OpenAI({
+      apiKey: modelConfig.api_key,
+      baseURL: modelConfig.api_url
+    });
+    const actualModel = modelConfig.model_name || modelConfig.code;
+    const isDoubao = (modelConfig.provider || '').toLowerCase() === 'doubao' || (actualModel || '').toLowerCase().includes('doubao');
+    const maxTokens = isDoubao ? (modelConfig.max_tokens || 4000) : Math.min(modelConfig.max_tokens || 4000, 16384);
+
+    try {
+      const res = await client.chat.completions.create({
+        model: actualModel,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userMessage }
+        ],
+        temperature: 0.3,
+        max_tokens: maxTokens
+      });
+      const content = (res.choices && res.choices[0] && res.choices[0].message && res.choices[0].message.content) ? res.choices[0].message.content.trim() : '';
+      if (!content) return { success: false, error: 'AI 返回为空' };
+
+      logger.info('[问答对优化] 接收内容:');
+      logger.info('[问答对优化] ' + content);
+
+      let jsonStr = content.replace(/^```json\s*/i, '').replace(/\s*```\s*$/, '').trim();
+      const parsed = JSON.parse(jsonStr);
+      const outQuestion = parsed.question != null ? String(parsed.question).trim() : userPayload.question;
+      const outAnswer = parsed.answer != null ? String(parsed.answer).trim() : userPayload.answer;
+      return { success: true, question: outQuestion, answer: outAnswer };
+    } catch (err) {
+      logger.error('问答对优化调用失败:', err);
+      return { success: false, error: err.message || '问答对优化失败' };
+    }
+  }
+
+  /**
    * 处理单批问答对提取（内部方法）
    * @param {Array} batchDialogues - 单批对话数组
    * @param {Object} speakerRoles - 说话人角色映射

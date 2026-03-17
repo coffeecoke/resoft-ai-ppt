@@ -1675,7 +1675,10 @@ function renderQAPairs(qaPairs, containerId = 'st-dialoguesList-qa') {
            onclick="playQAAudio(${index})">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
           <div style="font-weight: bold; color: #1890ff; font-size: 16px;">Q${qaIndex}</div>
-          ${classificationInfo ? '' : '<span style="font-size: 11px; color: #999;">未分类</span>'}
+          <div style="display: flex; align-items: center; gap: 8px;">
+            ${qa.id ? `<button type="button" class="btn btn-sm btn-outline-primary" data-concern-id="${escapeHtml(qa.id)}" onclick="event.stopPropagation(); optimizeQAPairInTranscription(this.getAttribute('data-concern-id'))" title="去除语气词并据前后文补全">🔄 优化</button>` : ''}
+            ${classificationInfo ? '' : '<span style="font-size: 11px; color: #999;">未分类</span>'}
+          </div>
         </div>
         <div style="margin-bottom: ${qa.answer && qa.answer.length > 0 ? '8px' : '0'}; line-height: 1.8; color: #333; font-size: 14px;">
           ${questionTimeDisplay ? `<span style="color: #666; font-size: 13px; font-family: monospace; margin-right: 8px;">${escapeHtml(questionTimeDisplay)}</span>` : ''}
@@ -1829,6 +1832,28 @@ function playQAAudio(qaIndex) {
   const startTimeDisplay = formatTimeFromSeconds(actualStartSeconds);
   const endTimeDisplay = formatTimeFromSeconds(actualEndSeconds);
   showToast(`正在播放问答对 Q${qaIndex + 1} ${timeRangeDisplay}（缓冲范围：${startTimeDisplay}-${endTimeDisplay}）`, 'info');
+}
+
+/**
+ * 问答对优化（去语气词 + 前后文补全），并保存后刷新列表
+ * @param {string} concernId - 问答对(concern)的 id
+ */
+async function optimizeQAPairInTranscription(concernId) {
+  if (!concernId) return;
+  try {
+    const res = await fetch(`${ST_API_BASE}/qa/concerns/${concernId}/optimize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ save: true })
+    });
+    const result = await res.json();
+    if (!result.success) throw new Error(result.error || '优化失败');
+    showToast('已优化并保存', 'success');
+    if (st_currentTranscriptionId) loadQAPairs(st_currentTranscriptionId).catch(() => {});
+  } catch (err) {
+    console.error('问答对优化失败:', err);
+    showToast(err.message || '优化失败', 'error');
+  }
 }
 
 // 角色判断设置对话框管理

@@ -64,6 +64,12 @@ router.get('/scenes', async (req, res) => {
         icon: 'question-circle',
       },
       {
+        code: 'qa_optimize',
+        name: '问答对优化',
+        description: '去除语气词并结合前后文补全问答对（主语与句子完整性）',
+        icon: 'edit',
+      },
+      {
         code: 'tender_analysis',
         name: '招标文件分析',
         description: '分析招标文件，提取关键信息并生成投标目录结构',

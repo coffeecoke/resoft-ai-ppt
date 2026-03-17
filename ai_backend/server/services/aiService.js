@@ -7,6 +7,9 @@
 const { OpenAI } = require('openai')
 const { getModelConfig } = require('../config/aiModels')
 
+// 请求超时（毫秒），避免代理/网络慢导致长时间挂起
+const REQUEST_TIMEOUT_MS = 120000
+
 class AIService {
   /**
    * 创建OpenAI客户端
@@ -23,7 +26,8 @@ class AIService {
     
     return new OpenAI({
       apiKey: config.apiKey,
-      baseURL: config.baseUrl
+      baseURL: config.baseUrl,
+      timeout: REQUEST_TIMEOUT_MS
     })
   }
 
@@ -44,15 +48,22 @@ class AIService {
     console.log(`📋 [AI调用] 实际模型: ${config.model}, Provider: ${config.provider}, BaseURL: ${config.baseUrl}`)
     console.log(`📊 [AI调用] 消息数量: ${messages.length}, 温度: ${options.temperature ?? 0.7}, 最大Token: ${options.maxTokens ?? 4096}`)
     
-    const response = await client.chat.completions.create({
-      model: config.model,
-      messages,
-      temperature: options.temperature ?? 0.7,
-      max_tokens: options.maxTokens ?? 4096,
-      ...options
-    })
-    
-    return response.choices[0].message.content
+    // 只传 OpenAI 标准参数，避免 ...options 把 maxTokens 等驼峰字段带给上游导致 400
+    try {
+      const response = await client.chat.completions.create({
+        model: config.model,
+        messages,
+        temperature: options.temperature ?? 0.7,
+        max_tokens: options.maxTokens ?? 4096
+      })
+      return response.choices[0].message.content
+    } catch (err) {
+      const msg = err && (err.message || String(err))
+      if (/connection|ECONNREFUSED|ETIMEDOUT|fetch failed/i.test(msg)) {
+        console.error(`[AI调用] 连接失败 BaseURL=${config.baseUrl} 请检查: 1) 代理/服务是否启动 2) 本机到 ${config.baseUrl.replace(/\/v1.*$/, '')} 网络是否可达`)
+      }
+      throw err
+    }
   }
 
   /**
@@ -71,13 +82,13 @@ class AIService {
     // ✅ 添加调用日志
     console.log(`🤖 [AI调用-流式] 模型: ${config.model}, Provider: ${config.provider}, BaseURL: ${config.baseUrl}`)
     
+    // 只传 OpenAI 标准参数，避免 ...options 把 maxTokens 带给上游导致 400
     const stream = await client.chat.completions.create({
       model: config.model,
       messages,
       temperature: options.temperature ?? 0.7,
       max_tokens: options.maxTokens ?? 4096,
-      stream: true,
-      ...options
+      stream: true
     })
     
     let fullContent = ''
@@ -114,13 +125,13 @@ class AIService {
     res.setHeader('Connection', 'keep-alive')
     
     try {
+      // 只传 OpenAI 标准参数，避免 ...options 把 maxTokens 带给上游导致 400
       const stream = await client.chat.completions.create({
         model: config.model,
         messages,
         temperature: options.temperature ?? 0.7,
         max_tokens: options.maxTokens ?? 4096,
-        stream: true,
-        ...options
+        stream: true
       })
       
       for await (const chunk of stream) {
@@ -133,10 +144,10 @@ class AIService {
       res.end()
     } catch (error) {
       console.error('AI Stream Error:', error)
-      if (!res.headersSent) {
-        res.status(500).json({ error: 'AI服务调用失败' })
-      } else {
+      if (res.headersSent) {
         res.end()
+      } else {
+        res.status(500).json({ error: 'AI服务调用失败' })
       }
     }
   }

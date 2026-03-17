@@ -186,24 +186,35 @@ const modelConfigs = {
 /**
  * 获取模型配置
  * 
- * @param {string} modelName - 模型名称
+ * 若 modelName 在预置列表中则返回对应配置；
+ * 否则按「自定义模型」处理：使用通用 API Key/BaseURL，model 为传入的 modelName（兼容数据库里配置的模型，如 doubao-seed-2-0-pro-260215）。
+ *
+ * @param {string} modelName - 模型名称（预置代码或数据库中的 model_name）
  * @returns {Object} 模型配置对象
  */
 function getModelConfig(modelName) {
-  const config = modelConfigs[modelName]
+  let config = modelConfigs[modelName]
   if (!config) {
-    throw new Error(`不支持的模型: ${modelName}`)
+    // 未在预置列表中：按自定义模型处理，使用通用端点，避免“不支持的模型”报错
+    const apiKey = process.env.CUSTOM_OPENAI_API_KEY || CUSTOM_API_KEY
+    const baseUrl = process.env.CUSTOM_OPENAI_BASE_URL || CUSTOM_BASE_URL
+    return {
+      provider: 'openai',
+      model: modelName,
+      displayName: modelName,
+      apiKey,
+      baseUrl
+    }
   }
-  
+
   // 优先使用环境变量，否则使用硬编码的默认值
   let apiKey = process.env[config.envKey]
   let baseUrl = process.env[config.envBaseUrl] || config.defaultBaseUrl
-  
-  // 如果环境变量为空，使用硬编码的默认值
+
   if (!apiKey) {
     apiKey = CUSTOM_API_KEY
   }
-  
+
   return {
     ...config,
     apiKey: apiKey,

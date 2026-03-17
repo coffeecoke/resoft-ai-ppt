@@ -241,6 +241,7 @@ function getSceneName(scene) {
     'transcription_correction': '语音转录纠错',
     'role_judgment': '角色判断',
     'qa_extraction': '问答对提取',
+    'qa_optimize': '问答对优化',
     'qa_classification': '问答对分类',
     'ppt_analysis': 'PPT分析',
     'presales_analysis': '售前交流综合分析',

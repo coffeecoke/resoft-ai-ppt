@@ -1324,23 +1324,40 @@ function renderQADetail(qa) {
       </div>
     </div>
     
+    ${(qa.question_original != null && qa.question_original !== '') || (qa.answer_original != null && qa.answer_original !== '') ? `
     <div style="margin-bottom: 24px;">
-      <h4 style="margin: 0 0 12px 0; font-size: 16px; color: #262626; display: flex; align-items: center;">
-        <span style="margin-right: 8px;">❓</span> 问题内容
-        ${questionSpeakerRole ? `<span class="badge badge-${questionSpeakerRole === '客户方' ? 'primary' : 'success'}" style="margin-left: 8px; font-size: 12px;">${questionSpeakerRole}提问</span>` : ''}
+      <h4 style="margin: 0 0 12px 0; font-size: 16px; color: #8c8c8c; display: flex; align-items: center;">
+        <span style="margin-right: 8px;">📜</span> 历史问答对（优化前原文）
       </h4>
-      <div style="background: #fff; border: 1px solid #d9d9d9; border-radius: 4px; padding: 16px; min-height: 60px; white-space: pre-wrap; word-wrap: break-word; line-height: 1.6;">
-        ${escapeHtml(qa.question || '（无）')}
+      <div style="background: #fafafa; border: 1px solid #e8e8e8; border-radius: 4px; padding: 16px;">
+        <div style="margin-bottom: 12px;">
+          <div style="font-size: 13px; color: #8c8c8c; margin-bottom: 6px;">问题</div>
+          <div style="white-space: pre-wrap; word-wrap: break-word; line-height: 1.6;">${escapeHtml(qa.question_original || '（无）')}</div>
+        </div>
+        <div>
+          <div style="font-size: 13px; color: #8c8c8c; margin-bottom: 6px;">回答</div>
+          <div style="white-space: pre-wrap; word-wrap: break-word; line-height: 1.6;">${escapeHtml(qa.answer_original || '（无）')}</div>
+        </div>
       </div>
     </div>
+    ` : ''}
     
     <div style="margin-bottom: 24px;">
       <h4 style="margin: 0 0 12px 0; font-size: 16px; color: #262626; display: flex; align-items: center;">
-        <span style="margin-right: 8px;">💬</span> 回答内容
-        ${answerSpeakerRole ? `<span class="badge badge-${answerSpeakerRole === '客户方' ? 'primary' : 'success'}" style="margin-left: 8px; font-size: 12px;">${answerSpeakerRole}回答</span>` : ''}
+        <span style="margin-right: 8px;">✅</span> 已优化后的问答对
+        ${questionSpeakerRole ? `<span class="badge badge-${questionSpeakerRole === '客户方' ? 'primary' : 'success'}" style="margin-left: 8px; font-size: 12px;">${questionSpeakerRole}提问</span>` : ''}
       </h4>
-      <div style="background: #fff; border: 1px solid #d9d9d9; border-radius: 4px; padding: 16px; min-height: 60px; white-space: pre-wrap; word-wrap: break-word; line-height: 1.6;">
-        ${escapeHtml(qa.answer || '（无）')}
+      <div style="margin-bottom: 12px;">
+        <div style="font-size: 13px; color: #666; margin-bottom: 6px;">问题</div>
+        <div style="background: #fff; border: 1px solid #d9d9d9; border-radius: 4px; padding: 16px; min-height: 50px; white-space: pre-wrap; word-wrap: break-word; line-height: 1.6;">
+          ${escapeHtml(qa.question || '（无）')}
+        </div>
+      </div>
+      <div>
+        <div style="font-size: 13px; color: #666; margin-bottom: 6px;">回答</div>
+        <div style="background: #fff; border: 1px solid #d9d9d9; border-radius: 4px; padding: 16px; min-height: 50px; white-space: pre-wrap; word-wrap: break-word; line-height: 1.6;">
+          ${escapeHtml(qa.answer || '（无）')}
+        </div>
       </div>
     </div>
     
@@ -1704,6 +1721,81 @@ function toggleQAReviewEdit(show) {
     if (modifyBtn) modifyBtn.style.display = 'inline-block';
     if (actions) actions.style.display = 'none';
   }
+}
+
+/**
+ * 一键优化全部（按当前筛选条件，批量优化所有问答对并保存）
+ */
+async function batchOptimizeAll() {
+  const overlay = document.getElementById('qa-optimize-overlay');
+  const statusEl = document.getElementById('qa-optimize-status');
+  const progressEl = document.getElementById('qa-optimize-progress');
+  const closeBtn = document.getElementById('qa-optimize-close-btn');
+  if (!overlay || !statusEl || !progressEl) return;
+
+  const params = new URLSearchParams({ page: 1, pageSize: 5000 });
+  if (qaState.filters.transcriptionName) params.append('transcriptionName', qaState.filters.transcriptionName);
+  if (qaState.filters.classificationStatus) params.append('classificationStatus', qaState.filters.classificationStatus);
+  if (qaState.filters.category) params.append('category', qaState.filters.category);
+  if (qaState.filters.intent) params.append('intent', qaState.filters.intent);
+  if (qaState.filters.questionSource) params.append('questionSource', qaState.filters.questionSource);
+  if (qaState.filters.reviewStatus) params.append('reviewStatus', qaState.filters.reviewStatus);
+
+  overlay.style.display = 'flex';
+  if (closeBtn) closeBtn.style.display = 'none';
+  statusEl.textContent = '正在获取问答对列表...';
+  progressEl.textContent = '';
+
+  try {
+    const listRes = await fetch(`${API_BASE}/qa/concerns?${params.toString()}`);
+    const listResult = await listRes.json();
+    if (!listResult.success) throw new Error(listResult.error || '获取列表失败');
+    const list = listResult.data?.list || [];
+    const total = listResult.data?.total || 0;
+    const ids = list.map(qa => qa.id).filter(Boolean);
+    if (ids.length === 0) {
+      statusEl.textContent = '当前筛选条件下暂无问答对';
+      if (closeBtn) closeBtn.style.display = 'block';
+      return;
+    }
+    statusEl.textContent = `共 ${ids.length} 条，开始优化（去语气词+前后文补全）...`;
+    const CHUNK = 15;
+    let successCount = 0;
+    let failCount = 0;
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      const chunk = ids.slice(i, i + CHUNK);
+      progressEl.textContent = `已处理 ${successCount + failCount}/${ids.length} 条${failCount ? `，失败 ${failCount} 条` : ''}`;
+      const res = await fetch(`${API_BASE}/qa/optimize-batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ concernIds: chunk, save: true })
+      });
+      const result = await res.json();
+      if (result.success && result.data?.results) {
+        result.data.results.forEach(r => {
+          if (r.error) failCount++; else successCount++;
+        });
+      } else {
+        failCount += chunk.length;
+      }
+    }
+    progressEl.textContent = `完成：成功 ${successCount} 条，失败 ${failCount} 条`;
+    statusEl.textContent = '一键优化全部完成';
+    if (closeBtn) closeBtn.style.display = 'block';
+    showToast(`优化完成：成功 ${successCount} 条，失败 ${failCount} 条`, failCount > 0 ? 'warning' : 'success');
+    loadQAList();
+  } catch (err) {
+    console.error('一键优化全部失败:', err);
+    statusEl.textContent = '优化失败：' + (err.message || '未知错误');
+    progressEl.textContent = '';
+    if (closeBtn) closeBtn.style.display = 'block';
+    showToast(err.message || '一键优化失败', 'error');
+  }
+}
+
+function closeOptimizeOverlay() {
+  const overlay = document.getElementById('qa-optimize-overlay');
+  if (overlay) overlay.style.display = 'none';
 }
 
 /**
