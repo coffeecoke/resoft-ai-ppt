@@ -428,6 +428,65 @@ export const responseFileSidebarData = {
   ]
 }
 
+export const tenderFileSidebarData = {
+  responseFiles: [
+    {
+      id: 'response_001',
+      title: '北京银行一表通项目建设应标文件',
+      creator: '张三',
+      date: '2025-11-01',
+    },
+    {
+      id: 'response_002',
+      title: '工商银行一表通项目建设应标文件',
+      creator: '李四',
+      date: '2025-10-28',
+    }
+  ],
+  projectVideos: [
+    {
+      id: 'video_001',
+      title: '北京银行一表通项目首次交流会议',
+      creator: '张三',
+      date: '2025-09-20',
+      views: 45,
+      likes: 12,
+      duration: '01:23:45',
+      thumbnail: ''
+    },
+    {
+      id: 'video_002',
+      title: '北京银行一表通项目需求调研会议',
+      creator: '李四',
+      date: '2025-09-25',
+      views: 38,
+      likes: 8,
+      duration: '00:56:12',
+      thumbnail: ''
+    }
+  ],
+  similarTenderFiles: [
+    {
+      id: 'tender_002',
+      title: '工商银行一表通项目建设招标文件',
+      creator: '工商银行',
+      date: '2025-10-10',
+    },
+    {
+      id: 'tender_003',
+      title: '建设银行一表通系统建设招标文件',
+      creator: '建设银行',
+      date: '2025-09-25',
+    },
+    {
+      id: 'tender_004',
+      title: '中国银行数据治理平台招标文件',
+      creator: '中国银行',
+      date: '2025-09-15',
+    }
+  ]
+}
+
 // ==================== 关心问题报告数据 ====================
 const createConcernedReports = () => {
   const companies = ['中国工商银行', '平安银行', '中信信托']

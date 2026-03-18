@@ -217,6 +217,10 @@ const props = defineProps({
   pptCatalogTree: {
     type: Array,
     default: () => []
+  },
+  bidSectionTypes: {
+    type: Array,
+    default: () => []
   }
 })
 
@@ -427,9 +431,19 @@ const catalogData = computed(() => {
   if (props.activeTab === 'concerned') {
     return questionCategoryData.value
   } else if (props.activeTab === 'response') {
+    // 优先使用 API 数据（bid_section_types），包在"基础部分"分组下
+    if (props.bidSectionTypes && (props.bidSectionTypes as any[]).length > 0) {
+      return [
+        {
+          id: 'basic',
+          name: '基础部分',
+          children: (props.bidSectionTypes as any[]).map((t: any) => ({ id: t.code, name: t.name }))
+        }
+      ]
+    }
     return responseFileCatalogData
   } else {
-    return pptCatalogData.value // pptCatalogData 现在是 computed
+    return pptCatalogData.value
   }
 })
 
@@ -972,6 +986,25 @@ watch(
       // 触发事件通知父组件（Home.vue 会调用 loadDocuments）
       emit('update:filters', props.filters)
     }
+  },
+  { deep: true }
+)
+
+// 🆕 监听响应文件目录筛选变化（response tab），同步到 responseFilters.sectionTypes
+watch(
+  () => ({
+    responseFileCatalog: selectedOptions.responseFileCatalog,
+    customerName: customerNameInput.value
+  }),
+  (newVal) => {
+    if (!isInitialized.value) return
+    if (props.activeTab !== 'response') return
+
+    if (!props.filters.responseFilters) return
+    props.filters.responseFilters.sectionTypes = newVal.responseFileCatalog || []
+    props.filters.responseFilters.customerName = newVal.customerName || ''
+
+    emit('update:filters', props.filters)
   },
   { deep: true }
 )

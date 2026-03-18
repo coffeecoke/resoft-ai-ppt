@@ -1,7 +1,7 @@
 <template>
   <section class="tender-page">
     <h2 class="page-title">招标文件</h2>
-    
+
     <!-- 筛选区域 -->
     <CommonFilters
       :industry-tags="industryTags"
@@ -14,10 +14,17 @@
       @select-customer="handleSelectCustomer"
       @select-product="handleSelectProduct"
     />
-    
+
+    <!-- 加载状态 -->
+    <div v-if="isLoading" class="tender-loading">
+      <i class="ri-loader-4-line spin"></i>
+      <span>加载中...</span>
+    </div>
+
     <!-- 招标文件列表 -->
     <TenderFileList
-      :items="tenderFiles"
+      v-else
+      :items="tenderFileItems"
       @item-click="handleTenderClick"
       @ai-analyze="handleTenderAiAnalyze"
       @download="handleTenderDownload"
@@ -26,23 +33,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { inject } from 'vue'
+import { ref, computed, onMounted, inject } from 'vue'
 import TenderFileList from './TenderFileList.vue'
 import CommonFilters from './CommonFilters.vue'
-
-const props = defineProps({
-  tenderFiles: {
-    type: Array,
-    default: () => []
-  }
-})
+import { getTenderDocumentList } from '@/services/tenderDocumentService'
 
 // 筛选状态
 const selectedIndustry = ref<string | null>(null)
 const filterValues = ref<Record<string, string | null>>({
   procurementMethod: null
 })
+
+// 数据状态
+const isLoading = ref(false)
+const rawList = ref<any[]>([])
 
 // 行业领域标签
 const industryTags = [
@@ -65,7 +69,6 @@ const procurementMethods = [
   { id: 'single', name: '单一来源' }
 ]
 
-// 筛选组配置
 const filterGroups = computed(() => [
   {
     key: 'procurementMethod',
@@ -75,7 +78,26 @@ const filterGroups = computed(() => [
   }
 ])
 
-// 注入dialogs composable
+// 将 API 数据映射到列表组件所需格式
+const tenderFileItems = computed(() =>
+  rawList.value.map(d => ({
+    id: d.id,
+    title: d.project_name || d.name,
+    date: d.created_at ? d.created_at.slice(0, 10) : '',
+    controlPrice: d.budget || '--',
+    customerName: '--',
+    tenderType: '--',
+    views: 0,
+    favorites: 0,
+    downloads: 0,
+    // 传递原始数据供弹窗使用
+    type: 'tender',
+    name: d.name,
+    project_name: d.project_name,
+  }))
+)
+
+// 注入 dialogs composable
 const dialogs: any = inject('dialogs')
 
 // 处理筛选变化
@@ -88,36 +110,72 @@ const handleFilterValuesChange = (values: Record<string, string | null>) => {
 }
 
 const handleSelectCustomer = () => {
-  // TODO: 实现选择客户功能
   console.log('选择客户')
 }
 
 const handleSelectProduct = () => {
-  // TODO: 实现选择产品与解决方案功能
   console.log('选择产品与解决方案')
 }
 
 const handleTenderClick = (item: any) => {
   if (dialogs) {
-    dialogs.openPpt(item)
+    dialogs.openPpt({ ...item, type: 'tender' })
   }
 }
 
 const handleTenderAiAnalyze = (item: any) => {
   if (dialogs) {
-    // 打开PDF对话框并显示AI分析面板
-    dialogs.openPpt(item)
-    // 可以在这里添加打开AI分析面板的逻辑
+    dialogs.openPpt({ ...item, type: 'tender' })
   }
 }
 
 const handleTenderDownload = (item: any) => {
-  // TODO: 实现下载逻辑
-  console.log('下载招标文件:', item)
+  if (dialogs) {
+    dialogs.openPpt({ ...item, type: 'tender' })
+  }
 }
+
+// 加载数据
+const loadData = async () => {
+  isLoading.value = true
+  try {
+    const result = await getTenderDocumentList({ pageSize: 100 })
+    rawList.value = result.list || []
+  } catch (err) {
+    console.error('[TenderPageView] 加载招标文件失败:', err)
+    rawList.value = []
+  } finally {
+    isLoading.value = false
+  }
+}
+
+onMounted(() => {
+  loadData()
+})
 </script>
 
 <style scoped>
-/* 样式继承自 sales.scss */
-</style>
+.tender-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 60px 20px;
+  color: #9ca3af;
+  font-size: 14px;
+}
 
+.tender-loading i {
+  font-size: 20px;
+  color: #f36f6f;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+</style>

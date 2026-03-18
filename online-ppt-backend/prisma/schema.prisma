@@ -800,10 +800,30 @@ model tender_documents {
 
   bid_directory_items bid_directory_items[]
   bid_compositions    bid_compositions[]
+  tender_sections     tender_sections[]
 
   @@index([status], map: "idx_tender_status")
   @@index([created_by], map: "idx_tender_created_by")
   @@index([created_at], map: "idx_tender_created_at")
+}
+
+/// 招标文件章节表（从招标文件 docx 解析出的目录章节，供前端 TOC 展示和章节勾选）
+model tender_sections {
+  id                String   @id @db.VarChar(50)
+  tender_id         String   @db.VarChar(50)  /// 关联 tender_documents.id
+  title             String   @db.VarChar(500) /// 章节标题文本
+  level             Int      @default(1)      /// 层级（1=章, 2=节, 3=小节）
+  sort_order        Int      @default(0)      /// 排序
+  parent_section_id String?  @db.VarChar(50) /// 父章节ID（支持树形结构，null 表示顶级）
+  created_at        DateTime @default(now())
+
+  tender_documents tender_documents   @relation(fields: [tender_id], references: [id], onDelete: Cascade)
+  parent           tender_sections?   @relation("tender_section_hierarchy", fields: [parent_section_id], references: [id], onDelete: Restrict)
+  children         tender_sections[]  @relation("tender_section_hierarchy")
+
+  @@index([tender_id], map: "idx_tendersec_tender_id")
+  @@index([parent_section_id], map: "idx_tendersec_parent_id")
+  @@index([sort_order], map: "idx_tendersec_sort_order")
 }
 
 /// 投标目录项（根据招标文件AI生成的投标文件目录树）
@@ -1041,7 +1061,7 @@ model leads {
   updated_at    DateTime @updatedAt                  /// 最后更新时间（用于增量同步）
   // lead_category lead_categories? @relation(fields: [category_id], references: [id])
   // customer      customers?       @relation(fields: [customer_id], references: [id])
-  // communication_reports communication_reports[] /// 交流报备记录
+  communication_reports communication_reports[] /// 交流报备记录
   @@index([category_id], map: "idx_leads_category_id")
   @@index([customer_id], map: "idx_leads_customer_id")
   @@index([owner_id], map: "idx_leads_owner_id")
