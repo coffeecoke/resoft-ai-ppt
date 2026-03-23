@@ -453,11 +453,8 @@ const handleQuestionCategoryFiltersUpdate = (newFilters: {
 
 
 const handleFiltersUpdate = () => {
-  // 只有 PPT tab 需要在此手动触发接口，其余 tab 的 watcher 在 useFilters 内部已自动处理
-  if (activeTab.value === 'ppt' || activeTab.value === 'ppt-new') {
-    const params = filters.buildDocumentParams(filters.pptFilters)
-    filters.loadDocuments(params)
-  }
+  // useFilters 内部的 watcher 已自动监听所有 filters 变化并触发对应接口
+  // 此处无需重复调用，避免双发请求
 }
 
 // 品牌Tab选项

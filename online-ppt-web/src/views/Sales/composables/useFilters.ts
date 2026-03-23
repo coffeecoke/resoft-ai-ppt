@@ -65,7 +65,7 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
   // 🆕 响应文件（bid_documents）从 API 加载
   const bidDocumentsFromAPI = ref<BidDocument[]>([])
   const isLoadingBidDocuments = ref(false)
-  const loadBidDocuments = async (params?: { sectionTypes?: string[] }) => {
+  const loadBidDocuments = async (params?: { sectionTypes?: string[]; name?: string }) => {
     try {
       isLoadingBidDocuments.value = true
       const result = await getBidDocumentList({ pageSize: 100, ...params })
@@ -205,6 +205,7 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
   // 响应文件筛选条件
   const responseFilters = reactive({
     customerName: '',
+    productName: '',
     sectionTypes: [] as string[],
   })
   
@@ -266,7 +267,13 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
       })
     }
     
-    // 5. PPT目录筛选（productIntro）- 暂时保留，等待后续实现
+    // 5. 产品名称筛选（模糊匹配 product 字段）
+    if (pptFilters.productSolution && pptFilters.productSolution.trim() !== '') {
+      const q = pptFilters.productSolution.trim().toLowerCase()
+      list = list.filter((x: any) => x.product && x.product.toLowerCase().includes(q))
+    }
+
+    // 6. PPT目录筛选（productIntro）- 暂时保留，等待后续实现
     // TODO: 需要后端支持目录筛选或者通过其他方式实现
     
     return list
@@ -280,15 +287,28 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
     if (pf.audience && pf.audience.length > 0) params.audience = pf.audience
     if (pf.language && pf.language.length > 0) params.language = pf.language
     if (pf.customerName && pf.customerName.trim() !== '') params.keyword = pf.customerName
+    if (pf.productSolution && pf.productSolution.trim() !== '') params.product = pf.productSolution
     return params
   }
+
+  // 防抖工具
+  const debounce = <T extends (...args: any[]) => any>(fn: T, delay: number): T => {
+    let timer: ReturnType<typeof setTimeout> | null = null
+    return ((...args: any[]) => {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => fn(...args), delay)
+    }) as T
+  }
+
+  const debouncedLoadDocuments = debounce(loadDocuments, 500)
+  const debouncedLoadBidDocuments = debounce(loadBidDocuments, 500)
 
   // 监听筛选条件变化，重新加载数据（直接深度监听 pptFilters，确保子组件修改能触发）
   watch(
     pptFilters,
     (newVal) => {
       const params = buildDocumentParams(newVal)
-      loadDocuments(params)
+      debouncedLoadDocuments(params)
     },
     { deep: true }
   )
@@ -297,8 +317,9 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
   watch(
     responseFilters,
     (newVal) => {
-      loadBidDocuments({
+      debouncedLoadBidDocuments({
         sectionTypes: newVal.sectionTypes.length ? newVal.sectionTypes : undefined,
+        name: newVal.productName.trim() || undefined,
       })
     },
     { deep: true }
@@ -407,6 +428,10 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
       const q = responseFilters.customerName.trim().toLowerCase()
       list = list.filter((x: any) => x.title.toLowerCase().includes(q))
     }
+    if (responseFilters.productName) {
+      const q = responseFilters.productName.trim().toLowerCase()
+      list = list.filter((x: any) => x.title.toLowerCase().includes(q))
+    }
 
     return list
   })
@@ -478,6 +503,7 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
       case 'response':
         Object.assign(responseFilters, {
           customerName: '',
+          productName: '',
           sectionTypes: [],
         })
         break
