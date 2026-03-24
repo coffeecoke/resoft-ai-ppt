@@ -262,8 +262,7 @@ router.get('/by-product/:productId', async (req, res) => {
 router.post('/:documentId/summary', async (req, res) => {
   try {
     const { documentId } = req.params
-    
-    console.log('[文档总结] 开始生成总结，documentId:', documentId)
+    const { userPrompt } = req.body || {}
     
     // 1. 查询文档基本信息
     const document = await prisma.documents.findUnique({
@@ -324,7 +323,8 @@ router.post('/:documentId/summary', async (req, res) => {
     // 5. 构建Prompt
     const prompt = createSummaryPrompt(finalText, {
       name: document.name,
-      slideCount: document.slide_count
+      slideCount: document.slide_count,
+      userPrompt: userPrompt || ''
     })
     
     console.log('[文档总结] Prompt构建完成')
@@ -445,7 +445,7 @@ router.post('/:documentId/chat', async (req, res) => {
 router.post('/:documentId/analyze-slides', async (req, res) => {
   try {
     const { documentId } = req.params
-    const { slideIds } = req.body
+    const { slideIds, userPrompt } = req.body
     
     // 验证参数
     if (!Array.isArray(slideIds) || slideIds.length === 0) {
@@ -525,7 +525,8 @@ router.post('/:documentId/analyze-slides', async (req, res) => {
       name: document.name,
       slideCount: document.slide_count,
       analyzedPageCount: slideContents.length,
-      pageNumbers: slideContents.map(s => s.slide_order)
+      pageNumbers: slideContents.map(s => s.slide_order),
+      userPrompt: userPrompt || ''
     })
     
     console.log('[幻灯片分析] Prompt构建完成')
