@@ -28,6 +28,8 @@ import translateRouter from './routes/translate.js'
 import templatesRouter from './routes/templates.js'
 import documentsRouter from './routes/documents.js'
 import salesRouter from './routes/sales.js'
+import wopiRouter from './routes/wopi.js'
+import personalDocsRouter from './routes/personal-documents.js'
 import thumbnailsRouter from './routes/thumbnails.js'
 import thumbnailTasksRouter from './routes/thumbnailTasks.js'
 import adminRouter from './routes/admin/index.js'
@@ -86,7 +88,8 @@ app.use((req, res, next) => {
     { method: 'GET', path: '/tools/models' },
   ]
   // 静态资源路径前缀（无需登录）
-  const publicPrefixes = ['/covers/', '/snapshots/', '/thumbnails/', '/templates/thumbnails/']
+  // WOPI 文件接口：OnlyOffice 通过 access_token 验证，不需要登录
+  const publicPrefixes = ['/covers/', '/snapshots/', '/thumbnails/', '/templates/thumbnails/', '/wopi/files/']
   const isPublic = publicPaths.some(
     p => p.method === req.method && req.path === p.path
   ) || publicPrefixes.some(prefix => req.path.startsWith(prefix))
@@ -113,6 +116,8 @@ app.use('/documents', documentsRouter)
 app.use('/thumbnails', thumbnailsRouter)
 app.use('/thumbnail-tasks', thumbnailTasksRouter)
 app.use('/sales', salesRouter)
+app.use('/wopi', wopiRouter)
+app.use('/personal-documents', personalDocsRouter)
 app.use('/admin', adminRouter)
 
 // 健康检查

@@ -957,6 +957,27 @@ model bid_composition_items {
   @@index([section_id], map: "idx_bidcompitem_sec_id")
   @@index([sort_order], map: "idx_bidcompitem_sort")
 }
+
+/// 个人文档表（用户通过合并章节创建的文档，仅创建者可见）
+model personal_documents {
+  id          String   @id @db.VarChar(50)
+  name        String   @db.VarChar(255)    /// 文件名称
+  file_path   String   @db.VarChar(500)    /// 存储路径
+  file_type   String   @default(".docx") @db.VarChar(20)
+  file_size   BigInt   @default(0)         /// 文件大小（字节）
+
+  /// 来源信息（记录是从哪些章节合并而来）
+  source_type String?  @db.VarChar(20)     /// 'tender' | 'bid'
+  source_ids  Json?                         /// 合并的章节ID列表
+
+  created_by  String   @db.VarChar(50)     /// 所属用户
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  @@index([created_by], map: "idx_personal_docs_created_by")
+  @@index([created_at], map: "idx_personal_docs_created_at")
+}
+
 // ==================== 外部系统同步相关表 ====================
 
 /// 部门表（树形层级结构，从外部系统同步）

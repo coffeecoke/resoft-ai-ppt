@@ -396,6 +396,14 @@ const handleVideoClick = async (item: any) => {
         try {
           const qaRes = await getTranscriptionConcerns(d.id) as { data?: any[] }
           const list = qaRes?.data ?? []
+          const speakerRolesMap = d.speakerRoles || {}
+          const resolveRole = (speakerId: string | null) => {
+            if (!speakerId) return null
+            const role = speakerRolesMap[speakerId]
+            if (role === 'customer') return '客户'
+            if (role === 'our_side') return '我方'
+            return null
+          }
           qa = list.map((c: any) => ({
             q: c.question ?? '',
             question: c.question ?? '',
@@ -408,7 +416,9 @@ const handleVideoClick = async (item: any) => {
             likes: c.likes ?? 0,
             expertApproved: !!c.expertApproved,
             expertAdvice: c.expertAdvice ?? '',
-            expertReviewer: c.expertReviewer ?? ''
+            expertReviewer: c.expertReviewer ?? '',
+            questionRole: resolveRole(c.question_speaker),
+            answerRole: resolveRole(c.answer_speaker)
           }))
         } catch (_) {}
         const videoDetail = {

@@ -88,7 +88,9 @@
 
                 <!-- 问题 -->
                 <div class="report-item-question">
-                  <span class="report-item-question-text">{{ item.q }}</span>
+                  <span class="report-item-question-text">
+                    <span v-if="item.questionRole" class="qa-role-label" :class="item.questionRole === '客户' ? 'qa-role-customer' : 'qa-role-our'">{{ item.questionRole }}</span>{{ item.q }}
+                  </span>
                   <span
                     v-if="item.time"
                     class="report-item-time qa-time-clickable"
@@ -106,7 +108,7 @@
                       class="answer-content"
                       :class="{ 'answer-content-expanded': localAnswerExpanded[`system-${index}`] }"
                     >
-                      {{ item.answerText }}
+                      <span v-if="item.answerRole" class="qa-role-label" :class="item.answerRole === '我方' ? 'qa-role-our' : 'qa-role-customer'">{{ item.answerRole }}</span>{{ item.answerText }}
                     </div>
                     <button
                       v-if="isTruncated[`system-${index}`] && !localAnswerExpanded[`system-${index}`]"
@@ -599,6 +601,29 @@ const getSpeakerClass = (speaker) => {
 /* 视频对话框：文件名称字体大小 */
 .file-item .f-name {
   font-size: 0.85rem !important;
+}
+
+/* Q&A 角色标签 */
+.qa-role-label {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-right: 5px;
+  vertical-align: middle;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.qa-role-customer {
+  color: #c2410c;
+  background: #ffedd5;
+}
+
+.qa-role-our {
+  color: #1d4ed8;
+  background: #dbeafe;
 }
 
 /* Q&A 时间标签可点击样式 */

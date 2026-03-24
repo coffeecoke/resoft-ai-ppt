@@ -7,9 +7,39 @@
       @click="handleVideoClick(item)"
       style="cursor: pointer;"
     >
-      <!-- 视频卡片：显示缩略图 -->
+      <!-- 视频卡片：自定义封面 -->
       <div v-if="item.isVideo" class="thumb is-video">
-        <img :src="item.thumbnail" :alt="item.title" />
+        <div class="video-bg">
+          <div class="video-bg-overlay"></div>
+          <!-- 视频波纹（系统蓝） -->
+          <div class="audio-wave-bars">
+            <span class="bar" style="--delay: 0s; --h: 10%;"></span>
+            <span class="bar" style="--delay: 0.15s; --h: 18%;"></span>
+            <span class="bar" style="--delay: 0.3s; --h: 25%;"></span>
+            <span class="bar" style="--delay: 0.45s; --h: 35%;"></span>
+            <span class="bar" style="--delay: 0.6s; --h: 42%;"></span>
+            <span class="bar" style="--delay: 0.75s; --h: 50%;"></span>
+            <span class="bar" style="--delay: 0.6s; --h: 42%;"></span>
+            <span class="bar" style="--delay: 0.45s; --h: 35%;"></span>
+            <span class="bar" style="--delay: 0.3s; --h: 25%;"></span>
+            <span class="bar" style="--delay: 0.15s; --h: 18%;"></span>
+            <span class="bar" style="--delay: 0s; --h: 10%;"></span>
+            <span class="bar" style="--delay: 0.15s; --h: 18%;"></span>
+            <span class="bar" style="--delay: 0.3s; --h: 25%;"></span>
+            <span class="bar" style="--delay: 0.45s; --h: 35%;"></span>
+            <span class="bar" style="--delay: 0.6s; --h: 42%;"></span>
+            <span class="bar" style="--delay: 0.75s; --h: 50%;"></span>
+            <span class="bar" style="--delay: 0.6s; --h: 42%;"></span>
+            <span class="bar" style="--delay: 0.45s; --h: 35%;"></span>
+            <span class="bar" style="--delay: 0.3s; --h: 25%;"></span>
+            <span class="bar" style="--delay: 0.15s; --h: 18%;"></span>
+            <span class="bar" style="--delay: 0s; --h: 10%;"></span>
+          </div>
+          <!-- 播放图标 -->
+          <div class="video-icon">
+            <el-icon><VideoPlay /></el-icon>
+          </div>
+        </div>
         <span
           v-if="item.tag"
           class="badge"
@@ -17,9 +47,6 @@
         >
           {{ item.tag }}
         </span>
-        <div class="play-icon">
-          <el-icon><VideoPlay /></el-icon>
-        </div>
         <span v-if="item.duration" class="video-duration">{{ item.duration }}</span>
       </div>
 
@@ -96,6 +123,72 @@ const handleVideoClick = (item) => {
 </script>
 
 <style scoped>
+/* 视频卡片样式 */
+.thumb.is-video {
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+}
+
+.video-bg {
+  width: 100%;
+  height: 100%;
+  background-image: url('/audio-bg-default.png');
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.video-bg-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  pointer-events: none;
+}
+
+.video-icon {
+  width: 56px;
+  height: 56px;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+
+.video-icon :deep(.el-icon) {
+  font-size: 28px;
+  color: #2563eb;
+}
+
+.thumb.is-video .badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+}
+
+.thumb.is-video .video-duration {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  z-index: 2;
+}
+
 /* 音频卡片样式 */
 .thumb.is-audio {
   position: relative;

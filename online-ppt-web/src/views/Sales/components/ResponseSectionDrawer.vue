@@ -27,6 +27,10 @@
             <i class="ri-download-line"></i>
             合并下载
           </el-button>
+          <el-button type="warning" @click="handleMergeAndEdit" :loading="merging">
+            <i class="ri-file-edit-line"></i>
+            合并再编辑
+          </el-button>
           <el-button @click="handleClear">
             <i class="ri-delete-bin-line"></i>
             清空
@@ -85,6 +89,7 @@
 import { ref, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useResponseSectionStore } from '@/store/Sales/responseSectionStore'
+import { mergeAndEdit } from '@/services/wopiService'
 import Draggable from 'vuedraggable'
 
 const props = defineProps({ visible: { type: Boolean, default: false } })
@@ -92,6 +97,7 @@ const emit = defineEmits(['update:visible'])
 
 const store = useResponseSectionStore()
 const downloading = ref(false)
+const merging = ref(false)
 
 const drawerVisible = computed({
   get: () => props.visible,
@@ -187,6 +193,49 @@ const handleMergeDownload = async () => {
     ElMessage.error(err.message || '合并下载失败')
   } finally {
     downloading.value = false
+  }
+}
+
+// ========== 合并再编辑功能 ==========
+
+const handleMergeAndEdit = async () => {
+  const items = localSections.value.filter(s => !s.isHeaderOnly)
+  if (!items.length) {
+    ElMessage.warning('请至少选择一个章节')
+    return
+  }
+
+  // 过滤父子冗余
+  const filteredIds = filterRedundantChildren(items)
+  const filteredItems = items.filter(s => filteredIds.includes(s.id))
+
+  merging.value = true
+  try {
+    ElMessage.info('正在合并章节...')
+
+    // 转换为接口需要的格式
+    const sections = filteredItems.map(item => ({
+      id: item.id,
+      documentType: 'bid', // 响应文件是 bid
+      title: item.title
+    }))
+
+    const result = await mergeAndEdit({ sections })
+
+    if (!result.success) {
+      throw new Error(result.error || '合并失败')
+    }
+
+    // 打开新页签显示编辑器
+    const editorUrl = `${window.location.origin}/#/onlyoffice/editor?documentId=${result.data.id}&mode=edit`
+    window.open(editorUrl, '_blank')
+
+    ElMessage.success('章节已合并，请在新页签中编辑')
+  } catch (error) {
+    console.error('[ResponseSectionDrawer] 合并章节失败:', error)
+    ElMessage.error(error.message || '合并章节失败')
+  } finally {
+    merging.value = false
   }
 }
 </script>
