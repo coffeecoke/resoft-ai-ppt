@@ -13,6 +13,13 @@ const routes: RouteRecordRaw[] = [
     redirect: '/sales/home'
   },
   {
+    // OnlyOffice 文档编辑页面（全屏，独立页签）
+    path: '/onlyoffice/editor',
+    name: 'OnlyOfficeEditor',
+    component: () => import('@/views/OnlyOffice/EditorPage.vue'),
+    meta: { title: '文档编辑' }
+  },
+  {
     path: '/sales',
     component: () => import('@/views/Sales/Layout.vue'),
     children: [

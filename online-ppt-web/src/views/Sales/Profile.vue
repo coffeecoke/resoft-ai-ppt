@@ -223,8 +223,31 @@
         <el-tab-pane label="我的招投标" name="tenders">
           <div class="tab-content">
             <div class="ppt-grid">
-              <div class="empty-item" style="text-align:center; padding:40px 0; color:#909399;">
+              <div v-if="personalDocuments.length === 0" class="empty-item" style="text-align:center; padding:40px 0; color:#909399;">
                 暂无招投标记录
+              </div>
+              <div
+                v-for="doc in personalDocuments"
+                :key="doc.id"
+                class="ppt-card"
+                style="cursor: pointer;"
+              >
+                <div class="thumb" @click="openPersonalDoc(doc)">
+                  <img src="https://picsum.photos/seed/docx/320/180" :alt="doc.name" />
+                  <span class="badge badge-personal">个人文档</span>
+                </div>
+                <div class="meta">
+                  <div class="title" @click="openPersonalDoc(doc)">{{ doc.name }}</div>
+                  <div class="sub">{{ formatDate(doc.updated_at) }}</div>
+                  <div class="ppt-actions">
+                    <el-button size="small" type="primary" plain @click.stop="editPersonalDoc(doc)">
+                      <el-icon><Edit /></el-icon> 编辑
+                    </el-button>
+                    <el-button size="small" type="danger" plain @click.stop="deletePersonalDoc(doc.id)">
+                      <el-icon><Delete /></el-icon>
+                    </el-button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -297,7 +320,15 @@
       :slides="currentPptSlides"
       :communication-info="currentCommunicationInfo"
     />
-    
+
+    <!-- OnlyOffice 编辑器对话框 -->
+    <OnlyOfficeEditorDialog
+      v-model:visible="editorDialogVisible"
+      :document-id="currentPersonalDocId"
+      :document-name="currentPersonalDocName"
+      mode="edit"
+    />
+
     <!-- PPT回传对话框 -->
     <el-dialog
       v-model="uploadDialogVisible"
@@ -440,15 +471,17 @@
 import { ref, computed, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { VideoPlay, MagicStick, Upload, UploadFilled, Plus } from '@element-plus/icons-vue'
+import { VideoPlay, MagicStick, Upload, UploadFilled, Plus, Edit, Delete } from '@element-plus/icons-vue'
 import Header from './components/Header.vue'
 import PptDialog from './components/PptDialog.vue'
+import OnlyOfficeEditorDialog from '@/components/OnlyOfficeEditorDialog.vue'
 import { salesData } from '@/configs/salesData'
 import { uploadSalesPpt } from '@/services/salesService'
 import type { UploadSalesPptParams } from '@/services/salesService'
 import { parsePPTXToSlides } from '@/utils/pptxParser'
 import { PRODUCTS, INDUSTRIES, AUDIENCES, LANGUAGES } from '@/configs/salesConstants'
 import { getDocumentList, createDocument } from '@/services/documentService'
+import { getPersonalDocumentList, deletePersonalDocument, type PersonalDocument } from '@/services/wopiService'
 const router = useRouter()
 
 // 加载个人副本 PPT（tag=personal），追加到 ppts 列表
@@ -491,7 +524,57 @@ const handleCreatePpt = async () => {
 
 onMounted(() => {
   loadPersonalPpts()
+  loadPersonalDocuments()
 })
+
+// ========== 个人文档（招投标） ==========
+const personalDocuments = ref<PersonalDocument[]>([])
+const editorDialogVisible = ref(false)
+const currentPersonalDocId = ref('')
+const currentPersonalDocName = ref('')
+
+const loadPersonalDocuments = async () => {
+  try {
+    const result = await getPersonalDocumentList({ pageSize: 50 })
+    if (result.success && result.data) {
+      personalDocuments.value = result.data.list
+    }
+  } catch (error) {
+    console.warn('[Profile] 加载个人文档失败:', error)
+  }
+}
+
+const formatDate = (dateStr: string) => {
+  if (!dateStr) return ''
+  return dateStr.slice(0, 10)
+}
+
+const openPersonalDoc = (doc: PersonalDocument) => {
+  currentPersonalDocId.value = doc.id
+  currentPersonalDocName.value = doc.name
+  editorDialogVisible.value = true
+}
+
+const editPersonalDoc = (doc: PersonalDocument) => {
+  currentPersonalDocId.value = doc.id
+  currentPersonalDocName.value = doc.name
+  editorDialogVisible.value = true
+}
+
+const deletePersonalDoc = async (id: string) => {
+  try {
+    const result = await deletePersonalDocument(id)
+    if (result.success) {
+      ElMessage.success('文档已删除')
+      personalDocuments.value = personalDocuments.value.filter(d => d.id !== id)
+    } else {
+      ElMessage.error(result.error || '删除失败')
+    }
+  } catch (error) {
+    console.error('[Profile] 删除文档失败:', error)
+    ElMessage.error('删除失败')
+  }
+}
 
 const activeTab = ref('ppts')
 const sessionFilter = ref('all')
@@ -1150,6 +1233,12 @@ const optimizePpt = (ppt) => {
   left: 10px;
   right: auto;
   top: 10px;
+}
+
+/* 个人文档标签样式 */
+.badge-personal {
+  background: #10b981 !important;
+  color: #fff;
 }
 
 /* 交流会议卡片样式 */

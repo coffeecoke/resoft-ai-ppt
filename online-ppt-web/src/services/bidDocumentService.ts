@@ -27,6 +27,13 @@ export interface BidDocument {
   sections?: BidSection[]
 }
 
+export interface BidSectionType {
+  id: number
+  code: string
+  name: string
+  description: string
+}
+
 export interface BidDocumentListResult {
   list: BidDocument[]
   total: number
@@ -42,8 +49,19 @@ export function getBidDocumentList(params?: {
   pageSize?: number
   name?: string
   industry?: string
+  sectionTypes?: string[]
 }): Promise<BidDocumentListResult> {
-  return axios.get(`${SERVER_URL}/sales/bid-documents`, { params }).then((res: any) => res.data)
+  const { sectionTypes, ...rest } = params ?? {}
+  const query: any = { ...rest }
+  if (sectionTypes?.length) query.sectionTypes = sectionTypes.join(',')
+  return axios.get(`${SERVER_URL}/sales/bid-documents`, { params: query }).then((res: any) => res.data)
+}
+
+/**
+ * 获取投标章节类型列表（用于筛选面板）
+ */
+export function getBidSectionTypeList(): Promise<BidSectionType[]> {
+  return axios.get(`${SERVER_URL}/sales/bid-documents/section-types`).then((res: any) => res.data)
 }
 
 /**

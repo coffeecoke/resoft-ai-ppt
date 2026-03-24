@@ -445,116 +445,27 @@
           </div>
         </div>
         <div class="filter-section filter-section-inline">
-          <h4 class="filter-section-title">报价</h4>
+          <h4 class="filter-section-title">响应目录</h4>
           <div class="filter-options">
-            <el-checkbox-group 
-              :model-value="filters.responseFilters?.quotation"
-              @update:model-value="updateFilter('response', 'quotation', $event)"
+            <el-checkbox-group
+              :model-value="filters.responseFilters?.sectionTypes"
+              @update:model-value="updateFilter('response', 'sectionTypes', $event)"
             >
-              <div class="filter-row">
-                <el-checkbox 
-                  v-for="option in quotationOptions" 
-                  :key="option.value" 
-                  :label="option.value"
-                >
-                  {{ option.label }}
-                </el-checkbox>
-              </div>
-            </el-checkbox-group>
-          </div>
-        </div>
-        <div class="filter-section filter-section-inline">
-          <h4 class="filter-section-title">投标状态</h4>
-          <div class="filter-options">
-            <el-checkbox-group 
-              :model-value="filters.responseFilters?.bidStatus"
-              @update:model-value="updateFilter('response', 'bidStatus', $event)"
-            >
-              <div class="filter-row">
-                <el-checkbox 
-                  v-for="option in bidStatusOptions" 
-                  :key="option.value" 
-                  :label="option.value"
-                >
-                  {{ option.label }}
-                </el-checkbox>
-              </div>
-            </el-checkbox-group>
-          </div>
-        </div>
-        <div class="filter-section filter-section-inline">
-          <h4 class="filter-section-title">商务资质</h4>
-          <div class="filter-options">
-            <el-checkbox-group 
-              :model-value="filters.responseFilters?.businessQualification"
-              @update:model-value="updateFilter('response', 'businessQualification', $event)"
-            >
-              <div class="filter-row">
-                <el-checkbox 
-                  v-for="option in businessQualificationOptions" 
-                  :key="option.value" 
-                  :label="option.value"
-                >
-                  {{ option.label }}
-                </el-checkbox>
-              </div>
-            </el-checkbox-group>
-          </div>
-        </div>
-        <div class="filter-section filter-section-inline">
-          <h4 class="filter-section-title">技术方案</h4>
-          <div class="filter-options">
-            <el-checkbox-group 
-              :model-value="filters.responseFilters?.technicalSolution"
-              @update:model-value="updateFilter('response', 'technicalSolution', $event)"
-            >
-              <div class="filter-row">
-                <el-checkbox 
-                  v-for="option in technicalSolutionOptions" 
-                  :key="option.value" 
-                  :label="option.value"
-                >
-                  {{ option.label }}
-                </el-checkbox>
-              </div>
-            </el-checkbox-group>
-          </div>
-        </div>
-        <div class="filter-section filter-section-inline">
-          <h4 class="filter-section-title">实施与保障</h4>
-          <div class="filter-options">
-            <el-checkbox-group 
-              :model-value="filters.responseFilters?.implementationGuarantee"
-              @update:model-value="updateFilter('response', 'implementationGuarantee', $event)"
-            >
-              <div class="filter-row">
-                <el-checkbox 
-                  v-for="option in implementationGuaranteeOptions" 
-                  :key="option.value" 
-                  :label="option.value"
-                >
-                  {{ option.label }}
-                </el-checkbox>
-              </div>
-            </el-checkbox-group>
-          </div>
-        </div>
-        <div class="filter-section filter-section-inline">
-          <h4 class="filter-section-title">案例与证明</h4>
-          <div class="filter-options">
-            <el-checkbox-group 
-              :model-value="filters.responseFilters?.casesProof"
-              @update:model-value="updateFilter('response', 'casesProof', $event)"
-            >
-              <div class="filter-row">
-                <el-checkbox 
-                  v-for="option in casesProofOptions" 
-                  :key="option.value" 
-                  :label="option.value"
-                >
-                  {{ option.label }}
-                </el-checkbox>
-              </div>
+              <template v-if="bidSectionTypes && bidSectionTypes.length > 0">
+                <div class="filter-catalog-group">
+                  <div class="filter-catalog-parent">基础部分</div>
+                  <div class="filter-row">
+                    <el-checkbox
+                      v-for="t in bidSectionTypes"
+                      :key="t.code"
+                      :label="t.code"
+                    >
+                      {{ t.name }}
+                    </el-checkbox>
+                  </div>
+                </div>
+              </template>
+              <div v-else class="filter-row" style="color:#999;font-size:12px;">暂无章节类型数据</div>
             </el-checkbox-group>
           </div>
         </div>
@@ -588,12 +499,6 @@ import {
   technicalRequirementsOptions,
   qualificationReviewOptions,
   contractBusinessOptions,
-  quotationOptions,
-  bidStatusOptions,
-  businessQualificationOptions,
-  technicalSolutionOptions,
-  implementationGuaranteeOptions,
-  casesProofOptions,
   companyStructure
 } from '../constants/salesConfig'
 
@@ -616,6 +521,11 @@ const props = defineProps({
   },
   /** 后台接口返回的 PPT 目录树（一级+二级），用于高级筛选「PPT目录」带父级展示 */
   pptCatalogTree: {
+    type: Array,
+    default: () => []
+  },
+  /** 后台接口返回的响应文件章节类型列表（来自 bid_section_types 表） */
+  bidSectionTypes: {
     type: Array,
     default: () => []
   }

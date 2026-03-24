@@ -8,7 +8,8 @@ import type { Ref } from 'vue'
 import { getSalesDocumentList, type DocumentMetadata, getDocumentCoverUrl } from '@/services/documentService'
 import { getTranscriptionList } from '@/services/salesService'
 import { SERVER_URL } from '@/services'
-import { getBidDocumentList, type BidDocument } from '@/services/bidDocumentService'
+import { getBidDocumentList, getBidSectionTypeList, type BidDocument, type BidSectionType } from '@/services/bidDocumentService'
+import { getTenderDocumentList, type TenderDocument } from '@/services/tenderDocumentService'
 
 export function useFilters(dataSource: any, activeProduct: Ref<string>) {
   // 🆕 从API加载的文档列表
@@ -64,10 +65,10 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
   // 🆕 响应文件（bid_documents）从 API 加载
   const bidDocumentsFromAPI = ref<BidDocument[]>([])
   const isLoadingBidDocuments = ref(false)
-  const loadBidDocuments = async () => {
+  const loadBidDocuments = async (params?: { sectionTypes?: string[]; name?: string }) => {
     try {
       isLoadingBidDocuments.value = true
-      const result = await getBidDocumentList({ pageSize: 100 })
+      const result = await getBidDocumentList({ pageSize: 100, ...params })
       bidDocumentsFromAPI.value = result.list || []
     } catch (error) {
       console.error('[Sales首页] 加载响应文件失败:', error)
@@ -77,6 +78,36 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
     }
   }
   loadBidDocuments()
+
+  // 🆕 章节类型（bid_section_types）从 API 加载
+  const bidSectionTypesFromAPI = ref<BidSectionType[]>([])
+  const loadBidSectionTypes = async () => {
+    try {
+      const result = await getBidSectionTypeList()
+      bidSectionTypesFromAPI.value = result || []
+    } catch (error) {
+      console.error('[Sales首页] 加载章节类型失败:', error)
+      bidSectionTypesFromAPI.value = []
+    }
+  }
+  loadBidSectionTypes()
+
+  // 🆕 招标文件（tender_documents）从 API 加载
+  const tenderDocumentsFromAPI = ref<TenderDocument[]>([])
+  const isLoadingTenderDocuments = ref(false)
+  const loadTenderDocuments = async () => {
+    try {
+      isLoadingTenderDocuments.value = true
+      const result = await getTenderDocumentList({ pageSize: 100 })
+      tenderDocumentsFromAPI.value = result.list || []
+    } catch (error) {
+      console.error('[Sales首页] 加载招标文件失败:', error)
+      tenderDocumentsFromAPI.value = []
+    } finally {
+      isLoadingTenderDocuments.value = false
+    }
+  }
+  loadTenderDocuments()
 
   // 🆕 交流会议（transcriptions）列表
   // 注意：推荐页和独立视频页现在都使用 VideoPageView 组件，它有自己的 API 调用逻辑
@@ -174,12 +205,8 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
   // 响应文件筛选条件
   const responseFilters = reactive({
     customerName: '',
-    quotation: [] as string[],
-    bidStatus: [] as string[],
-    businessQualification: [] as string[],
-    technicalSolution: [] as string[],
-    implementationGuarantee: [] as string[],
-    casesProof: [] as string[],
+    productName: '',
+    sectionTypes: [] as string[],
   })
   
   // 独立页面筛选条件
@@ -240,7 +267,13 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
       })
     }
     
-    // 5. PPT目录筛选（productIntro）- 暂时保留，等待后续实现
+    // 5. 产品名称筛选（模糊匹配 product 字段）
+    if (pptFilters.productSolution && pptFilters.productSolution.trim() !== '') {
+      const q = pptFilters.productSolution.trim().toLowerCase()
+      list = list.filter((x: any) => x.product && x.product.toLowerCase().includes(q))
+    }
+
+    // 6. PPT目录筛选（productIntro）- 暂时保留，等待后续实现
     // TODO: 需要后端支持目录筛选或者通过其他方式实现
     
     return list
@@ -254,15 +287,40 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
     if (pf.audience && pf.audience.length > 0) params.audience = pf.audience
     if (pf.language && pf.language.length > 0) params.language = pf.language
     if (pf.customerName && pf.customerName.trim() !== '') params.keyword = pf.customerName
+    if (pf.productSolution && pf.productSolution.trim() !== '') params.product = pf.productSolution
     return params
   }
+
+  // 防抖工具
+  const debounce = <T extends (...args: any[]) => any>(fn: T, delay: number): T => {
+    let timer: ReturnType<typeof setTimeout> | null = null
+    return ((...args: any[]) => {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => fn(...args), delay)
+    }) as T
+  }
+
+  const debouncedLoadDocuments = debounce(loadDocuments, 500)
+  const debouncedLoadBidDocuments = debounce(loadBidDocuments, 500)
 
   // 监听筛选条件变化，重新加载数据（直接深度监听 pptFilters，确保子组件修改能触发）
   watch(
     pptFilters,
     (newVal) => {
       const params = buildDocumentParams(newVal)
-      loadDocuments(params)
+      debouncedLoadDocuments(params)
+    },
+    { deep: true }
+  )
+
+  // 监听响应文件筛选条件，重新加载响应文件列表
+  watch(
+    responseFilters,
+    (newVal) => {
+      debouncedLoadBidDocuments({
+        sectionTypes: newVal.sectionTypes.length ? newVal.sectionTypes : undefined,
+        name: newVal.productName.trim() || undefined,
+      })
     },
     { deep: true }
   )
@@ -318,43 +376,60 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
     return dataSource.videoList
   })
   
-  // 招标文件列表
+  // 招标文件列表（从 API 加载，回退到 mock 数据）
   const tenderFiles = computed(() => {
-    let list = dataSource.tenderFiles
-    
-    // 应用tenderFilters
+    let list: any[]
+
+    if (tenderDocumentsFromAPI.value.length > 0) {
+      // API 数据：将 TenderDocument 转换为 TenderFileItem 格式
+      list = tenderDocumentsFromAPI.value.map(doc => ({
+        id: doc.id,
+        title: doc.project_name || doc.name,
+        date: doc.created_at?.split('T')[0] || '',
+        type: 'tender',
+        name: doc.name,
+        project_name: doc.project_name,
+        controlPrice: doc.budget || '--',
+        customerName: '--',
+        tenderType: '--',
+        views: 0,
+        favorites: 0,
+        downloads: 0,
+      }))
+    } else {
+      // 回退到 mock 数据（API 未返回数据时）
+      list = dataSource.tenderFiles
+    }
+
+    // 应用 tenderFilters
     if (tenderFilters.customerName) {
       const q = tenderFilters.customerName.trim().toLowerCase()
       list = list.filter((x: any) => x.title.toLowerCase().includes(q))
     }
-    
+
     return list
   })
   
-  // 响应文件列表（从 API 加载，回退到 mock 数据）
+  // 响应文件列表（从 API 加载）
   const responseFiles = computed(() => {
-    let list: any[]
-
-    if (bidDocumentsFromAPI.value.length > 0) {
-      // API 数据：将 BidDocument 转换为 ResponseFileItem 格式
-      list = bidDocumentsFromAPI.value.map(doc => ({
-        id: doc.id,
-        title: doc.name,
-        date: doc.created_at?.split('T')[0] || '',
-        type: 'response',
-        fileType: doc.file_type,
-        industry: doc.industry || '',
-        source_info: doc.source_info || '',
-        section_count: doc.section_count,
-      }))
-    } else {
-      // 回退到 mock 数据（API 未返回数据时）
-      list = dataSource.responseFiles
-    }
+    let list: any[] = bidDocumentsFromAPI.value.map(doc => ({
+      id: doc.id,
+      title: doc.name,
+      date: doc.created_at?.split('T')[0] || '',
+      type: 'response',
+      fileType: doc.file_type,
+      industry: doc.industry || '',
+      source_info: doc.source_info || '',
+      section_count: doc.section_count,
+    }))
 
     // 应用 responseFilters
     if (responseFilters.customerName) {
       const q = responseFilters.customerName.trim().toLowerCase()
+      list = list.filter((x: any) => x.title.toLowerCase().includes(q))
+    }
+    if (responseFilters.productName) {
+      const q = responseFilters.productName.trim().toLowerCase()
       list = list.filter((x: any) => x.title.toLowerCase().includes(q))
     }
 
@@ -428,12 +503,8 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
       case 'response':
         Object.assign(responseFilters, {
           customerName: '',
-          quotation: [],
-          bidStatus: [],
-          businessQualification: [],
-          technicalSolution: [],
-          implementationGuarantee: [],
-          casesProof: [],
+          productName: '',
+          sectionTypes: [],
         })
         break
     }
@@ -462,6 +533,7 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
     isLoadingDocuments,
     loadDocuments,
     buildDocumentParams,
+    bidSectionTypesFromAPI,
     
     // 方法
     resetFilters,

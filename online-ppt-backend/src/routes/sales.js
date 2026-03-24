@@ -15,6 +15,7 @@ import concernsRouter from './sales/concerns.js'
 import concernCategoriesRouter from './sales/concern-categories.js'
 import bidDocumentsRouter from './sales/bid-documents.js'
 import bidCompositionsRouter from './sales/bid-compositions.js'
+import tenderDocumentsRouter from './sales/tender-documents.js'
 
 const router = express.Router()
 
@@ -35,5 +36,6 @@ router.use('/documents', documentsRouter)
 router.use('/batch-operations', batchOperationsRouter)
 router.use('/bid-documents', bidDocumentsRouter)
 router.use('/bid-compositions', bidCompositionsRouter)
+router.use('/tender-documents', tenderDocumentsRouter)
 
 export default router

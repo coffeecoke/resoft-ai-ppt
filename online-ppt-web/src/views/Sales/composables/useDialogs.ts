@@ -35,6 +35,11 @@ export function useDialogs() {
   const responseFileSlides = ref<any[]>([])
   const responseFileId = ref('')  // bid_documents.id
 
+  // 招标文件对话框状态
+  const tenderFileDialogVisible = ref(false)
+  const tenderFileTitle = ref('')
+  const tenderFileId = ref('')  // tender_documents.id
+
   // 打开PPT对话框
   const openPpt = async (item: any) => {
     console.log('[PPT弹框] 点击的卡片数据:', item)
@@ -54,6 +59,14 @@ export function useDialogs() {
       responseFileTitle.value = item.title
       responseFileId.value = item.id  // bid_documents.id
       responseFileDialogVisible.value = true
+      return
+    }
+
+    // 如果是招标文件，打开招标文件专用弹窗（docx 预览）
+    if (item.type === 'tender') {
+      tenderFileTitle.value = item.title || item.project_name || item.name || ''
+      tenderFileId.value = item.id
+      tenderFileDialogVisible.value = true
       return
     }
 
@@ -251,6 +264,11 @@ export function useDialogs() {
     responseFileTitle,
     responseFileSlides,
     responseFileId,
+
+    // 招标文件对话框
+    tenderFileDialogVisible,
+    tenderFileTitle,
+    tenderFileId,
 
     // 统一处理
     openBrandItem,

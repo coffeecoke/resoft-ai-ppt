@@ -1,7 +1,7 @@
 /**
- * 投标/响应文件路由（销售前端）
+ * 招标文件路由（销售前端）
  *
- * API 路径前缀：/api/sales/bid-documents
+ * API 路径前缀：/api/sales/tender-documents
  */
 
 import { Router } from 'express'
@@ -22,44 +22,19 @@ function resolveFilePath(relativePath) {
 }
 
 /**
- * GET /api/sales/bid-documents/section-types
- * 获取投标章节类型列表（用于筛选面板）
- */
-router.get('/section-types', async (req, res) => {
-  try {
-    const types = await prisma.bid_section_types.findMany({
-      where: { is_active: true },
-      orderBy: { sort_order: 'asc' },
-      select: { id: true, code: true, name: true, description: true },
-    })
-    res.json({ success: true, data: types })
-  } catch (error) {
-    console.error('[sales/bid-documents] 章节类型查询失败:', error)
-    res.status(500).json({ success: false, error: error.message })
-  }
-})
-
-/**
- * GET /api/sales/bid-documents
- * 销售端响应文件列表（已完成扫描的文件）
+ * GET /api/sales/tender-documents
+ * 招标文件列表
  */
 router.get('/', async (req, res) => {
   try {
-    const { page = 1, pageSize = 50, name, industry, sectionTypes } = req.query
+    const { page = 1, pageSize = 50, name } = req.query
     const skip = (parseInt(page) - 1) * parseInt(pageSize)
 
     const where = {}
-    if (industry) where.industry = industry
     if (name) where.name = { contains: name }
-    if (sectionTypes) {
-      const codes = sectionTypes.split(',').map(s => s.trim()).filter(Boolean)
-      if (codes.length > 0) {
-        where.bid_sections = { some: { section_type: { in: codes } } }
-      }
-    }
 
     const [list, total] = await Promise.all([
-      prisma.bid_documents.findMany({
+      prisma.tender_documents.findMany({
         where,
         orderBy: { created_at: 'desc' },
         skip,
@@ -67,44 +42,56 @@ router.get('/', async (req, res) => {
         select: {
           id: true,
           name: true,
+          project_name: true,
+          budget: true,
+          bid_deadline: true,
+          status: true,
           file_type: true,
           file_size: true,
-          source_info: true,
-          industry: true,
-          project_type: true,
-          section_count: true,
           created_at: true,
+          _count: { select: { tender_sections: true } },
         },
       }),
-      prisma.bid_documents.count({ where }),
+      prisma.tender_documents.count({ where }),
     ])
 
     res.json({
       success: true,
       data: {
-        list: list.map(d => ({ ...d, file_size: Number(d.file_size) })),
+        list: list.map(d => ({
+          id: d.id,
+          name: d.name,
+          project_name: d.project_name,
+          budget: d.budget,
+          bid_deadline: d.bid_deadline,
+          status: d.status,
+          file_type: d.file_type,
+          file_size: Number(d.file_size),
+          section_count: d._count.tender_sections,
+          created_at: d.created_at,
+        })),
         total,
         page: parseInt(page),
         pageSize: parseInt(pageSize),
       },
     })
   } catch (error) {
-    console.error('[sales/bid-documents] 列表查询失败:', error)
+    console.error('[sales/tender-documents] 列表查询失败:', error)
     res.status(500).json({ success: false, error: error.message })
   }
 })
 
 /**
- * GET /api/sales/bid-documents/:id
- * 文档详情（含章节列表，用于构建 TOC）
+ * GET /api/sales/tender-documents/:id
+ * 招标文件详情（含章节列表，用于构建 TOC）
  */
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params
-    const doc = await prisma.bid_documents.findUnique({
+    const doc = await prisma.tender_documents.findUnique({
       where: { id },
       include: {
-        bid_sections: {
+        tender_sections: {
           orderBy: { sort_order: 'asc' },
           select: {
             id: true,
@@ -118,7 +105,7 @@ router.get('/:id', async (req, res) => {
     })
 
     if (!doc) {
-      return res.status(404).json({ success: false, error: '文档不存在' })
+      return res.status(404).json({ success: false, error: '招标文件不存在' })
     }
 
     res.json({
@@ -126,52 +113,56 @@ router.get('/:id', async (req, res) => {
       data: {
         id: doc.id,
         name: doc.name,
+        project_name: doc.project_name,
+        budget: doc.budget,
+        bid_deadline: doc.bid_deadline,
+        status: doc.status,
         file_type: doc.file_type,
         file_size: Number(doc.file_size),
-        source_info: doc.source_info,
-        industry: doc.industry,
-        section_count: doc.section_count,
+        section_count: doc.tender_sections?.length ?? 0,
+        analysis_result: doc.analysis_result,
         created_at: doc.created_at,
-        sections: doc.bid_sections,
+        sections: doc.tender_sections,
       },
     })
   } catch (error) {
-    console.error('[sales/bid-documents] 详情查询失败:', error)
+    console.error('[sales/tender-documents] 详情查询失败:', error)
     res.status(500).json({ success: false, error: error.message })
   }
 })
 
 /**
- * GET /api/sales/bid-documents/:id/file
- * 下载原始 docx 文件（销售端）
+ * GET /api/sales/tender-documents/:id/file
+ * 下载原始 docx 文件
  */
 router.get('/:id/file', async (req, res) => {
   try {
     const { id } = req.params
-    const doc = await prisma.bid_documents.findUnique({
+    const doc = await prisma.tender_documents.findUnique({
       where: { id },
       select: { file_path: true, name: true, file_type: true },
     })
 
     if (!doc) {
-      return res.status(404).json({ success: false, error: '文档不存在' })
+      return res.status(404).json({ success: false, error: '招标文件不存在' })
     }
 
     const fullPath = resolveFilePath(doc.file_path)
-    console.log('[bid-documents/file] UPLOAD_BASE_DIR:', UPLOAD_BASE_DIR)
-    console.log('[bid-documents/file] db file_path:', doc.file_path)
-    console.log('[bid-documents/file] resolved fullPath:', fullPath)
+    console.log('[tender-documents/file] UPLOAD_BASE_DIR:', UPLOAD_BASE_DIR)
+    console.log('[tender-documents/file] db file_path:', doc.file_path)
+    console.log('[tender-documents/file] resolved fullPath:', fullPath)
 
     if (!fs.existsSync(fullPath)) {
       return res.status(404).json({ success: false, error: '文件不存在于磁盘' })
     }
 
-    const fileName = encodeURIComponent(doc.name + doc.file_type)
+    const ext = doc.file_type || '.docx'
+    const fileName = encodeURIComponent(doc.name + ext)
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`)
     res.sendFile(path.resolve(fullPath))
   } catch (error) {
-    console.error('[sales/bid-documents] 文件下载失败:', error)
+    console.error('[sales/tender-documents] 文件下载失败:', error)
     res.status(500).json({ success: false, error: error.message })
   }
 })

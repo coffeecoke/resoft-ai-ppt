@@ -1,7 +1,7 @@
 <template>
   <el-drawer
     v-model="drawerVisible"
-    title="响应文件章节"
+    title="招标文件章节"
     :size="480"
     direction="rtl"
     :before-close="handleClose"
@@ -10,7 +10,7 @@
       <div class="drawer-header">
         <div class="drawer-title">
           <i class="ri-file-list-3-line"></i>
-          响应文件章节
+          招标文件章节
           <span class="drawer-count">({{ realCount }})</span>
         </div>
       </div>
@@ -26,10 +26,6 @@
           <el-button type="success" @click="handleMergeDownload" :loading="downloading">
             <i class="ri-download-line"></i>
             合并下载
-          </el-button>
-          <el-button type="warning" @click="handleMergeAndEdit" :loading="merging">
-            <i class="ri-file-edit-line"></i>
-            合并再编辑
           </el-button>
           <el-button @click="handleClear">
             <i class="ri-delete-bin-line"></i>
@@ -47,7 +43,6 @@
           >
             <template #item="{ element, index }">
               <div>
-                <!-- 文档分组标题 -->
                 <div v-if="isFirstOfGroup(element, index)" class="doc-group-header">
                   <i class="ri-file-word-line"></i>
                   <span class="doc-group-name">{{ element.documentName }}</span>
@@ -55,7 +50,6 @@
                     移除全部
                   </el-button>
                 </div>
-                <!-- 标题行（半选父级，不可拖拽不可删除） -->
                 <div
                   v-if="element.isHeaderOnly"
                   class="section-item section-item--header"
@@ -64,7 +58,6 @@
                   <i class="ri-bookmark-line header-icon"></i>
                   <span class="section-title">{{ element.title }}</span>
                 </div>
-                <!-- 正常章节行 -->
                 <div
                   v-else
                   class="section-item"
@@ -88,16 +81,14 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { useResponseSectionStore } from '@/store/Sales/responseSectionStore'
-import { mergeAndEdit } from '@/services/wopiService'
+import { useTenderSectionStore } from '@/store/Sales/tenderSectionStore'
 import Draggable from 'vuedraggable'
 
 const props = defineProps({ visible: { type: Boolean, default: false } })
 const emit = defineEmits(['update:visible'])
 
-const store = useResponseSectionStore()
+const store = useTenderSectionStore()
 const downloading = ref(false)
-const merging = ref(false)
 
 const drawerVisible = computed({
   get: () => props.visible,
@@ -106,7 +97,6 @@ const drawerVisible = computed({
 
 const handleClose = () => { drawerVisible.value = false }
 
-// 本地副本供 vuedraggable 操作
 const localSections = ref([])
 
 watch(
@@ -115,14 +105,11 @@ watch(
   { immediate: true, deep: true }
 )
 
-// 真实章节数（排除标题行）
 const realCount = computed(() => store.sectionList.filter(s => !s.isHeaderOnly).length)
 
-// 文档分组判断
 const isFirstOfGroup = (element, index) =>
   index === 0 || localSections.value[index - 1]?.documentId !== element.documentId
 
-// 组内最小 level 作为基准，计算相对缩进
 const minLevelMap = computed(() => {
   const map = {}
   for (const s of localSections.value) {
@@ -148,7 +135,7 @@ const removeSection = (element) => { store.removeSectionCascade(element.id) }
 
 const handleClear = async () => {
   try {
-    await ElMessageBox.confirm('确定要清空所有响应文件章节吗？', '提示', {
+    await ElMessageBox.confirm('确定要清空所有招标文件章节吗？', '提示', {
       confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning',
     })
     store.clearSections()
@@ -156,7 +143,6 @@ const handleClear = async () => {
   } catch { /* 用户取消 */ }
 }
 
-// 父子去重：父节点已包含子节点内容，跳过子节点
 function filterRedundantChildren(sections) {
   const selectedIds = new Set(sections.map(s => s.id))
   return sections
@@ -187,55 +173,12 @@ const handleMergeDownload = async () => {
       .filter(s => s.isHeaderOnly || filteredRealIds.includes(s.id))
       .map(s => ({ id: s.id, headerOnly: s.isHeaderOnly || false, title: s.title, level: s.level }))
 
-    await mergeDownloadSections(orderedSections, '合并响应文件')
+    await mergeDownloadSections(orderedSections, '合并招标文件')
     ElMessage.success('合并下载成功')
   } catch (err) {
     ElMessage.error(err.message || '合并下载失败')
   } finally {
     downloading.value = false
-  }
-}
-
-// ========== 合并再编辑功能 ==========
-
-const handleMergeAndEdit = async () => {
-  const items = localSections.value.filter(s => !s.isHeaderOnly)
-  if (!items.length) {
-    ElMessage.warning('请至少选择一个章节')
-    return
-  }
-
-  // 过滤父子冗余
-  const filteredIds = filterRedundantChildren(items)
-  const filteredItems = items.filter(s => filteredIds.includes(s.id))
-
-  merging.value = true
-  try {
-    ElMessage.info('正在合并章节...')
-
-    // 转换为接口需要的格式
-    const sections = filteredItems.map(item => ({
-      id: item.id,
-      documentType: 'bid', // 响应文件是 bid
-      title: item.title
-    }))
-
-    const result = await mergeAndEdit({ sections })
-
-    if (!result.success) {
-      throw new Error(result.error || '合并失败')
-    }
-
-    // 打开新页签显示编辑器
-    const editorUrl = `${window.location.origin}/#/onlyoffice/editor?documentId=${result.data.id}&mode=edit`
-    window.open(editorUrl, '_blank')
-
-    ElMessage.success('章节已合并，请在新页签中编辑')
-  } catch (error) {
-    console.error('[ResponseSectionDrawer] 合并章节失败:', error)
-    ElMessage.error(error.message || '合并章节失败')
-  } finally {
-    merging.value = false
   }
 }
 </script>
@@ -253,7 +196,7 @@ const handleMergeAndEdit = async () => {
   align-items: center;
   gap: 8px;
 }
-.drawer-title i { font-size: 20px; color: #2563eb; }
+.drawer-title i { font-size: 20px; color: #f36f6f; }
 .drawer-count { font-size: 14px; font-weight: 400; color: #6b7280; }
 
 .drawer-content { padding: 0; }
@@ -288,7 +231,7 @@ const handleMergeAndEdit = async () => {
   color: #1e293b;
 }
 .doc-group-header:first-child { margin-top: 0; }
-.doc-group-header i { color: #3b82f6; font-size: 16px; }
+.doc-group-header i { color: #f36f6f; font-size: 16px; }
 .doc-group-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .section-item {
@@ -327,9 +270,9 @@ const handleMergeAndEdit = async () => {
 
 :deep(.sortable-ghost) {
   opacity: 0.4;
-  background: #dbeafe;
-  border: 1px dashed #3b82f6;
+  background: #fee2e2;
+  border: 1px dashed #f36f6f;
   border-radius: 4px;
 }
-:deep(.sortable-chosen) { background: #eff6ff; }
+:deep(.sortable-chosen) { background: #fff5f5; }
 </style>

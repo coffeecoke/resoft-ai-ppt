@@ -164,7 +164,9 @@ router.get('/:id/concerns', async (req, res) => {
         likes: c.likes ?? 0,
         expertApproved: !!c.expert_approved,
         expertAdvice: c.expert_advice ?? null,
-        expertReviewer: c.expert_reviewer ?? null
+        expertReviewer: c.expert_reviewer ?? null,
+        question_speaker: c.question_speaker ?? null,
+        answer_speaker: c.answer_speaker ?? null
       }
     })
     res.json({ success: true, data: sanitizeForJson(items) })

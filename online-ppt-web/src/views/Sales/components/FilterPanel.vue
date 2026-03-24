@@ -217,6 +217,10 @@ const props = defineProps({
   pptCatalogTree: {
     type: Array,
     default: () => []
+  },
+  bidSectionTypes: {
+    type: Array,
+    default: () => []
   }
 })
 
@@ -427,9 +431,19 @@ const catalogData = computed(() => {
   if (props.activeTab === 'concerned') {
     return questionCategoryData.value
   } else if (props.activeTab === 'response') {
+    // 优先使用 API 数据（bid_section_types），包在"基础部分"分组下
+    if (props.bidSectionTypes && (props.bidSectionTypes as any[]).length > 0) {
+      return [
+        {
+          id: 'basic',
+          name: '基础部分',
+          children: (props.bidSectionTypes as any[]).map((t: any) => ({ id: t.code, name: t.name }))
+        }
+      ]
+    }
     return responseFileCatalogData
   } else {
-    return pptCatalogData.value // pptCatalogData 现在是 computed
+    return pptCatalogData.value
   }
 })
 
@@ -920,6 +934,23 @@ const handleCreatePpt = () => {
   emit('create-ppt')
 }
 
+// 防抖工具
+const debounce = <T extends (...args: any[]) => any>(fn: T, delay: number): T => {
+  let timer: ReturnType<typeof setTimeout> | null = null
+  return ((...args: any[]) => {
+    if (timer) clearTimeout(timer)
+    timer = setTimeout(() => fn(...args), delay)
+  }) as T
+}
+
+const debouncedEmitFilters = debounce((filtersData: any) => {
+  emit('update:filters', filtersData)
+}, 500)
+
+const debouncedEmitQuestionFilters = debounce((filtersData: any) => {
+  emit('update:questionCategoryFilters', filtersData)
+}, 500)
+
 // 🆕 监听筛选条件变化，同步到 useFilters 的 pptFilters（触发接口请求）
 // 防抖标记，避免初始化时触发
 const isInitialized = ref(false)
@@ -936,18 +967,19 @@ watch(
     industry: selectedOptions.industry,
     audience: selectedOptions.audience,
     language: selectedOptions.language,
-    customerName: customerNameInput.value
+    customerName: customerNameInput.value,
+    productName: productNameInput.value
   }),
   (newVal) => {
     if (!isInitialized.value) return
-    
+
     console.log('[FilterPanel] 🔄 筛选条件变化，同步到 filters')
-    
+
     if (!props.filters.pptFilters) {
       console.warn('[FilterPanel] props.filters.pptFilters 不存在')
       return
     }
-    
+
     // 映射 FilterPanel 的 selectedOptions 到 pptFilters（PPT tab）
     if (props.activeTab === 'ppt') {
       // PPT目录 → productIntro
@@ -960,6 +992,8 @@ watch(
       props.filters.pptFilters.language = newVal.language || []
       // 客户名称
       props.filters.pptFilters.customerName = newVal.customerName || ''
+      // 产品名称
+      props.filters.pptFilters.productSolution = newVal.productName || null
       
       console.log('[FilterPanel] ✅ 同步后的 pptFilters:', {
         productIntro: props.filters.pptFilters.productIntro,
@@ -970,8 +1004,29 @@ watch(
       })
       
       // 触发事件通知父组件（Home.vue 会调用 loadDocuments）
-      emit('update:filters', props.filters)
+      debouncedEmitFilters(props.filters)
     }
+  },
+  { deep: true }
+)
+
+// 🆕 监听响应文件目录筛选变化（response tab），同步到 responseFilters.sectionTypes
+watch(
+  () => ({
+    responseFileCatalog: selectedOptions.responseFileCatalog,
+    customerName: customerNameInput.value,
+    productName: productNameInput.value
+  }),
+  (newVal) => {
+    if (!isInitialized.value) return
+    if (props.activeTab !== 'response') return
+
+    if (!props.filters.responseFilters) return
+    props.filters.responseFilters.sectionTypes = newVal.responseFileCatalog || []
+    props.filters.responseFilters.customerName = newVal.customerName || ''
+    props.filters.responseFilters.productName = newVal.productName || ''
+
+    debouncedEmitFilters(props.filters)
   },
   { deep: true }
 )
@@ -991,7 +1046,7 @@ watch(
     console.log('[FilterPanel] 🔄 关心问题筛选条件变化:', newVal)
 
     // 发射筛选变化事件给父组件
-    emit('update:questionCategoryFilters', {
+    debouncedEmitQuestionFilters({
       questionCategory: newVal.questionCategory || [],
       industry: newVal.industry || [],
       essenceType: newVal.essenceType || [],

@@ -31,6 +31,10 @@
             <i class="ri-download-line"></i>
             合并下载
           </el-button>
+          <el-button type="warning" @click="handleMergeAndEdit" :disabled="!hasSelectedItems">
+            <i class="ri-file-edit-line"></i>
+            合并再编辑
+          </el-button>
           <el-button @click="handleClear">
             <i class="ri-delete-bin-line"></i>
             清空
@@ -66,13 +70,24 @@
         </div>
       </div>
     </div>
+
+    <!-- OnlyOffice 编辑器弹窗 -->
+    <OnlyOfficeEditorDialog
+      v-model:visible="editorDialogVisible"
+      :document-id="currentDocumentId"
+      :document-name="currentDocumentName"
+      mode="edit"
+      @save="handleEditorSave"
+    />
   </el-drawer>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { usePendingOperationsStore } from '@/store/Sales/pendingOperations'
+import { mergeAndEdit } from '@/services/wopiService'
+import OnlyOfficeEditorDialog from '@/components/OnlyOfficeEditorDialog.vue'
 
 const props = defineProps({ visible: { type: Boolean, default: false } })
 const emit = defineEmits(['update:visible'])
@@ -116,6 +131,51 @@ const handleBatchDownload = async () => {
   const items = pendingStore.pendingList.filter(i => i.selected !== false)
   if (!items.length) { ElMessage.warning('没有可下载的内容'); return }
   pendingStore.batchDownload(items)
+}
+
+// ========== 合并再编辑功能 ==========
+const editorDialogVisible = ref(false)
+const currentDocumentId = ref('')
+const currentDocumentName = ref('')
+
+const handleMergeAndEdit = async () => {
+  const items = pendingStore.pendingList.filter(i => i.selected !== false)
+  if (!items.length) {
+    ElMessage.warning('请至少选择一个章节')
+    return
+  }
+
+  try {
+    ElMessage.info('正在合并章节...')
+
+    // 转换为接口需要的格式
+    const sections = items.map(item => ({
+      id: item.id,
+      documentType: item.documentType || 'tender', // 默认招标文件
+      title: item.title
+    }))
+
+    const result = await mergeAndEdit({ sections })
+
+    if (!result.success) {
+      throw new Error(result.error || '合并失败')
+    }
+
+    // 打开编辑器
+    currentDocumentId.value = result.data.id
+    currentDocumentName.value = result.data.name
+    editorDialogVisible.value = true
+
+    ElMessage.success('章节已合并，请在编辑器中编辑')
+  } catch (error) {
+    console.error('[PendingDrawer] 合并章节失败:', error)
+    ElMessage.error(error.message || '合并章节失败')
+  }
+}
+
+const handleEditorSave = () => {
+  // 文档已保存，可以刷新列表等
+  console.log('[PendingDrawer] 文档已保存')
 }
 </script>
 

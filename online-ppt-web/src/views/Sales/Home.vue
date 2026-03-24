@@ -28,7 +28,7 @@
       />
       
       <!-- ✅ 已有组件：高级筛选面板 -->
-      <AdvancedFilterPanel
+      <!-- <AdvancedFilterPanel
         v-if="showAdvancedFilter && activeNav === 'recommend' && activeDashboardTab === 'products'"
         :visible="showAdvancedFilter"
         :activeTab="activeTab"
@@ -36,9 +36,10 @@
         :companyStructure="companyStructure"
         :filters="filterProps"
         :pptCatalogTree="pptCatalogTree"
+        :bidSectionTypes="filters.bidSectionTypesFromAPI.value"
         @update:filters="handleFiltersUpdate"
-      />
-      
+      /> -->
+
       <!-- 🆕 新组件：交流会议（使用 VideoPageView 支持无限滚动） -->
       <div v-if="showVideoSection" class="content-with-filter">
         <!-- 筛选面板（在左侧） -->
@@ -70,6 +71,7 @@
           :active-tab="activeTab === 'ppt-new' ? 'ppt' : activeTab"
           :filters="filterProps"
           :pptCatalogTree="pptCatalogTree"
+          :bidSectionTypes="filters.bidSectionTypesFromAPI.value"
           @close="handleFilterClose"
           @create-ppt="handleCreatePpt"
           @update:filters="handleFiltersUpdate"
@@ -225,6 +227,13 @@
       :title="dialogs.responseFileTitle.value"
       :file-id="dialogs.responseFileId.value"
     />
+
+    <!-- ✅ 新组件：招标文件对话框 -->
+    <TenderFileDialog
+      v-model:visible="dialogs.tenderFileDialogVisible.value"
+      :title="dialogs.tenderFileTitle.value"
+      :file-id="dialogs.tenderFileId.value"
+    />
     
     <!-- ✅ 已有组件：视频对话框（替换掉内联的el-dialog） -->
     <VideoDialog
@@ -258,6 +267,7 @@ import PptDialog from './components/PptDialog.vue'
 import VideoDialog from './components/VideoDialog.vue'
 import ResponseFileDialog from './components/ResponseFileDialog.vue'
 import PdfDialog from './components/PdfDialog.vue'
+import TenderFileDialog from './components/TenderFileDialog.vue'
 
 // ============================================
 // 🆕 新组件导入
@@ -443,11 +453,8 @@ const handleQuestionCategoryFiltersUpdate = (newFilters: {
 
 
 const handleFiltersUpdate = () => {
-  console.log('[Home] 📥 收到 AdvancedFilterPanel 的 update:filters 事件')
-  // AdvancedFilterPanel 内部已直接修改了 filters，此处根据当前 pptFilters 主动触发接口拉取，确保筛选生效
-  const params = filters.buildDocumentParams(filters.pptFilters)
-  console.log('[Home] 📤 调用 loadDocuments，参数:', params)
-  filters.loadDocuments(params)
+  // useFilters 内部的 watcher 已自动监听所有 filters 变化并触发对应接口
+  // 此处无需重复调用，避免双发请求
 }
 
 // 品牌Tab选项
