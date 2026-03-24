@@ -1,0 +1,77 @@
+# OnlyOffice Document Server 部署配置
+#
+# 启动命令：docker-compose -f docker-compose.onlyoffice.yml up -d
+# 停止命令：docker-compose -f docker-compose.onlyoffice.yml down
+# 查看日志：docker-compose -f docker-compose.onlyoffice.yml logs -f
+#
+# 访问地址：http://localhost:8080
+# 健康检查：http://localhost:8080/healthcheck
+
+version: '3.8'
+
+services:
+  onlyoffice:
+    image: onlyoffice/documentserver:8.2
+    container_name: resoft-onlyoffice
+    restart: unless-stopped
+
+    ports:
+      - "${ONLYOFFICE_PORT:-8080}:80"
+
+    environment:
+      # JWT 安全配置（生产环境建议开启）
+      - JWT_ENABLED=${JWT_ENABLED:-false}
+      # - JWT_SECRET=${JWT_SECRET:-your-secret-key-here}
+
+      # 数据库配置（使用内置 PostgreSQL，生产环境可改用外部数据库）
+      - DB_TYPE=postgres
+      - DB_HOST=onlyoffice-db
+      - DB_PORT=5432
+      - DB_NAME=onlyoffice
+      - DB_USER=onlyoffice
+      - DB_PWD=onlyoffice_secret
+
+      # Redis 配置（使用内置 Redis）
+      - REDIS_SERVER_HOST=onlyoffice-redis
+      - REDIS_SERVER_PORT=6379
+
+      # 服务配置
+      - WOPI_ENABLED=true
+      - ALLOW_META_IP_ADDRESS=true
+      - ALLOW_PRIVATE_IP_ADDRESS=true
+
+    volumes:
+      # 数据持久化（数据目录放在项目外，避免 git 提交）
+      - ${ONLYOFFICE_DATA_DIR:-../onlyoffice-data}/data:/var/www/onlyoffice/Data
+      - ${ONLYOFFICE_DATA_DIR:-../onlyoffice-data}/logs:/var/log/onlyoffice
+      - ${ONLYOFFICE_DATA_DIR:-../onlyoffice-data}/fonts:/usr/share/fonts/truetype/custom
+
+    depends_on:
+      - onlyoffice-db
+      - onlyoffice-redis
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # 内置 PostgreSQL（生产环境建议使用外部数据库）
+  onlyoffice-db:
+    image: postgres:15-alpine
+    container_name: resoft-onlyoffice-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=onlyoffice
+      - POSTGRES_USER=onlyoffice
+      - POSTGRES_PASSWORD=onlyoffice_secret
+    volumes:
+      - ${ONLYOFFICE_DATA_DIR:-../onlyoffice-data}/postgres:/var/lib/postgresql/data
+
+  # 内置 Redis
+  onlyoffice-redis:
+    image: redis:7-alpine
+    container_name: resoft-onlyoffice-redis
+    restart: unless-stopped
+    volumes:
+      - ${ONLYOFFICE_DATA_DIR:-../onlyoffice-data}/redis:/data
