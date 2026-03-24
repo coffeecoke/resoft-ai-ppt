@@ -332,11 +332,17 @@ router.get('/concerns', async (req, res) => {
       category,
       intent,
       questionSource, // 问题发起方筛选
-      reviewStatus // 审核状态：pending | approved | rejected
+      reviewStatus, // 审核状态：pending | approved | rejected
+      notOptimized  // 仅返回未优化的（question_original 为 null）
     } = req.query;
 
     // 构建查询条件
     const where = {};
+
+    // 仅返回未优化的（一键优化全部时排除已优化项）
+    if (notOptimized === 'true') {
+      where.question_original = null;
+    }
 
     // 审核状态筛选
     if (reviewStatus && ['pending', 'approved', 'rejected'].includes(reviewStatus)) {

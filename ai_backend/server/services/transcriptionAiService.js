@@ -1900,8 +1900,6 @@ ${JSON.stringify(sampleDialogues, null, 2)}
       baseURL: modelConfig.api_url
     });
     const actualModel = modelConfig.model_name || modelConfig.code;
-    const isDoubao = (modelConfig.provider || '').toLowerCase() === 'doubao' || (actualModel || '').toLowerCase().includes('doubao');
-    const maxTokens = isDoubao ? (modelConfig.max_tokens || 4000) : Math.min(modelConfig.max_tokens || 4000, 16384);
 
     try {
       const res = await client.chat.completions.create({
@@ -1911,7 +1909,7 @@ ${JSON.stringify(sampleDialogues, null, 2)}
           { role: 'user', content: userMessage }
         ],
         temperature: 0.3,
-        max_tokens: maxTokens
+        timeout: 90000  // 90秒超时，给AI足够处理时间
       });
       const content = (res.choices && res.choices[0] && res.choices[0].message && res.choices[0].message.content) ? res.choices[0].message.content.trim() : '';
       if (!content) return { success: false, error: 'AI 返回为空' };

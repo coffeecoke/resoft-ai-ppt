@@ -542,6 +542,7 @@ router.put('/scan/config', async (req, res) => {
  * @param {object} opts - { page, pageSize, nameKeyword, transcribed?, roleSet? }
  *   transcribed: 'all' | 'yes' | 'no' — 是否转录
  *   roleSet: 'all' | 'yes' | 'no' — 是否进行角色设置
+ * 结果集按文件 modifiedTime 升序后再分页。
  */
 async function handleScanFiles(opts) {
   const { page, pageSize, nameKeyword, transcribed: transcribedFilter, roleSet: roleSetFilter } = opts;
@@ -573,6 +574,18 @@ async function handleScanFiles(opts) {
     filesWithStatus = filesWithStatus.filter(f => f.hasRoleSet !== true);
     console.log(`🔍 筛选「未设角色」，剩余 ${filesWithStatus.length} 个文件`);
   }
+
+  // 查询结果按文件修改时间升序（早 → 晚），与列表「修改时间」列一致
+  filesWithStatus.sort((a, b) => {
+    const ta = new Date(a.modifiedTime).getTime();
+    const tb = new Date(b.modifiedTime).getTime();
+    if (Number.isFinite(ta) && Number.isFinite(tb) && ta !== tb) {
+      return ta - tb;
+    }
+    const pa = a.filePath || '';
+    const pb = b.filePath || '';
+    return pa.localeCompare(pb, 'zh-CN');
+  });
 
   const total = filesWithStatus.length;
   const totalPages = Math.ceil(total / pageSize);

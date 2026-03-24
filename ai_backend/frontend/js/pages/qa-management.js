@@ -1733,7 +1733,7 @@ async function batchOptimizeAll() {
   const closeBtn = document.getElementById('qa-optimize-close-btn');
   if (!overlay || !statusEl || !progressEl) return;
 
-  const params = new URLSearchParams({ page: 1, pageSize: 5000 });
+  const params = new URLSearchParams({ page: 1, pageSize: 5000, notOptimized: 'true' });
   if (qaState.filters.transcriptionName) params.append('transcriptionName', qaState.filters.transcriptionName);
   if (qaState.filters.classificationStatus) params.append('classificationStatus', qaState.filters.classificationStatus);
   if (qaState.filters.category) params.append('category', qaState.filters.category);
@@ -1751,31 +1751,44 @@ async function batchOptimizeAll() {
     const listResult = await listRes.json();
     if (!listResult.success) throw new Error(listResult.error || '获取列表失败');
     const list = listResult.data?.list || [];
-    const total = listResult.data?.total || 0;
     const ids = list.map(qa => qa.id).filter(Boolean);
     if (ids.length === 0) {
-      statusEl.textContent = '当前筛选条件下暂无问答对';
+      statusEl.textContent = '当前筛选条件下暂无未优化的问答对（全部已优化）';
       if (closeBtn) closeBtn.style.display = 'block';
       return;
     }
-    statusEl.textContent = `共 ${ids.length} 条，开始优化（去语气词+前后文补全）...`;
-    const CHUNK = 15;
+    statusEl.textContent = `共 ${ids.length} 条未优化，开始优化（去语气词+前后文补全）...`;
+    // 每批5条：避免后端串行15次AI调用导致单次请求超时（75~150s）
+    const CHUNK = 5;
     let successCount = 0;
     let failCount = 0;
     for (let i = 0; i < ids.length; i += CHUNK) {
       const chunk = ids.slice(i, i + CHUNK);
       progressEl.textContent = `已处理 ${successCount + failCount}/${ids.length} 条${failCount ? `，失败 ${failCount} 条` : ''}`;
-      const res = await fetch(`${API_BASE}/qa/optimize-batch`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ concernIds: chunk, save: true })
-      });
-      const result = await res.json();
-      if (result.success && result.data?.results) {
-        result.data.results.forEach(r => {
-          if (r.error) failCount++; else successCount++;
+      // 每个chunk独立try-catch：单批失败不中断后续处理
+      try {
+        const res = await fetch(`${API_BASE}/qa/optimize-batch`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ concernIds: chunk, save: true })
         });
-      } else {
+        if (!res.ok) {
+          console.error(`[优化] 第${i / CHUNK + 1}批请求失败，HTTP ${res.status}`);
+          failCount += chunk.length;
+        } else {
+          const result = await res.json();
+          if (result.success && result.data?.results) {
+            result.data.results.forEach(r => {
+              if (r.error) failCount++; else successCount++;
+            });
+          } else {
+            console.error(`[优化] 第${i / CHUNK + 1}批返回失败:`, result.error);
+            failCount += chunk.length;
+          }
+        }
+      } catch (chunkErr) {
+        // 单批超时或网络异常，跳过继续下一批
+        console.error(`[优化] 第${i / CHUNK + 1}批异常（可能超时），跳过:`, chunkErr.message);
         failCount += chunk.length;
       }
     }

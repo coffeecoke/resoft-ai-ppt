@@ -17,6 +17,8 @@ let st_currentTab = 'original'; // 当前显示的标签页：'original'、'merg
 let st_editedDialogues = new Map(); // 存储编辑过的对话
 let st_isEditMode = false;
 let st_currentAudioPath = null;
+/** 当前转录对应的音频显示名（用于下载 txt 文件名与音频名一致） */
+let st_currentAudioDisplayName = '';
 let st_speakerRoles = {}; // 存储角色设置，格式：{ "SPEAKER_1": "customer", "SPEAKER_2": "our_side" }
 let st_aiCorrectionResult = null; // 存储 AI 修正结果
 let st_qaPairs = []; // 存储问答对数据
@@ -2584,6 +2586,14 @@ function updateProgress(title, desc, percentage) {
 function displayResult(data) {
   st_currentTranscriptionId = data.id;
   st_currentAudioPath = data.audio_file_path; // 保存音频路径
+  // 优先用磁盘上的原始文件名，与上传音频一致；其次业务名称/本机 File 对象
+  st_currentAudioDisplayName =
+    (data.original_file_name && String(data.original_file_name).trim()) ||
+    (data.originalFileName && String(data.originalFileName).trim()) ||
+    (data.fileName && String(data.fileName).trim()) ||
+    (data.name && String(data.name).trim()) ||
+    (st_selectedFile && st_selectedFile.name) ||
+    '';
   
   document.getElementById('st-progressSection').style.display = 'none';
   document.getElementById('st-resultSection').style.display = 'block';
@@ -3036,6 +3046,27 @@ function copyAllDialogues() {
   });
 }
 
+/**
+ * 根据音频显示名生成安全的 .txt 下载文件名（与上传音频主文件名一致，去掉原扩展名）
+ */
+function buildTranscriptionDownloadFilename(displayName) {
+  let raw = (displayName && String(displayName).trim()) || '';
+  raw = raw.replace(/^.*[/\\]/, '');
+  if (!raw) {
+    return `转录结果_${Date.now()}.txt`;
+  }
+  const stem = raw.replace(
+    /\.(mp3|wav|m4a|flac|aac|wma|ogg|mp4|avi|mov|mkv|flv|wmv|webm|3gp|3g2|txt)$/i,
+    ''
+  );
+  const base = (stem.trim() || raw)
+    .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')
+    .replace(/^\.+/, '')
+    .trim()
+    .substring(0, 180);
+  return `${base || `转录结果_${Date.now()}`}.txt`;
+}
+
 function downloadResult() {
   if (!st_currentTranscriptionId) {
     showToast('没有可下载的结果', 'error');
@@ -3088,7 +3119,7 @@ function downloadResult() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `转录结果_${new Date().getTime()}.txt`;
+    a.download = buildTranscriptionDownloadFilename(st_currentAudioDisplayName);
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -3104,6 +3135,7 @@ function downloadResult() {
 function resetForm() {
   st_selectedFile = null;
   st_currentTranscriptionId = null;
+  st_currentAudioDisplayName = '';
   
   document.getElementById('st-audioInput').value = '';
   document.getElementById('st-audioName').value = '';
