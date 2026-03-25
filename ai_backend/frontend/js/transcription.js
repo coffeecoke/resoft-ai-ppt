@@ -5,6 +5,8 @@
 // ==================== 全局状态 ====================
 let selectedFile = null;
 let currentTranscriptionId = null;
+/** 当前转录对应的音频显示名（下载 txt 与音频名一致） */
+let currentAudioDisplayName = '';
 
 // ==================== DOM 元素 ====================
 const elements = {
@@ -231,7 +233,14 @@ function updateProgress(title, desc, percentage) {
 // ==================== 结果显示 ====================
 function displayResult(data) {
   currentTranscriptionId = data.id;
-  
+  currentAudioDisplayName =
+    (data.original_file_name && String(data.original_file_name).trim()) ||
+    (data.originalFileName && String(data.originalFileName).trim()) ||
+    (data.fileName && String(data.fileName).trim()) ||
+    (data.name && String(data.name).trim()) ||
+    (selectedFile && selectedFile.name) ||
+    '';
+
   // 隐藏进度，显示结果
   elements.progressSection.style.display = 'none';
   elements.resultSection.style.display = 'block';
@@ -342,6 +351,24 @@ function copyToClipboard(text) {
 }
 
 // ==================== 下载功能 ====================
+function buildTranscriptionDownloadFilename(displayName) {
+  let raw = (displayName && String(displayName).trim()) || '';
+  raw = raw.replace(/^.*[/\\]/, '');
+  if (!raw) {
+    return `转录结果_${Date.now()}.txt`;
+  }
+  const stem = raw.replace(
+    /\.(mp3|wav|m4a|flac|aac|wma|ogg|mp4|avi|mov|mkv|flv|wmv|webm|3gp|3g2|txt)$/i,
+    ''
+  );
+  const base = (stem.trim() || raw)
+    .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')
+    .replace(/^\.+/, '')
+    .trim()
+    .substring(0, 180);
+  return `${base || `转录结果_${Date.now()}`}.txt`;
+}
+
 function downloadResult() {
   if (!currentTranscriptionId) return;
   
@@ -357,7 +384,7 @@ function downloadResult() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `转录结果_${new Date().getTime()}.txt`;
+  a.download = buildTranscriptionDownloadFilename(currentAudioDisplayName);
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -459,6 +486,7 @@ async function deleteTranscription(id) {
 function resetForm() {
   selectedFile = null;
   currentTranscriptionId = null;
+  currentAudioDisplayName = '';
   elements.audioInput.value = '';
   elements.audioName.value = '';
   elements.customerName.value = '';
