@@ -262,8 +262,7 @@ router.get('/by-product/:productId', async (req, res) => {
 router.post('/:documentId/summary', async (req, res) => {
   try {
     const { documentId } = req.params
-    
-    console.log('[文档总结] 开始生成总结，documentId:', documentId)
+    const { userPrompt } = req.body || {}
     
     // 1. 查询文档基本信息
     const document = await prisma.documents.findUnique({
@@ -324,7 +323,8 @@ router.post('/:documentId/summary', async (req, res) => {
     // 5. 构建Prompt
     const prompt = createSummaryPrompt(finalText, {
       name: document.name,
-      slideCount: document.slide_count
+      slideCount: document.slide_count,
+      userPrompt: userPrompt || ''
     })
     
     console.log('[文档总结] Prompt构建完成')

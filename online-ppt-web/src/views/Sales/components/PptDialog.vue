@@ -246,7 +246,7 @@
                 </span>
                 <i class="ri-arrow-right-s-line feature-arrow"></i>
               </div>
-              <div class="ai-feature-item" @click="handleSummarize">
+              <div class="ai-feature-item" @click="handleSummarizeClick">
                 <span class="feature-text">总结本文档大意</span>
                 <i class="ri-arrow-right-s-line feature-arrow"></i>
               </div>
@@ -470,6 +470,7 @@ const aiInputText = ref('')
 const pendingDrawerVisible = ref(false) // 待操作列表抽屉显示状态
 const exporting = ref(false) // 导出状态
 const pendingSlideIds = ref<string[]>([]) // 分析方向模式：缓存待分析的幻灯片 ID
+const pendingSummarize = ref(false) // 总结方向模式：等待用户输入总结方向
 
 // 文档总结相关状态
 const summaryVisible = ref(false)
@@ -585,6 +586,22 @@ const handleAnalyzeClick = () => {
   })
 }
 
+/**
+ * 点击"总结本文档大意"：预填输入框，打开 AI 面板
+ */
+const handleSummarizeClick = () => {
+  pendingSummarize.value = true
+  aiInputText.value = '总结方向：'
+  aiPanelVisible.value = true
+  nextTick(() => {
+    const inputEl = document.querySelector('.ai-input') as HTMLTextAreaElement
+    if (inputEl) {
+      inputEl.focus()
+      inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length)
+    }
+  })
+}
+
 // 监听对话框打开/关闭状态，同步到store
 watch(() => props.visible, (newVal) => {
   if (newVal) {
@@ -667,6 +684,15 @@ const sendAiMessage = async () => {
     pendingSlideIds.value = []
     aiInputText.value = ''
     await analyzeSelectedSlide(direction, cachedIds)
+    return
+  }
+
+  // 检测"总结方向："前缀：有 pendingSummarize 标记时，走总结逻辑
+  if (userMessage.startsWith('总结方向：') && pendingSummarize.value) {
+    const direction = userMessage.replace('总结方向：', '').trim()
+    pendingSummarize.value = false
+    aiInputText.value = ''
+    await handleSummarize(direction)
     return
   }
   
@@ -1070,8 +1096,9 @@ const editCurrentPPT = async () => {
 /**
  * 总结文档
  * 调用后端API，流式接收总结内容，作为聊天消息展示
+ * @param userPrompt 用户输入的总结方向（可选）
  */
-const handleSummarize = async () => {
+const handleSummarize = async (userPrompt = '') => {
   if (!props.documentId) {
     ElMessage.error('文档ID不存在，无法生成总结')
     return
@@ -1084,7 +1111,7 @@ const handleSummarize = async () => {
   // 添加用户请求到聊天记录
   chatMessages.value.push({
     role: 'user',
-    content: '请总结这个PPT文档的大意'
+    content: userPrompt ? `请总结这个PPT文档的大意（总结方向：${userPrompt}）` : '请总结这个PPT文档的大意'
   })
   
   // 滚动到底部
@@ -1104,7 +1131,8 @@ const handleSummarize = async () => {
       `${API_BASE_URL}/sales/documents/${props.documentId}/summary`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userPrompt: userPrompt || '' })
       }
     )
     

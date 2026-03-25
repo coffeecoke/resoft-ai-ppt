@@ -5,7 +5,11 @@
  */
 
 export function createSummaryPrompt(documentText, documentInfo = {}) {
-  const { name, slideCount } = documentInfo
+  const { name, slideCount, userPrompt = '' } = documentInfo
+
+  const userInstruction = userPrompt
+    ? `\n【用户总结要求】\n${userPrompt}\n请在总结中优先关注用户指定的方向，输出格式仍按下方要求执行。\n`
+    : ''
   
   return `你是一个专业的PPT文档分析助手。请根据以下PPT文档的内容，生成结构化总结。
 
@@ -15,7 +19,7 @@ export function createSummaryPrompt(documentText, documentInfo = {}) {
 
 【文档内容】
 ${documentText}
-
+${userInstruction}
 【输出要求】
 请严格按照以下格式输出，保持emoji和格式：
 
