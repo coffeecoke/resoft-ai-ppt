@@ -70,7 +70,7 @@
               </div>
             </el-scrollbar>
             <div class="ppt-thumbs-footer">
-              <el-button type="primary" plain style="width: 100%; margin-bottom: 0;" @click="analyzeSelectedSlide">
+              <el-button type="primary" plain style="width: 100%; margin-bottom: 0;" @click="handleAnalyzeClick">
                 <el-icon><MagicStick /></el-icon> 选中-AI分析
               </el-button>
               <el-button style="width: 100%; margin-bottom: 0;" @click="downloadSelectedSlides">
@@ -469,6 +469,7 @@ const aiPanelVisible = ref(false) // 默认隐藏AI助手面板，只显示AI图
 const aiInputText = ref('')
 const pendingDrawerVisible = ref(false) // 待操作列表抽屉显示状态
 const exporting = ref(false) // 导出状态
+const pendingSlideIds = ref<string[]>([]) // 分析方向模式：缓存待分析的幻灯片 ID
 
 // 文档总结相关状态
 const summaryVisible = ref(false)
@@ -562,6 +563,28 @@ const closeAiPanel = () => {
   aiPanelVisible.value = false
 }
 
+/**
+ * 点击"选中-AI分析"：缓存已选幻灯片 ID，预填输入框，打开 AI 面板
+ */
+const handleAnalyzeClick = () => {
+  if (selectedSlides.value.length === 0) {
+    ElMessage.warning('请先选择要分析的幻灯片')
+    return
+  }
+  pendingSlideIds.value = selectedSlides.value
+    .map(i => (props.slides[i] as any)?.id)
+    .filter(Boolean) as string[]
+  aiInputText.value = '分析方向：'
+  aiPanelVisible.value = true
+  nextTick(() => {
+    const inputEl = document.querySelector('.ai-input') as HTMLTextAreaElement
+    if (inputEl) {
+      inputEl.focus()
+      inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length)
+    }
+  })
+}
+
 // 监听对话框打开/关闭状态，同步到store
 watch(() => props.visible, (newVal) => {
   if (newVal) {
@@ -636,6 +659,16 @@ const sendAiMessage = async () => {
   }
   
   const userMessage = aiInputText.value.trim()
+  
+  // 检测"分析方向："前缀：有缓存的幻灯片 ID 时，走分析逻辑
+  if (userMessage.startsWith('分析方向：') && pendingSlideIds.value.length > 0) {
+    const direction = userMessage.replace('分析方向：', '').trim()
+    const cachedIds = [...pendingSlideIds.value]
+    pendingSlideIds.value = []
+    aiInputText.value = ''
+    await analyzeSelectedSlide(direction, cachedIds)
+    return
+  }
   
   // 添加用户消息到聊天记录
   chatMessages.value.push({
@@ -743,62 +776,74 @@ const scrollToBottom = () => {
 
 /**
  * 分析选中的幻灯片
+ * @param userPrompt 用户输入的分析方向（可选，来自"分析方向："前缀）
+ * @param overrideSlideIds 直接传入的幻灯片 ID 数组（从 sendAiMessage 分支传来）
  */
-const analyzeSelectedSlide = async () => {
-  // 1. 验证是否选中
-  if (selectedSlides.value.length === 0) {
-    ElMessage.warning('请先选择要分析的幻灯片')
-    return
-  }
-  
-  // 2. 验证文档ID
+const analyzeSelectedSlide = async (userPrompt = '', overrideSlideIds?: string[]) => {
+  // 验证文档ID
   if (!props.documentId) {
     ElMessage.error('文档ID不存在，无法进行分析')
     return
   }
-  
-  // 3. 获取选中幻灯片的 slideId
-  const selectedSlideIds = selectedSlides.value.map(index => {
-    const slide = props.slides[index]
-    return slide?.id // 这里的 id 就是 slideId
-  }).filter(id => id) // 过滤掉 undefined
-  
-  if (selectedSlideIds.length === 0) {
-    ElMessage.error('选中的幻灯片数据不完整')
-    return
+
+  let selectedSlideIds: string[]
+  let pageCount: number
+  let pageList: string
+
+  if (overrideSlideIds && overrideSlideIds.length > 0) {
+    // 来自 sendAiMessage 分支，直接使用传入的 ID
+    selectedSlideIds = overrideSlideIds
+    pageCount = overrideSlideIds.length
+    pageList = String(pageCount)
+  } else {
+    // 来自按钮直接点击（不走分析方向前缀流程）
+    if (selectedSlides.value.length === 0) {
+      ElMessage.warning('请先选择要分析的幻灯片')
+      return
+    }
+    selectedSlideIds = selectedSlides.value.map(index => {
+      const slide = props.slides[index] as any
+      return slide?.id
+    }).filter((id): id is string => Boolean(id))
+
+    if (selectedSlideIds.length === 0) {
+      ElMessage.error('选中的幻灯片数据不完整')
+      return
+    }
+    pageCount = selectedSlides.value.length
+    pageList = selectedSlides.value.map(i => i + 1).join('、')
   }
-  
-  const pageCount = selectedSlides.value.length
-  const pageList = selectedSlides.value.map(i => i + 1).join('、')
-  
-  console.log('[幻灯片分析] slideIds:', selectedSlideIds, 'pageNumbers:', pageList)
-  
-  // 4. 打开AI面板
+
+  console.log('[幻灯片分析] slideIds:', selectedSlideIds, 'userPrompt:', userPrompt)
+
+  // 打开AI面板
   aiPanelVisible.value = true
-  
-  // 5. 添加用户请求到聊天记录
-  const requestMessage = pageCount === 1
-    ? `请分析第${pageList}页的内容`
-    : `请分析选中的${pageCount}页内容（第${pageList}页）`
-  
+
+  // 构建用户消息（展示在聊天记录中）
+  const requestMessage = userPrompt
+    ? `请分析选中的${pageCount}页内容（分析方向：${userPrompt}）`
+    : pageCount === 1
+      ? `请分析第${pageList}页的内容`
+      : `请分析选中的${pageCount}页内容（第${pageList}页）`
+
   chatMessages.value.push({
     role: 'user',
     content: requestMessage
   })
-  
-  // 6. 滚动到底部
+
+  // 滚动到底部
   await nextTick()
   scrollToBottom()
-  
-  // 7. 设置加载状态
+
+  // 设置加载状态
   aiChatLoading.value = true
   aiTyping.value = true
-  
+
   try {
-    console.log('[幻灯片分析] 开始分析，documentId:', props.documentId, 
+    console.log('[幻灯片分析] 开始分析，documentId:', props.documentId,
                 'slideIds:', selectedSlideIds)
-    
-    // 8. 调用后端流式API
+
+    // 调用后端流式API
     const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
     const response = await authFetch(
       `${API_BASE_URL}/sales/documents/${props.documentId}/analyze-slides`,
@@ -806,69 +851,70 @@ const analyzeSelectedSlide = async () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          slideIds: selectedSlideIds
+          slideIds: selectedSlideIds,
+          userPrompt: userPrompt || ''
         })
       }
     )
-    
+
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
       throw new Error(errorData.error || '生成分析失败')
     }
-    
-    // 9. 流式读取响应
+
+    // 流式读取响应
     const reader = response.body!.getReader()
     const decoder = new TextDecoder()
-    
-    // 10. 创建助手消息
+
+    // 创建助手消息
     const assistantMessage = {
       role: 'assistant' as const,
       content: ''
     }
     chatMessages.value.push(assistantMessage)
-    
-    // 11. 滚动到底部显示新消息
+
+    // 滚动到底部显示新消息
     await nextTick()
     scrollToBottom()
-    
+
     aiTyping.value = false // 停止输入动画，开始显示文字
-    
+
     let rawContent = ''
     let chunkCount = 0
     while (true) {
       const { done, value } = await reader.read()
-      
+
       if (done) {
         console.log('[幻灯片分析] 流式传输完成，总块数:', chunkCount)
         break
       }
-      
+
       chunkCount++
       const chunk = decoder.decode(value, { stream: true })
       rawContent += chunk
-      
+
       // 更新助手消息内容
       assistantMessage.content = rawContent
-      
+
       // 定期滚动
       if (chunkCount % 3 === 0) {
         await nextTick()
         scrollToBottom()
       }
     }
-    
+
     console.log('[幻灯片分析] 分析完成，内容长度:', rawContent.length)
-    
+
     // 最后滚动一次
     await nextTick()
     scrollToBottom()
-    
+
   } catch (error: any) {
     console.error('[幻灯片分析] 分析失败:', error)
     ElMessage.error('AI分析失败：' + (error.message || '未知错误'))
-    
+
     // 移除失败的消息
-    if (chatMessages.value[chatMessages.value.length - 1]?.role === 'assistant' && 
+    if (chatMessages.value[chatMessages.value.length - 1]?.role === 'assistant' &&
         !chatMessages.value[chatMessages.value.length - 1]?.content) {
       chatMessages.value.pop()
     }

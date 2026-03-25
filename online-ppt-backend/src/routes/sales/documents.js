@@ -445,7 +445,7 @@ router.post('/:documentId/chat', async (req, res) => {
 router.post('/:documentId/analyze-slides', async (req, res) => {
   try {
     const { documentId } = req.params
-    const { slideIds } = req.body
+    const { slideIds, userPrompt } = req.body
     
     // 验证参数
     if (!Array.isArray(slideIds) || slideIds.length === 0) {
@@ -525,7 +525,8 @@ router.post('/:documentId/analyze-slides', async (req, res) => {
       name: document.name,
       slideCount: document.slide_count,
       analyzedPageCount: slideContents.length,
-      pageNumbers: slideContents.map(s => s.slide_order)
+      pageNumbers: slideContents.map(s => s.slide_order),
+      userPrompt: userPrompt || ''
     })
     
     console.log('[幻灯片分析] Prompt构建完成')

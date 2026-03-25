@@ -19,13 +19,19 @@ export function createSlideAnalysisPrompt(documentText, options = {}) {
     name = '未知', 
     slideCount = 0,
     analyzedPageCount = 0,
-    pageNumbers = []
+    pageNumbers = [],
+    userPrompt = ''
   } = options
   
   // 格式化页面列表显示
   const pageList = pageNumbers.length <= 5 
     ? pageNumbers.join('、') 
     : `${pageNumbers.slice(0, 3).join('、')}...等${pageNumbers.length}页`
+
+  // 有用户分析方向时，作为额外要求插入 Prompt
+  const userInstruction = userPrompt
+    ? `\n【用户分析要求】\n${userPrompt}\n请在分析中优先关注用户指定的方向，输出格式仍按下方要求执行。\n`
+    : ''
   
   return `你是一个专业的PPT内容分析助手。用户从一个PPT文档中选中了${analyzedPageCount}页，需要你对这些页面进行针对性分析。
 
@@ -37,7 +43,7 @@ export function createSlideAnalysisPrompt(documentText, options = {}) {
 
 【选中页面内容】
 ${documentText}
-
+${userInstruction}
 【输出要求】
 请严格按照以下格式输出，保持emoji和格式：
 
