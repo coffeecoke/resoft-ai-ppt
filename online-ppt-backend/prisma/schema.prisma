@@ -475,6 +475,7 @@ model transcriptions {
   products                    products?                    @relation(fields: [product_id], references: [id])
   dialogue_adjustments        dialogue_adjustments[]       /// 对话调整记录
   presales_analysis_results   presales_analysis_results[]  /// 售前交流综合分析结果
+  presales_video_tasks        presales_video_tasks?        /// 售前视频生成主任务（每条转录最多一条）
 
   @@index([status], map: "idx_status")
   @@index([session_id], map: "idx_session_id")
@@ -488,6 +489,39 @@ model transcriptions {
   @@index([language], map: "idx_language")
   @@index([created_by], map: "idx_transcription_created_by")
   @@fulltext([full_text], map: "ft_full_text")
+}
+
+/// 售前分析·视频生成主任务（Coze 上传 file_id/file_name、工作流 execute_id、流水线状态落库）
+model presales_video_tasks {
+  id               String @id @db.VarChar(50) /// 主任务 ID（UUID）
+  transcription_id String @unique @db.VarChar(50) /// 关联转录（一条转录对应一条主任务记录）
+
+  /// Coze 文件上传（字段 file）返回
+  coze_file_id   String? @db.VarChar(200)
+  coze_file_name String? @db.VarChar(500)
+  /// 待推送的合并对话 txt 本地路径
+  local_dialogue_txt_path String? @db.VarChar(1000)
+  /// Coze meeting-analysis 返回
+  execute_id String? @db.VarChar(200)
+
+  /// 流水线状态：推送对话 | 提交工作流 | 分析中 | 分析完成 | 推送分析文件 | 视频生成
+  pipeline_status String @default("推送对话") @db.VarChar(32)
+
+  reserve_1 String? @db.VarChar(500) /// 备用
+  reserve_2 String? @db.VarChar(500) /// 备用
+  reserve_3 String? @db.VarChar(500) /// 备用
+  reserve_4 String? @db.VarChar(500) /// 备用
+  reserve_5 String? @db.VarChar(500) /// 备用
+
+  last_error String? @db.VarChar(2000) /// 最近一步错误摘要
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  transcription transcriptions @relation(fields: [transcription_id], references: [id], onDelete: Cascade)
+
+  @@index([pipeline_status], map: "idx_pv_video_task_status")
+  @@index([updated_at], map: "idx_pv_video_task_updated")
 }
 
 /// 对话调整记录表（用于多次调整对话内容）

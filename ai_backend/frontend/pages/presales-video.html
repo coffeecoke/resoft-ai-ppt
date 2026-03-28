@@ -1,0 +1,360 @@
+<div class="pv-page">
+  <style>
+    .pv-page {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 8px 8px 28px;
+    }
+    @media (min-width: 768px) {
+      .pv-page {
+        padding: 12px 20px 32px;
+      }
+    }
+    .pv-page-header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px 24px;
+      margin-bottom: 20px;
+    }
+    .pv-title-block h1 {
+      font-size: 22px;
+      font-weight: 600;
+      margin: 0 0 6px 0;
+      line-height: 1.3;
+      color: var(--text-primary, #262626);
+    }
+    .pv-subtitle {
+      margin: 0;
+      max-width: 640px;
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--text-secondary, #8c8c8c);
+    }
+    .pv-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .pv-card.card {
+      padding: 0;
+      overflow: hidden;
+    }
+    .pv-card .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px 16px;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-color, #d9d9d9);
+      background: var(--bg-color, #f0f2f5);
+    }
+    .pv-card .card-header h2 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-primary, #262626);
+    }
+    .pv-card .card-header .header-info {
+      font-size: 13px;
+      color: var(--text-secondary, #8c8c8c);
+    }
+    .pv-card .card-body {
+      padding: 0;
+    }
+    .pv-table-scroll {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .pv-table.data-table {
+      table-layout: fixed;
+      width: 100%;
+      min-width: 1000px;
+    }
+    .pv-table.data-table th,
+    .pv-table.data-table td {
+      padding: 10px 12px;
+      vertical-align: middle;
+    }
+    .pv-table.data-table th {
+      font-size: 11px;
+      white-space: nowrap;
+    }
+    .pv-col-name {
+      width: 28%;
+      max-width: 280px;
+    }
+    .pv-col-customer {
+      width: 12%;
+      max-width: 120px;
+    }
+    .pv-col-time {
+      width: 150px;
+    }
+    .pv-col-report {
+      width: 72px;
+      text-align: center;
+    }
+    .pv-col-pipeline {
+      width: 100px;
+      max-width: 120px;
+      text-align: center;
+    }
+    .pv-pipeline-badge {
+      display: inline-block;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 12px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: var(--bg-color, #f0f2f5);
+      color: var(--text-secondary, #595959);
+    }
+    .pv-col-actions {
+      width: 440px;
+      text-align: right;
+      white-space: nowrap;
+    }
+    .pv-ellipsis {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 600;
+      color: var(--text-primary, #262626);
+    }
+    .pv-cell-muted {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--text-secondary, #8c8c8c);
+      font-size: 13px;
+    }
+    .pv-time {
+      font-size: 12px;
+      color: var(--text-secondary, #8c8c8c);
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+    .pv-actions {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: nowrap;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 6px;
+    }
+    .pv-actions .btn-sm {
+      padding: 5px 8px;
+      font-size: 12px;
+      line-height: 1.3;
+      white-space: nowrap;
+    }
+    .pv-actions .btn.pv-act-secondary {
+      background: var(--card-bg, #fff);
+      color: var(--text-primary, #262626);
+      border-color: var(--border-color, #d9d9d9);
+    }
+    .pv-actions .btn.pv-act-secondary:hover {
+      border-color: var(--primary-color, #1890ff);
+      color: var(--primary-color, #1890ff);
+    }
+    .pv-actions .btn.pv-act-workflow {
+      background: #f0f5ff;
+      color: #1d39c4;
+      border-color: #adc6ff;
+    }
+    .pv-actions .btn.pv-act-workflow:hover {
+      border-color: var(--primary-color, #1890ff);
+      color: var(--primary-color, #1890ff);
+      background: #fff;
+    }
+    .pv-pagination {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 20px;
+      border-top: 1px solid var(--border-color, #d9d9d9);
+      background: var(--card-bg, #fff);
+    }
+    .pv-pagination .pagination-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .pv-pagination .pagination-info {
+      font-size: 13px;
+      color: var(--text-secondary, #8c8c8c);
+    }
+    #pv-report-dialog[open] {
+      margin: auto;
+      max-width: 880px;
+      width: min(92vw, 880px);
+      border: none;
+      border-radius: 12px;
+      box-shadow: var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.2));
+      padding: 0;
+    }
+    #pv-report-dialog::backdrop {
+      background: rgba(0, 0, 0, 0.45);
+    }
+    #pv-report-dialog .dialog-body {
+      max-height: min(70vh, 560px);
+      overflow: auto;
+      padding: 16px 20px;
+      background: var(--card-bg, #fff);
+    }
+    #pv-report-pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 13px;
+      line-height: 1.55;
+      margin: 0;
+      font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+      color: var(--text-primary, #262626);
+    }
+    .pv-empty-inner {
+      padding: 40px 24px;
+      text-align: center;
+    }
+    .pv-empty-inner p {
+      margin: 0 0 8px;
+      font-size: 15px;
+      color: var(--text-primary, #262626);
+    }
+    .pv-empty-inner small {
+      font-size: 13px;
+      color: var(--text-secondary, #8c8c8c);
+      line-height: 1.5;
+      display: block;
+      max-width: 400px;
+      margin: 0 auto;
+    }
+    .pv-loading-inner {
+      padding: 48px 24px;
+    }
+    .pv-table .badge-secondary {
+      background: #fafafa;
+      color: var(--text-secondary, #8c8c8c);
+      border: 1px solid var(--border-color, #d9d9d9);
+    }
+    .pv-search-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border-color, #d9d9d9);
+      background: var(--card-bg, #fff);
+    }
+    .pv-search-bar .form-control {
+      min-width: 200px;
+      max-width: 320px;
+      flex: 1;
+    }
+  </style>
+
+  <div class="pv-page-header">
+    <div class="pv-title-block">
+      <h1>售前分析 · 视频生成</h1>
+      <p class="pv-subtitle">仅列出已执行「合并」的转录。<strong>推送对话</strong>仅 Coze 上传 txt；待服务端处理完毕后，再点<strong>提交工作流</strong>调会议分析取 execute_id（本页会记住上传返回的 fileId/file_name，勿在两者之间刷新页面）。其它接口见 <code style="font-size:12px;">.env</code>。</p>
+    </div>
+    <div class="pv-header-actions">
+      <button type="button" class="btn btn-secondary" onclick="pvLoadList()">
+        <span class="icon">🔄</span> 刷新
+      </button>
+    </div>
+  </div>
+
+  <div class="card pv-card">
+    <div class="card-header">
+      <h2>已合并对话列表</h2>
+      <div class="header-info">
+        <span id="pv-total-count">共 0 条</span>
+      </div>
+    </div>
+    <div class="pv-search-bar">
+      <input
+        type="text"
+        id="pv-name-query"
+        class="form-control"
+        placeholder="按文件名称、原始文件名、客户名称搜索"
+        autocomplete="off"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();pvSearch();}"
+      />
+      <button type="button" class="btn btn-sm btn-primary" onclick="pvSearch()">查询</button>
+      <button type="button" class="btn btn-sm btn-secondary" onclick="pvClearNameSearch()">清除</button>
+    </div>
+    <div class="card-body">
+      <div id="pv-loading" class="loading pv-loading-inner" style="display: none;">
+        <div class="spinner"></div>
+        <p>加载中...</p>
+      </div>
+      <div id="pv-empty" class="empty-state pv-empty-inner" style="display: none;">
+        <p>暂无记录</p>
+        <small id="pv-empty-hint">请先在「语音转文本」中完成转录，并执行「合并相邻同一说话人」或「再次合并」</small>
+      </div>
+      <div id="pv-list" class="pv-table-scroll" style="display: none;">
+        <table class="data-table pv-table">
+          <thead>
+            <tr>
+              <th class="pv-col-name">文件名称</th>
+              <th class="pv-col-customer">客户</th>
+              <th class="pv-col-time">创建时间</th>
+              <th class="pv-col-pipeline" title="视频任务流水线（库表 presales_video_tasks）">流水线</th>
+              <th class="pv-col-report">报告</th>
+              <th class="pv-col-actions">操作</th>
+            </tr>
+          </thead>
+          <tbody id="pv-tbody"></tbody>
+        </table>
+      </div>
+      <div id="pv-pagination" class="pv-pagination pagination-container" style="display: none;">
+        <div class="pagination-info">
+          <span id="pv-pagination-info">共 0 条</span>
+        </div>
+        <div class="pagination-controls">
+          <button type="button" class="btn btn-sm" id="pv-prev" onclick="pvChangePage(-1)" disabled>上一页</button>
+          <span id="pv-page-info" style="font-size:13px;color:var(--text-secondary,#8c8c8c);">第 1 页</span>
+          <button type="button" class="btn btn-sm" id="pv-next" onclick="pvChangePage(1)" disabled>下一页</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <dialog id="pv-report-dialog">
+    <div class="dialog-content">
+      <div class="dialog-header">
+        <h2>报告内容</h2>
+        <button type="button" class="icon-btn" onclick="pvCloseReportDialog()" aria-label="关闭">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="dialog-body">
+        <pre id="pv-report-pre"></pre>
+      </div>
+      <div class="dialog-actions">
+        <button type="button" class="btn btn-secondary" onclick="pvCloseReportDialog()">关闭</button>
+        <button type="button" class="btn btn-primary" onclick="pvCopyReport()">复制</button>
+      </div>
+    </div>
+  </dialog>
+
+  <div id="pv-overlay" class="loading-overlay" style="display: none;">
+    <div class="loading-content">
+      <div class="spinner"></div>
+      <p id="pv-overlay-text">处理中...</p>
+    </div>
+  </div>
+</div>

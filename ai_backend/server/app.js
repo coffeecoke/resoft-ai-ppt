@@ -22,6 +22,7 @@ const sessionsRoutes = require('./routes/sessionsRoutes')
 const autoProcessRoutes = require('./routes/autoProcessRoutes')
 const qaManagementRoutes = require('./routes/qaManagementRoutes')
 const presalesAnalysisRoutes = require('./routes/presalesAnalysisRoutes')
+const presalesVideoRoutes = require('./routes/presalesVideoRoutes')
 const intelligentScraperRoutes = require('./routes/intelligentScraperRoutes')
 const tenderAnalysisRoutes = require('./routes/tenderAnalysisRoutes')
 const bidAnalysisRoutes = require('./routes/bidAnalysisRoutes')
@@ -97,6 +98,9 @@ app.use('/api/qa', qaManagementRoutes)
 
 // 路由：售前交流综合分析（新增）
 app.use('/api/presales-analysis', presalesAnalysisRoutes)
+
+// 路由：售前分析 · 视频生成（合并对话推送与第三方对接）
+app.use('/api/presales-video', presalesVideoRoutes)
 
 // 路由：智能信息爬取（采招网）（新增）
 app.use('/api/scraper', intelligentScraperRoutes)

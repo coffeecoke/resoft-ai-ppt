@@ -2,36 +2,45 @@
  * 公共函数库
  */
 
-// 显示消息提示
-function showMessage(message, type = 'info') {
+// 显示消息提示（durationMs 可选，默认 3000；多行文案自动换行）
+function showMessage(message, type = 'info', durationMs = 3000) {
   const colors = {
     success: '#52c41a',
     error: '#f5222d',
     warning: '#faad14',
     info: '#1890ff',
   };
-  
-  const toast = document.createElement('div');
+
+  const ms =
+    typeof durationMs === 'number' && durationMs > 0 ? durationMs : 3000
+
+  const toast = document.createElement('div')
   toast.style.cssText = `
     position: fixed;
     top: 20px;
     right: 20px;
-    background: ${colors[type]};
+    background: ${colors[type] || colors.info};
     color: white;
     padding: 12px 20px;
     border-radius: 8px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     z-index: 10000;
     animation: slideIn 0.3s ease-out;
-  `;
-  toast.textContent = message;
-  
-  document.body.appendChild(toast);
-  
+    max-width: min(440px, 92vw);
+    line-height: 1.45;
+    word-break: break-word;
+  `
+  toast.textContent = message
+  if (String(message).includes('\n')) {
+    toast.style.whiteSpace = 'pre-line'
+  }
+
+  document.body.appendChild(toast)
+
   setTimeout(() => {
-    toast.style.animation = 'slideOut 0.3s ease-out';
-    setTimeout(() => toast.remove(), 300);
-  }, 3000);
+    toast.style.animation = 'slideOut 0.3s ease-out'
+    setTimeout(() => toast.remove(), 300)
+  }, ms)
 }
 
 // 格式化日期
