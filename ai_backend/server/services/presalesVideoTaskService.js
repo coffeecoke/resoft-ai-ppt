@@ -93,6 +93,73 @@ async function updatePipelineStatus(transcriptionId, pipelineStatus, extra = {})
   })
 }
 
+/** video_address 列 VarChar(2000) */
+const VIDEO_ADDRESS_MAX_LEN = 2000
+
+function clipVideoAddress(val) {
+  if (val == null) return { text: null, truncated: false }
+  const s = String(val)
+  if (s.length <= VIDEO_ADDRESS_MAX_LEN) return { text: s, truncated: false }
+  return { text: s.slice(0, VIDEO_ADDRESS_MAX_LEN), truncated: true }
+}
+
+function normalizeAnalysisContent(val) {
+  if (val == null) return null
+  return String(val)
+}
+
+async function getByExecuteId(executeId) {
+  if (executeId == null || String(executeId).trim() === '') return null
+  return prisma.presales_video_tasks.findFirst({
+    where: { execute_id: String(executeId).trim() }
+  })
+}
+
+/**
+ * 工作流异步回调：按 execute_id 更新流水线状态与备用字段
+ * @param {'analysis_content'|'video_create'} callbackType
+ * @param {string} payloadText 分析文本或视频路径
+ * @returns {Promise<{ ok: boolean, task?: object, code?: string, message?: string, truncated?: boolean }>}
+ */
+async function applyWorkflowCallback(callbackType, executeId, payloadText) {
+  const task = await getByExecuteId(executeId)
+  if (!task) {
+    return { ok: false, code: 'NOT_FOUND', message: '未找到与 execute_id 匹配的主任务记录' }
+  }
+
+  if (callbackType === 'analysis_content') {
+    const text = normalizeAnalysisContent(payloadText)
+    const updated = await prisma.presales_video_tasks.update({
+      where: { id: task.id },
+      data: {
+        pipeline_status: PipelineStatus.ANALYSIS_DONE,
+        analysis_content: text,
+        last_error: null
+      }
+    })
+    return { ok: true, task: updated, truncated: false }
+  }
+
+  if (callbackType === 'video_create') {
+    const { text, truncated } = clipVideoAddress(payloadText)
+    const updated = await prisma.presales_video_tasks.update({
+      where: { id: task.id },
+      data: {
+        pipeline_status: PipelineStatus.VIDEO_DONE,
+        video_address: text,
+        last_error: null
+      }
+    })
+    return { ok: true, task: updated, truncated }
+  }
+
+  return {
+    ok: false,
+    code: 'INVALID_TYPE',
+    message: 'type 必须为 analysis_content 或 video_create'
+  }
+}
+
 function toApiShape(row) {
   if (!row) return null
   return {
@@ -103,8 +170,8 @@ function toApiShape(row) {
     localDialogueTxtPath: row.local_dialogue_txt_path,
     executeId: row.execute_id,
     pipelineStatus: row.pipeline_status,
-    reserve1: row.reserve_1,
-    reserve2: row.reserve_2,
+    analysisContent: row.analysis_content,
+    videoAddress: row.video_address,
     reserve3: row.reserve_3,
     reserve4: row.reserve_4,
     reserve5: row.reserve_5,
@@ -116,10 +183,12 @@ function toApiShape(row) {
 module.exports = {
   PipelineStatus,
   getByTranscriptionId,
+  getByExecuteId,
   getOrCreateTask,
   saveAfterLocalTxt,
   saveAfterCozeUpload,
   saveAfterSubmitWorkflow,
   updatePipelineStatus,
+  applyWorkflowCallback,
   toApiShape
 }

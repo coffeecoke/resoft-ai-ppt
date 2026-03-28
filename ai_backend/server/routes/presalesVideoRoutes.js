@@ -11,6 +11,7 @@
  * - PRESALES_VIDEO_FETCH_URL           获取视频 GET（可选，query: transcriptionId）
  * - PRESALES_VIDEO_WORKFLOW_SUBMIT_URL 提交工作流 JSON POST（可选）
  * - PRESALES_VIDEO_WORKFLOW_SUBMIT_TOKEN 可选，Bearer Token 鉴权
+ * - PRESALES_VIDEO_WORKFLOW_CALLBACK_SECRET 可选，工作流回调鉴权；请求需带 Header X-Presales-Video-Callback-Secret 或 query ?secret=
  */
 
 const express = require('express')
@@ -191,6 +192,99 @@ function logResponseBody(tag, body, maxLen = 16000) {
     logger.info(`${tag}${s.slice(0, maxLen)}…(总长 ${s.length} 字符，日志已截断)`)
   }
 }
+
+/** 工作流回调体中「文本或地址」字段，兼容多种命名 */
+function pickWorkflowCallbackPayload(body) {
+  if (!body || typeof body !== 'object') return null
+  const keys = [
+    'content',
+    'text',
+    'result',
+    'url',
+    'path',
+    'video_url',
+    'videoUrl',
+    'video_path',
+    'videoPath',
+    'address',
+    'payload',
+    'value'
+  ]
+  for (const k of keys) {
+    const v = body[k]
+    if (v != null && String(v) !== '') return v
+  }
+  if (body.data != null && typeof body.data === 'string' && String(body.data) !== '') {
+    return body.data
+  }
+  return null
+}
+
+/**
+ * POST /api/presales-video/workflow-callback
+ * 工作流完成后回调：按 execute_id 更新 presales_video_tasks
+ * Body: { type: 'analysis_content' | 'video_create', id 或 execute_id, 文本/路径: content|text|url|path|... }
+ */
+router.post('/workflow-callback', async (req, res) => {
+  try {
+    const expectedSecret = process.env.PRESALES_VIDEO_WORKFLOW_CALLBACK_SECRET
+    if (expectedSecret && String(expectedSecret).trim()) {
+      const given =
+        req.headers['x-presales-video-callback-secret'] ||
+        req.query.secret ||
+        (req.body && req.body.secret)
+      if (String(given || '') !== String(expectedSecret).trim()) {
+        return res.status(401).json({ success: false, error: 'callback 鉴权失败' })
+      }
+    }
+
+    const body = req.body && typeof req.body === 'object' ? req.body : {}
+    const typeRaw = body.type || body.callback_type
+    const executeId = body.id ?? body.execute_id ?? body.executeId
+    const payloadText = pickWorkflowCallbackPayload(body)
+
+    if (typeRaw == null || String(typeRaw).trim() === '') {
+      return res.status(400).json({ success: false, error: '缺少 type（analysis_content / video_create）' })
+    }
+    if (executeId == null || String(executeId).trim() === '') {
+      return res.status(400).json({ success: false, error: '缺少 id（execute_id）' })
+    }
+
+    const typeNorm = String(typeRaw).trim()
+    const result = await presalesVideoTaskService.applyWorkflowCallback(
+      typeNorm,
+      executeId,
+      payloadText
+    )
+
+    if (!result.ok) {
+      const status = result.code === 'NOT_FOUND' ? 404 : 400
+      return res.status(status).json({
+        success: false,
+        error: result.message,
+        code: result.code
+      })
+    }
+
+    if (result.truncated) {
+      logger.warn('[presales-video] workflow-callback video_address 超过 2000 字符已截断')
+    }
+
+    logger.info(
+      `[presales-video] workflow-callback 已处理 type=${typeNorm} execute_id=${String(executeId).slice(0, 80)}`
+    )
+
+    return res.json({
+      success: true,
+      data: {
+        videoTask: presalesVideoTaskService.toApiShape(result.task)
+      }
+    })
+  } catch (error) {
+    logger.error('[presales-video] workflow-callback 失败:', error)
+    return res.status(500).json({ success: false, error: error.message || '回调处理失败' })
+  }
+})
 
 /**
  * GET /api/presales-video/transcriptions
