@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta http-equiv="Cache-Control" content="no-cache" />
+  <title>说话人角色确认</title>
+  <style>
+    :root {
+      --bg: #141414;
+      --card: #1f1f1f;
+      --border: #303030;
+      --text: #e8e8e8;
+      --muted: #a3a3a3;
+      --primary: #4096ff;
+      --ok: #52c41a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding: 16px;
+      padding-bottom: 96px;
+    }
+    h1 { font-size: 1.15rem; margin: 0 0 8px; font-weight: 600; }
+    .meta { font-size: 12px; color: var(--muted); margin-bottom: 16px; }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: flex-end;
+      margin-bottom: 16px;
+      padding: 12px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    .toolbar label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+    .toolbar input, .toolbar select {
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: #262626;
+      color: var(--text);
+      min-width: 120px;
+    }
+    .btn {
+      padding: 8px 16px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-secondary { background: #434343; color: #fff; }
+    .list { display: flex; flex-direction: column; gap: 10px; }
+    .row {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+    .row-head {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 6px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .row-head input.speaker-in {
+      flex: 1;
+      min-width: 140px;
+      padding: 6px 8px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: #262626;
+      color: var(--text);
+    }
+    .row .text {
+      font-size: 14px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: #d9d9d9;
+    }
+    .msg { padding: 12px; border-radius: 8px; margin-bottom: 12px; font-size: 14px; }
+    .msg.err { background: #2a1215; border: 1px solid #5c2121; color: #ffccc7; }
+    .msg.ok { background: #162312; border: 1px solid #274916; color: #b7eb8f; }
+    .fixed-bar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 12px 16px;
+      background: rgba(20, 20, 20, 0.95);
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+    }
+  </style>
+</head>
+<body>
+  <h1>说话人角色确认</h1>
+  <div class="meta" id="pvsc-meta">加载中…</div>
+  <div id="pvsc-err" class="msg err" style="display: none;"></div>
+  <div id="pvsc-ok" class="msg ok" style="display: none;"></div>
+
+  <div class="toolbar" id="pvsc-toolbar" style="display: none;">
+    <div>
+      <label>批量：原说话人（选标签，右侧为角色名）</label>
+      <select id="pvsc-batch-from" aria-label="原说话人标签"></select>
+    </div>
+    <div>
+      <label>改为</label>
+      <input type="text" id="pvsc-batch-to" placeholder="如 客户方" autocomplete="off" />
+    </div>
+    <button type="button" class="btn btn-secondary" id="pvsc-batch-apply">应用到全部匹配</button>
+  </div>
+
+  <div class="list" id="pvsc-list"></div>
+
+  <div class="fixed-bar" id="pvsc-bar" style="display: none;">
+    <button type="button" class="btn btn-primary" id="pvsc-save">保存确认结果</button>
+  </div>
+
+  <!-- 脚本走 /api/... 由服务端显式返回 JS MIME；企微内对 /js/ 静态请求常返回 HTML 导致 SyntaxError: Unexpected token '<' -->
+  <script>
+    window.onerror = function (msg, url, line) {
+      var el = document.getElementById('pvsc-meta')
+      var er = document.getElementById('pvsc-err')
+      if (el) el.textContent = '页面脚本异常'
+      if (er) {
+        er.style.display = 'block'
+        er.textContent =
+          String(msg || 'error') +
+          (line ? ' (行 ' + line + ')' : '') +
+          (url ? '\n文件: ' + url : '') +
+          '\n若持续失败，请复制本页链接到系统浏览器打开。'
+      }
+    }
+  </script>
+  <!-- ngrok 免费域名对 <script src> 常返回 HTML 拦截页 → Unexpected token '<'；fetch 可带 ngrok-skip-browser-warning -->
+  <script>
+    ;(function () {
+      var scriptUrl =
+        (window.location.origin || '') +
+        '/api/presales-video/public/speaker-confirm-page.js?v=5'
+      var hdrs = { 'ngrok-skip-browser-warning': 'true' }
+      fetch(scriptUrl, { credentials: 'same-origin', headers: hdrs })
+        .then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status)
+          return r.text()
+        })
+        .then(function (text) {
+          var t = (text || '').trim()
+          if (t.charAt(0) === '<') {
+            throw new Error(
+              '脚本返回了 HTML（多为 ngrok 免费域名在企微内置浏览器中的拦截页）。请用系统浏览器打开本页，或换正式域名/付费隧道。'
+            )
+          }
+          var s = document.createElement('script')
+          s.textContent = text
+          document.head.appendChild(s)
+        })
+        .catch(function (e) {
+          var el = document.getElementById('pvsc-meta')
+          var er = document.getElementById('pvsc-err')
+          if (el) el.textContent = '页面脚本加载失败'
+          if (er) {
+            er.style.display = 'block'
+            er.textContent =
+              String((e && e.message) || e) +
+              '\n文件: ' +
+              scriptUrl +
+              '\n若持续失败，请复制本页链接到系统浏览器打开。'
+          }
+        })
+    })()
+  </script>
+  <noscript><p style="color:#ffccc7;padding:16px;">请开启 JavaScript 后刷新</p></noscript>
+</body>
+</html>

@@ -9,6 +9,7 @@ const fs = require('fs').promises
 const prisma = new PrismaClient()
 
 const NOTE_REMerged = '再次合并对话'
+const NOTE_ROLE = '角色判断'
 const NOTE_AI = 'AI错别字修正'
 const NOTE_MERGE = '合并相邻同一说话人的对话'
 
@@ -45,6 +46,13 @@ async function resolveMergedDialoguesForTranscription(transcriptionId) {
   if (re?.adjusted_dialogues) {
     dialogues = parseDialogues(re.adjusted_dialogues)
     if (dialogues.length) source = 'remerged'
+  }
+  if (!dialogues.length) {
+    const role = await findLatestAdjustment(transcriptionId, NOTE_ROLE)
+    if (role?.adjusted_dialogues) {
+      dialogues = parseDialogues(role.adjusted_dialogues)
+      if (dialogues.length) source = 'role_confirmed'
+    }
   }
   if (!dialogues.length) {
     const ai = await findLatestAdjustment(transcriptionId, NOTE_AI)
@@ -132,6 +140,25 @@ function buildSafeTxtFilename(displayName) {
   return `${base || `转录结果_${Date.now()}`}.txt`
 }
 
+/** 与 buildSafeTxtFilename 同类规则，扩展名为 .md（用于售前分析回调落盘） */
+function buildSafeMarkdownFilename(displayName) {
+  let raw = (displayName && String(displayName).trim()) || ''
+  raw = raw.replace(/^.*[/\\]/, '')
+  if (!raw) {
+    return `analysis_${Date.now()}.md`
+  }
+  const stem = raw.replace(
+    /\.(mp3|wav|m4a|flac|aac|wma|ogg|mp4|avi|mov|mkv|flv|wmv|webm|3gp|3g2|txt|md)$/i,
+    ''
+  )
+  const base = (stem.trim() || raw)
+    .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')
+    .replace(/^\.+/, '')
+    .trim()
+    .substring(0, 180)
+  return `${base || `analysis_${Date.now()}`}.md`
+}
+
 /**
  * 曾有过「合并」或「再次合并」步骤的转录 ID（去重）
  */
@@ -165,6 +192,7 @@ module.exports = {
   uniqueSpeakers,
   buildMergedDialogueTxt,
   buildSafeTxtFilename,
+  buildSafeMarkdownFilename,
   listTranscriptionIdsWithMergeStep,
   writeDialogueFile,
   NOTE_MERGE,

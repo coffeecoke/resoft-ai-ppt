@@ -1,5 +1,5 @@
 {
-  "scanDirectory": "E:\\音频提取",
+  "scanDirectory": "/Users/guandanghai/Documents/project_workspace/presail_project/resoft-ai-ppt/ai_backend/uploads_data/wecom_bot/received/files",
   "supportedFormats": [
     ".mp3",
     ".wav",

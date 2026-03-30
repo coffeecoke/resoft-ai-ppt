@@ -27,9 +27,14 @@ const intelligentScraperRoutes = require('./routes/intelligentScraperRoutes')
 const tenderAnalysisRoutes = require('./routes/tenderAnalysisRoutes')
 const bidAnalysisRoutes = require('./routes/bidAnalysisRoutes')
 const bidCompositionRoutes = require('./routes/bidCompositionRoutes')
+const wecomBotRoutes = require('./routes/wecomBotRoutes')
+const presalesInboundRoutes = require('./routes/presalesInboundRoutes')
+const { startWeComBot, stopWeComBot } = require('./services/wecomBotService')
 
 const app = express()
 const PORT = process.env.PORT || 3000
+// 默认监听所有网卡，本机用 localhost / 127.0.0.1；局域网可用本机 IP 访问
+const HOST = process.env.HOST || '0.0.0.0'
 
 // 配置文件上传
 const storage = multer.diskStorage({
@@ -113,6 +118,12 @@ app.use('/api/bid-analysis', bidAnalysisRoutes)
 
 // 路由：投标文件组合（新增）
 app.use('/api/bid-composition', bidCompositionRoutes)
+
+// 路由：企业微信智能机器人（长连接 + 主动发消息，原 saler-agent）
+app.use('/api/wecom-bot', wecomBotRoutes)
+
+// 路由：售前报备外部接入（报备 + 远程音频 → 转录入库）
+app.use('/api/presales-inbound', presalesInboundRoutes)
 
 // 路由：文件提取接口
 app.post('/api/extract', upload.single('file'), async (req, res) => {
@@ -277,11 +288,14 @@ app.get('/api/health', (req, res) => {
 })
 
 // 启动服务器
-app.listen(PORT, () => {
+app.listen(PORT, HOST, () => {
   console.log('='.repeat(60))
   console.log('文档文本提取器 - Web 服务已启动')
   console.log('='.repeat(60))
-  console.log(`🌐 访问地址: http://localhost:${PORT}`)
+  console.log(`🌐 本机访问: http://127.0.0.1:${PORT}  或  http://localhost:${PORT}`)
+  if (HOST === '0.0.0.0') {
+    console.log(`📡 监听: 0.0.0.0:${PORT}（同网段设备可用你电脑的局域网 IP + 端口访问）`)
+  }
   console.log(`📁 输出目录: ${path.join(__dirname, '../output')}`)
   console.log(`📤 上传目录: ${path.join(__dirname, '../uploads')}`)
   console.log('')
@@ -320,6 +334,12 @@ app.listen(PORT, () => {
   console.log('  - 历史记录: GET    /api/history')
   console.log('  - 文件预览: GET    /api/preview')
   console.log('  - 健康检查: GET    /api/health')
+  console.log('')
+  console.log('  [企业微信智能机器人 - 与本服务同端口]')
+  console.log('  - 状态:     GET    /api/wecom-bot/status')
+  console.log('  - 发消息健康: GET  /api/wecom-bot/send/health')
+  console.log('  - 发用户消息: POST /api/wecom-bot/send/user（需 INTERNAL_API_TOKENS）')
+  console.log('  - 发群消息: POST /api/wecom-bot/send/group')
   console.log('')
   console.log('  [文档管理 - 新增]')
   console.log('  - 文档列表: GET    /api/documents/list')
@@ -409,6 +429,7 @@ app.listen(PORT, () => {
   console.log('  🔬 高级: o1, o1-preview, o1-mini, resoft-llm')
   console.log('  📖 详细说明: ai_backend/MODEL_EXPANSION.md')
   console.log('='.repeat(60))
+  startWeComBot()
 })
 
 // 错误处理
@@ -423,6 +444,7 @@ app.use((err, req, res, next) => {
 // 优雅关闭
 process.on('SIGINT', async () => {
   console.log('\n正在关闭服务器...')
+  stopWeComBot()
   process.exit(0)
 })
 

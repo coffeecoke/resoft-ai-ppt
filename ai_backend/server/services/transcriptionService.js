@@ -108,6 +108,10 @@ class TranscriptionService {
         session_id: data.sessionId || null,
         product_id: data.productId || null,
         customer_name: data.customerName || null,
+        created_by:
+          data.createdBy != null && String(data.createdBy).trim() !== ''
+            ? String(data.createdBy).trim().slice(0, 50)
+            : null,
         status: 'completed',
         progress: 100,
         completed_at: new Date(),
@@ -213,15 +217,11 @@ class TranscriptionService {
       orderBy: { created_at: 'desc' }
     });
     
-    // 2. 查找角色判断记录（note1='角色判断'）或包含 speaker_roles 的记录
-    let roleJudgmentAdjustment = await prisma.dialogue_adjustments.findFirst({
-      where: { 
+    // 2. 仅 note1='角色判断'（含企微外链说话人确认），勿用 speaker_roles OR 否则易命中 AI 修正记录
+    let roleConfirmAdjustment = await prisma.dialogue_adjustments.findFirst({
+      where: {
         transcription_id: id,
-        OR: [
-          { note1: '角色判断' },
-          { note1: '角色设置' },
-          { speaker_roles: { not: null } } // 查找任何包含 speaker_roles 的记录
-        ]
+        note1: '角色判断'
       },
       orderBy: { created_at: 'desc' }
     });
@@ -244,25 +244,39 @@ class TranscriptionService {
       orderBy: { created_at: 'desc' }
     });
     
-    // 5. 优先使用包含 speaker_roles 的记录（角色判断记录或AI修正记录），如果没有则使用合并记录
-    // 如果AI修正记录包含 speaker_roles，优先使用它；否则使用角色判断记录
+    const adjustmentDialogueCount = (adj) => {
+      if (!adj || !adj.adjusted_dialogues) return 0;
+      try {
+        const a =
+          typeof adj.adjusted_dialogues === 'string'
+            ? JSON.parse(adj.adjusted_dialogues)
+            : adj.adjusted_dialogues;
+        return Array.isArray(a) ? a.length : 0;
+      } catch {
+        return 0;
+      }
+    };
+
+    // 5. 与 mergedDialogueService 一致：再次合并 > 角色判断(企微确认) > AI修正 > 第一次合并
     let latestAdjustment = null;
-    if (aiCorrectionAdjustment && aiCorrectionAdjustment.speaker_roles) {
-      latestAdjustment = aiCorrectionAdjustment; // AI修正记录包含角色设置，优先使用
-    } else if (roleJudgmentAdjustment) {
-      latestAdjustment = roleJudgmentAdjustment; // 使用角色判断记录
-    } else if (aiCorrectionAdjustment) {
-      latestAdjustment = aiCorrectionAdjustment; // 使用AI修正记录（即使没有角色设置）
-    } else if (reMergeAdjustment) {
-      latestAdjustment = reMergeAdjustment; // ✅ 使用再次合并记录
-    } else if (mergeAdjustment) {
-      latestAdjustment = mergeAdjustment; // 使用合并记录（兼容旧数据）
+    if (reMergeAdjustment && adjustmentDialogueCount(reMergeAdjustment) > 0) {
+      latestAdjustment = reMergeAdjustment;
+    } else if (roleConfirmAdjustment && adjustmentDialogueCount(roleConfirmAdjustment) > 0) {
+      latestAdjustment = roleConfirmAdjustment;
+    } else if (aiCorrectionAdjustment && adjustmentDialogueCount(aiCorrectionAdjustment) > 0) {
+      latestAdjustment = aiCorrectionAdjustment;
+    } else if (mergeAdjustment && adjustmentDialogueCount(mergeAdjustment) > 0) {
+      latestAdjustment = mergeAdjustment;
     } else {
-      // 如果都没有，查找最新的调整记录
-      latestAdjustment = await prisma.dialogue_adjustments.findFirst({
-        where: { transcription_id: id },
-        orderBy: { created_at: 'desc' }
-      });
+      latestAdjustment =
+        reMergeAdjustment ||
+        roleConfirmAdjustment ||
+        aiCorrectionAdjustment ||
+        mergeAdjustment ||
+        (await prisma.dialogue_adjustments.findFirst({
+          where: { transcription_id: id },
+          orderBy: { created_at: 'desc' }
+        }));
     }
 
     // 将调整记录附加到转录记录中
@@ -316,6 +330,38 @@ class TranscriptionService {
         } catch (e) {
           console.error('解析再次合并后的对话失败:', e);
           transcription.reMergeAdjustment.adjusted_dialogues = [];
+        }
+      }
+    }
+
+    // 企微外链说话人确认等：单独返回，前端「合并后」页签优先展示（不依赖 adjustment 是否为最新）
+    if (roleConfirmAdjustment) {
+      transcription.roleJudgmentAdjustment = { ...roleConfirmAdjustment };
+      if (roleConfirmAdjustment.adjusted_dialogues) {
+        try {
+          transcription.roleJudgmentAdjustment.adjusted_dialogues =
+            typeof roleConfirmAdjustment.adjusted_dialogues === 'string'
+              ? JSON.parse(roleConfirmAdjustment.adjusted_dialogues)
+              : roleConfirmAdjustment.adjusted_dialogues;
+        } catch (e) {
+          console.error('解析角色判断对话失败:', e);
+          transcription.roleJudgmentAdjustment.adjusted_dialogues = [];
+        }
+      }
+    }
+
+    // AI 错别字修正：单独返回，便于存在「角色判断」时仍能加载 AI 修正页签
+    if (aiCorrectionAdjustment) {
+      transcription.aiCorrectionAdjustment = { ...aiCorrectionAdjustment };
+      if (aiCorrectionAdjustment.adjusted_dialogues) {
+        try {
+          transcription.aiCorrectionAdjustment.adjusted_dialogues =
+            typeof aiCorrectionAdjustment.adjusted_dialogues === 'string'
+              ? JSON.parse(aiCorrectionAdjustment.adjusted_dialogues)
+              : aiCorrectionAdjustment.adjusted_dialogues;
+        } catch (e) {
+          console.error('解析 AI 修正对话失败:', e);
+          transcription.aiCorrectionAdjustment.adjusted_dialogues = [];
         }
       }
     }

@@ -509,7 +509,7 @@ model presales_video_tasks {
 
   analysis_content String? @db.LongText /// 分析完内容（约 2 万字量级，LONGTEXT）
   video_address    String? @db.VarChar(2000) /// 视频地址（URL 或服务器路径）
-  reserve_3        String? @db.VarChar(500) /// 备用
+  reserve_3        String? @db.VarChar(500) /// 售前视频：analysis_content 成功落盘 .md 的路径（最长 500，超出截断）
   reserve_4 String? @db.VarChar(500) /// 备用
   reserve_5 String? @db.VarChar(500) /// 备用
 
@@ -1149,6 +1149,10 @@ model communication_reports {
   created_at           DateTime  @default(now()) /// 创建时间
   updated_at           DateTime  @updatedAt /// 更新时间
   created_by           String?   @db.VarChar(50) /// 创建人用户ID
+  /// 企微机器人等来源
+  source_channel       String?   @db.VarChar(50) /// 如 wecom_bot
+  wecom_msg_id         String?   @db.VarChar(100) /// 企微消息 msgid，用于去重
+  snapshot_json_path   String?   @db.VarChar(500) /// 落盘 JSON 相对上传根目录路径
 
   leads leads? @relation(fields: [lead_id], references: [id])
 
@@ -1157,6 +1161,7 @@ model communication_reports {
   @@index([customer_name], map: "idx_comm_report_customer")
   @@index([report_date], map: "idx_comm_report_date")
   @@index([created_by], map: "idx_comm_report_created_by")
+  @@index([wecom_msg_id], map: "idx_comm_report_wecom_msg")
 }
 
 /// 交流报备推送临时表（接收推送的原始报备，再解析入库 communication_reports）

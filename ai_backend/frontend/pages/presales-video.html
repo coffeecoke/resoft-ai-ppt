@@ -72,7 +72,7 @@
     .pv-table.data-table {
       table-layout: fixed;
       width: 100%;
-      min-width: 1000px;
+      min-width: 1080px;
     }
     .pv-table.data-table th,
     .pv-table.data-table td {
@@ -116,7 +116,7 @@
       color: var(--text-secondary, #595959);
     }
     .pv-col-actions {
-      width: 440px;
+      width: 520px;
       text-align: right;
       white-space: nowrap;
     }
@@ -260,12 +260,83 @@
       max-width: 320px;
       flex: 1;
     }
+    .pv-search-bar .pv-date-field {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .pv-search-bar .pv-date-field label {
+      margin: 0;
+      font-size: 13px;
+      color: var(--text-secondary, #8c8c8c);
+      white-space: nowrap;
+    }
+    .pv-search-bar input[type='date'] {
+      min-width: 140px;
+      max-width: 160px;
+      padding: 6px 8px;
+      font-size: 14px;
+      border: 1px solid var(--border-color, #d9d9d9);
+      border-radius: 6px;
+      background: var(--card-bg, #fff);
+      color: var(--text-primary, #262626);
+    }
+    .pv-search-bar .pv-pipeline-field {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .pv-search-bar .pv-pipeline-field label {
+      margin: 0;
+      font-size: 13px;
+      color: var(--text-secondary, #8c8c8c);
+      white-space: nowrap;
+    }
+    .pv-search-bar select#pv-pipeline-status {
+      min-width: 150px;
+      max-width: 200px;
+      padding: 6px 8px;
+      font-size: 14px;
+      border: 1px solid var(--border-color, #d9d9d9);
+      border-radius: 6px;
+      background: var(--card-bg, #fff);
+      color: var(--text-primary, #262626);
+    }
+    #pv-push-video-dialog textarea {
+      width: 100%;
+      min-height: 100px;
+      box-sizing: border-box;
+      padding: 10px 12px;
+      font-size: 14px;
+      border: 1px solid var(--border-color, #d9d9d9);
+      border-radius: 6px;
+      resize: vertical;
+    }
+    #pv-push-video-dialog .pv-push-video-hint {
+      font-size: 12px;
+      color: var(--text-secondary, #8c8c8c);
+      margin: 0 0 10px 0;
+      line-height: 1.5;
+    }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
   </style>
 
   <div class="pv-page-header">
     <div class="pv-title-block">
       <h1>售前分析 · 视频生成</h1>
-      <p class="pv-subtitle">仅列出已执行「合并」的转录。<strong>推送对话</strong>仅 Coze 上传 txt；待服务端处理完毕后，再点<strong>提交工作流</strong>调会议分析取 execute_id（本页会记住上传返回的 fileId/file_name，勿在两者之间刷新页面）。其它接口见 <code style="font-size:12px;">.env</code>。</p>
+      <p class="pv-subtitle">列出全部转录。可先向企微上传人推送<strong>角色确认</strong>链接（需 created_by + 机器人已连接），再<strong>推送对话</strong>生成 txt 并可选 Coze 上传；上传成功后请<strong>提交工作流</strong>取 execute_id。<strong>推送视频</strong>需配置 <code style="font-size:12px;">WECOM_CORP_ID</code>、<code style="font-size:12px;">WECOM_APPCHAT_SECRET</code>（自建应用 Secret），按客户名匹配最近一条交流报备并推送 <code style="font-size:12px;">video_address</code>。流水线状态可用下方下拉筛选。</p>
     </div>
     <div class="pv-header-actions">
       <button type="button" class="btn btn-secondary" onclick="pvLoadList()">
@@ -276,7 +347,7 @@
 
   <div class="card pv-card">
     <div class="card-header">
-      <h2>已合并对话列表</h2>
+      <h2>转录列表</h2>
       <div class="header-info">
         <span id="pv-total-count">共 0 条</span>
       </div>
@@ -290,6 +361,18 @@
         autocomplete="off"
         onkeydown="if(event.key==='Enter'){event.preventDefault();pvSearch();}"
       />
+      <div class="pv-date-field">
+        <label for="pv-date-from">创建起</label>
+        <input type="date" id="pv-date-from" autocomplete="off" />
+      </div>
+      <div class="pv-date-field">
+        <label for="pv-date-to">创建止</label>
+        <input type="date" id="pv-date-to" autocomplete="off" />
+      </div>
+      <div class="pv-pipeline-field">
+        <label for="pv-pipeline-status">流水线状态</label>
+        <select id="pv-pipeline-status" aria-label="流水线状态筛选"></select>
+      </div>
       <button type="button" class="btn btn-sm btn-primary" onclick="pvSearch()">查询</button>
       <button type="button" class="btn btn-sm btn-secondary" onclick="pvClearNameSearch()">清除</button>
     </div>
@@ -300,7 +383,7 @@
       </div>
       <div id="pv-empty" class="empty-state pv-empty-inner" style="display: none;">
         <p>暂无记录</p>
-        <small id="pv-empty-hint">请先在「语音转文本」中完成转录，并执行「合并相邻同一说话人」或「再次合并」</small>
+        <small id="pv-empty-hint">暂无转录记录，请先在「语音转文本」中完成转录</small>
       </div>
       <div id="pv-list" class="pv-table-scroll" style="display: none;">
         <table class="data-table pv-table">
@@ -329,6 +412,35 @@
       </div>
     </div>
   </div>
+
+  <dialog id="pv-push-video-dialog" class="pv-modal-dialog">
+    <div class="dialog-content" style="min-width: min(420px, 92vw); max-width: 520px;">
+      <div class="dialog-header">
+        <h2>推送视频到企业微信</h2>
+        <button type="button" class="icon-btn" onclick="pvClosePushVideoDialog()" aria-label="关闭">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="dialog-body">
+        <p class="pv-push-video-hint">
+          填写企业微信成员 <strong>userid</strong>（与通讯录一致），英文逗号分隔，<strong>至少 2 人</strong>（含群主）。系统将创建「应用群发会话」、推送与转录客户名匹配的<strong>最近一条交流报备</strong>摘要，以及库中的<strong>视频链接/路径</strong>（<code>video_address</code>）。
+        </p>
+        <label for="pv-push-video-users" class="sr-only">推送人员名单</label>
+        <textarea
+          id="pv-push-video-users"
+          placeholder="例：ZhangSan,LiSi,WangWu"
+          autocomplete="off"
+        ></textarea>
+      </div>
+      <div class="dialog-actions">
+        <button type="button" class="btn btn-secondary" onclick="pvClosePushVideoDialog()">取消</button>
+        <button type="button" class="btn btn-primary" onclick="pvSubmitPushVideo()">保存推送</button>
+      </div>
+    </div>
+  </dialog>
 
   <dialog id="pv-report-dialog">
     <div class="dialog-content">

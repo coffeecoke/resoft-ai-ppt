@@ -21,6 +21,7 @@
   "license": "MIT",
   "dependencies": {
     "@prisma/client": "^5.22.0",
+    "@wecom/aibot-node-sdk": "^1.0.4",
     "docx": "^9.6.0",
     "docx-preview": "^0.3.7",
     "dotenv": "^17.2.3",
@@ -36,6 +37,6 @@
     "xlsx": "^0.18.5"
   },
   "engines": {
-    "node": ">=14.0.0"
+    "node": ">=18.0.0"
   }
 }

@@ -2625,8 +2625,19 @@ function displayResult(data) {
   // ✅ 解析再次合并后的对话（从 dialogue_adjustments 表，note1='再次合并对话'）
   let reMergedDialogues = [];
   
-  // ✅ 优先从 mergeAdjustment 字段获取第一次合并记录（如果后端单独返回）
-  if (data.mergeAdjustment && data.mergeAdjustment.adjusted_dialogues) {
+  // ✅ 企微外链「说话人确认」写入 note1=角色判断：合并页签优先展示确认后的说话人（优于仅第一次合并）
+  if (data.roleJudgmentAdjustment && data.roleJudgmentAdjustment.adjusted_dialogues) {
+    const rjd = data.roleJudgmentAdjustment.adjusted_dialogues;
+    try {
+      mergedDialogues = Array.isArray(rjd)
+        ? rjd
+        : (typeof rjd === 'string' ? JSON.parse(rjd) : []);
+    } catch (e) {
+      console.error('解析 roleJudgmentAdjustment 对话失败:', e);
+      mergedDialogues = [];
+    }
+    console.log('✅ 已加载「角色判断/说话人确认」到合并页签，共', mergedDialogues.length, '条');
+  } else if (data.mergeAdjustment && data.mergeAdjustment.adjusted_dialogues) {
     mergedDialogues = Array.isArray(data.mergeAdjustment.adjusted_dialogues)
       ? data.mergeAdjustment.adjusted_dialogues
       : (typeof data.mergeAdjustment.adjusted_dialogues === 'string'
@@ -2649,7 +2660,7 @@ function displayResult(data) {
     const note1 = data.adjustment.note1 || '';
     
     if (note1 === '合并相邻同一说话人的对话' && data.adjustment.adjusted_dialogues) {
-      // 第一次合并后的对话（如果 mergeAdjustment 没有数据，使用 adjustment）
+      // 第一次合并后的对话（若尚无角色判断/mergeAdjustment 数据，使用 adjustment）
       if (mergedDialogues.length === 0) {
         mergedDialogues = Array.isArray(data.adjustment.adjusted_dialogues)
           ? data.adjustment.adjusted_dialogues
@@ -2668,44 +2679,60 @@ function displayResult(data) {
         console.log('✅ 再次合并后的对话已从 adjustment 加载，共', reMergedDialogues.length, '条');
       }
     } else if (note1 === 'AI错别字修正' && data.adjustment.adjusted_dialogues) {
-      // AI修正后的对话
-      correctedDialogues = Array.isArray(data.adjustment.adjusted_dialogues)
-        ? data.adjustment.adjusted_dialogues
-        : (typeof data.adjustment.adjusted_dialogues === 'string'
-          ? JSON.parse(data.adjustment.adjusted_dialogues)
-          : []);
-      
-      // ✅ 兼容旧数据格式：如果只有 text 字段，需要转换为 correctedText
-      // 旧格式：{ text: "修正后的文本" }
-      // 新格式：{ originalText: "原始文本", correctedText: "修正后的文本", text: "修正后的文本" }
-      correctedDialogues = correctedDialogues.map(dialogue => {
-        // 如果已经有 correctedText 字段，直接返回
-        if (dialogue.correctedText) {
-          return dialogue;
-        }
-        // 如果只有 text 字段（旧格式），将其作为 correctedText
-        if (dialogue.text && !dialogue.correctedText) {
-          return {
-            ...dialogue,
-            originalText: dialogue.text, // 旧数据没有原始文本，暂时用 text 代替
-            correctedText: dialogue.text, // 将 text 作为 correctedText
-            text: dialogue.text // 保留 text 字段
-          };
-        }
-        return dialogue;
-      });
-      
-      console.log('✅ AI修正后的对话已加载，共', correctedDialogues.length, '条');
-      if (correctedDialogues.length > 0) {
-        console.log('📋 第一条对话示例:', correctedDialogues[0]);
+      // AI修正后的对话（无单独 aiCorrectionAdjustment 时使用）
+      if (correctedDialogues.length === 0) {
+        correctedDialogues = Array.isArray(data.adjustment.adjusted_dialogues)
+          ? data.adjustment.adjusted_dialogues
+          : (typeof data.adjustment.adjusted_dialogues === 'string'
+            ? JSON.parse(data.adjustment.adjusted_dialogues)
+            : []);
       }
     }
   }
+
+  // ✅ 后端单独返回 AI 修正记录时（例如同时存在「角色判断」），优先用于 AI 页签
+  if (data.aiCorrectionAdjustment && data.aiCorrectionAdjustment.adjusted_dialogues) {
+    const acd = data.aiCorrectionAdjustment.adjusted_dialogues;
+    try {
+      correctedDialogues = Array.isArray(acd)
+        ? acd
+        : (typeof acd === 'string' ? JSON.parse(acd) : []);
+    } catch (e) {
+      console.error('解析 aiCorrectionAdjustment 对话失败:', e);
+      correctedDialogues = [];
+    }
+    console.log('✅ AI修正后的对话已从 aiCorrectionAdjustment 加载，共', correctedDialogues.length, '条');
+  }
+
+  const normalizeCorrectedDialogueShape = (dialogue) => {
+    if (dialogue.correctedText) return dialogue;
+    if (dialogue.text && !dialogue.correctedText) {
+      return {
+        ...dialogue,
+        originalText: dialogue.text,
+        correctedText: dialogue.text,
+        text: dialogue.text
+      };
+    }
+    return dialogue;
+  };
+  correctedDialogues = correctedDialogues.map(normalizeCorrectedDialogueShape);
+  if (correctedDialogues.length > 0) {
+    console.log('📋 AI 修正对话已就绪，共', correctedDialogues.length, '条');
+  }
   
-  // ✅ 加载角色设置（优先从 dialogue_adjustments 表的 adjustment 记录中获取）
-  // 后端会优先返回包含 speaker_roles 的 adjustment 记录（AI修正记录或角色判断记录）
-  // 如果没有 adjustment 记录，才从 transcriptions 表读取（兼容旧数据）
-  if (data.adjustment && data.adjustment.speaker_roles) {
+  // ✅ 角色映射：优先「角色判断」记录（与合并页签一致），其次当前 adjustment，最后 transcriptions
+  if (data.roleJudgmentAdjustment && data.roleJudgmentAdjustment.speaker_roles) {
+    try {
+      st_speakerRoles = typeof data.roleJudgmentAdjustment.speaker_roles === 'string'
+        ? JSON.parse(data.roleJudgmentAdjustment.speaker_roles)
+        : data.roleJudgmentAdjustment.speaker_roles;
+      console.log('✅ 角色设置已从 roleJudgmentAdjustment 加载');
+    } catch (e) {
+      console.error('解析 roleJudgmentAdjustment.speaker_roles 失败:', e);
+      st_speakerRoles = {};
+    }
+  } else if (data.adjustment && data.adjustment.speaker_roles) {
     try {
       st_speakerRoles = typeof data.adjustment.speaker_roles === 'string' 
         ? JSON.parse(data.adjustment.speaker_roles) 

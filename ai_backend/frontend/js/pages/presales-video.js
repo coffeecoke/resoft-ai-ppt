@@ -6,6 +6,20 @@ const PV_API = (window.location.origin || 'http://localhost:3000') + '/api'
 /** 推送对话 / 提交工作流 返回信息较长，Toast 多停留一会（毫秒） */
 const PV_PUSH_WORKFLOW_TOAST_MS = 10000
 
+/** 与 presales_video_tasks.pipeline_status 一致（含「无记录」） */
+const PV_PIPELINE_OPTIONS = [
+  { value: 'all', label: '全部状态' },
+  { value: '__none__', label: '无流水线记录' },
+  { value: '推送对话', label: '推送对话' },
+  { value: '提交工作流', label: '提交工作流' },
+  { value: '分析中', label: '分析中' },
+  { value: '分析完成', label: '分析完成' },
+  { value: '分析失败', label: '分析失败' },
+  { value: '推送分析文件', label: '推送分析文件' },
+  { value: '视频生成', label: '视频生成' },
+  { value: '视频生成失败', label: '视频生成失败' }
+]
+
 const pvState = {
   page: 1,
   pageSize: 20,
@@ -13,8 +27,13 @@ const pvState = {
   totalPages: 1,
   list: [],
   lastReportText: '',
+  /** 流水线筛选：all | __none__ | 具体状态 */
+  pipelineStatus: 'all',
   /** 列表名称模糊查询（与接口 name 参数一致） */
   nameQuery: '',
+  /** 创建时间起止 YYYY-MM-DD，与接口 dateFrom / dateTo 一致 */
+  dateFrom: '',
+  dateTo: '',
   /** 推送对话成功后缓存，供「提交工作流」传 Coze meeting-analysis：{ [transcriptionId]: { fileId, fileName } } */
   cozeUploadById: {}
 }
@@ -62,12 +81,29 @@ window.pvLoadList = async function () {
   if (pag) pag.style.display = 'none'
 
   try {
+    const qInput0 = document.getElementById('pv-name-query')
+    if (qInput0) pvState.nameQuery = String(qInput0.value || '').trim()
+    const df0 = document.getElementById('pv-date-from')
+    const dt0 = document.getElementById('pv-date-to')
+    if (df0) pvState.dateFrom = String(df0.value || '').trim()
+    if (dt0) pvState.dateTo = String(dt0.value || '').trim()
+    const ps0 = document.getElementById('pv-pipeline-status')
+    if (ps0) pvState.pipelineStatus = String(ps0.value || 'all').trim() || 'all'
+
     const nameParam =
       pvState.nameQuery && String(pvState.nameQuery).trim()
         ? `&name=${encodeURIComponent(String(pvState.nameQuery).trim())}`
         : ''
+    const df = pvState.dateFrom && String(pvState.dateFrom).trim()
+    const dt = pvState.dateTo && String(pvState.dateTo).trim()
+    const dateParam =
+      (df ? `&dateFrom=${encodeURIComponent(df)}` : '') + (dt ? `&dateTo=${encodeURIComponent(dt)}` : '')
+    const pipeParam =
+      pvState.pipelineStatus && pvState.pipelineStatus !== 'all'
+        ? `&pipelineStatus=${encodeURIComponent(pvState.pipelineStatus)}`
+        : ''
     const res = await fetch(
-      `${PV_API}/presales-video/transcriptions?page=${pvState.page}&pageSize=${pvState.pageSize}${nameParam}`
+      `${PV_API}/presales-video/transcriptions?page=${pvState.page}&pageSize=${pvState.pageSize}${nameParam}${dateParam}${pipeParam}`
     )
     const data = await res.json()
     if (!data.success) throw new Error(data.error || '加载失败')
@@ -79,24 +115,55 @@ window.pvLoadList = async function () {
     if (data.data.nameQuery != null) {
       pvState.nameQuery = data.data.nameQuery
     }
+    if (data.data.dateFrom != null) {
+      pvState.dateFrom = data.data.dateFrom
+    }
+    if (data.data.dateTo != null) {
+      pvState.dateTo = data.data.dateTo
+    }
+    if (data.data.pipelineStatus != null) {
+      pvState.pipelineStatus = data.data.pipelineStatus || 'all'
+    }
 
     const totalEl = document.getElementById('pv-total-count')
     if (totalEl) {
       const q = pvState.nameQuery && String(pvState.nameQuery).trim()
-      totalEl.textContent = q ? `共 ${pvState.total} 条（名称含「${pvState.nameQuery.trim()}」）` : `共 ${pvState.total} 条`
+      const df = pvState.dateFrom && String(pvState.dateFrom).trim()
+      const dt = pvState.dateTo && String(pvState.dateTo).trim()
+      let extra = ''
+      if (q) extra += `（名称含「${pvState.nameQuery.trim()}」）`
+      if (df || dt) {
+        extra += `（创建 ${df || '不限'}～${dt || '不限'}）`
+      }
+      totalEl.textContent = `共 ${pvState.total} 条${extra}`
     }
 
     const qInput = document.getElementById('pv-name-query')
     if (qInput && document.activeElement !== qInput) {
       qInput.value = pvState.nameQuery || ''
     }
+    const dfInput = document.getElementById('pv-date-from')
+    const dtInput = document.getElementById('pv-date-to')
+    if (dfInput && document.activeElement !== dfInput) {
+      dfInput.value = pvState.dateFrom || ''
+    }
+    if (dtInput && document.activeElement !== dtInput) {
+      dtInput.value = pvState.dateTo || ''
+    }
+    const psInput = document.getElementById('pv-pipeline-status')
+    if (psInput && document.activeElement !== psInput) {
+      psInput.value = pvState.pipelineStatus || 'all'
+    }
 
     const emptyHint = document.getElementById('pv-empty-hint')
     if (emptyHint) {
-      emptyHint.textContent =
-        pvState.nameQuery && String(pvState.nameQuery).trim()
-          ? '当前名称条件下没有匹配记录，可点击「清除」后重试'
-          : '请先在「语音转文本」中完成转录，并执行「合并相邻同一说话人」或「再次合并」'
+      const hasFilter =
+        (pvState.nameQuery && String(pvState.nameQuery).trim()) ||
+        (pvState.dateFrom && String(pvState.dateFrom).trim()) ||
+        (pvState.dateTo && String(pvState.dateTo).trim())
+      emptyHint.textContent = hasFilter
+        ? '当前查询条件下没有匹配记录，可点击「清除」后重试'
+        : '暂无转录记录，请先在「语音转文本」中完成转录'
     }
 
     pvRenderTable()
@@ -117,19 +184,26 @@ window.pvLoadList = async function () {
   }
 }
 
-/** 名称查询：从输入框同步关键词并回到第 1 页 */
+/** 查询：回到第 1 页（条件在 pvLoadList 内从输入框同步） */
 window.pvSearch = function () {
-  const input = document.getElementById('pv-name-query')
-  pvState.nameQuery = input ? String(input.value || '').trim() : ''
   pvState.page = 1
   pvLoadList()
 }
 
-/** 清除名称条件并重新加载 */
+/** 清除名称与日期条件并重新加载 */
 window.pvClearNameSearch = function () {
   pvState.nameQuery = ''
+  pvState.dateFrom = ''
+  pvState.dateTo = ''
+  pvState.pipelineStatus = 'all'
   const input = document.getElementById('pv-name-query')
   if (input) input.value = ''
+  const df = document.getElementById('pv-date-from')
+  const dt = document.getElementById('pv-date-to')
+  if (df) df.value = ''
+  if (dt) dt.value = ''
+  const ps = document.getElementById('pv-pipeline-status')
+  if (ps) ps.value = 'all'
   pvState.page = 1
   pvLoadList()
 }
@@ -190,11 +264,11 @@ function pvRenderTable() {
         <td class="pv-col-report">${reportBadge}</td>
         <td class="pv-col-actions">
           <div class="pv-actions">
-            <button type="button" class="btn btn-sm btn-primary" title="仅 Coze 文件上传（字段 file），返回 file_id/file_name；会议分析请点「提交工作流」" onclick="pvPushDialogue('${row.id}')">推送对话</button>
-            <button type="button" class="btn btn-sm pv-act-secondary" title="拉取报告（本地售前结果或远程 URL）" onclick="pvFetchReport('${row.id}')">获取报告</button>
-            <button type="button" class="btn btn-sm pv-act-secondary" title="将本地售前分析 JSON 推送到第三方" onclick="pvPushReport('${row.id}')">推送报告</button>
-            <button type="button" class="btn btn-sm pv-act-secondary" title="请求第三方返回视频或下载链接" onclick="pvFetchVideo('${row.id}')">获取视频</button>
+            <button type="button" class="btn btn-sm btn-outline" style="border:1px solid var(--primary-color,#1890ff);color:var(--primary-color,#1890ff);background:transparent;" title="向转录 created_by（企微用户）推送 Markdown 卡片链接，打开后可核对/批量修改说话人" onclick="pvNotifyRoleConfirm('${row.id}')">角色确认</button>
+            <button type="button" class="btn btn-sm btn-primary" title="仅 Coze 文件上传（字段 file），返回 file_id/file_name；会议分析请点右侧「提交工作流」" onclick="pvPushDialogue('${row.id}')">推送对话</button>
             <button type="button" class="btn btn-sm pv-act-workflow" title="Coze：用「推送对话」缓存的 fileId/fileName 调 meeting-analysis 取 execute_id；或通用工作流 URL" onclick="pvSubmitWorkflow('${row.id}')">提交工作流</button>
+            <button type="button" class="btn btn-sm pv-act-secondary" title="优先：POST 异步任务（md 路径 reserve_3 + execute_id）；未配异步地址时推送本地售前 JSON" onclick="pvPushReport('${row.id}')">推送报告</button>
+            <button type="button" class="btn btn-sm pv-act-secondary" title="填写企微 userid 建应用群发会话，推送报备摘要与视频" onclick="pvOpenPushVideoDialog('${row.id}')">推送视频</button>
           </div>
         </td>
       </tr>`
@@ -222,6 +296,39 @@ window.pvChangePage = function (delta) {
   if (next < 1 || next > pvState.totalPages) return
   pvState.page = next
   pvLoadList()
+}
+
+window.pvNotifyRoleConfirm = async function (id) {
+  if (
+    !confirm(
+      '将向该转录的「创建人/企微 userid」（created_by）发送一条 Markdown，内含「角色确认」外链。\n需：机器人已连接、已配置 PRESALES_VIDEO_PUBLIC_BASE_URL 与 PRESALES_VIDEO_SPEAKER_LINK_SECRET。\n确定发送？'
+    )
+  ) {
+    return
+  }
+  pvShowOverlay(true, '正在推送角色确认…')
+  try {
+    const res = await fetch(`${PV_API}/presales-video/transcriptions/${id}/notify-role-confirm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}'
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || !data.success) {
+      pvToast(data.error || '推送失败', 'error', PV_PUSH_WORKFLOW_TOAST_MS)
+      return
+    }
+    const d = data.data || {}
+    pvToast(
+      `已推送。对方企微账号：${d.wecomUserId || '-'}，对话条数：${d.dialogueCount ?? '-'}`,
+      'success',
+      PV_PUSH_WORKFLOW_TOAST_MS
+    )
+  } catch (e) {
+    pvToast('推送失败: ' + e.message, 'error')
+  } finally {
+    pvShowOverlay(false)
+  }
 }
 
 window.pvPushDialogue = async function (id) {
@@ -300,37 +407,6 @@ window.pvPushDialogue = async function (id) {
   }
 }
 
-window.pvFetchReport = async function (id) {
-  pvShowOverlay(true, '正在获取报告...')
-  try {
-    const res = await fetch(`${PV_API}/presales-video/transcriptions/${id}/report`)
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok || !data.success) {
-      pvToast(data.error || '获取失败', 'error')
-      return
-    }
-    const payload = data.data
-    let text = ''
-    if (payload.source === 'remote') {
-      text =
-        typeof payload.body === 'string'
-          ? payload.body
-          : JSON.stringify(payload.body, null, 2)
-    } else {
-      text = JSON.stringify(payload, null, 2)
-    }
-    pvState.lastReportText = text
-    const pre = document.getElementById('pv-report-pre')
-    if (pre) pre.textContent = text
-    const dlg = document.getElementById('pv-report-dialog')
-    if (dlg) dlg.showModal()
-  } catch (e) {
-    pvToast('获取报告失败: ' + e.message, 'error')
-  } finally {
-    pvShowOverlay(false)
-  }
-}
-
 window.pvCloseReportDialog = function () {
   const dlg = document.getElementById('pv-report-dialog')
   if (dlg) dlg.close()
@@ -348,7 +424,14 @@ window.pvCopyReport = async function () {
 }
 
 window.pvPushReport = async function (id) {
-  if (!confirm('将本地售前分析结果以 JSON POST 到第三方（需配置 PRESALES_VIDEO_REPORT_PUSH_URL），确定？')) {
+  if (
+    !confirm(
+      '将调用服务端「推送报告」：\n' +
+        '· 若已配置 PRESALES_VIDEO_REPORT_ASYNC_URL：POST 异步任务，参数为 name（md 文件名）、execute_id（工作流 ID）、filePaths（库中 reserve_3 的 md 路径）。需已提交工作流且分析回调已落盘 md。\n' +
+        '· 否则：按旧逻辑 POST 本地售前分析 JSON（PRESALES_VIDEO_REPORT_PUSH_URL）。\n' +
+        '确定执行？'
+    )
+  ) {
     return
   }
   pvShowOverlay(true, '正在推送报告...')
@@ -371,7 +454,11 @@ window.pvPushReport = async function (id) {
       )
       return
     }
-    pvToast(`推送报告成功（HTTP ${d.remoteStatus}）`, 'success')
+    const okMsg =
+      d.mode === 'async_task'
+        ? `异步任务已提交（HTTP ${d.remoteStatus}）`
+        : `推送报告成功（HTTP ${d.remoteStatus}）`
+    pvToast(okMsg, 'success')
     console.log('[presales-video] push-report', d)
   } catch (e) {
     pvToast('推送报告失败: ' + e.message, 'error')
@@ -479,55 +566,72 @@ window.pvSubmitWorkflow = async function (id) {
   }
 }
 
-window.pvFetchVideo = async function (id) {
-  pvShowOverlay(true, '正在获取视频...')
+let pvPushVideoTranscriptionId = null
+
+window.pvOpenPushVideoDialog = function (id) {
+  pvPushVideoTranscriptionId = id
+  const ta = document.getElementById('pv-push-video-users')
+  if (ta) ta.value = ''
+  document.getElementById('pv-push-video-dialog')?.showModal()
+}
+
+window.pvClosePushVideoDialog = function () {
+  document.getElementById('pv-push-video-dialog')?.close()
+  pvPushVideoTranscriptionId = null
+}
+
+window.pvSubmitPushVideo = async function () {
+  const id = pvPushVideoTranscriptionId
+  if (!id) return
+  const raw = (document.getElementById('pv-push-video-users') && document.getElementById('pv-push-video-users').value) || ''
+  if (!String(raw).trim()) {
+    pvToast('请填写推送人员名单（企微 userid，逗号分隔）', 'error')
+    return
+  }
+  pvShowOverlay(true, '正在创建企微群发会话并推送…')
   try {
-    const res = await fetch(`${PV_API}/presales-video/transcriptions/${id}/video`)
-    const ct = res.headers.get('content-type') || ''
-
-    if (ct.includes('application/json')) {
-      const data = await res.json()
-      if (!data.success) {
-        pvToast(data.error || '获取失败', 'error')
-        return
-      }
-      const inner = data.data || {}
-      if (inner.json && inner.json.url) {
-        window.open(inner.json.url, '_blank')
-        pvToast('已打开视频链接', 'success')
-      } else if (inner.text) {
-        pvState.lastReportText = inner.text
-        const pre = document.getElementById('pv-report-pre')
-        if (pre) pre.textContent = inner.text
-        document.getElementById('pv-report-dialog')?.showModal()
-      } else {
-        pvToast('已返回 JSON，请查看控制台', 'info')
-        console.log(inner)
-      }
+    const res = await fetch(`${PV_API}/presales-video/transcriptions/${id}/push-video`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userIds: raw.trim() })
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || !data.success) {
+      pvToast(data.error || '推送失败', 'error', PV_PUSH_WORKFLOW_TOAST_MS)
       return
     }
-
-    const blob = await res.blob()
-    if (!res.ok) {
-      pvToast('获取视频失败: HTTP ' + res.status, 'error')
-      return
-    }
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `video_${id}.bin`
-    a.click()
-    URL.revokeObjectURL(url)
-    pvToast('已开始下载视频文件', 'success')
+    const d = data.data || {}
+    pvToast(
+      `已推送。企微群发会话 chatid：${d.chatid || '-'}，成员 ${d.userCount ?? '-'} 人` +
+        (d.reportMatched ? '（已关联报备）' : '（未匹配到报备）') +
+        (d.videoPushedAsMedia ? '；已向群内发送视频/文件消息。' : ''),
+      'success',
+      PV_PUSH_WORKFLOW_TOAST_MS
+    )
+    pvClosePushVideoDialog()
+    pvLoadList()
   } catch (e) {
-    pvToast('获取视频失败: ' + e.message, 'error')
+    pvToast('推送失败: ' + e.message, 'error')
   } finally {
     pvShowOverlay(false)
   }
 }
 
+function pvInitPipelineSelect() {
+  const sel = document.getElementById('pv-pipeline-status')
+  if (!sel || sel.getAttribute('data-pv-inited') === '1') return
+  sel.setAttribute('data-pv-inited', '1')
+  sel.innerHTML = PV_PIPELINE_OPTIONS.map((o) => {
+    const v = pvEscapeAttr(o.value)
+    const lab = pvEscapeHtml(o.label)
+    return `<option value="${v}">${lab}</option>`
+  }).join('')
+  sel.value = 'all'
+}
+
 ;(async function initPv() {
   try {
+    pvInitPipelineSelect()
     await window.pvLoadList()
   } catch (e) {
     console.error(e)

@@ -1,0 +1,333 @@
+/**
+ * 企业微信 HTTP：gettoken + appchat 建群 + 群发 Markdown / 视频
+ * 需自建应用 Secret（与智能机器人 WebSocket Secret 不同），且应用可见范围内包含所选成员。
+ * @see https://developer.work.weixin.qq.com/document/path/90245
+ * @see https://developer.work.weixin.qq.com/document/path/90253 上传临时素材
+ */
+const fs = require('fs')
+const path = require('path')
+const https = require('https')
+const { URL } = require('url')
+const FormData = require('form-data')
+
+let tokenCache = { token: null, expireAtMs: 0 }
+
+function httpsGetJson(urlString) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(urlString)
+    const opts = { hostname: u.hostname, port: 443, path: `${u.pathname}${u.search}`, method: 'GET' }
+    const req = https.request(opts, (res) => {
+      const chunks = []
+      res.on('data', (c) => chunks.push(c))
+      res.on('end', () => {
+        try {
+          resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')))
+        } catch (e) {
+          reject(e)
+        }
+      })
+    })
+    req.on('error', reject)
+    req.end()
+  })
+}
+
+function httpsPostJson(urlString, bodyObj) {
+  const data = JSON.stringify(bodyObj)
+  return new Promise((resolve, reject) => {
+    const u = new URL(urlString)
+    const opts = {
+      hostname: u.hostname,
+      port: 443,
+      path: `${u.pathname}${u.search}`,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Content-Length': Buffer.byteLength(data, 'utf8')
+      }
+    }
+    const req = https.request(opts, (res) => {
+      const chunks = []
+      res.on('data', (c) => chunks.push(c))
+      res.on('end', () => {
+        try {
+          resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')))
+        } catch (e) {
+          reject(e)
+        }
+      })
+    })
+    req.on('error', reject)
+    req.write(data, 'utf8')
+    req.end()
+  })
+}
+
+function isAppChatConfigured() {
+  const id = process.env.WECOM_CORP_ID && String(process.env.WECOM_CORP_ID).trim()
+  const sec = process.env.WECOM_APPCHAT_SECRET && String(process.env.WECOM_APPCHAT_SECRET).trim()
+  return Boolean(id && sec)
+}
+
+async function getAccessToken() {
+  const corpId = String(process.env.WECOM_CORP_ID || '').trim()
+  const secret = String(process.env.WECOM_APPCHAT_SECRET || '').trim()
+  if (!corpId || !secret) {
+    throw new Error('未配置 WECOM_CORP_ID 或 WECOM_APPCHAT_SECRET，无法调用企业微信 appchat 接口')
+  }
+  const now = Date.now()
+  if (tokenCache.token && now < tokenCache.expireAtMs - 60_000) {
+    return tokenCache.token
+  }
+  const url = `https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid=${encodeURIComponent(corpId)}&corpsecret=${encodeURIComponent(secret)}`
+  const j = await httpsGetJson(url)
+  if (j.errcode != null && j.errcode !== 0) {
+    throw new Error(`企业微信 gettoken 失败: ${j.errmsg || j.errcode}`)
+  }
+  if (!j.access_token) {
+    throw new Error('企业微信 gettoken 未返回 access_token')
+  }
+  const expiresIn = Number(j.expires_in) || 7200
+  tokenCache = { token: j.access_token, expireAtMs: now + expiresIn * 1000 }
+  return tokenCache.token
+}
+
+/** 群名最多约 50 utf8 字符（企微文档） */
+function truncateChatName(name) {
+  const s = String(name || '售前视频群')
+  const arr = Array.from(s)
+  return arr.length <= 50 ? s : arr.slice(0, 47).join('') + '…'
+}
+
+/**
+ * @param {{ name: string, ownerUserId: string, userIds: string[] }} opts userIds 去重后须含 owner，且至少 2 人
+ * @returns {Promise<{ chatid: string }>}
+ */
+async function createAppChat(opts) {
+  const token = await getAccessToken()
+  const userlist = [...new Set((opts.userIds || []).map((u) => String(u).trim()).filter(Boolean))]
+  const owner = String(opts.ownerUserId || '').trim()
+  if (!owner || !userlist.includes(owner)) {
+    throw new Error('群主必须包含在成员列表中')
+  }
+  if (userlist.length < 2) {
+    throw new Error('企业微信应用群发会话至少需要 2 名成员（含群主）')
+  }
+  const url = `https://qyapi.weixin.qq.com/cgi-bin/appchat/create?access_token=${encodeURIComponent(token)}`
+  const body = {
+    name: truncateChatName(opts.name),
+    owner,
+    userlist
+  }
+  const j = await httpsPostJson(url, body)
+  if (j.errcode != null && j.errcode !== 0) {
+    throw new Error(`appchat/create 失败: ${j.errmsg || j.errcode}`)
+  }
+  if (!j.chatid) {
+    throw new Error('appchat/create 未返回 chatid')
+  }
+  return { chatid: j.chatid }
+}
+
+/**
+ * @param {string} chatid
+ * @param {string} markdownContent
+ */
+async function sendAppChatMarkdown(chatid, markdownContent) {
+  const token = await getAccessToken()
+  const url = `https://qyapi.weixin.qq.com/cgi-bin/appchat/send?access_token=${encodeURIComponent(token)}`
+  const content = String(markdownContent || '').slice(0, 4000)
+  const body = {
+    chatid: String(chatid).trim(),
+    msgtype: 'markdown',
+    markdown: { content }
+  }
+  const j = await httpsPostJson(url, body)
+  if (j.errcode != null && j.errcode !== 0) {
+    throw new Error(`appchat/send 失败: ${j.errmsg || j.errcode}`)
+  }
+  return true
+}
+
+/** 企微文档：视频临时素材约 10MB；普通文件约 20MB */
+const TEMP_VIDEO_MAX_BYTES = 10 * 1024 * 1024
+const TEMP_FILE_MAX_BYTES = 20 * 1024 * 1024
+
+/**
+ * 上传本地视频为临时素材（media/upload type=video）
+ * @param {string} absoluteFilePath
+ * @returns {Promise<string>} media_id
+ */
+async function uploadTempMediaVideo(absoluteFilePath) {
+  const resolved = path.resolve(String(absoluteFilePath || '').trim())
+  if (!fs.existsSync(resolved)) {
+    throw new Error(`视频文件不存在: ${resolved}`)
+  }
+  const st = fs.statSync(resolved)
+  if (!st.isFile()) {
+    throw new Error(`不是文件: ${resolved}`)
+  }
+  if (st.size > TEMP_VIDEO_MAX_BYTES) {
+    throw new Error(
+      `视频超过企业微信临时素材上限（约 10MB），当前 ${Math.round(st.size / 1024 / 1024)}MB，请先压缩或改用可下载链接`
+    )
+  }
+  const token = await getAccessToken()
+  const urlPath = `/cgi-bin/media/upload?access_token=${encodeURIComponent(token)}&type=video`
+  const form = new FormData()
+  form.append('media', fs.createReadStream(resolved), {
+    filename: path.basename(resolved) || 'video.mp4'
+  })
+
+  const j = await new Promise((resolve, reject) => {
+    const req = https.request(
+      {
+        hostname: 'qyapi.weixin.qq.com',
+        port: 443,
+        path: urlPath,
+        method: 'POST',
+        headers: form.getHeaders()
+      },
+      (res) => {
+        const chunks = []
+        res.on('data', (c) => chunks.push(c))
+        res.on('end', () => {
+          try {
+            resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')))
+          } catch (e) {
+            reject(e)
+          }
+        })
+      }
+    )
+    req.on('error', reject)
+    form.pipe(req)
+  })
+
+  if (j.errcode != null && j.errcode !== 0) {
+    throw new Error(`media/upload(video) 失败: ${j.errmsg || j.errcode}`)
+  }
+  if (!j.media_id) {
+    throw new Error('media/upload 未返回 media_id')
+  }
+  return j.media_id
+}
+
+/**
+ * 上传本地文件为临时素材（media/upload type=file，约 20MB）
+ * @param {string} absoluteFilePath
+ * @returns {Promise<string>} media_id
+ */
+async function uploadTempMediaFile(absoluteFilePath) {
+  const resolved = path.resolve(String(absoluteFilePath || '').trim())
+  if (!fs.existsSync(resolved)) {
+    throw new Error(`文件不存在: ${resolved}`)
+  }
+  const st = fs.statSync(resolved)
+  if (!st.isFile()) {
+    throw new Error(`不是文件: ${resolved}`)
+  }
+  if (st.size > TEMP_FILE_MAX_BYTES) {
+    throw new Error(
+      `文件超过企业微信临时素材上限（约 20MB），当前 ${Math.round(st.size / 1024 / 1024)}MB`
+    )
+  }
+  if (st.size < 5) {
+    throw new Error('文件过小，企微要求大于 5 字节')
+  }
+  const token = await getAccessToken()
+  const urlPath = `/cgi-bin/media/upload?access_token=${encodeURIComponent(token)}&type=file`
+  const form = new FormData()
+  form.append('media', fs.createReadStream(resolved), {
+    filename: path.basename(resolved) || 'video.mp4'
+  })
+
+  const j = await new Promise((resolve, reject) => {
+    const req = https.request(
+      {
+        hostname: 'qyapi.weixin.qq.com',
+        port: 443,
+        path: urlPath,
+        method: 'POST',
+        headers: form.getHeaders()
+      },
+      (res) => {
+        const chunks = []
+        res.on('data', (c) => chunks.push(c))
+        res.on('end', () => {
+          try {
+            resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')))
+          } catch (e) {
+            reject(e)
+          }
+        })
+      }
+    )
+    req.on('error', reject)
+    form.pipe(req)
+  })
+
+  if (j.errcode != null && j.errcode !== 0) {
+    throw new Error(`media/upload(file) 失败: ${j.errmsg || j.errcode}`)
+  }
+  if (!j.media_id) {
+    throw new Error('media/upload(file) 未返回 media_id')
+  }
+  return j.media_id
+}
+
+async function sendAppChatFile(chatid, mediaId) {
+  const token = await getAccessToken()
+  const url = `https://qyapi.weixin.qq.com/cgi-bin/appchat/send?access_token=${encodeURIComponent(token)}`
+  const body = {
+    chatid: String(chatid).trim(),
+    msgtype: 'file',
+    file: {
+      media_id: String(mediaId).trim()
+    }
+  }
+  const j = await httpsPostJson(url, body)
+  if (j.errcode != null && j.errcode !== 0) {
+    throw new Error(`appchat/send(file) 失败: ${j.errmsg || j.errcode}`)
+  }
+  return true
+}
+
+/**
+ * 群发会话发送视频消息（需先 uploadTempMediaVideo）
+ * @param {string} chatid
+ * @param {string} mediaId
+ * @param {{ title?: string, description?: string }} [opts]
+ */
+async function sendAppChatVideo(chatid, mediaId, opts) {
+  const token = await getAccessToken()
+  const url = `https://qyapi.weixin.qq.com/cgi-bin/appchat/send?access_token=${encodeURIComponent(token)}`
+  const o = opts && typeof opts === 'object' ? opts : {}
+  const video = { media_id: String(mediaId).trim() }
+  if (o.title) video.title = String(o.title).slice(0, 128)
+  if (o.description) video.description = String(o.description).slice(0, 512)
+  const body = {
+    chatid: String(chatid).trim(),
+    msgtype: 'video',
+    video
+  }
+  const j = await httpsPostJson(url, body)
+  if (j.errcode != null && j.errcode !== 0) {
+    throw new Error(`appchat/send(video) 失败: ${j.errmsg || j.errcode}`)
+  }
+  return true
+}
+
+module.exports = {
+  isAppChatConfigured,
+  getAccessToken,
+  createAppChat,
+  sendAppChatMarkdown,
+  sendAppChatVideo,
+  sendAppChatFile,
+  uploadTempMediaVideo,
+  uploadTempMediaFile,
+  truncateChatName,
+  TEMP_VIDEO_MAX_BYTES,
+  TEMP_FILE_MAX_BYTES
+}
