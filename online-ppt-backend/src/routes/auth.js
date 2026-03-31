@@ -2,12 +2,10 @@
 import express from 'express'
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
-import pkg from '@prisma/client'
-const { PrismaClient } = pkg
 import { authMiddleware } from '../middleware/auth.js'
+import prisma from '../lib/prisma.js'
 
 const router = express.Router()
-const prisma = new PrismaClient()
 const JWT_SECRET = process.env.JWT_SECRET || 'resoft-ppt-secret-change-in-production'
 const JWT_EXPIRES = '8h'
 

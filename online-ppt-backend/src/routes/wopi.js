@@ -13,12 +13,10 @@
 import { Router } from 'express'
 import fs from 'fs/promises'
 import path from 'path'
-import * as prismaClient from '@prisma/client'
 import jwt from 'jsonwebtoken'
+import prisma from '../lib/prisma.js'
 
 const router = Router()
-const { PrismaClient } = prismaClient
-const prisma = new PrismaClient()
 
 const UPLOAD_BASE_DIR = process.env.UPLOAD_BASE_DIR || ''
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'

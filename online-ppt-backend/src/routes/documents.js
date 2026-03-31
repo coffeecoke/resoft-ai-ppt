@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url'
 import dotenv from 'dotenv'
 import { documentService } from '../services/documentService.js'
 import { thumbnailService } from '../services/thumbnailService.js'
+import prisma from '../lib/prisma.js'
 
 const router = Router()
 
@@ -654,10 +655,6 @@ router.patch('/:id/rename', async (req, res) => {
 router.post('/:id/view', async (req, res) => {
   try {
     const { id } = req.params
-    
-    // 使用Prisma直接更新view_count
-    const { PrismaClient } = await import('@prisma/client')
-    const prisma = new PrismaClient()
     
     await prisma.documents.update({
       where: { id },

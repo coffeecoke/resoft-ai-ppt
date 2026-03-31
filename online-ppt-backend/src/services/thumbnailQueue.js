@@ -2,10 +2,7 @@
  * 缩略图任务管理服务（方案A：直接接收模式）
  * 不再等待前端上传，上传接口收到后直接调 reportUpload 推进度
  */
-import * as prismaClient from '@prisma/client'
-
-const { PrismaClient } = prismaClient
-const prisma = new PrismaClient()
+import prisma from '../lib/prisma.js'
 
 class ThumbnailQueue {
   constructor() {
