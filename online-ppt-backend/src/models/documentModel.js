@@ -10,12 +10,10 @@ const __dirname = path.dirname(__filename)
 const envPath = path.join(__dirname, '..', '..', '.env')
 dotenv.config({ path: envPath })
 
-import pkg from '@prisma/client'
-const { PrismaClient } = pkg
 import { generateDocumentId } from '../utils/idGenerator.js'
+import { thumbnailModel } from './thumbnailModel.js'
 import fs from 'fs'
-
-const prisma = new PrismaClient()
+import prisma from '../lib/prisma.js'
 // 优先使用环境变量 DATA_DIR，如果没有则使用默认相对路径
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', '..', 'data')
 
@@ -278,6 +276,14 @@ export const documentModel = {
       where: { id },
       data: { updated_at: new Date(), file_size: BigInt(fs.statSync(contentPath).size) }
     })
+    try {
+      await thumbnailModel.syncSlideIndicesFromSlideIds(
+        id,
+        content.slides.map(s => s.id)
+      )
+    } catch (e) {
+      console.warn('[documentModel] 同步缩略图 slide_index 失败:', id, e?.message || e)
+    }
     return serializeBigInt(updated)
   },
 
@@ -301,6 +307,14 @@ export const documentModel = {
       where: { id },
       data: { updated_at: new Date(), file_size: BigInt(fs.statSync(contentPath).size) }
     })
+    try {
+      await thumbnailModel.syncSlideIndicesFromSlideIds(
+        id,
+        content.slides.map(s => s.id)
+      )
+    } catch (e) {
+      console.warn('[documentModel] 同步缩略图 slide_index 失败:', id, e?.message || e)
+    }
     return serializeBigInt(updated)
   },
 
@@ -326,6 +340,14 @@ export const documentModel = {
       where: { id },
       data: { updated_at: new Date(), file_size: BigInt(fs.statSync(contentPath).size) }
     })
+    try {
+      await thumbnailModel.syncSlideIndicesFromSlideIds(
+        id,
+        content.slides.map(s => s.id)
+      )
+    } catch (e) {
+      console.warn('[documentModel] 同步缩略图 slide_index 失败:', id, e?.message || e)
+    }
     return serializeBigInt(updated)
   },
 

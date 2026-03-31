@@ -1,9 +1,7 @@
 import express from 'express'
-import * as prismaClient from '@prisma/client'
+import prisma from '../../lib/prisma.js'
 
 const router = express.Router()
-const { PrismaClient } = prismaClient
-const prisma = new PrismaClient()
 
 /**
  * GET /api/sales/product-catalogs

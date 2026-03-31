@@ -7,12 +7,10 @@
 import { Router } from 'express'
 import fs from 'fs'
 import path from 'path'
-import * as prismaClient from '@prisma/client'
 import docxMergeService from '../../services/docxMergeService.js'
+import prisma from '../../lib/prisma.js'
 
 const router = Router()
-const { PrismaClient } = prismaClient
-const prisma = new PrismaClient()
 
 const UPLOAD_BASE_DIR = process.env.UPLOAD_BASE_DIR || ''
 

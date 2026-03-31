@@ -3,10 +3,7 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import dotenv from 'dotenv'
-import * as prismaClient from '@prisma/client'
-
-const { PrismaClient } = prismaClient
-const prisma = new PrismaClient()
+import prisma from '../lib/prisma.js'
 
 const router = Router()
 

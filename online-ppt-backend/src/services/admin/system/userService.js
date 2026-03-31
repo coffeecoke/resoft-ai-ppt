@@ -5,12 +5,9 @@
  * sex / phone 前端保留但不存库，读时返回 null
  */
 
-import pkg from '@prisma/client'
-const { PrismaClient } = pkg
 import bcrypt from 'bcryptjs'
 import { nanoid } from 'nanoid'
-
-const prisma = new PrismaClient()
+import prisma from '../../../lib/prisma.js'
 
 class UserService {
   /**

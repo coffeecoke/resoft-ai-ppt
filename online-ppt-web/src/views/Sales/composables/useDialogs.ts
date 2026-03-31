@@ -100,14 +100,13 @@ export function useDialogs() {
           
           // axios拦截器已经提取了response.data，所以result就是后端返回的data部分
           if (result && result.thumbnails && result.thumbnails.length > 0) {
-            // 转换为弹框需要的格式
-            slides.value = result.thumbnails
-              .sort((a, b) => a.slideIndex - b.slideIndex) // 按slideIndex排序
-              .map(thumbnail => ({
+            slides.value = [...result.thumbnails]
+              .sort((a: any, b: any) => (a.slideIndex ?? 0) - (b.slideIndex ?? 0))
+              .map((thumbnail: any, i: number) => ({
                 id: thumbnail.slideId,
-                title: `幻灯片 ${thumbnail.slideIndex + 1}`, // 页码从1开始显示
-                img: thumbnail.url, // 缩略图URL
-                slideIndex: thumbnail.slideIndex,
+                title: `幻灯片 ${i + 1}`,
+                img: thumbnail.url,
+                slideIndex: i,
                 metadata: thumbnail.metadata
               }))
             

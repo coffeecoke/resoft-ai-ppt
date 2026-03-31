@@ -1,13 +1,11 @@
 // online-ppt-backend/src/routes/users.js
 import express from 'express'
 import bcrypt from 'bcryptjs'
-import pkg from '@prisma/client'
-const { PrismaClient } = pkg
 import { authMiddleware } from '../middleware/auth.js'
 import { adminOnly } from '../middleware/adminOnly.js'
+import prisma from '../lib/prisma.js'
 
 const router = express.Router()
-const prisma = new PrismaClient()
 
 // 所有 /users 路由都需要登录 + 管理员权限
 router.use(authMiddleware, adminOnly)

@@ -1,13 +1,11 @@
 import { Router } from 'express'
 import { documentService } from '../../services/documentService.js'
 import { thumbnailService } from '../../services/thumbnailService.js'
-import * as prismaClient from '@prisma/client'
 import aiService from '../../services/aiService.js'
 import { createSummaryPrompt } from '../../prompts/summaryPrompt.js'
+import prisma from '../../lib/prisma.js'
 
 const router = Router()
-const { PrismaClient } = prismaClient
-const prisma = new PrismaClient()
 
 /**
  * 获取默认PPT列表（未选择产品时）

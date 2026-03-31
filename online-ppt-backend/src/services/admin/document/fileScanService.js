@@ -8,7 +8,6 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import dotenv from 'dotenv'
-import * as prismaClient from '@prisma/client'
 import mammoth from 'mammoth'
 import { generateDocumentId } from '../../../utils/idGenerator.js'
 import pptxService from '../../pptxService.js'
@@ -25,8 +24,7 @@ dotenv.config({ path: envPath })
 // 获取 DATA_DIR
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', '..', '..', '..', 'data')
 
-const { PrismaClient } = prismaClient
-const prisma = new PrismaClient()
+import prisma from '../../../lib/prisma.js'
 
 class FileScanService {
   

@@ -4,12 +4,9 @@
  * 提供产品的增删改查功能
  */
 
-import * as prismaClient from '@prisma/client'
 import { generateDocumentId } from '../../../utils/idGenerator.js'
 import { formatObjectDates, formatArrayDates } from '../../../utils/dateFormatter.js'
-
-const { PrismaClient } = prismaClient
-const prisma = new PrismaClient()
+import prisma from '../../../lib/prisma.js'
 
 class ProductService {
   /**
