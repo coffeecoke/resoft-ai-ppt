@@ -320,6 +320,22 @@
       margin: 0 0 10px 0;
       line-height: 1.5;
     }
+    #pv-role-confirm-dialog input#pv-role-confirm-userid {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 10px 12px;
+      font-size: 14px;
+      border: 1px solid var(--border-color, #d9d9d9);
+      border-radius: 6px;
+      background: var(--card-bg, #fff);
+      color: var(--text-primary, #262626);
+    }
+    #pv-role-confirm-dialog .pv-role-confirm-hint {
+      font-size: 12px;
+      color: var(--text-secondary, #8c8c8c);
+      margin: 0 0 10px 0;
+      line-height: 1.5;
+    }
     .sr-only {
       position: absolute;
       width: 1px;
@@ -336,7 +352,7 @@
   <div class="pv-page-header">
     <div class="pv-title-block">
       <h1>售前分析 · 视频生成</h1>
-      <p class="pv-subtitle">列出全部转录。可先向企微上传人推送<strong>角色确认</strong>链接（需 created_by + 机器人已连接），再<strong>推送对话</strong>生成 txt 并可选 Coze 上传；上传成功后请<strong>提交工作流</strong>取 execute_id。<strong>推送视频</strong>需配置 <code style="font-size:12px;">WECOM_CORP_ID</code>、<code style="font-size:12px;">WECOM_APPCHAT_SECRET</code>（自建应用 Secret），按客户名匹配最近一条交流报备并推送 <code style="font-size:12px;">video_address</code>。流水线状态可用下方下拉筛选。</p>
+      <p class="pv-subtitle">仅列出<strong>转录状态为已完成</strong>的记录（不含待处理、转录中、失败等）。点<strong>角色确认</strong>发卡片后流水线为<strong>角色确认中</strong>；对方在外链页<strong>保存</strong>后为<strong>角色已确认</strong>。需机器人已连接并配置 <code style="font-size:12px;">PRESALES_VIDEO_PUBLIC_BASE_URL</code> 等。再<strong>推送对话</strong>生成 txt 并可选 Coze 上传；上传成功后请<strong>提交工作流</strong>取 execute_id。<strong>推送视频</strong>需配置 <code style="font-size:12px;">WECOM_CORP_ID</code>、<code style="font-size:12px;">WECOM_APPCHAT_SECRET</code>（自建应用 Secret），按客户名匹配最近一条交流报备并推送 <code style="font-size:12px;">video_address</code>。流水线状态可用下方下拉筛选。</p>
     </div>
     <div class="pv-header-actions">
       <button type="button" class="btn btn-secondary" onclick="pvLoadList()">
@@ -383,7 +399,7 @@
       </div>
       <div id="pv-empty" class="empty-state pv-empty-inner" style="display: none;">
         <p>暂无记录</p>
-        <small id="pv-empty-hint">暂无转录记录，请先在「语音转文本」中完成转录</small>
+        <small id="pv-empty-hint">暂无「转录已完成」的记录；待处理、转录中或失败的条目不会出现在本列表，请先在「语音转文本」中完成转录</small>
       </div>
       <div id="pv-list" class="pv-table-scroll" style="display: none;">
         <table class="data-table pv-table">
@@ -438,6 +454,37 @@
       <div class="dialog-actions">
         <button type="button" class="btn btn-secondary" onclick="pvClosePushVideoDialog()">取消</button>
         <button type="button" class="btn btn-primary" onclick="pvSubmitPushVideo()">保存推送</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="pv-role-confirm-dialog" class="pv-modal-dialog">
+    <div class="dialog-content" style="min-width: min(380px, 92vw); max-width: 480px;">
+      <div class="dialog-header">
+        <h2>角色确认 · 接收人</h2>
+        <button type="button" class="icon-btn" onclick="pvCloseRoleConfirmDialog()" aria-label="关闭">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="dialog-body">
+        <p class="pv-role-confirm-hint">
+          填写<strong>企业微信成员 userid</strong>（与通讯录一致）。默认已填入该转录的创建人；可改为其他成员。点击「发送卡片」后，仅向此处填写的 userid 推送角色确认链接。
+        </p>
+        <label for="pv-role-confirm-userid" class="sr-only">企微 userid</label>
+        <input
+          type="text"
+          id="pv-role-confirm-userid"
+          placeholder="例：ZhangSan"
+          autocomplete="off"
+          spellcheck="false"
+        />
+      </div>
+      <div class="dialog-actions">
+        <button type="button" class="btn btn-secondary" onclick="pvCloseRoleConfirmDialog()">取消</button>
+        <button type="button" class="btn btn-primary" onclick="pvSubmitRoleConfirm()">发送卡片</button>
       </div>
     </div>
   </dialog>

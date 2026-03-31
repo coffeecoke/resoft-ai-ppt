@@ -504,7 +504,7 @@ model presales_video_tasks {
   /// Coze meeting-analysis 返回
   execute_id String? @db.VarChar(200)
 
-  /// 流水线状态：推送对话 | 提交工作流 | 分析中 | 分析完成 | 推送分析文件 | 视频生成
+  /// 流水线状态：角色确认中 | 角色已确认 | 推送对话 | 提交工作流 | 分析中 | 分析完成 | 推送分析文件 | 视频生成 等
   pipeline_status String @default("推送对话") @db.VarChar(32)
 
   analysis_content String? @db.LongText /// 分析完内容（约 2 万字量级，LONGTEXT）

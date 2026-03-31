@@ -115,15 +115,15 @@ function openAddDialog() {
   document.getElementById('model-dialog').showModal();
 }
 
-// 编辑模型
+// 编辑模型（拉取详情接口，明文回显密钥）
 async function editModel(id) {
   try {
-    const model = models.find(m => m.id === id);
-    if (!model) {
+    const model = await API.get(`/api/admin/models/${id}`);
+    if (!model || !model.id) {
       showMessage('模型不存在', 'error');
       return;
     }
-    
+
     document.getElementById('dialog-title').textContent = '编辑模型配置';
     document.getElementById('model-id').value = model.id;
     document.querySelector('[name="name"]').value = model.name;
@@ -131,16 +131,17 @@ async function editModel(id) {
     document.querySelector('[name="provider"]').value = model.provider;
     document.querySelector('[name="model_name"]').value = model.model_name;
     document.querySelector('[name="api_url"]').value = model.api_url;
-    document.querySelector('[name="api_key"]').value = ''; // 不回显密钥
-    document.querySelector('[name="api_secret"]').value = '';
+    document.querySelector('[name="api_key"]').value = model.api_key != null ? String(model.api_key) : '';
+    document.querySelector('[name="api_secret"]').value =
+      model.api_secret != null ? String(model.api_secret) : '';
     document.querySelector('[name="scene_type"]').value = model.scene_type;
     document.querySelector('[name="max_tokens"]').value = model.max_tokens;
     document.querySelector('[name="temperature"]').value = model.temperature;
     document.querySelector('[name="remark"]').value = model.remark || '';
-    
+
     document.getElementById('model-dialog').showModal();
   } catch (error) {
-    showMessage('加载模型信息失败', 'error');
+    showMessage('加载模型信息失败: ' + (error.message || ''), 'error');
   }
 }
 

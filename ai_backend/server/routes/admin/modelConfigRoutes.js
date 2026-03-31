@@ -101,10 +101,14 @@ router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const model = await modelConfigService.getModelById(id);
-    
+
+    // 管理后台编辑表单需要明文回显 api_key / api_secret（列表接口仍掩码）
     res.json({
       success: true,
-      data: modelConfigService.maskSensitiveInfo(model),
+      data: {
+        ...model,
+        total_tokens: model.total_tokens != null ? Number(model.total_tokens) : 0,
+      },
     });
   } catch (error) {
     logger.error(`获取模型配置失败 [${req.params.id}]:`, error.message);

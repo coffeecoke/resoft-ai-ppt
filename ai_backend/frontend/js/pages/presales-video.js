@@ -10,6 +10,9 @@ const PV_PUSH_WORKFLOW_TOAST_MS = 10000
 const PV_PIPELINE_OPTIONS = [
   { value: 'all', label: '全部状态' },
   { value: '__none__', label: '无流水线记录' },
+  { value: '角色确认中', label: '角色确认中' },
+  { value: '角色已确认', label: '角色已确认' },
+  { value: '已确认', label: '已确认（旧数据）' },
   { value: '推送对话', label: '推送对话' },
   { value: '提交工作流', label: '提交工作流' },
   { value: '分析中', label: '分析中' },
@@ -35,7 +38,9 @@ const pvState = {
   dateFrom: '',
   dateTo: '',
   /** 推送对话成功后缓存，供「提交工作流」传 Coze meeting-analysis：{ [transcriptionId]: { fileId, fileName } } */
-  cozeUploadById: {}
+  cozeUploadById: {},
+  /** 「角色确认」弹窗当前转录 id */
+  roleConfirmTranscriptionId: null
 }
 
 function pvToast(msg, type, durationMs) {
@@ -264,7 +269,7 @@ function pvRenderTable() {
         <td class="pv-col-report">${reportBadge}</td>
         <td class="pv-col-actions">
           <div class="pv-actions">
-            <button type="button" class="btn btn-sm btn-outline" style="border:1px solid var(--primary-color,#1890ff);color:var(--primary-color,#1890ff);background:transparent;" title="向转录 created_by（企微用户）推送 Markdown 卡片链接，打开后可核对/批量修改说话人" onclick="pvNotifyRoleConfirm('${row.id}')">角色确认</button>
+            <button type="button" class="btn btn-sm btn-outline" style="border:1px solid var(--primary-color,#1890ff);color:var(--primary-color,#1890ff);background:transparent;" title="选择企微接收人并推送角色确认卡片（默认创建人 userid）" onclick="pvOpenRoleConfirmDialog('${row.id}')">角色确认</button>
             <button type="button" class="btn btn-sm btn-primary" title="仅 Coze 文件上传（字段 file），返回 file_id/file_name；会议分析请点右侧「提交工作流」" onclick="pvPushDialogue('${row.id}')">推送对话</button>
             <button type="button" class="btn btn-sm pv-act-workflow" title="Coze：用「推送对话」缓存的 fileId/fileName 调 meeting-analysis 取 execute_id；或通用工作流 URL" onclick="pvSubmitWorkflow('${row.id}')">提交工作流</button>
             <button type="button" class="btn btn-sm pv-act-secondary" title="优先：POST 异步任务（md 路径 reserve_3 + execute_id）；未配异步地址时推送本地售前 JSON" onclick="pvPushReport('${row.id}')">推送报告</button>
@@ -298,20 +303,50 @@ window.pvChangePage = function (delta) {
   pvLoadList()
 }
 
-window.pvNotifyRoleConfirm = async function (id) {
-  if (
-    !confirm(
-      '将向该转录的「创建人/企微 userid」（created_by）发送一条 Markdown，内含「角色确认」外链。\n需：机器人已连接、已配置 PRESALES_VIDEO_PUBLIC_BASE_URL 与 PRESALES_VIDEO_SPEAKER_LINK_SECRET。\n确定发送？'
-    )
-  ) {
+window.pvOpenRoleConfirmDialog = function (id) {
+  const dlg = document.getElementById('pv-role-confirm-dialog')
+  const input = document.getElementById('pv-role-confirm-userid')
+  if (!dlg || !input) {
+    pvToast('页面缺少角色确认弹窗', 'error')
     return
   }
+  pvState.roleConfirmTranscriptionId = id
+  const row = (pvState.list || []).find((r) => r.id === id)
+  const def =
+    row && row.createdBy != null && String(row.createdBy).trim() ? String(row.createdBy).trim() : ''
+  input.value = def
+  if (typeof dlg.showModal === 'function') dlg.showModal()
+  else dlg.setAttribute('open', '')
+}
+
+window.pvCloseRoleConfirmDialog = function () {
+  const dlg = document.getElementById('pv-role-confirm-dialog')
+  if (dlg) {
+    if (typeof dlg.close === 'function') dlg.close()
+    else dlg.removeAttribute('open')
+  }
+  pvState.roleConfirmTranscriptionId = null
+}
+
+window.pvSubmitRoleConfirm = async function () {
+  const id = pvState.roleConfirmTranscriptionId
+  const input = document.getElementById('pv-role-confirm-userid')
+  const wecomUserId = input ? String(input.value || '').trim() : ''
+  if (!id) {
+    pvToast('未选择转录', 'error')
+    return
+  }
+  if (!wecomUserId) {
+    pvToast('请填写接收人企微 userid', 'error')
+    return
+  }
+  pvCloseRoleConfirmDialog()
   pvShowOverlay(true, '正在推送角色确认…')
   try {
     const res = await fetch(`${PV_API}/presales-video/transcriptions/${id}/notify-role-confirm`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: '{}'
+      body: JSON.stringify({ wecomUserId })
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok || !data.success) {
@@ -320,10 +355,11 @@ window.pvNotifyRoleConfirm = async function (id) {
     }
     const d = data.data || {}
     pvToast(
-      `已推送。对方企微账号：${d.wecomUserId || '-'}，对话条数：${d.dialogueCount ?? '-'}`,
+      `已推送至：${d.wecomUserId || wecomUserId}，对话条数：${d.dialogueCount ?? '-'}`,
       'success',
       PV_PUSH_WORKFLOW_TOAST_MS
     )
+    if (typeof window.pvLoadList === 'function') window.pvLoadList()
   } catch (e) {
     pvToast('推送失败: ' + e.message, 'error')
   } finally {

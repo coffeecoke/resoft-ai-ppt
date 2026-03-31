@@ -438,6 +438,7 @@ router.post('/workflow-callback', async (req, res) => {
 
 /**
  * GET /api/presales-video/transcriptions
+ * 仅列出转录状态为 completed（已完成）的记录，不含待处理/上传中/转录中/失败等。
  * Query: page, pageSize, name, dateFrom, dateTo, pipelineStatus
  * pipelineStatus: 空或 all=不限；__none__=无 presales_video_tasks；其它值=流水线状态精确匹配（如 分析中）
  */
@@ -490,13 +491,13 @@ router.get('/transcriptions', async (req, res) => {
       }
     }
 
-    const whereParts = []
+    const whereParts = [{ status: 'completed' }]
     if (Object.keys(nameWhere).length > 0) whereParts.push(nameWhere)
     if (Object.keys(createdAtFilter).length > 0) {
       whereParts.push({ created_at: createdAtFilter })
     }
     if (taskWhere) whereParts.push(taskWhere)
-    const where = whereParts.length === 0 ? {} : whereParts.length === 1 ? whereParts[0] : { AND: whereParts }
+    const where = whereParts.length === 1 ? whereParts[0] : { AND: whereParts }
 
     const total = await prisma.transcriptions.count({ where })
 
@@ -531,6 +532,7 @@ router.get('/transcriptions', async (req, res) => {
       name: t.name,
       originalFileName: t.original_file_name,
       customerName: t.customer_name,
+      createdBy: t.created_by != null && String(t.created_by).trim() ? String(t.created_by).trim() : null,
       createdAt: t.created_at,
       hasPresalesReport: (t.presales_analysis_results && t.presales_analysis_results.length > 0) || false,
       videoTask: presalesVideoTaskService.toApiShape(taskByTid.get(t.id))
@@ -1354,7 +1356,8 @@ router.get('/transcriptions/:id/video', async (req, res) => {
 
 /**
  * POST /api/presales-video/transcriptions/:id/notify-role-confirm
- * 向 transcriptions.created_by（企微 userid）发 Markdown，内含角色确认外链（需机器人 WS 已连接 + 环境变量）
+ * Body 可选：{ wecomUserId } 接收人企微 userid；缺省时用 transcriptions.created_by。
+ * 发模板卡片/Markdown，内含角色确认外链（需机器人 WS 已连接 + 环境变量）
  */
 router.post('/transcriptions/:id/notify-role-confirm', async (req, res) => {
   const { id } = req.params
@@ -1363,11 +1366,17 @@ router.post('/transcriptions/:id/notify-role-confirm', async (req, res) => {
     if (!tr) {
       return res.status(404).json({ success: false, error: '转录不存在' })
     }
-    const wxUser = tr.created_by && String(tr.created_by).trim()
+    const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {}
+    const fromBody =
+      body.wecomUserId != null && String(body.wecomUserId).trim()
+        ? String(body.wecomUserId).trim()
+        : ''
+    const fromCreated = tr.created_by != null && String(tr.created_by).trim() ? String(tr.created_by).trim() : ''
+    const wxUser = fromBody || fromCreated
     if (!wxUser) {
       return res.status(400).json({
         success: false,
-        error: '该转录无 created_by（企微 userid），无法定向推送。请使用企微机器人上传的转录。'
+        error: '请指定接收人企微 userid（弹窗中填写），或确保该转录有 created_by'
       })
     }
     const resolved = await mergedDialogueService.resolveMergedDialoguesForTranscription(id)
@@ -1406,13 +1415,26 @@ router.post('/transcriptions/:id/notify-role-confirm', async (req, res) => {
       await bot.sendMsg(wxUser, md, 'text')
       logger.info(`[presales-video] 已推送角色确认 Markdown transcription=${id} -> ${wxUser}`)
     }
+    try {
+      await presalesVideoTaskService.getOrCreateTask(id)
+      await presalesVideoTaskService.updatePipelineStatus(
+        id,
+        presalesVideoTaskService.PipelineStatus.ROLE_CONFIRMING
+      )
+    } catch (pipeErr) {
+      logger.warn(
+        `[presales-video] 推送角色确认卡片后更新流水线状态失败 transcription=${id}:`,
+        pipeErr.message || pipeErr
+      )
+    }
     res.json({
       success: true,
       data: {
         transcriptionId: id,
         wecomUserId: wxUser,
         dialogueSource: resolved.source,
-        dialogueCount: resolved.dialogues.length
+        dialogueCount: resolved.dialogues.length,
+        pipelineStatus: presalesVideoTaskService.PipelineStatus.ROLE_CONFIRMING
       }
     })
   } catch (error) {
@@ -1512,6 +1534,18 @@ router.put('/public/speaker-confirm', async (req, res) => {
     logger.info(
       `[presales-video] 外链保存角色确认 transcription=${v.transcriptionId} adjustment=${row.id}`
     )
+    try {
+      await presalesVideoTaskService.getOrCreateTask(v.transcriptionId)
+      await presalesVideoTaskService.updatePipelineStatus(
+        v.transcriptionId,
+        presalesVideoTaskService.PipelineStatus.SPEAKER_CONFIRMED
+      )
+    } catch (pipeErr) {
+      logger.warn(
+        `[presales-video] 外链保存后更新流水线状态失败 transcription=${v.transcriptionId}:`,
+        pipeErr.message || pipeErr
+      )
+    }
     res.json({
       success: true,
       data: { adjustmentId: row.id, transcriptionId: v.transcriptionId }

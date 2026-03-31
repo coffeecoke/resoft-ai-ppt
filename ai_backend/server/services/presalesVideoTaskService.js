@@ -15,6 +15,10 @@ const prisma = new PrismaClient()
 
 /** 流水线状态（与库中 pipeline_status 一致） */
 const PipelineStatus = {
+  /** 已推送角色确认卡片，对方尚未在外链页保存 */
+  ROLE_CONFIRMING: '角色确认中',
+  /** 用户在外链页保存说话人后 */
+  SPEAKER_CONFIRMED: '角色已确认',
   PUSH_DIALOGUE: '推送对话',
   SUBMIT_WORKFLOW: '提交工作流',
   ANALYZING: '分析中',
