@@ -670,6 +670,10 @@ onUnmounted(() => {
   border-radius: 8px;
   padding: 0;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  position: sticky;
+  top: 89px;
+  max-height: calc(100vh - 89px);
+  overflow-y: auto;
 }
 
 /* 热搜榜样式已移至 HotSearchPanel 组件 */

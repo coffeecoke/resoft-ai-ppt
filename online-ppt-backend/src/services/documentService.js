@@ -11,6 +11,7 @@ const envPath = path.join(__dirname, '..', '..', '.env')
 dotenv.config({ path: envPath })
 
 import { documentModel } from '../models/documentModel.js'
+import { thumbnailModel } from '../models/thumbnailModel.js'
 import { generateDocumentId } from '../utils/idGenerator.js'
 import fs from 'fs'
 
@@ -21,6 +22,16 @@ const INDEX_FILE = path.join(DATA_DIR, 'document-index.json')
 
 const USE_DATABASE = process.env.USE_DATABASE === 'true'
 const DUAL_WRITE = process.env.DUAL_WRITE === 'true'
+
+async function syncThumbnailIndicesAfterSlideChange(documentId, slides) {
+  try {
+    const ids = slides?.map(s => s.id).filter(Boolean) || []
+    if (ids.length === 0) return
+    await thumbnailModel.syncSlideIndicesFromSlideIds(documentId, ids)
+  } catch (e) {
+    console.warn('[文档服务] 同步缩略图 slide_index 失败:', documentId, e?.message || e)
+  }
+}
 
 // 确保目录存在
 function ensureDirs() {
@@ -389,6 +400,8 @@ export const documentService = {
     content.slides.splice(insertAt, 0, slide)
     fs.writeFileSync(contentPath, JSON.stringify(content, null, 2), 'utf-8')
 
+    await syncThumbnailIndicesAfterSlideChange(id, content.slides)
+
     const indexList = jsonOps.readIndex()
     const metaIndex = indexList.findIndex(item => item.id === id)
     if (metaIndex !== -1) {
@@ -413,6 +426,8 @@ export const documentService = {
     const content = JSON.parse(fs.readFileSync(contentPath, 'utf-8'))
     content.slides = content.slides.filter(s => !ids.includes(s.id))
     fs.writeFileSync(contentPath, JSON.stringify(content, null, 2), 'utf-8')
+
+    await syncThumbnailIndicesAfterSlideChange(id, content.slides)
 
     const indexList = jsonOps.readIndex()
     const metaIndex = indexList.findIndex(item => item.id === id)
@@ -439,6 +454,8 @@ export const documentService = {
     const remaining = content.slides.filter(s => !slideIds.includes(s.id))
     content.slides = [...reordered, ...remaining]
     fs.writeFileSync(contentPath, JSON.stringify(content, null, 2), 'utf-8')
+
+    await syncThumbnailIndicesAfterSlideChange(id, content.slides)
 
     const indexList = jsonOps.readIndex()
     const metaIndex = indexList.findIndex(item => item.id === id)

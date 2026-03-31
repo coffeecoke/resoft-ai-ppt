@@ -10,10 +10,7 @@ const __dirname = path.dirname(__filename)
 const envPath = path.join(__dirname, '..', '..', '.env')
 dotenv.config({ path: envPath })
 
-import pkg from '@prisma/client'
-const { PrismaClient } = pkg
-
-const prisma = new PrismaClient()
+import prisma from '../lib/prisma.js'
 
 export const thumbnailModel = {
   // 获取文档的所有缩略图
@@ -83,6 +80,23 @@ export const thumbnailModel = {
     return await prisma.thumbnails.deleteMany({
       where: { document_id: documentId } // 数据库字段是 document_id
     })
+  },
+
+  /**
+   * 按文档当前 slides 顺序回写 thumbnails.slide_index（与 JSON 内容一致）
+   * @param {string} documentId
+   * @param {string[]} slideIdsOrdered 与文档 content.slides 顺序一致的 slide id 列表
+   */
+  async syncSlideIndicesFromSlideIds(documentId, slideIdsOrdered) {
+    if (!documentId || !slideIdsOrdered?.length) return
+    await prisma.$transaction(
+      slideIdsOrdered.map((slideId, i) =>
+        prisma.thumbnails.updateMany({
+          where: { document_id: documentId, slide_id: slideId },
+          data: { slide_index: i }
+        })
+      )
+    )
   },
   
   // 统计文档的缩略图数量

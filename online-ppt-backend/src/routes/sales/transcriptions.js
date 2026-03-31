@@ -1,9 +1,7 @@
 import express from 'express'
-import * as prismaClient from '@prisma/client'
+import prisma from '../../lib/prisma.js'
 
 const router = express.Router()
-const { PrismaClient } = prismaClient
-const prisma = new PrismaClient()
 
 // 为 5 个筛选项补充 name 字段（表存中文，code 与 name 同值）
 function attachFilterNames(row) {

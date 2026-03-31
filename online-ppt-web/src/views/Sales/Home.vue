@@ -49,7 +49,6 @@
           :active-tab="'video'"
           :filters="filterProps"
           @close="handleFilterClose"
-          @update:filters="handleFiltersUpdate"
         />
 
         <div class="content-grid-wrapper" :class="{ 'with-filter': showFilterPanel }">
@@ -66,7 +65,7 @@
       <div v-if="showPptGrid || showContentGrid || showProductDetail" class="content-with-filter">
         <!-- 🆕 新组件：筛选面板（在左侧） -->
         <FilterPanel
-          v-if="showFilterPanel && activeTab !== 'concerned' && (activeTab === 'ppt' || activeTab === 'ppt-new' || activeTab === 'video' || activeTab === 'tender' || activeTab === 'response')"
+          v-if="showMainFilterPanel"
           v-model:visible="showFilterPanel"
           :active-tab="activeTab === 'ppt-new' ? 'ppt' : activeTab"
           :filters="filterProps"
@@ -74,10 +73,9 @@
           :bidSectionTypes="filters.bidSectionTypesFromAPI.value"
           @close="handleFilterClose"
           @create-ppt="handleCreatePpt"
-          @update:filters="handleFiltersUpdate"
         />
-        
-        <div class="content-grid-wrapper" :class="{ 'with-filter': showFilterPanel && (activeTab === 'ppt' || activeTab === 'ppt-new' || activeTab === 'video' || activeTab === 'tender' || activeTab === 'response') }">
+
+        <div class="content-grid-wrapper" :class="{ 'with-filter': showMainFilterPanel }">
           <!-- 🆕 新组件：选中产品后的详情视图（产品介绍PPT tab 与 ppt-new 均使用 ProductDetailView，保留当前项目 PPT 组件） -->
           <!-- 选中产品后的详情：内部用 useProductCatalogs 按 code 请求公共版/实战版 -->
           <ProductDetailView
@@ -108,28 +106,6 @@
         </div>
       </div>
       
-      <!-- 兼容旧布局（当不显示内容网格时） -->
-      <template v-else>
-        <!-- 🆕 新组件：PPT tab 未选产品时显示PPT网格 -->
-        <ContentGridSection
-          v-if="showPptGrid"
-          :activeTab="activeTab"
-          :filteredPPT="filters.filteredPPT.value"
-          :filteredVideos="filters.filteredVideos.value"
-          :tenderFiles="filters.tenderFiles.value"
-          :responseFiles="filters.responseFiles.value"
-        />
-        
-        <!-- 🆕 新组件：视频/招标/响应 tab 始终显示内容网格 -->
-        <ContentGridSection
-          v-if="showContentGrid"
-          :activeTab="activeTab"
-          :filteredPPT="filters.filteredPPT.value"
-          :filteredVideos="filters.filteredVideos.value"
-          :tenderFiles="filters.tenderFiles.value"
-          :responseFiles="filters.responseFiles.value"
-        />
-      </template>
       
       <!-- ✅ 已有组件：QA区域（内部处理点赞/点踩） -->
       <QASection
@@ -336,6 +312,10 @@ const activeDashboardTab = ref('products')
 const activeBrandTab = ref('company')
 const showAdvancedFilter = ref(false)
 const showFilterPanel = ref(true) // 筛选面板显示状态（默认展开）
+// 主内容区筛选面板（ppt/ppt-new/video/tender/response tab 下展开）
+const showMainFilterPanel = computed(() =>
+  showFilterPanel.value && ['ppt', 'ppt-new', 'video', 'tender', 'response'].includes(activeTab.value)
+)
 
 // 问题分类筛选条件（关心问题 tab）
 const questionCategoryFilters = ref<{
@@ -350,7 +330,7 @@ const questionCategoryFilters = ref<{
   customerName: ''
 })
 
-// 独立页面的筛选条件
+// 以下状态由 PptPageView/VideoPageView 通过 v-model 自维护，Home.vue 仅作托管
 const fProduct = ref<string | null>(null)
 const fAudience = ref<string | null>(null)
 const fIndustry = ref<string | null>(null)
@@ -378,50 +358,38 @@ const filterProps = { pptFilters, videoFilters, qaFilters, tenderFilters, respon
 // 4.5. 计算属性（优化复杂的显示逻辑）
 // ============================================
 
-// 是否显示内容网格（PPT/招标/响应，video 单独处理）
-const showContentGrid = computed(() => {
-  return activeNav.value === 'recommend'           // ① 在推荐页
-    && activeDashboardTab.value === 'products'     // ② 在产品标签
-    && ['tender', 'response'].includes(activeTab.value)  // ③ 招标/响应 tab（video 单独处理）
-})
+// 基础条件：推荐页 + 产品标签
+const isRecommendProducts = computed(() =>
+  activeNav.value === 'recommend' && activeDashboardTab.value === 'products'
+)
 
-// 是否显示交流会议（使用 VideoPageView 支持无限滚动）
-const showVideoSection = computed(() => {
-  return activeNav.value === 'recommend'           // ① 在推荐页
-    && activeDashboardTab.value === 'products'     // ② 在产品标签
-    && activeTab.value === 'video'                 // ③ 在交流会议 tab
-})
+const showContentGrid = computed(() =>
+  isRecommendProducts.value && ['tender', 'response'].includes(activeTab.value)
+)
 
-// 是否显示产品详情（仅PPT tab且已选产品时显示）
-const showProductDetail = computed(() => {
-  return activeNav.value === 'recommend'           // ① 在推荐页
-    && activeDashboardTab.value === 'products'     // ② 在产品标签
-    && (activeTab.value === 'ppt' || activeTab.value === 'ppt-new')  // ③ 在PPT tab（包括新的PPT标签）
-    && !!productContent.activeProduct.value        // ④ 已选中产品
-})
+const showVideoSection = computed(() =>
+  isRecommendProducts.value && activeTab.value === 'video'
+)
 
-// 是否显示PPT网格（PPT tab且未选产品时显示）
-const showPptGrid = computed(() => {
-  return activeNav.value === 'recommend'           // ① 在推荐页
-    && activeDashboardTab.value === 'products'     // ② 在产品标签
-    && (activeTab.value === 'ppt' || activeTab.value === 'ppt-new')  // ③ 在PPT tab（包括新的PPT标签）
-    && !productContent.activeProduct.value         // ④ 未选中产品
-})
+const showProductDetail = computed(() =>
+  isRecommendProducts.value
+  && (activeTab.value === 'ppt' || activeTab.value === 'ppt-new')
+  && !!productContent.activeProduct.value
+)
 
-// 是否显示QA区域
-const showQASection = computed(() => {
-  return activeNav.value === 'recommend'           // ① 在推荐页
-    && activeDashboardTab.value === 'products'     // ② 在产品标签
-    && activeTab.value === 'qa'                    // ③ 在QA tab
-    // ④ 无论是否选择产品都显示（通过filters自动过滤）
-})
+const showPptGrid = computed(() =>
+  isRecommendProducts.value
+  && (activeTab.value === 'ppt' || activeTab.value === 'ppt-new')
+  && !productContent.activeProduct.value
+)
 
-// 是否显示关心问题页面
-const showConcernedQuestions = computed(() => {
-  return activeNav.value === 'recommend'           // ① 在推荐页
-    && activeDashboardTab.value === 'products'     // ② 在产品标签
-    && activeTab.value === 'concerned'             // ③ 在关心问题 tab
-})
+const showQASection = computed(() =>
+  isRecommendProducts.value && activeTab.value === 'qa'
+)
+
+const showConcernedQuestions = computed(() =>
+  isRecommendProducts.value && activeTab.value === 'concerned'
+)
 
 // ============================================
 // 5. 事件处理（仅状态同步，无业务逻辑）
@@ -451,11 +419,6 @@ const handleQuestionCategoryFiltersUpdate = (newFilters: {
   questionCategoryFilters.value = newFilters
 }
 
-
-const handleFiltersUpdate = () => {
-  // useFilters 内部的 watcher 已自动监听所有 filters 变化并触发对应接口
-  // 此处无需重复调用，避免双发请求
-}
 
 // 品牌Tab选项
 const brandTabOptions = BRAND_TAB_OPTIONS

@@ -1,11 +1,9 @@
 import { Router } from 'express'
-import * as prismaClient from '@prisma/client'
 import aiService from '../../services/aiService.js'
 import { createSlideAnalysisPrompt } from '../../prompts/slideAnalysisPrompt.js'
+import prisma from '../../lib/prisma.js'
 
 const router = Router()
-const { PrismaClient } = prismaClient
-const prisma = new PrismaClient()
 
 /**
  * 批量AI分析接口

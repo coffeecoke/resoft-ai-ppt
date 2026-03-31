@@ -523,7 +523,9 @@ const publicPPT = computed(() => {
   const docs = catalogState.publicDocuments.value || []
   const thumbnails = catalogState.publicThumbnails.value || []
   return docs.map((doc: any) => {
-    const docThumbnails = thumbnails.filter((t: any) => t.documentId === doc.id)
+    const docThumbnails = thumbnails
+      .filter((t: any) => t.document?.id === doc.id)
+      .sort((a: any, b: any) => (a.slideIndex ?? 0) - (b.slideIndex ?? 0))
     return {
       id: doc.id,
       title: doc.name,
@@ -534,7 +536,7 @@ const publicPPT = computed(() => {
       product: doc.product?.[0] || activeProduct.value,
       slides: docThumbnails.map((t: any) => ({
         id: t.id,
-        page: t.pageNumber,
+        page: (t.slideIndex ?? 0) + 1,
         img: t.url || ''
       }))
     }
@@ -581,11 +583,13 @@ const practicalPPTGroups = computed(() => {
       tag: '实战版',
       date: doc.updatedAt?.split('T')[0] || '',
       author: doc.createdBy || '',
-      slides: doc.thumbnails?.map((t: any) => ({
-        id: t.id,
-        page: t.pageNumber,
-        img: t.url || ''
-      })) || []
+      slides: [...(doc.thumbnails || [])]
+        .sort((a: any, b: any) => (a.slideIndex ?? 0) - (b.slideIndex ?? 0))
+        .map((t: any) => ({
+          id: t.id,
+          page: (t.slideIndex ?? 0) + 1,
+          img: t.url || ''
+        }))
     })) || []
   }))
 })
