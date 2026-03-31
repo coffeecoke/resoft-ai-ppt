@@ -23,7 +23,9 @@
     <div v-if="loading && apiList.length === 0" class="video-loading">加载中...</div>
 
     <!-- 视频卡片网格（交流会议来自 API） -->
-    <div v-else ref="scrollContainer" class="video-scroll-container" @scroll="handleScroll">
+    <div v-else ref="scrollContainer" class="video-scroll-container"
+         :style="!showHeader ? { maxHeight: 'calc(100vh - 89px)' } : {}"
+         @scroll="handleScroll">
       <VideoGrid
         :items="gridItems"
         @video-click="handleVideoClick"
