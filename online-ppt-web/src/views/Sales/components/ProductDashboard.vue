@@ -84,7 +84,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 
 const props = defineProps({
   productStats: {
@@ -148,7 +148,13 @@ const scrollRight = () => {
   })
 }
 
-onMounted(() => {
+watch(() => props.productStats, async () => {
+  await nextTick()
+  checkScrollButtons()
+})
+
+onMounted(async () => {
+  await nextTick()
   checkScrollButtons()
   // 监听窗口大小变化
   window.addEventListener('resize', checkScrollButtons)
