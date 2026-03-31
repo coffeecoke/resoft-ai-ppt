@@ -88,8 +88,13 @@ const upload = multer({
     }
   },
   limits: {
-    fileSize: 500 * 1024 * 1024 // 限制 500MB（讯飞限制）
-  }
+    // 允许更大文件上传；超过 TRANSCRIPTION_COMPRESS_THRESHOLD_MB 时由转录服务自动压缩后再送讯飞
+    fileSize: (() => {
+      const mb = parseInt(process.env.TRANSCRIPTION_UPLOAD_MAX_MB || '2048', 10);
+      const safe = Number.isFinite(mb) && mb > 0 ? mb : 2048;
+      return safe * 1024 * 1024;
+    })(),
+  },
 });
 
 /**

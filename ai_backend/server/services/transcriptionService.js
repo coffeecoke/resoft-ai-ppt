@@ -7,6 +7,10 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs').promises;
 const { v4: uuidv4 } = require('uuid');
+const {
+  prepareAudioForTranscription,
+  cleanupTempCompressed,
+} = require('../utils/audioCompressForTranscription');
 
 // ✅ 使用正确的 Prisma Client 导入方式
 const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client');
@@ -21,29 +25,46 @@ class TranscriptionService {
   }
 
   /**
-   * 转录音频文件
+   * 转录音频文件（超过 TRANSCRIPTION_COMPRESS_THRESHOLD_MB 时先 ffmpeg 压成 16k 单声道再送讯飞）
    * @param {string} audioFilePath - 音频文件绝对路径
    * @returns {Promise<Object>} 转录结果
    */
   async transcribeAudio(audioFilePath) {
+    let prep = null;
+    try {
+      prep = await prepareAudioForTranscription(audioFilePath);
+      if (prep.didCompress) {
+        console.log(
+          `📉 音频超过压缩阈值，已转码供转录: ${(prep.bytesIn / 1024 / 1024).toFixed(2)} MB → ${((prep.bytesOut || 0) / 1024 / 1024).toFixed(2)} MB (16kHz/mono/16bit)`
+        );
+      }
+      return await this._transcribeAudioPath(prep.pathForTranscribe);
+    } finally {
+      await cleanupTempCompressed(prep).catch(() => {});
+    }
+  }
+
+  /**
+   * 直接对路径调用 Python 转录（内部使用）
+   * @param {string} audioFilePath
+   */
+  _transcribeAudioPath(audioFilePath) {
     return new Promise((resolve, reject) => {
       console.log('🎤 开始调用 Python 转录服务...');
       console.log('音频文件:', audioFilePath);
       console.log('Python 脚本:', this.pythonScript);
 
-      // 设置环境变量以确保 Python 使用 UTF-8 编码
       const env = { ...process.env, PYTHONIOENCODING: 'utf-8' };
       const pythonProcess = spawn(this.pythonPath, [this.pythonScript, audioFilePath], { env });
 
       let stdout = '';
       let stderr = '';
 
-      pythonProcess.stdout.setEncoding('utf8'); // 设置 UTF-8 编码
+      pythonProcess.stdout.setEncoding('utf8');
       pythonProcess.stderr.setEncoding('utf8');
 
       pythonProcess.stdout.on('data', (data) => {
         stdout += data;
-        // 实时输出日志（方便调试）
         console.log('[Python]', data.trim());
       });
 
@@ -60,12 +81,11 @@ class TranscriptionService {
         }
 
         try {
-          // 解析最后一行JSON输出（Python脚本的返回结果）
           const lines = stdout.trim().split('\n');
           const jsonOutput = lines[lines.length - 1];
-          
+
           console.log('解析 Python 输出:', jsonOutput);
-          
+
           const result = JSON.parse(jsonOutput);
 
           if (!result.success) {
