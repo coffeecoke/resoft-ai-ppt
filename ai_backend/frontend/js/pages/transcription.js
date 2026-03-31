@@ -2548,7 +2548,15 @@ async function uploadAndTranscribe() {
   if (sessionId) formData.append('sessionId', sessionId);
 
   try {
-    updateProgress('⏫ 正在上传音频文件...', '请稍候，文件上传中', 30);
+    const compressThreshold = 500 * 1024 * 1024;
+    const isLarge = st_selectedFile.size > compressThreshold;
+    updateProgress(
+      '⏫ 正在上传并转录...',
+      isLarge
+        ? '文件较大：上传后服务端将自动压缩为 16kHz 单声道再送转写，请耐心等待'
+        : '请稍候，文件上传中',
+      20
+    );
 
     const response = await fetch(`${ST_API_BASE}/transcription/upload`, {
       method: 'POST',
