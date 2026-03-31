@@ -107,13 +107,7 @@
       </div>
       
       
-      <!-- ✅ 已有组件：QA区域（内部处理点赞/点踩） -->
-      <QASection
-        v-if="showQASection"
-        :questions="filters.filteredQuestions.value"
-      />
-      
-      <!-- 🆕 新组件：关心问题页面 -->
+      <!-- 关心问题页面 -->
       <div v-if="showConcernedQuestions" class="concerned-questions-wrapper">
         <!-- 筛选面板（关心问题，在左侧） -->
         <FilterPanel
@@ -238,7 +232,6 @@ import { ElMessage } from 'element-plus'
 import Header from './components/Header.vue'
 import SearchBar from './components/SearchBar.vue'
 import AdvancedFilterPanel from './components/AdvancedFilterPanel.vue'
-import QASection from './components/QASection.vue'
 import PptDialog from './components/PptDialog.vue'
 import VideoDialog from './components/VideoDialog.vue'
 import ResponseFileDialog from './components/ResponseFileDialog.vue'
@@ -381,10 +374,6 @@ const showPptGrid = computed(() =>
   isRecommendProducts.value
   && (activeTab.value === 'ppt' || activeTab.value === 'ppt-new')
   && !productContent.activeProduct.value
-)
-
-const showQASection = computed(() =>
-  isRecommendProducts.value && activeTab.value === 'qa'
 )
 
 const showConcernedQuestions = computed(() =>

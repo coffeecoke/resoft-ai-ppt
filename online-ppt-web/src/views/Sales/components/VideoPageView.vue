@@ -24,7 +24,7 @@
 
     <!-- 视频卡片网格（交流会议来自 API） -->
     <div v-else ref="scrollContainer" class="video-scroll-container"
-         :style="!showHeader ? { maxHeight: 'calc(100vh - 89px)' } : {}"
+         :style="!showHeader ? { maxHeight: 'calc(100vh - var(--sales-header-height))' } : {}"
          @scroll="handleScroll">
       <VideoGrid
         :items="gridItems"

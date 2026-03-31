@@ -43,8 +43,7 @@ const tabOptions = [
   { label: '产品介绍PPT', value: 'ppt' },
   // { label: 'PPT', value: 'ppt-new' },
   { label: '售前交流', value: 'video' },
-  // { label: '客户问题', value: 'qa' }, // 已隐藏
-  { label: '客户问题', value: 'concerned' },
+{ label: '客户问题', value: 'concerned' },
   { label: '招标文件', value: 'tender' },
   { label: '响应文件', value: 'response' }
 ]

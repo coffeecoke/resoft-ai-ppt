@@ -34,7 +34,6 @@ export const brandTabOptions = [
 export const mainTabOptions = [
   { label: '产品介绍PPT', value: 'ppt' },
   { label: '交流会议', value: 'video' },
-  { label: '客户关心问题', value: 'qa' },
   { label: '招标文件', value: 'tender' },
   { label: '响应文件', value: 'response' }
 ]
