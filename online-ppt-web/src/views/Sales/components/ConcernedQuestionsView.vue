@@ -516,10 +516,9 @@ const setupLoadMoreObserver = () => {
   loadMoreObserver.observe(loadMoreSentinel.value)
 }
 
-// 初始化
+// 初始化（loadConcerns 由 watch externalFilters immediate:true 触发，此处不重复调用）
 onMounted(() => {
   loadCategories()
-  loadConcerns(true)
   nextTick(() => setupLoadMoreObserver())
 })
 
@@ -671,8 +670,8 @@ onUnmounted(() => {
   padding: 0;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   position: sticky;
-  top: 89px;
-  max-height: calc(100vh - 89px);
+  top: var(--sales-header-height);
+  max-height: calc(100vh - var(--sales-header-height));
   overflow-y: auto;
 }
 

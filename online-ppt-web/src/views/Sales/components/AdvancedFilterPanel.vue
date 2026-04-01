@@ -208,117 +208,6 @@
         </div>
       </template>
 
-      <!-- 客户关心问题筛选 -->
-      <template v-else-if="activeTab === 'qa'">
-        <div class="filter-section filter-section-inline">
-          <h4 class="filter-section-title">客户名称</h4>
-          <div class="filter-options">
-            <el-input
-              :model-value="filters.qaFilters?.customerName"
-              @update:model-value="updateFilter('qa', 'customerName', $event)"
-              placeholder="请输入客户名称"
-              clearable
-              style="width: 200px;"
-            />
-          </div>
-        </div>
-        <div class="filter-section filter-section-inline">
-          <h4 class="filter-section-title">客户行业</h4>
-          <div class="filter-options">
-            <el-checkbox-group 
-              :model-value="filters.qaFilters?.customerIndustry"
-              @update:model-value="updateFilter('qa', 'customerIndustry', $event)"
-            >
-              <div class="filter-row">
-                <el-checkbox 
-                  v-for="option in industryOptions" 
-                  :key="option.value" 
-                  :label="option.value"
-                >
-                  {{ option.label }}
-                </el-checkbox>
-              </div>
-            </el-checkbox-group>
-          </div>
-        </div>
-        <div class="filter-section filter-section-inline">
-          <h4 class="filter-section-title">提问人</h4>
-          <div class="filter-options">
-            <el-checkbox-group 
-              :model-value="filters.qaFilters?.questioner"
-              @update:model-value="updateFilter('qa', 'questioner', $event)"
-            >
-              <div class="filter-row">
-                <el-checkbox 
-                  v-for="option in questionerOptions" 
-                  :key="option.value" 
-                  :label="option.value"
-                >
-                  {{ option.label }}
-                </el-checkbox>
-              </div>
-            </el-checkbox-group>
-          </div>
-        </div>
-        <div class="filter-section filter-section-inline">
-          <h4 class="filter-section-title">交流阶段</h4>
-          <div class="filter-options">
-            <el-checkbox-group 
-              :model-value="filters.qaFilters?.exchangeStage"
-              @update:model-value="updateFilter('qa', 'exchangeStage', $event)"
-            >
-              <div class="filter-row">
-                <el-checkbox 
-                  v-for="option in exchangeStageOptions" 
-                  :key="option.value" 
-                  :label="option.value"
-                >
-                  {{ option.label }}
-                </el-checkbox>
-              </div>
-            </el-checkbox-group>
-          </div>
-        </div>
-        <div class="filter-section filter-section-inline">
-          <h4 class="filter-section-title">用户需求</h4>
-          <div class="filter-options">
-            <el-checkbox-group 
-              :model-value="filters.qaFilters?.userNeeds"
-              @update:model-value="updateFilter('qa', 'userNeeds', $event)"
-            >
-              <div class="filter-row">
-                <el-checkbox 
-                  v-for="option in userNeedsOptions" 
-                  :key="option.value" 
-                  :label="option.value"
-                >
-                  {{ option.label }}
-                </el-checkbox>
-              </div>
-            </el-checkbox-group>
-          </div>
-        </div>
-        <div class="filter-section filter-section-inline">
-          <h4 class="filter-section-title">问题类型</h4>
-          <div class="filter-options">
-            <el-checkbox-group 
-              :model-value="filters.qaFilters?.questionType"
-              @update:model-value="updateFilter('qa', 'questionType', $event)"
-            >
-              <div class="filter-row">
-                <el-checkbox 
-                  v-for="option in questionTypeOptions" 
-                  :key="option.value" 
-                  :label="option.value"
-                >
-                  {{ option.label }}
-                </el-checkbox>
-              </div>
-            </el-checkbox-group>
-          </div>
-        </div>
-      </template>
-
       <!-- 招标文件筛选 -->
       <template v-else-if="activeTab === 'tender'">
         <div class="filter-section filter-section-inline">
@@ -540,8 +429,7 @@ const updateFilter = (tab, field, value) => {
   const filterMap = {
     'ppt': 'pptFilters',
     'video': 'videoFilters',
-    'qa': 'qaFilters',
-    'tender': 'tenderFilters',
+'tender': 'tenderFilters',
     'response': 'responseFilters'
   }
   

@@ -480,16 +480,6 @@ export function useFilters(dataSource: any, activeProduct: Ref<string>) {
           ourParticipants: [],
         })
         break
-      case 'qa':
-        Object.assign(qaFilters, {
-          customerName: '',
-          customerIndustry: [],
-          questioner: [],
-          exchangeStage: [],
-          userNeeds: [],
-          questionType: [],
-        })
-        break
       case 'tender':
         Object.assign(tenderFilters, {
           customerName: '',

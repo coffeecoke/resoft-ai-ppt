@@ -1064,17 +1064,16 @@ watch(
   box-sizing: border-box;
   margin-top: 0;
   // 确保面板高度正好填满从顶部到底部的可视区域
-  // top: 89px（header高度）+ margin-top: 0 = 89px
-  // 面板高度 = 100vh - 89px，这样面板底部正好在视口底部
-  height: calc(100vh - 89px);
-  max-height: calc(100vh - 89px);
+  // top = header高度，面板底部正好在视口底部
+  height: calc(100vh - var(--sales-header-height));
+  max-height: calc(100vh - var(--sales-header-height));
   background: #fff;
   display: flex;
   flex-direction: column;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   position: sticky;
-  top: 89px;
+  top: var(--sales-header-height);
   padding: 15px 0 0 0;
   overflow: hidden;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
