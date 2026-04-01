@@ -31,6 +31,31 @@ APP_ID = "30fb0f0d"
 API_KEY = "8a96101efefbab3880e7e491b78139de"
 API_SECRET = "704fdea92fb9c8cec33d9f5705a06b69"
 
+
+def _ai_backend_root():
+    """本脚本位于 ai_backend 根目录。"""
+    return Path(__file__).resolve().parent
+
+
+def get_xunfei_output_dir():
+    """讯飞原始 JSON / 默认 TXT 输出目录。未设置环境变量时为 <ai_backend>/data/xunfei_transcripts（跨平台）。"""
+    custom = (os.environ.get("XUNFEI_TRANSCRIPT_OUTPUT_DIR") or "").strip()
+    if custom:
+        return os.path.expanduser(custom)
+    return str(_ai_backend_root() / "data" / "xunfei_transcripts")
+
+
+def get_xunfei_txt_output_dir(audio_file):
+    """TXT：Windows 下若音频在 E: 盘则写入 E 盘目录，否则与 get_xunfei_output_dir 一致。"""
+    p = Path(audio_file)
+    if p.drive and p.drive.upper() == "E:":
+        e_custom = (os.environ.get("XUNFEI_TRANSCRIPT_E_DRIVE_OUTPUT_DIR") or "").strip()
+        if e_custom:
+            return os.path.expanduser(e_custom)
+        return r"E:\已转录"
+    return get_xunfei_output_dir()
+
+
 def transcribe_audio(audio_file):
     """转录音频文件"""
     
@@ -153,8 +178,7 @@ def transcribe_audio(audio_file):
 
 def save_json_result(audio_file, order_data):
     """保存原始JSON结果"""
-    # 创建输出目录
-    output_dir = r"C:\soft\result\xunfei"
+    output_dir = get_xunfei_output_dir()
     os.makedirs(output_dir, exist_ok=True)
     
     # 生成输出文件名
@@ -171,12 +195,7 @@ def save_json_result(audio_file, order_data):
 
 def save_result(audio_file, order_data):
     """保存转录结果"""
-    # 如果音频文件在 E 盘，则保存到 E 盘根目录；否则保存到默认目录
-    audio_path = Path(audio_file)
-    if audio_path.drive.upper() == 'E:':
-        output_dir = r"E:\已转录"
-    else:
-        output_dir = r"C:\soft\result\xunfei"
+    output_dir = get_xunfei_txt_output_dir(audio_file)
     os.makedirs(output_dir, exist_ok=True)
     
     # 生成输出文件名

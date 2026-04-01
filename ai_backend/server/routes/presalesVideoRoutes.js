@@ -62,6 +62,24 @@ function parseListDateTo(s) {
   return new Date(y, m - 1, d, 23, 59, 59, 999)
 }
 
+/** 角色确认卡片展示：优先原始上传文件名，否则转录名称 */
+function transcriptionAudioDisplayName(tr) {
+  const orig =
+    tr.original_file_name != null && String(tr.original_file_name).trim()
+      ? String(tr.original_file_name).trim()
+      : ''
+  if (orig) return orig
+  const n = tr.name != null && String(tr.name).trim() ? String(tr.name).trim() : ''
+  return n
+}
+
+/** 企微模板卡主标题不宜过长 */
+function truncateForWecomCardTitle(s, maxLen = 48) {
+  if (!s) return ''
+  if (s.length <= maxLen) return s
+  return `${s.slice(0, maxLen - 1)}…`
+}
+
 async function getVideoTaskShape(transcriptionId) {
   try {
     const row = await presalesVideoTaskService.getByTranscriptionId(transcriptionId)
@@ -354,6 +372,7 @@ function pickCallbackErrorMessage(body) {
  *   id 或 execute_id,
  *   success: 文本/路径 content|text|url|path|...
  *   fail: 建议 error|message|msg|reason|...，或与 success 相同字段携带说明
+ *   video_create 成功时可选: video_split 或 videoSplit → 落库 reserve_5（视频切片地址）
  * }
  */
 router.post('/workflow-callback', async (req, res) => {
@@ -385,6 +404,12 @@ router.post('/workflow-callback', async (req, res) => {
         ? pickCallbackErrorMessage(body) ?? pickWorkflowCallbackPayload(body)
         : pickWorkflowCallbackPayload(body)
 
+    const videoSplitRaw = body.video_split ?? body.videoSplit
+    const videoSplit =
+      videoSplitRaw != null && String(videoSplitRaw).trim() !== ''
+        ? String(videoSplitRaw).trim()
+        : null
+
     if (typeRaw == null || String(typeRaw).trim() === '') {
       return res.status(400).json({ success: false, error: '缺少 type（analysis_content / video_create）' })
     }
@@ -397,7 +422,8 @@ router.post('/workflow-callback', async (req, res) => {
       typeNorm,
       executeId,
       payloadText,
-      outcomeNorm
+      outcomeNorm,
+      { videoSplit }
     )
 
     if (!result.ok) {
@@ -1407,13 +1433,18 @@ router.post('/transcriptions/:id/notify-role-confirm', async (req, res) => {
         error: '企业微信机器人未连接（WebSocket 未认证），无法推送消息'
       })
     }
-    const md = `**售前视频 · 说话人确认**\n\n请打开链接核对对话并修正说话人（可批量改同一标签），保存后即可在后台继续「推送对话」等流程。\n\n[点此打开角色确认页面](${pageUrl})`
+    const audioName = transcriptionAudioDisplayName(tr)
+    const roleConfirmTitle = audioName
+      ? `说话人角色确认 · ${truncateForWecomCardTitle(audioName)}`
+      : '说话人角色确认'
+    const mdAudio = audioName ? `\n\n音频：${audioName}` : ''
+    const md = `**售前视频 · 说话人确认**${mdAudio}\n\n请打开链接核对对话并修正说话人（可批量改同一标签），保存后即可在后台继续「推送对话」等流程。\n\n[点此打开角色确认页面](${pageUrl})`
     const taskId = `pvsc_${id.replace(/-/g, '').slice(0, 24)}_${Date.now()}`
     try {
       await bot.sendTextNoticeCard(wxUser, {
         pageUrl,
         taskId,
-        title: '说话人角色确认',
+        title: roleConfirmTitle,
         desc: '请完成核对后再推送对话',
         subTitle: '点击本卡片或「打开确认页面」进入网页（需与服务器网络互通）'
       })

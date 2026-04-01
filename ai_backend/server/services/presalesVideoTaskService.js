@@ -2,6 +2,7 @@
  * 售前视频生成主任务：Coze 上传与工作流信息落库
  *
  * analysis_content 回调成功时，内容除入库外会写入本地 .md（目录见 PRESALES_VIDEO_ANALYSIS_MD_DIR），文件名为录音显示名安全化 + .md（original_file_name / name），成功落盘路径写入 reserve_3（最长 500 字符，超出截断）
+ * video_create 成功回调可选 body.video_split：视频切片地址写入 reserve_5（最长 500，超出截断）
  */
 
 const fs = require('fs/promises')
@@ -105,10 +106,11 @@ async function updatePipelineStatus(transcriptionId, pipelineStatus, extra = {})
   })
 }
 
-/** video_address / last_error 等列 VarChar(2000)；reserve_3 VarChar(500) */
+/** video_address / last_error 等列 VarChar(2000)；reserve_3 / reserve_5 VarChar(500) */
 const VIDEO_ADDRESS_MAX_LEN = 2000
 const LAST_ERROR_MAX_LEN = 2000
 const RESERVE3_MAX_LEN = 500
+const RESERVE5_MAX_LEN = 500
 
 function clipLastError(val) {
   if (val == null) return null
@@ -126,6 +128,15 @@ function clipReserve3Path(val) {
     `[presales-video-task] reserve_3 路径超过 ${RESERVE3_MAX_LEN} 字符已截断（完整路径见本次 analysisMarkdownPath 或日志）`
   )
   return s.slice(0, RESERVE3_MAX_LEN)
+}
+
+/** 入库 reserve_5（视频切片地址）：与 schema VarChar(500) 一致 */
+function clipReserve5(val) {
+  if (val == null || String(val).trim() === '') return null
+  const s = String(val)
+  if (s.length <= RESERVE5_MAX_LEN) return s
+  logger.warn(`[presales-video-task] reserve_5（视频切片）超过 ${RESERVE5_MAX_LEN} 字符已截断`)
+  return s.slice(0, RESERVE5_MAX_LEN)
 }
 
 function clipVideoAddress(val) {
@@ -206,9 +217,10 @@ async function getByExecuteId(executeId) {
  * @param {'analysis_content'|'video_create'} callbackType
  * @param {string|null} payloadText 分析文本或视频路径（success 时）；fail 时可作错误说明
  * @param {'success'|'fail'} outcome 成功或失败；缺省为 success（兼容旧回调）
+ * @param {{ videoSplit?: string|null }} [options] video_create 成功时：可选 video_split，写入 reserve_5
  * @returns {Promise<{ ok: boolean, task?: object, code?: string, message?: string, truncated?: boolean, analysisMarkdownPath?: string|null, analysisMarkdownWriteError?: string|null }>}
  */
-async function applyWorkflowCallback(callbackType, executeId, payloadText, outcome = 'success') {
+async function applyWorkflowCallback(callbackType, executeId, payloadText, outcome = 'success', options = {}) {
   const task = await getByExecuteId(executeId)
   if (!task) {
     return { ok: false, code: 'NOT_FOUND', message: '未找到与 execute_id 匹配的主任务记录' }
@@ -283,13 +295,18 @@ async function applyWorkflowCallback(callbackType, executeId, payloadText, outco
       return { ok: true, task: updated, truncated: false }
     }
     const { text, truncated } = clipVideoAddress(payloadText)
+    const data = {
+      pipeline_status: PipelineStatus.VIDEO_DONE,
+      video_address: text,
+      last_error: null
+    }
+    const vs = options.videoSplit
+    if (vs != null && String(vs).trim() !== '') {
+      data.reserve_5 = clipReserve5(vs)
+    }
     const updated = await prisma.presales_video_tasks.update({
       where: { id: task.id },
-      data: {
-        pipeline_status: PipelineStatus.VIDEO_DONE,
-        video_address: text,
-        last_error: null
-      }
+      data
     })
     return { ok: true, task: updated, truncated }
   }
