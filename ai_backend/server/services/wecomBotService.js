@@ -7,6 +7,8 @@ const { isWeComBotConfigured, loadInternalApiTokens } = require('../wecomBot/con
 const { getLogger } = require('../wecomBot/logger')
 
 let client = null
+/** @type {ReturnType<typeof setTimeout> | null} */
+let kickedReconnectTimer = null
 
 function getWeComBotClient() {
   return client
@@ -41,7 +43,35 @@ function startWeComBot() {
       log.info(`[wecom-bot] WebSocket 已认证，可接收用户消息 botId=${masked}`)
     })
     client.on('disconnected', (reason) => {
-      log.warn(`[wecom-bot] WebSocket 断开 reason=${reason || 'unknown'}`)
+      const r = String(reason || 'unknown')
+      log.warn(`[wecom-bot] WebSocket 断开 reason=${r}`)
+      // 企微侧：同一 botId 仅允许一条长连接；别处新连上会踢掉本连接，需自行再连
+      const kicked =
+        r.includes('kicked') ||
+        r.includes('Kicked') ||
+        r.includes('New connection') ||
+        r.includes('new connection')
+      if (kicked) {
+        if (kickedReconnectTimer) clearTimeout(kickedReconnectTimer)
+        const delayMs = Math.max(
+          3000,
+          parseInt(process.env.WECOM_KICKED_RECONNECT_DELAY_MS || '8000', 10) || 8000
+        )
+        kickedReconnectTimer = setTimeout(() => {
+          kickedReconnectTimer = null
+          try {
+            const c = getWeComBotClient()
+            if (!c) return
+            const st = c.getState()
+            if (st === 'disconnected') {
+              log.info(`[wecom-bot] 被新连接挤下线后尝试重连（延迟 ${delayMs}ms）…`)
+              c.connect()
+            }
+          } catch (e) {
+            log.error('[wecom-bot] kicked 后重连失败:', e)
+          }
+        }, delayMs)
+      }
     })
     client.connect()
     log.info('[wecom-bot] WebSocket 长连接已启动（落盘: UPLOAD_BASE_DIR/wecom_bot/received）')
@@ -52,6 +82,10 @@ function startWeComBot() {
 }
 
 function stopWeComBot() {
+  if (kickedReconnectTimer) {
+    clearTimeout(kickedReconnectTimer)
+    kickedReconnectTimer = null
+  }
   if (client) {
     try {
       client.disconnect()

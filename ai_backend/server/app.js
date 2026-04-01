@@ -30,6 +30,8 @@ const bidCompositionRoutes = require('./routes/bidCompositionRoutes')
 const wecomBotRoutes = require('./routes/wecomBotRoutes')
 const presalesInboundRoutes = require('./routes/presalesInboundRoutes')
 const { startWeComBot, stopWeComBot } = require('./services/wecomBotService')
+const presalesVideoPipelineOrchestrator = require('./services/presalesVideoPipelineOrchestrator')
+const presalesVideoRoleConfirmReminderService = require('./services/presalesVideoRoleConfirmReminderService')
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -430,6 +432,42 @@ app.listen(PORT, HOST, () => {
   console.log('  📖 详细说明: ai_backend/MODEL_EXPANSION.md')
   console.log('='.repeat(60))
   startWeComBot()
+
+  const pipelineDisabled =
+    process.env.PRESALES_VIDEO_PIPELINE_DISABLED != null &&
+    String(process.env.PRESALES_VIDEO_PIPELINE_DISABLED).trim().toLowerCase() === 'true'
+  if (!pipelineDisabled) {
+    const tickMs = Math.max(5000, parseInt(process.env.PRESALES_VIDEO_PIPELINE_TICK_MS || '30000', 10) || 30000)
+    setInterval(() => {
+      presalesVideoPipelineOrchestrator.processActiveRuns().catch((e) => {
+        console.error('[presales-video-pipeline] tick:', e.message || e)
+      })
+    }, tickMs)
+    console.log(`  [售前视频·服务端流水线] 已启用，轮询 ${tickMs}ms（关闭: PRESALES_VIDEO_PIPELINE_DISABLED=true）`)
+  } else {
+    console.log('  [售前视频·服务端流水线] 已禁用（PRESALES_VIDEO_PIPELINE_DISABLED=true）')
+  }
+
+  const roleRemindDisabled =
+    process.env.PRESALES_VIDEO_ROLE_CONFIRM_REMINDER_DISABLED != null &&
+    String(process.env.PRESALES_VIDEO_ROLE_CONFIRM_REMINDER_DISABLED).trim().toLowerCase() === 'true'
+  if (!roleRemindDisabled) {
+    const scanMs = Math.max(
+      60000,
+      parseInt(process.env.PRESALES_VIDEO_ROLE_CONFIRM_REMINDER_SCAN_MS || '120000', 10) || 120000
+    )
+    setInterval(() => {
+      presalesVideoRoleConfirmReminderService.tickRoleConfirmReminders().catch((e) => {
+        console.error('[presales-video] role-confirm reminder:', e.message || e)
+      })
+    }, scanMs)
+    const intervalMin = presalesVideoRoleConfirmReminderService.reminderIntervalMinutes()
+    console.log(
+      `  [售前视频·角色确认提醒] 扫描 ${scanMs}ms，每 ${intervalMin} 分钟重复催（参数 PRESALES_VIDEO_ROLE_CONFIRM_REMINDER_INTERVAL_MINUTES；关闭: PRESALES_VIDEO_ROLE_CONFIRM_REMINDER_DISABLED=true）`
+    )
+  } else {
+    console.log('  [售前视频·角色确认超时提醒] 已禁用')
+  }
 })
 
 // 错误处理

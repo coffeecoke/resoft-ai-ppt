@@ -35,6 +35,7 @@ const presalesVideoTaskService = require('../services/presalesVideoTaskService')
 const presalesVideoSpeakerLink = require('../services/presalesVideoSpeakerLink')
 const { getWeComBotClient } = require('../services/wecomBotService')
 const presalesVideoWecomPushService = require('../services/presalesVideoWecomPushService')
+const presalesVideoPipelineOrchestrator = require('../services/presalesVideoPipelineOrchestrator')
 const logger = require('../utils/logger')
 
 const router = express.Router()
@@ -416,6 +417,15 @@ router.post('/workflow-callback', async (req, res) => {
       `[presales-video] workflow-callback 已处理 type=${typeNorm} execute_id=${String(executeId).slice(0, 80)}`
     )
 
+    if (result.task && result.task.transcription_id) {
+      const tidCb = String(result.task.transcription_id)
+      setImmediate(() => {
+        presalesVideoPipelineOrchestrator.notifyTranscriptionUpdated(tidCb).catch((e) => {
+          logger.warn('[presales-video] pipeline notify (workflow-callback):', e.message || e)
+        })
+      })
+    }
+
     const dataOut = {
       videoTask: presalesVideoTaskService.toApiShape(result.task)
     }
@@ -532,6 +542,8 @@ router.get('/transcriptions', async (req, res) => {
       name: t.name,
       originalFileName: t.original_file_name,
       customerName: t.customer_name,
+      /** 音频时长（秒），库字段 audio_duration */
+      audioDuration: t.audio_duration != null ? Number(t.audio_duration) : null,
       createdBy: t.created_by != null && String(t.created_by).trim() ? String(t.created_by).trim() : null,
       createdAt: t.created_at,
       hasPresalesReport: (t.presales_analysis_results && t.presales_analysis_results.length > 0) || false,
@@ -1421,6 +1433,14 @@ router.post('/transcriptions/:id/notify-role-confirm', async (req, res) => {
         id,
         presalesVideoTaskService.PipelineStatus.ROLE_CONFIRMING
       )
+      await prisma.presales_video_tasks.update({
+        where: { transcription_id: id },
+        data: {
+          role_confirm_wecom_userid: wxUser,
+          role_confirm_card_sent_at: new Date(),
+          role_confirm_reminder_sent_at: null
+        }
+      })
     } catch (pipeErr) {
       logger.warn(
         `[presales-video] 推送角色确认卡片后更新流水线状态失败 transcription=${id}:`,
@@ -1540,6 +1560,14 @@ router.put('/public/speaker-confirm', async (req, res) => {
         v.transcriptionId,
         presalesVideoTaskService.PipelineStatus.SPEAKER_CONFIRMED
       )
+      await prisma.presales_video_tasks.updateMany({
+        where: { transcription_id: v.transcriptionId },
+        data: {
+          role_confirm_wecom_userid: null,
+          role_confirm_card_sent_at: null,
+          role_confirm_reminder_sent_at: null
+        }
+      })
     } catch (pipeErr) {
       logger.warn(
         `[presales-video] 外链保存后更新流水线状态失败 transcription=${v.transcriptionId}:`,
@@ -1550,6 +1578,12 @@ router.put('/public/speaker-confirm', async (req, res) => {
       success: true,
       data: { adjustmentId: row.id, transcriptionId: v.transcriptionId }
     })
+    const tidNotify = v.transcriptionId
+    setImmediate(() => {
+      presalesVideoPipelineOrchestrator.notifyTranscriptionUpdated(tidNotify).catch((e) => {
+        logger.warn('[presales-video] pipeline notify (speaker-confirm):', e.message || e)
+      })
+    })
   } catch (error) {
     logger.error('[presales-video] public speaker-confirm PUT 失败:', error)
     const msg = error.message || '保存失败'
@@ -1557,6 +1591,45 @@ router.put('/public/speaker-confirm', async (req, res) => {
     if (msg === '转录不存在') status = 404
     else if (msg.includes('须为') || msg.includes('非空')) status = 400
     res.status(status).json({ success: false, error: msg })
+  }
+})
+
+/**
+ * POST /api/presales-video/pipeline-runs/start
+ * 服务端自动流水线（不依赖页面打开）：角色确认 → 推送对话 → 提交工作流 →（等回调）→ 推送报告 →（等视频回调）→ 推送视频
+ * Body: { transcriptionId, wecomUserId?, pushVideoUserIds?, skipRoleConfirm? }
+ * pushVideoUserIds 可缺省若已配置 PRESALES_VIDEO_PIPELINE_DEFAULT_PUSH_VIDEO_USERIDS
+ */
+router.post('/pipeline-runs/start', async (req, res) => {
+  try {
+    const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {}
+    const run = await presalesVideoPipelineOrchestrator.startPipelineRun({
+      transcriptionId: body.transcriptionId,
+      wecomUserId: body.wecomUserId,
+      pushVideoUserIds: body.pushVideoUserIds,
+      skipRoleConfirm: Boolean(body.skipRoleConfirm)
+    })
+    res.json({ success: true, data: { run } })
+  } catch (error) {
+    logger.error('[presales-video] pipeline-runs/start:', error)
+    res.status(400).json({ success: false, error: error.message || '启动失败' })
+  }
+})
+
+/**
+ * GET /api/presales-video/pipeline-runs/by-transcription/:transcriptionId
+ * 最近若干条流水线记录（含 phase、run_status、last_error）
+ */
+router.get('/pipeline-runs/by-transcription/:transcriptionId', async (req, res) => {
+  try {
+    const list = await presalesVideoPipelineOrchestrator.getRunsForTranscription(
+      req.params.transcriptionId,
+      15
+    )
+    res.json({ success: true, data: { list } })
+  } catch (error) {
+    logger.error('[presales-video] pipeline-runs list:', error)
+    res.status(500).json({ success: false, error: error.message || '查询失败' })
   }
 })
 

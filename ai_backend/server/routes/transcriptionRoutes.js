@@ -692,7 +692,7 @@ router.post('/scan/transcribe', async (req, res) => {
       audioFilePath: filePath,
       audioFileSize: result.audioFileSize || 0,
       audioFormat: path.extname(filePath).replace('.', ''),
-      audioDuration: result.duration,
+      audioDuration: result.audioDuration ?? null,
       resultFilePath: null,
       dialogues: result.dialogues,
       fullText: result.fullText,

@@ -476,6 +476,7 @@ model transcriptions {
   dialogue_adjustments        dialogue_adjustments[]       /// 对话调整记录
   presales_analysis_results   presales_analysis_results[]  /// 售前交流综合分析结果
   presales_video_tasks        presales_video_tasks?        /// 售前视频生成主任务（每条转录最多一条）
+  presales_video_pipeline_runs presales_video_pipeline_runs[] /// 服务端自动流水线运行记录（方案 B）
 
   @@index([status], map: "idx_status")
   @@index([session_id], map: "idx_session_id")
@@ -515,6 +516,13 @@ model presales_video_tasks {
 
   last_error String? @db.VarChar(2000) /// 最近一步错误摘要
 
+  /// 角色确认卡片接收人企微 userid（用于超时提醒）
+  role_confirm_wecom_userid String? @db.VarChar(100)
+  /// 最近一次发出角色确认卡片的时间（超时提醒计时起点）
+  role_confirm_card_sent_at DateTime?
+  /// 最近一次「尽快确认」提醒发送时间（按间隔重复提醒，直至离开角色确认中；重新发卡片会清空）
+  role_confirm_reminder_sent_at DateTime?
+
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
@@ -522,6 +530,29 @@ model presales_video_tasks {
 
   @@index([pipeline_status], map: "idx_pv_video_task_status")
   @@index([updated_at], map: "idx_pv_video_task_updated")
+  @@index([pipeline_status, role_confirm_reminder_sent_at], map: "idx_pv_role_confirm_remind")
+}
+
+/// 售前视频 · 服务端自动流水线（不依赖浏览器；定时轮询 + 回调唤醒）
+model presales_video_pipeline_runs {
+  id                    String   @id @db.VarChar(50)
+  transcription_id      String   @db.VarChar(50)
+  /// active | completed | failed
+  run_status            String   @default("active") @db.VarChar(20)
+  /// init | wait_speaker | push_dialogue | submit_workflow | wait_analysis | push_report | wait_video | push_video | superseded
+  phase                 String   @default("init") @db.VarChar(32)
+  wecom_user_id         String?  @db.VarChar(100)
+  /// 推送视频：企微 userid 逗号分隔（至少 2 人规则仍由 push-video 接口校验）
+  push_video_user_ids   String?  @db.VarChar(2000)
+  skip_role_confirm     Boolean  @default(false)
+  last_error            String?  @db.VarChar(2000)
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+
+  transcription transcriptions @relation(fields: [transcription_id], references: [id], onDelete: Cascade)
+
+  @@index([run_status, updated_at], map: "idx_pv_pipe_run_status")
+  @@index([transcription_id, run_status], map: "idx_pv_pipe_tid_status")
 }
 
 /// 对话调整记录表（用于多次调整对话内容）

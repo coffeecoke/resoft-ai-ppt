@@ -40,7 +40,26 @@ const pvState = {
   /** 推送对话成功后缓存，供「提交工作流」传 Coze meeting-analysis：{ [transcriptionId]: { fileId, fileName } } */
   cozeUploadById: {},
   /** 「角色确认」弹窗当前转录 id */
-  roleConfirmTranscriptionId: null
+  roleConfirmTranscriptionId: null,
+  /** 「服务端流水线」弹窗当前转录 id */
+  pipelineTranscriptionId: null
+}
+
+/** 本地日历日格式化为 YYYY-MM-DD（与 input[type=date] 一致） */
+function pvFormatLocalYmd(d) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+/** 近 n 个自然日（含今天）的 dateFrom / dateTo */
+function pvDefaultLastNDaysRange(n) {
+  const end = new Date()
+  end.setHours(0, 0, 0, 0)
+  const start = new Date(end)
+  start.setDate(start.getDate() - (n - 1))
+  return { dateFrom: pvFormatLocalYmd(start), dateTo: pvFormatLocalYmd(end) }
 }
 
 function pvToast(msg, type, durationMs) {
@@ -236,6 +255,21 @@ function pvFormatDate(s) {
   return new Date(s).toLocaleString('zh-CN')
 }
 
+/** 音频时长（秒）→ 显示 M:SS 或 H:MM:SS */
+function pvFormatAudioDuration(sec) {
+  if (sec == null || sec === '') return '-'
+  const n = Number(sec)
+  if (!Number.isFinite(n) || n < 0) return '-'
+  const s = Math.floor(n)
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const r = s % 60
+  if (h > 0) {
+    return `${h}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`
+  }
+  return `${m}:${String(r).padStart(2, '0')}`
+}
+
 function pvRenderTable() {
   const tbody = document.getElementById('pv-tbody')
   if (!tbody) return
@@ -264,6 +298,7 @@ function pvRenderTable() {
         <td class="pv-col-customer" title="${pvEscapeAttr(customer)}">
           <span class="pv-cell-muted">${pvEscapeHtml(customer)}</span>
         </td>
+        <td class="pv-col-duration" title="${row.audioDuration != null ? String(row.audioDuration) + ' 秒' : ''}"><span class="pv-time">${pvEscapeHtml(pvFormatAudioDuration(row.audioDuration))}</span></td>
         <td class="pv-col-time"><span class="pv-time">${pvEscapeHtml(pvFormatDate(row.createdAt))}</span></td>
         <td class="pv-col-pipeline">${pipeCell}</td>
         <td class="pv-col-report">${reportBadge}</td>
@@ -274,6 +309,7 @@ function pvRenderTable() {
             <button type="button" class="btn btn-sm pv-act-workflow" title="Coze：用「推送对话」缓存的 fileId/fileName 调 meeting-analysis 取 execute_id；或通用工作流 URL" onclick="pvSubmitWorkflow('${row.id}')">提交工作流</button>
             <button type="button" class="btn btn-sm pv-act-secondary" title="优先：POST 异步任务（md 路径 reserve_3 + execute_id）；未配异步地址时推送本地售前 JSON" onclick="pvPushReport('${row.id}')">推送报告</button>
             <button type="button" class="btn btn-sm pv-act-secondary" title="填写企微 userid 建应用群发会话，推送报备摘要与视频" onclick="pvOpenPushVideoDialog('${row.id}')">推送视频</button>
+            <button type="button" class="btn btn-sm btn-secondary" title="服务端自动串联：角色确认→推送对话→提交工作流→（等回调）→推送报告→推送视频；可不关页面" onclick="pvOpenPipelineDialog('${row.id}')">服务端流水线</button>
           </div>
         </td>
       </tr>`
@@ -326,6 +362,82 @@ window.pvCloseRoleConfirmDialog = function () {
     else dlg.removeAttribute('open')
   }
   pvState.roleConfirmTranscriptionId = null
+}
+
+window.pvOpenPipelineDialog = function (id) {
+  const dlg = document.getElementById('pv-pipeline-dialog')
+  const wx = document.getElementById('pv-pipeline-wecom')
+  const pv = document.getElementById('pv-pipeline-push-users')
+  const sk = document.getElementById('pv-pipeline-skip-role')
+  if (!dlg || !pv) {
+    pvToast('页面缺少服务端流水线弹窗', 'error')
+    return
+  }
+  pvState.pipelineTranscriptionId = id
+  const row = (pvState.list || []).find((r) => r.id === id)
+  const defWx =
+    row && row.createdBy != null && String(row.createdBy).trim() ? String(row.createdBy).trim() : ''
+  if (wx) wx.value = defWx
+  pv.value = ''
+  if (sk) sk.checked = false
+  if (typeof dlg.showModal === 'function') dlg.showModal()
+  else dlg.setAttribute('open', '')
+}
+
+window.pvClosePipelineDialog = function () {
+  const dlg = document.getElementById('pv-pipeline-dialog')
+  if (dlg) {
+    if (typeof dlg.close === 'function') dlg.close()
+    else dlg.removeAttribute('open')
+  }
+  pvState.pipelineTranscriptionId = null
+}
+
+window.pvSubmitPipelineRun = async function () {
+  const id = pvState.pipelineTranscriptionId
+  const wxEl = document.getElementById('pv-pipeline-wecom')
+  const pvEl = document.getElementById('pv-pipeline-push-users')
+  const skEl = document.getElementById('pv-pipeline-skip-role')
+  const wecomUserId = wxEl ? String(wxEl.value || '').trim() : ''
+  const pushVideoUserIds = pvEl ? String(pvEl.value || '').trim() : ''
+  const skipRoleConfirm = skEl ? Boolean(skEl.checked) : false
+  if (!id) {
+    pvToast('未选择转录', 'error')
+    return
+  }
+  if (!skipRoleConfirm && !wecomUserId) {
+    pvToast('请填写接收人企微 userid，或勾选跳过角色确认', 'error')
+    return
+  }
+  pvClosePipelineDialog()
+  pvShowOverlay(true, '正在启动服务端流水线…')
+  try {
+    const body = {
+      transcriptionId: id,
+      skipRoleConfirm
+    }
+    if (wecomUserId) body.wecomUserId = wecomUserId
+    if (pushVideoUserIds) body.pushVideoUserIds = pushVideoUserIds
+    const res = await fetch(`${PV_API}/presales-video/pipeline-runs/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || !data.success) {
+      pvToast(data.error || '启动失败', 'error', PV_PUSH_WORKFLOW_TOAST_MS)
+      return
+    }
+    const run = data.data && data.data.run
+    const phase = run && run.phase != null ? run.phase : '-'
+    const st = run && run.run_status != null ? run.run_status : '-'
+    pvToast(`服务端流水线已启动（状态 ${st}，阶段 ${phase}）。可关闭页面，后台将按定时任务与回调继续推进。`, 'success', PV_PUSH_WORKFLOW_TOAST_MS)
+    if (typeof window.pvLoadList === 'function') window.pvLoadList()
+  } catch (e) {
+    pvToast('启动失败: ' + e.message, 'error')
+  } finally {
+    pvShowOverlay(false)
+  }
 }
 
 window.pvSubmitRoleConfirm = async function () {
@@ -668,6 +780,15 @@ function pvInitPipelineSelect() {
 ;(async function initPv() {
   try {
     pvInitPipelineSelect()
+    const df = document.getElementById('pv-date-from')
+    const dt = document.getElementById('pv-date-to')
+    if (df && dt && !String(df.value || '').trim() && !String(dt.value || '').trim()) {
+      const { dateFrom, dateTo } = pvDefaultLastNDaysRange(3)
+      df.value = dateFrom
+      dt.value = dateTo
+      pvState.dateFrom = dateFrom
+      pvState.dateTo = dateTo
+    }
     await window.pvLoadList()
   } catch (e) {
     console.error(e)

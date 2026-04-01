@@ -206,7 +206,7 @@ async function runReportAndTranscribe({ reportPayload, audioRemotePath, original
       path.extname(localAudioPath).replace('.', '') ||
       path.extname(baseName).replace('.', '') ||
       '',
-    audioDuration: result.duration,
+    audioDuration: result.audioDuration ?? null,
     resultFilePath: null,
     dialogues: result.dialogues,
     fullText: result.fullText,

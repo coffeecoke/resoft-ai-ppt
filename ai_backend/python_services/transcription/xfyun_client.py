@@ -151,6 +151,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# 讯飞 getResult 限频：100012 = access too fast（需等待后重试，勿直接退出）
+XFYUN_ERR_QUERY_TOO_FAST = "100012"
+# 官方建议回调拉结果；轮询间隔不宜过短（秒）
+POLL_INTERVAL_SEC = 8
+UPLOAD_TO_FIRST_QUERY_DELAY_SEC = 3
+
 # 讯飞API凭证
 APP_ID = "30fb0f0d"
 API_KEY = "8a96101efefbab3880e7e491b78139de"
@@ -262,8 +268,12 @@ def transcribe_audio(audio_file):
         logger.info("等待转录完成...")
         logger.info("=" * 80)
         
+        # 上传后立即查结果容易触发 100012，先短暂等待
+        time.sleep(UPLOAD_TO_FIRST_QUERY_DELAY_SEC)
+        
         status = 3
         check_count = 0
+        too_fast_streak = 0
         
         # 建议使用回调的方式查询结果，查询接口有请求频率限制
         while status == 3:
@@ -273,8 +283,21 @@ def transcribe_audio(audio_file):
             result_data = json.loads(result_resp)
             
             if result_data["code"] != "000000":
+                if result_data.get("code") == XFYUN_ERR_QUERY_TOO_FAST:
+                    too_fast_streak += 1
+                    # 指数退避，上限 60s，避免持续打满限频
+                    wait_sec = min(60, 3 * (2 ** min(too_fast_streak - 1, 4)))
+                    logger.warning(
+                        "⚠️ 查询过于频繁(100012)，%s 秒后重试（第 %s 次）",
+                        wait_sec,
+                        too_fast_streak,
+                    )
+                    time.sleep(wait_sec)
+                    continue
                 logger.error(f"❌ 查询失败: {result_data}")
                 break
+            
+            too_fast_streak = 0
                 
             status = result_data['content']['orderInfo']['status']
             
@@ -308,7 +331,7 @@ def transcribe_audio(audio_file):
                 logger.error(f"❌ 转录失败: {orderId}, 失败类型: {failType}")
                 break
                 
-            time.sleep(5)
+            time.sleep(POLL_INTERVAL_SEC)
             
     except Exception as e:
         error_msg = str(e)

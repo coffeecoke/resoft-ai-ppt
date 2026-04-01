@@ -21,6 +21,14 @@ class WeComBotClient {
       this.logger.warn('WeCom bot: already connected')
       return
     }
+    if (this.wsClient) {
+      try {
+        this.wsClient.disconnect()
+      } catch (e) {
+        this.logger.warn('WeCom bot: 清理旧 WebSocket 时:', e && e.message)
+      }
+      this.wsClient = null
+    }
     this.setState('connecting')
     this.logger.info('WeCom bot: connecting WebSocket...')
 

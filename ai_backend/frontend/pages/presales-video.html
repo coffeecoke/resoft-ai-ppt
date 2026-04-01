@@ -91,6 +91,11 @@
       width: 12%;
       max-width: 120px;
     }
+    .pv-col-duration {
+      width: 88px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
     .pv-col-time {
       width: 150px;
     }
@@ -145,7 +150,7 @@
     .pv-actions {
       display: flex;
       flex-direction: row;
-      flex-wrap: nowrap;
+      flex-wrap: wrap;
       align-items: center;
       justify-content: flex-end;
       gap: 6px;
@@ -336,6 +341,36 @@
       margin: 0 0 10px 0;
       line-height: 1.5;
     }
+    #pv-pipeline-dialog input[type='text'],
+    #pv-pipeline-dialog textarea {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px 10px;
+      border: 1px solid var(--border-color, #d9d9d9);
+      border-radius: 6px;
+      font-size: 13px;
+      background: var(--card-bg, #fff);
+      color: var(--text-primary, #262626);
+    }
+    #pv-pipeline-dialog textarea {
+      min-height: 72px;
+      resize: vertical;
+    }
+    #pv-pipeline-dialog .pv-pipeline-hint {
+      font-size: 12px;
+      color: var(--text-secondary, #8c8c8c);
+      margin: 0 0 10px 0;
+      line-height: 1.5;
+    }
+    #pv-pipeline-dialog .pv-pipeline-row {
+      margin-bottom: 12px;
+    }
+    #pv-pipeline-dialog label.pv-pipeline-label {
+      display: block;
+      font-size: 12px;
+      margin-bottom: 4px;
+      color: var(--text-secondary, #8c8c8c);
+    }
     .sr-only {
       position: absolute;
       width: 1px;
@@ -407,6 +442,7 @@
             <tr>
               <th class="pv-col-name">文件名称</th>
               <th class="pv-col-customer">客户</th>
+              <th class="pv-col-duration" title="转录音频时长（秒，来自库表 transcriptions.audio_duration）">音频时长</th>
               <th class="pv-col-time">创建时间</th>
               <th class="pv-col-pipeline" title="视频任务流水线（库表 presales_video_tasks）">流水线</th>
               <th class="pv-col-report">报告</th>
@@ -485,6 +521,42 @@
       <div class="dialog-actions">
         <button type="button" class="btn btn-secondary" onclick="pvCloseRoleConfirmDialog()">取消</button>
         <button type="button" class="btn btn-primary" onclick="pvSubmitRoleConfirm()">发送卡片</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="pv-pipeline-dialog" class="pv-modal-dialog">
+    <div class="dialog-content" style="min-width: min(400px, 92vw); max-width: 520px;">
+      <div class="dialog-header">
+        <h2>服务端自动流水线</h2>
+        <button type="button" class="icon-btn" onclick="pvClosePipelineDialog()" aria-label="关闭">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="dialog-body">
+        <p class="pv-pipeline-hint">
+          由<strong>后台定时任务 + 工作流回调</strong>串联各步，<strong>无需保持本页打开</strong>。推送视频须至少 2 个企微
+          userid；若已配置环境变量 <code style="font-size:11px;">PRESALES_VIDEO_PIPELINE_DEFAULT_PUSH_VIDEO_USERIDS</code>，下方可留空。
+        </p>
+        <div class="pv-pipeline-row">
+          <label class="pv-pipeline-label" for="pv-pipeline-wecom">角色确认接收人 userid（跳过角色确认时可不填）</label>
+          <input type="text" id="pv-pipeline-wecom" placeholder="默认：转录创建人" autocomplete="off" spellcheck="false" />
+        </div>
+        <div class="pv-pipeline-row">
+          <label class="pv-pipeline-label" for="pv-pipeline-push-users">推送视频成员 userid（逗号分隔，≥2 人）</label>
+          <textarea id="pv-pipeline-push-users" placeholder="例：ZhangSan,LiSi" autocomplete="off" spellcheck="false"></textarea>
+        </div>
+        <div class="pv-pipeline-row" style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" id="pv-pipeline-skip-role" />
+          <label for="pv-pipeline-skip-role" style="font-size:13px;margin:0;cursor:pointer;">跳过角色确认（不发卡片，直接推送对话）</label>
+        </div>
+      </div>
+      <div class="dialog-actions">
+        <button type="button" class="btn btn-secondary" onclick="pvClosePipelineDialog()">取消</button>
+        <button type="button" class="btn btn-primary" onclick="pvSubmitPipelineRun()">启动</button>
       </div>
     </div>
   </dialog>
