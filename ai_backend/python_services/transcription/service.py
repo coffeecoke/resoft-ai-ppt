@@ -3,8 +3,9 @@
 提供统一的接口供Node.js调用
 """
 import json
-import sys
 import os
+import subprocess
+import sys
 from pathlib import Path
 
 # 添加当前目录到路径，以便导入 xfyun_client
@@ -65,9 +66,49 @@ def extract_full_text(dialogues):
     """
     return ' '.join([d['text'] for d in dialogues if d.get('text')])
 
+def get_audio_duration_seconds_from_file(audio_path):
+    """
+    用 ffprobe 读音频/视频文件的实际时长（秒，四舍五入为整数，与库字段一致）。
+    不依赖讯飞结果。未安装 ffprobe 或解析失败时返回 None。
+    可通过环境变量 FFPROBE_PATH 指定可执行文件路径（默认 ffprobe，通常与 ffmpeg 同目录）。
+    """
+    bin_name = (os.environ.get("FFPROBE_PATH") or "").strip() or "ffprobe"
+    try:
+        completed = subprocess.run(
+            [
+                bin_name,
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                audio_path,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return None
+    if completed.returncode != 0:
+        return None
+    line = (completed.stdout or "").strip()
+    if not line:
+        return None
+    try:
+        sec = float(line)
+        if sec < 0 or sec != sec:  # NaN
+            return None
+        return int(round(sec))
+    except ValueError:
+        return None
+
+
 def get_audio_duration_from_dialogues(dialogues):
     """
-    从对话列表中提取音频时长
+    从对话列表中提取音频时长（兜底：仅当 ffprobe 不可用时使用）
     
     Args:
         dialogues: 对话列表
@@ -113,6 +154,9 @@ def main():
         }
         print(json.dumps(result, ensure_ascii=False))
         sys.exit(1)
+
+    # 优先用文件本身时长（ffprobe），与讯飞识别内容无关
+    duration_from_file = get_audio_duration_seconds_from_file(audio_file)
     
     try:
         # 调用转录函数（来自 xfyun_client.py）
@@ -144,8 +188,10 @@ def main():
         # 提取完整文本
         full_text = extract_full_text(dialogues)
         
-        # 提取音频时长
-        duration = get_audio_duration_from_dialogues(dialogues)
+        # 音频时长：优先 ffprobe 读文件；若无 ffprobe 再尝试从对白时间戳推断
+        duration = duration_from_file
+        if duration is None:
+            duration = get_audio_duration_from_dialogues(dialogues)
         
         # 统计说话人数量
         speakers = set([d['speaker'] for d in dialogues])

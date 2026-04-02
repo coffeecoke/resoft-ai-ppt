@@ -29,23 +29,53 @@
     .meta { font-size: 12px; color: var(--muted); margin-bottom: 16px; }
     .toolbar {
       display: flex;
-      flex-wrap: wrap;
+      flex-direction: column;
+      align-items: stretch;
       gap: 10px;
-      align-items: flex-end;
       margin-bottom: 16px;
       padding: 12px;
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: 8px;
     }
-    .toolbar label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
-    .toolbar input, .toolbar select {
+    .speaker-map-hint {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+    .speaker-map {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      width: 100%;
+    }
+    .speaker-map-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .speaker-map-label {
+      flex: 0 0 auto;
+      min-width: 6.5rem;
+      font-size: 13px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      color: var(--text);
+      word-break: break-all;
+    }
+    .speaker-map-meta {
+      font-size: 11px;
+      color: var(--muted);
+      margin-left: 4px;
+    }
+    .speaker-map-in {
+      flex: 1;
+      min-width: 160px;
       padding: 8px 10px;
       border-radius: 6px;
       border: 1px solid var(--border);
       background: #262626;
       color: var(--text);
-      min-width: 120px;
     }
     .btn {
       padding: 8px 16px;
@@ -112,15 +142,10 @@
   <div id="pvsc-ok" class="msg ok" style="display: none;"></div>
 
   <div class="toolbar" id="pvsc-toolbar" style="display: none;">
-    <div>
-      <label>批量：原说话人（选标签，右侧为角色名）</label>
-      <select id="pvsc-batch-from" aria-label="原说话人标签"></select>
+    <div class="speaker-map-hint">
+      按说话人标签平铺：左侧为当前标签（如 speaker_1），右侧填写角色名；修改后失焦即应用到所有相同标签的段落。
     </div>
-    <div>
-      <label>改为</label>
-      <input type="text" id="pvsc-batch-to" placeholder="如 客户方" autocomplete="off" />
-    </div>
-    <button type="button" class="btn btn-secondary" id="pvsc-batch-apply">应用到全部匹配</button>
+    <div id="pvsc-speaker-map" class="speaker-map" aria-label="说话人批量改名"></div>
   </div>
 
   <div class="list" id="pvsc-list"></div>
@@ -150,7 +175,7 @@
     ;(function () {
       var scriptUrl =
         (window.location.origin || '') +
-        '/api/presales-video/public/speaker-confirm-page.js?v=5'
+        '/api/presales-video/public/speaker-confirm-page.js?v=6'
       var hdrs = { 'ngrok-skip-browser-warning': 'true' }
       fetch(scriptUrl, { credentials: 'same-origin', headers: hdrs })
         .then(function (r) {

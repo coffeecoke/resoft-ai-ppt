@@ -14,17 +14,15 @@
   var elErr = document.getElementById('pvsc-err')
   var elOk = document.getElementById('pvsc-ok')
   var elToolbar = document.getElementById('pvsc-toolbar')
+  var elSpeakerMap = document.getElementById('pvsc-speaker-map')
   var elList = document.getElementById('pvsc-list')
   var elBar = document.getElementById('pvsc-bar')
   var elSave = document.getElementById('pvsc-save')
-  var elBatchFrom = document.getElementById('pvsc-batch-from')
-  var elBatchTo = document.getElementById('pvsc-batch-to')
-  var elBatchApply = document.getElementById('pvsc-batch-apply')
 
   var dialogues = []
   var loadedName = ''
   var renderIndex = 0
-  /** GET 返回的 speaker_roles，用于下拉框展示角色名 */
+  /** GET 返回的 speaker_roles，用于平铺区展示可读角色名 */
   var speakerRolesFromApi = null
 
   function showErr(msg) {
@@ -84,9 +82,8 @@
     return en2zh[s] != null ? en2zh[s] : String(raw)
   }
 
-  function refreshBatchFromSelect() {
-    if (!elBatchFrom || elBatchFrom.tagName !== 'SELECT') return
-    var prev = String(elBatchFrom.value || '').trim()
+  /** 按出现顺序去重后的说话人标签列表 */
+  function uniqueSpeakerKeys() {
     var seen = {}
     var keys = []
     for (var j = 0; j < dialogues.length; j++) {
@@ -95,21 +92,72 @@
       seen[sp] = 1
       keys.push(sp)
     }
-    elBatchFrom.innerHTML = ''
-    var opt0 = document.createElement('option')
-    opt0.value = ''
-    opt0.textContent = '请选择…'
-    elBatchFrom.appendChild(opt0)
-    for (var i = 0; i < keys.length; i++) {
-      var spk = keys[i]
-      var opt = document.createElement('option')
-      opt.value = spk
-      var label = roleDisplayLabel(spk)
-      opt.textContent = label === spk ? spk : label + '（' + spk + '）'
-      elBatchFrom.appendChild(opt)
+    return keys
+  }
+
+  /** 平铺：每个标签一行，右侧输入新角色名；失焦触发 change 后批量替换 */
+  function renderSpeakerMap() {
+    if (!elSpeakerMap) return
+    var keys = uniqueSpeakerKeys()
+    elSpeakerMap.innerHTML = ''
+    if (keys.length === 0) {
+      elSpeakerMap.innerHTML = '<p class="meta" style="margin:0;">暂无说话人</p>'
+      return
     }
-    if (prev && seen[prev]) elBatchFrom.value = prev
-    else if (keys.length === 1) elBatchFrom.value = keys[0]
+    for (var i = 0; i < keys.length; i++) {
+      var fromKey = keys[i]
+      var row = document.createElement('div')
+      row.className = 'speaker-map-row'
+      var labWrap = document.createElement('div')
+      labWrap.style.display = 'flex'
+      labWrap.style.alignItems = 'baseline'
+      labWrap.style.flexWrap = 'wrap'
+      labWrap.style.gap = '4px'
+      var lab = document.createElement('span')
+      lab.className = 'speaker-map-label'
+      lab.textContent = fromKey
+      var disp = roleDisplayLabel(fromKey)
+      if (disp && disp !== fromKey) {
+        var meta = document.createElement('span')
+        meta.className = 'speaker-map-meta'
+        meta.textContent = '（' + disp + '）'
+        labWrap.appendChild(lab)
+        labWrap.appendChild(meta)
+      } else {
+        labWrap.appendChild(lab)
+      }
+      var inp = document.createElement('input')
+      inp.type = 'text'
+      inp.className = 'speaker-map-in'
+      inp.setAttribute('data-map-from', fromKey)
+      inp.value = fromKey
+      inp.placeholder = '如 客户方'
+      inp.setAttribute('aria-label', '将「' + fromKey + '」统一改为')
+      inp.autocomplete = 'off'
+      row.appendChild(labWrap)
+      row.appendChild(inp)
+      elSpeakerMap.appendChild(row)
+    }
+  }
+
+  function applySpeakerMapOne(fromKey, to) {
+    var t = (to != null ? String(to) : '').trim()
+    if (!t) t = fromKey
+    if (t === fromKey) return 0
+    syncAllSpeakersFromDom()
+    var n = 0
+    var next = []
+    for (var i = 0; i < dialogues.length; i++) {
+      var d = dialogues[i]
+      if (normSpeaker(d) === fromKey) {
+        n++
+        next.push(Object.assign({}, d, { speaker: t }))
+      } else {
+        next.push(d)
+      }
+    }
+    dialogues = next
+    return n
   }
 
   function cloneDialogue(x) {
@@ -175,6 +223,7 @@
     renderIndex = 0
     if (dialogues.length === 0) {
       elList.innerHTML = '<p class="meta">暂无对话</p>'
+      renderSpeakerMap()
       if (done) done()
       return
     }
@@ -210,6 +259,7 @@
             dialogues.length +
             ' 条（可修改说话人后保存）'
         }
+        renderSpeakerMap()
         if (done) done()
       }
     }
@@ -285,9 +335,7 @@
           ' 条，正在渲染界面…'
         elToolbar.style.display = 'flex'
         elBar.style.display = 'flex'
-        render(function () {
-          refreshBatchFromSelect()
-        })
+        render(null)
       })
       .catch(function (e) {
         showErr(e.message || String(e))
@@ -295,34 +343,24 @@
       })
   }
 
-  elBatchApply.addEventListener('click', function () {
-    var from = String(elBatchFrom.value || '').trim()
-    var to = String(elBatchTo.value || '').trim()
-    if (!from || !to) {
-      showErr(!from ? '请选择「原说话人」并填写「改为」' : '请填写「改为」')
-      return
-    }
-    syncAllSpeakersFromDom()
-    hideMsgs()
-    var n = 0
-    var next = []
-    for (var i = 0; i < dialogues.length; i++) {
-      var d = dialogues[i]
-      if (normSpeaker(d) === from) {
-        n++
-        next.push(Object.assign({}, d, { speaker: to }))
-      } else {
-        next.push(d)
-      }
-    }
-    dialogues = next
-    render(null)
-    refreshBatchFromSelect()
-    showOk('已将 ' + n + ' 条中的「' + from + '」改为「' + to + '」')
-    setTimeout(function () {
-      elOk.style.display = 'none'
-    }, 3000)
-  })
+  if (elSpeakerMap) {
+    elSpeakerMap.addEventListener('change', function (e) {
+      var t = e.target
+      if (!t || !t.classList || !t.classList.contains('speaker-map-in')) return
+      var fromKey = t.getAttribute('data-map-from')
+      if (fromKey == null || fromKey === '') return
+      var toRaw = t.value
+      var n = applySpeakerMapOne(fromKey, toRaw)
+      if (n <= 0) return
+      hideMsgs()
+      render(null)
+      var toShow = (toRaw != null ? String(toRaw) : '').trim() || fromKey
+      showOk('已将 ' + n + ' 条中的「' + fromKey + '」改为「' + toShow + '」')
+      setTimeout(function () {
+        elOk.style.display = 'none'
+      }, 3000)
+    })
+  }
 
   elSave.addEventListener('click', function () {
     syncAllSpeakersFromDom()

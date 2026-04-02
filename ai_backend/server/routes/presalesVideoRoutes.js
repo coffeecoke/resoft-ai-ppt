@@ -375,9 +375,71 @@ function workflowCallbackPayloadLogSummary(payloadText, maxPreview = 160) {
 
 function workflowCallbackClientMeta(req) {
   const forwarded = req.headers['x-forwarded-for']
-  constxff = forwarded != null && String(forwarded).trim() ? String(forwarded).split(',')[0].trim() : ''
+  const xff = forwarded != null && String(forwarded).trim() ? String(forwarded).split(',')[0].trim() : ''
   const ip = xff || req.ip || (req.socket && req.socket.remoteAddress) || ''
   return { ip, userAgent: req.headers['user-agent'] != null ? String(req.headers['user-agent']).slice(0, 200) : '' }
+}
+
+/** 日志用：递归脱敏名为 secret 的字段（含 body / query 嵌套） */
+function workflowCallbackRedactSecrets(value) {
+  if (value == null) return value
+  if (Array.isArray(value)) return value.map((x) => workflowCallbackRedactSecrets(x))
+  if (typeof value !== 'object') return value
+  const out = {}
+  for (const k of Object.keys(value)) {
+    const lk = String(k).toLowerCase()
+    if (lk === 'secret') {
+      const v = value[k]
+      out[k] = v != null && String(v).trim() !== '' ? '***' : v
+    } else {
+      out[k] = workflowCallbackRedactSecrets(value[k])
+    }
+  }
+  return out
+}
+
+/** 回调全文日志：headers 全量；Authorization / Cookie / 回调密钥头脱敏 */
+function workflowCallbackHeadersForLog(req) {
+  const h = req.headers || {}
+  const out = {}
+  for (const k of Object.keys(h)) {
+    const lk = k.toLowerCase()
+    if (
+      lk === 'x-presales-video-callback-secret' ||
+      lk === 'authorization' ||
+      lk === 'cookie'
+    ) {
+      const v = h[k]
+      out[k] = v != null && String(v).trim() !== '' ? '***' : h[k]
+    } else {
+      out[k] = h[k]
+    }
+  }
+  return out
+}
+
+/** 供「回调全文」日志：与本次请求相关的全部可还原信息 */
+function workflowCallbackFullSnapshot(req, reqMeta) {
+  const query =
+    req.query && typeof req.query === 'object'
+      ? workflowCallbackRedactSecrets(Object.assign({}, req.query))
+      : {}
+  let bodySnap
+  if (req.body && typeof req.body === 'object') {
+    bodySnap = workflowCallbackRedactSecrets(req.body)
+  } else if (req.body !== undefined) {
+    bodySnap = req.body
+  } else {
+    bodySnap = null
+  }
+  return {
+    ip: reqMeta.ip,
+    method: req.method,
+    originalUrl: req.originalUrl,
+    query,
+    headers: workflowCallbackHeadersForLog(req),
+    body: bodySnap
+  }
 }
 
 /**
@@ -389,7 +451,7 @@ function workflowCallbackClientMeta(req) {
  *   id 或 execute_id,
  *   success: 文本/路径 content|text|url|path|...
  *   fail: 建议 error|message|msg|reason|...，或与 success 相同字段携带说明
- *   video_create 成功时可选: video_split 或 videoSplit → 落库 reserve_5（视频切片地址）
+ *   video_create 成功时可选: playlist_url 或 playlistUrl → 落库 reserve_5（播放列表 / 切片地址）
  * }
  */
 router.post('/workflow-callback', async (req, res) => {
@@ -408,11 +470,24 @@ router.post('/workflow-callback', async (req, res) => {
         logger.warn(
           `[presales-video] workflow-callback 鉴权失败 ip=${reqMeta.ip} secret来源 header=${fromHeader} query=${fromQuery} body=${fromBody}（不记录密钥内容）`
         )
+        try {
+          const snap = workflowCallbackFullSnapshot(req, reqMeta)
+          logger.info(`回调全文-------------------====\n${JSON.stringify(snap, null, 2)}`)
+        } catch (e) {
+          logger.warn('[presales-video] workflow-callback 回调全文日志序列化失败:', e && e.message)
+        }
         return res.status(401).json({ success: false, error: 'callback 鉴权失败' })
       }
     }
 
     const body = req.body && typeof req.body === 'object' ? req.body : {}
+    try {
+      const snap = workflowCallbackFullSnapshot(req, reqMeta)
+      logger.info(`回调全文-------------------====\n${JSON.stringify(snap, null, 2)}`)
+    } catch (e) {
+      logger.warn('[presales-video] workflow-callback 回调全文日志序列化失败:', e && e.message)
+    }
+
     const typeRaw = body.type || body.callback_type
     const executeId = body.id ?? body.execute_id ?? body.executeId
     const outcomeNorm = normalizeCallbackOutcome(body)
@@ -432,10 +507,10 @@ router.post('/workflow-callback', async (req, res) => {
         ? pickCallbackErrorMessage(body) ?? pickWorkflowCallbackPayload(body)
         : pickWorkflowCallbackPayload(body)
 
-    const videoSplitRaw = body.video_split ?? body.videoSplit
-    const videoSplit =
-      videoSplitRaw != null && String(videoSplitRaw).trim() !== ''
-        ? String(videoSplitRaw).trim()
+    const playlistUrlRaw = body.playlist_url ?? body.playlistUrl
+    const playlistUrl =
+      playlistUrlRaw != null && String(playlistUrlRaw).trim() !== ''
+        ? String(playlistUrlRaw).trim()
         : null
 
     if (typeRaw == null || String(typeRaw).trim() === '') {
@@ -454,9 +529,9 @@ router.post('/workflow-callback', async (req, res) => {
     const typeNorm = String(typeRaw).trim()
     const execStr = String(executeId).trim()
     const paySum = workflowCallbackPayloadLogSummary(payloadText)
-    const splitSum = workflowCallbackPayloadLogSummary(videoSplit, 120)
+    const playlistSum = workflowCallbackPayloadLogSummary(playlistUrl, 120)
     logger.info(
-      `[presales-video] workflow-callback 收到 ip=${reqMeta.ip} ua=${JSON.stringify((reqMeta.userAgent || '').slice(0, 120))} type=${typeNorm} outcome=${outcomeNorm} execute_id_len=${execStr.length} execute_id_head=${JSON.stringify(execStr.slice(0, 64))} payload_len=${paySum.len} payload_empty=${paySum.empty} payload_preview=${paySum.preview != null ? JSON.stringify(paySum.preview) : 'null'} video_split_present=${Boolean(videoSplit)} video_split_len=${splitSum.len}`
+      `[presales-video] workflow-callback 收到 ip=${reqMeta.ip} ua=${JSON.stringify((reqMeta.userAgent || '').slice(0, 120))} type=${typeNorm} outcome=${outcomeNorm} execute_id_len=${execStr.length} execute_id_head=${JSON.stringify(execStr.slice(0, 64))} payload_len=${paySum.len} payload_empty=${paySum.empty} payload_preview=${paySum.preview != null ? JSON.stringify(paySum.preview) : 'null'} playlist_url_present=${Boolean(playlistUrl)} playlist_url_len=${playlistSum.len}`
     )
 
     const result = await presalesVideoTaskService.applyWorkflowCallback(
@@ -464,7 +539,7 @@ router.post('/workflow-callback', async (req, res) => {
       executeId,
       payloadText,
       outcomeNorm,
-      { videoSplit }
+      { playlistUrl }
     )
 
     if (!result.ok) {
@@ -501,7 +576,7 @@ router.post('/workflow-callback', async (req, res) => {
       const va = task && task.video_address != null ? String(task.video_address) : ''
       const r5 = task && task.reserve_5 != null ? String(task.reserve_5) : ''
       logger.info(
-        `[presales-video] workflow-callback 已落库 video_create success transcription_id=${tid} pipeline_status=${JSON.stringify(ps)} video_address_len=${va.length} video_address_head=${JSON.stringify(va.slice(0, 120))} reserve_5_written=${Boolean(videoSplit)} reserve_5_len=${r5.length} reserve_5_head=${r5 ? JSON.stringify(r5.slice(0, 120)) : 'null'}`
+        `[presales-video] workflow-callback 已落库 video_create success transcription_id=${tid} pipeline_status=${JSON.stringify(ps)} video_address_len=${va.length} video_address_head=${JSON.stringify(va.slice(0, 120))} reserve_5_written=${Boolean(playlistUrl)} reserve_5_len=${r5.length} reserve_5_head=${r5 ? JSON.stringify(r5.slice(0, 120)) : 'null'}`
       )
     } else if (typeNorm === 'video_create' && outcomeNorm === 'fail') {
       const le = task && task.last_error != null ? String(task.last_error) : ''
