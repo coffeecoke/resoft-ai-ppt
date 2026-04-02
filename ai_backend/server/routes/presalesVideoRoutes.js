@@ -1332,7 +1332,12 @@ router.post('/transcriptions/:id/push-report', async (req, res) => {
         })
       }
 
-      const name = path.basename(filePaths)
+      const fileBase = path.basename(filePaths)
+      const parsedName = path.parse(fileBase)
+      const name =
+        parsedName.ext !== '' && parsedName.ext.toLowerCase() === '.md'
+          ? parsedName.name
+          : fileBase
       const bodyPrompt =
         req.body && req.body.prompt != null && String(req.body.prompt).trim() !== ''
           ? String(req.body.prompt).trim()

@@ -512,7 +512,7 @@ model presales_video_tasks {
   video_address    String? @db.VarChar(2000) /// 视频地址（URL 或服务器路径）
   reserve_3        String? @db.VarChar(500) /// 售前视频：analysis_content 成功落盘 .md 的路径（最长 500，超出截断）
   reserve_4 String? @db.VarChar(500) /// 备用
-  reserve_5 String? @db.VarChar(500) /// 视频切片地址（workflow-callback video_create 可选 video_split，最长 500）
+  reserve_5 String? @db.VarChar(500) /// 播放列表等（workflow-callback video_create 可选 playlist_url，最长 500）
 
   last_error String? @db.VarChar(2000) /// 最近一步错误摘要
 
