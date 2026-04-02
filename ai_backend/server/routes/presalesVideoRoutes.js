@@ -363,6 +363,23 @@ function pickCallbackErrorMessage(body) {
   return null
 }
 
+/** 回调日志用大文本时只打长度 + 短前缀，避免 analysis 全文刷日志 */
+function workflowCallbackPayloadLogSummary(payloadText, maxPreview = 160) {
+  if (payloadText == null) return { len: 0, empty: true, preview: null }
+  const s = String(payloadText)
+  const len = s.length
+  if (len === 0) return { len: 0, empty: true, preview: null }
+  const preview = len <= maxPreview ? s : `${s.slice(0, maxPreview)}…`
+  return { len, empty: false, preview }
+}
+
+function workflowCallbackClientMeta(req) {
+  const forwarded = req.headers['x-forwarded-for']
+  constxff = forwarded != null && String(forwarded).trim() ? String(forwarded).split(',')[0].trim() : ''
+  const ip = xff || req.ip || (req.socket && req.socket.remoteAddress) || ''
+  return { ip, userAgent: req.headers['user-agent'] != null ? String(req.headers['user-agent']).slice(0, 200) : '' }
+}
+
 /**
  * POST /api/presales-video/workflow-callback
  * 工作流完成后回调：按 execute_id 更新 presales_video_tasks
@@ -376,14 +393,21 @@ function pickCallbackErrorMessage(body) {
  * }
  */
 router.post('/workflow-callback', async (req, res) => {
+  const reqMeta = workflowCallbackClientMeta(req)
   try {
     const expectedSecret = process.env.PRESALES_VIDEO_WORKFLOW_CALLBACK_SECRET
     if (expectedSecret && String(expectedSecret).trim()) {
+      const fromHeader = Boolean(req.headers['x-presales-video-callback-secret'])
+      const fromQuery = req.query && req.query.secret != null && String(req.query.secret) !== ''
+      const fromBody = req.body && req.body.secret != null && String(req.body.secret) !== ''
       const given =
         req.headers['x-presales-video-callback-secret'] ||
         req.query.secret ||
         (req.body && req.body.secret)
       if (String(given || '') !== String(expectedSecret).trim()) {
+        logger.warn(
+          `[presales-video] workflow-callback 鉴权失败 ip=${reqMeta.ip} secret来源 header=${fromHeader} query=${fromQuery} body=${fromBody}（不记录密钥内容）`
+        )
         return res.status(401).json({ success: false, error: 'callback 鉴权失败' })
       }
     }
@@ -393,6 +417,10 @@ router.post('/workflow-callback', async (req, res) => {
     const executeId = body.id ?? body.execute_id ?? body.executeId
     const outcomeNorm = normalizeCallbackOutcome(body)
     if (outcomeNorm == null) {
+      const rawOut = body.outcome ?? body.callback_outcome
+      logger.warn(
+        `[presales-video] workflow-callback 参数错误 outcome 非法 ip=${reqMeta.ip} raw=${JSON.stringify(rawOut)} type=${JSON.stringify(typeRaw)} execute_id_len=${executeId != null ? String(executeId).length : 0}`
+      )
       return res.status(400).json({
         success: false,
         error: 'outcome 必须为 success 或 fail（可用 body.outcome 或 callback_outcome）'
@@ -411,13 +439,26 @@ router.post('/workflow-callback', async (req, res) => {
         : null
 
     if (typeRaw == null || String(typeRaw).trim() === '') {
+      logger.warn(
+        `[presales-video] workflow-callback 参数错误 缺少 type ip=${reqMeta.ip} outcome=${outcomeNorm} execute_id=${executeId != null ? String(executeId).slice(0, 80) : '(空)'}`
+      )
       return res.status(400).json({ success: false, error: '缺少 type（analysis_content / video_create）' })
     }
     if (executeId == null || String(executeId).trim() === '') {
+      logger.warn(
+        `[presales-video] workflow-callback 参数错误 缺少 execute_id ip=${reqMeta.ip} type=${String(typeRaw).trim()} outcome=${outcomeNorm}`
+      )
       return res.status(400).json({ success: false, error: '缺少 id（execute_id）' })
     }
 
     const typeNorm = String(typeRaw).trim()
+    const execStr = String(executeId).trim()
+    const paySum = workflowCallbackPayloadLogSummary(payloadText)
+    const splitSum = workflowCallbackPayloadLogSummary(videoSplit, 120)
+    logger.info(
+      `[presales-video] workflow-callback 收到 ip=${reqMeta.ip} ua=${JSON.stringify((reqMeta.userAgent || '').slice(0, 120))} type=${typeNorm} outcome=${outcomeNorm} execute_id_len=${execStr.length} execute_id_head=${JSON.stringify(execStr.slice(0, 64))} payload_len=${paySum.len} payload_empty=${paySum.empty} payload_preview=${paySum.preview != null ? JSON.stringify(paySum.preview) : 'null'} video_split_present=${Boolean(videoSplit)} video_split_len=${splitSum.len}`
+    )
+
     const result = await presalesVideoTaskService.applyWorkflowCallback(
       typeNorm,
       executeId,
@@ -428,6 +469,9 @@ router.post('/workflow-callback', async (req, res) => {
 
     if (!result.ok) {
       const status = result.code === 'NOT_FOUND' ? 404 : 400
+      logger.warn(
+        `[presales-video] workflow-callback 业务未受理 http=${status} code=${result.code} msg=${result.message} type=${typeNorm} outcome=${outcomeNorm} execute_id_head=${JSON.stringify(execStr.slice(0, 64))}`
+      )
       return res.status(status).json({
         success: false,
         error: result.message,
@@ -439,9 +483,36 @@ router.post('/workflow-callback', async (req, res) => {
       logger.warn('[presales-video] workflow-callback video_address 超过 2000 字符已截断')
     }
 
-    logger.info(
-      `[presales-video] workflow-callback 已处理 type=${typeNorm} execute_id=${String(executeId).slice(0, 80)}`
-    )
+    const task = result.task
+    const tid = task && task.transcription_id ? String(task.transcription_id) : ''
+    const ps = task && task.pipeline_status != null ? String(task.pipeline_status) : ''
+    if (typeNorm === 'analysis_content' && outcomeNorm === 'success') {
+      const acLen = task && task.analysis_content != null ? String(task.analysis_content).length : 0
+      const r3 = task && task.reserve_3 != null ? String(task.reserve_3) : ''
+      logger.info(
+        `[presales-video] workflow-callback 已落库 analysis_content success transcription_id=${tid} pipeline_status=${JSON.stringify(ps)} analysis_content_len=${acLen} reserve_3_len=${r3.length} md_path=${result.analysisMarkdownPath != null ? JSON.stringify(String(result.analysisMarkdownPath)) : 'null'} md_write_error=${result.analysisMarkdownWriteError != null ? JSON.stringify(String(result.analysisMarkdownWriteError)) : 'null'}`
+      )
+    } else if (typeNorm === 'analysis_content' && outcomeNorm === 'fail') {
+      const le = task && task.last_error != null ? String(task.last_error) : ''
+      logger.info(
+        `[presales-video] workflow-callback 已落库 analysis_content fail transcription_id=${tid} pipeline_status=${JSON.stringify(ps)} last_error=${JSON.stringify(le.slice(0, 500))}`
+      )
+    } else if (typeNorm === 'video_create' && outcomeNorm === 'success') {
+      const va = task && task.video_address != null ? String(task.video_address) : ''
+      const r5 = task && task.reserve_5 != null ? String(task.reserve_5) : ''
+      logger.info(
+        `[presales-video] workflow-callback 已落库 video_create success transcription_id=${tid} pipeline_status=${JSON.stringify(ps)} video_address_len=${va.length} video_address_head=${JSON.stringify(va.slice(0, 120))} reserve_5_written=${Boolean(videoSplit)} reserve_5_len=${r5.length} reserve_5_head=${r5 ? JSON.stringify(r5.slice(0, 120)) : 'null'}`
+      )
+    } else if (typeNorm === 'video_create' && outcomeNorm === 'fail') {
+      const le = task && task.last_error != null ? String(task.last_error) : ''
+      logger.info(
+        `[presales-video] workflow-callback 已落库 video_create fail transcription_id=${tid} pipeline_status=${JSON.stringify(ps)} last_error=${JSON.stringify(le.slice(0, 500))}`
+      )
+    } else {
+      logger.info(
+        `[presales-video] workflow-callback 已落库 type=${typeNorm} outcome=${outcomeNorm} transcription_id=${tid} pipeline_status=${JSON.stringify(ps)}`
+      )
+    }
 
     if (result.task && result.task.transcription_id) {
       const tidCb = String(result.task.transcription_id)
@@ -467,7 +538,10 @@ router.post('/workflow-callback', async (req, res) => {
       data: dataOut
     })
   } catch (error) {
-    logger.error('[presales-video] workflow-callback 失败:', error)
+    logger.error(
+      `[presales-video] workflow-callback 异常 ip=${reqMeta.ip} message=${error && error.message}`,
+      error
+    )
     return res.status(500).json({ success: false, error: error.message || '回调处理失败' })
   }
 })
