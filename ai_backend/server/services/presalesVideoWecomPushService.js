@@ -1,5 +1,6 @@
 /**
- * 售前视频：企微应用群发会话推送「交流报备摘要 + 售前视频文本卡片（跳转可配置对外播放地址）」
+ * 售前视频：企微应用群发会话推送「交流报备摘要 + 售前视频文本卡片」
+ * 卡片 URL：优先 PRESALES_VIDEO_WECOM_CARD_URL_TEMPLATE（{id}=execute_id/psv_video_info.id）；否则「基址+playlist/path」拼接
  */
 const wecomAppChatApi = require('./wecomAppChatApi')
 const presalesVideoTaskService = require('./presalesVideoTaskService')
@@ -146,10 +147,35 @@ function isWindowsStyleFilePath(s) {
   return /^[a-zA-Z]:[\\/]/.test(String(s || '').trim())
 }
 
+/**
+ * 卡片 H5 地址模板：{id} = psv_video_info.id（与 presales_video_tasks.execute_id 一致），{chatId} 可选
+ * 优先 PRESALES_VIDEO_WECOM_CARD_URL_TEMPLATE；否则若 PRESALES_VIDEO_WECOM_PUSH_PUBLIC_BASE_URL 含 {id} 也视为模板（兼容旧键名）
+ */
+function resolveWecomCardUrlTemplate() {
+  const a = process.env.PRESALES_VIDEO_WECOM_CARD_URL_TEMPLATE
+  if (a != null && String(a).trim() !== '') return String(a).trim()
+  const b = process.env.PRESALES_VIDEO_WECOM_PUSH_PUBLIC_BASE_URL
+  if (b != null && String(b).trim() !== '' && String(b).includes('{id}')) return String(b).trim()
+  return null
+}
+
+/** 路径拼接模式下的对外基址（不含 {id} 占位符时） */
 function wecomCardPublicOriginOverride() {
   const w = process.env.PRESALES_VIDEO_WECOM_PUSH_PUBLIC_BASE_URL
-  if (w != null && String(w).trim() !== '') return String(w).trim()
+  if (w != null && String(w).trim() !== '' && !String(w).includes('{id}')) return String(w).trim()
   return undefined
+}
+
+function fillWecomCardUrlTemplate(tpl, executeId) {
+  const chatId =
+    process.env.PRESALES_VIDEO_WECOM_CARD_CHAT_ID != null
+      ? String(process.env.PRESALES_VIDEO_WECOM_CARD_CHAT_ID).trim()
+      : ''
+  return String(tpl)
+    .split('{id}')
+    .join(encodeURIComponent(executeId))
+    .split('{chatId}')
+    .join(encodeURIComponent(chatId))
 }
 
 function defaultCardDescription() {
@@ -213,39 +239,63 @@ async function pushPresalesVideoToWecomAppChat(ctx) {
   await wecomAppChatApi.sendAppChatMarkdown(chatid, md1)
 
   const rawLink = pickRawVideoLinkForWecomCard(videoTask)
+  const execId =
+    videoTask && videoTask.execute_id != null ? String(videoTask.execute_id).trim() : ''
+  const cardTpl = resolveWecomCardUrlTemplate()
   let videoPushedAsCard = false
 
-  if (rawLink) {
+  async function sendCardWithUrl(cardUrl) {
+    const title = String(tr.original_file_name || tr.name || '售前视频').trim() || '售前视频'
+    try {
+      await wecomAppChatApi.sendAppChatTextCard(chatid, {
+        title,
+        description: defaultCardDescription(),
+        url: cardUrl,
+        btntxt: defaultCardBtntxt()
+      })
+      videoPushedAsCard = true
+    } catch (e) {
+      const errLine = escapeMdLine((e && e.message) || String(e))
+      await wecomAppChatApi.sendAppChatMarkdown(
+        chatid,
+        `${formatVideoMarkdown(tr, videoTask)}\n> 发送文本卡片失败：${errLine}`
+      )
+    }
+  }
+
+  if (cardTpl) {
+    if (!execId) {
+      await wecomAppChatApi.sendAppChatMarkdown(
+        chatid,
+        `${formatVideoMarkdown(tr, videoTask)}\n> 卡片链接模板需要 \`execute_id\`（与库表 \`psv_video_info.id\` 一致）。请先**提交工作流**并等待 \`video_create\` 回调写入后再推送。`
+      )
+    } else {
+      const idForCard = presalesVideoTaskService.clipExecuteIdForPsvVideoInfo(execId)
+      const cardUrl = fillWecomCardUrlTemplate(cardTpl, idForCard)
+      if (/^https?:\/\//i.test(cardUrl)) {
+        await sendCardWithUrl(cardUrl)
+      } else {
+        await wecomAppChatApi.sendAppChatMarkdown(
+          chatid,
+          `${formatVideoMarkdown(tr, videoTask)}\n> 卡片 URL 模板展开后不是合法 http(s) 链接，请检查环境变量。`
+        )
+      }
+    }
+  } else if (rawLink) {
     if (isWindowsStyleFilePath(rawLink) && !/^https?:\/\//i.test(rawLink)) {
       await wecomAppChatApi.sendAppChatMarkdown(
         chatid,
-        `${formatVideoMarkdown(tr, videoTask)}\n> 当前为 Windows 本地路径，无法在卡片中作为可点击链接。请改为 http(s) 地址，或配置 \`PRESALES_VIDEO_PSV_INFO_BASE_URL\` / \`PRESALES_VIDEO_WECOM_PUSH_PUBLIC_BASE_URL\` 做路径拼接。`
+        `${formatVideoMarkdown(tr, videoTask)}\n> 当前为 Windows 本地路径，无法在卡片中作为可点击链接。请改为 http(s) 地址，或配置 \`PRESALES_VIDEO_PSV_INFO_BASE_URL\` / \`PRESALES_VIDEO_WECOM_PUSH_PUBLIC_BASE_URL\` 做路径拼接；或使用 \`PRESALES_VIDEO_WECOM_CARD_URL_TEMPLATE\`（\`{id}\` = execute_id）。`
       )
     } else {
       const originOv = wecomCardPublicOriginOverride()
       const cardUrl = presalesVideoTaskService.buildPresalesVideoPublicPlayUrl(rawLink, originOv)
       if (/^https?:\/\//i.test(cardUrl)) {
-        const title =
-          String(tr.original_file_name || tr.name || '售前视频').trim() || '售前视频'
-        try {
-          await wecomAppChatApi.sendAppChatTextCard(chatid, {
-            title,
-            description: defaultCardDescription(),
-            url: cardUrl,
-            btntxt: defaultCardBtntxt()
-          })
-          videoPushedAsCard = true
-        } catch (e) {
-          const errLine = escapeMdLine((e && e.message) || String(e))
-          await wecomAppChatApi.sendAppChatMarkdown(
-            chatid,
-            `${formatVideoMarkdown(tr, videoTask)}\n> 发送文本卡片失败：${errLine}`
-          )
-        }
+        await sendCardWithUrl(cardUrl)
       } else {
         await wecomAppChatApi.sendAppChatMarkdown(
           chatid,
-          `${formatVideoMarkdown(tr, videoTask)}\n> 无法生成 http(s) 卡片链接。请配置 \`PRESALES_VIDEO_PSV_INFO_BASE_URL\`（或 HOST+PORT+SCHEME），或单独配置 \`PRESALES_VIDEO_WECOM_PUSH_PUBLIC_BASE_URL\`，将回调中的路径拼成群内可点的地址。`
+          `${formatVideoMarkdown(tr, videoTask)}\n> 无法生成 http(s) 卡片链接。请配置 \`PRESALES_VIDEO_PSV_INFO_BASE_URL\`（或 HOST+PORT+SCHEME），或 \`PRESALES_VIDEO_WECOM_PUSH_PUBLIC_BASE_URL\` 做路径拼接；或使用带 \`{id}\` 的播放页模板。`
         )
       }
     }

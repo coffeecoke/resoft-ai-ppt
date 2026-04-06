@@ -127,10 +127,23 @@ function clipPsvVideoInfoId(executeId) {
 
 function clipPsvVideoInfoUrl(val) {
   if (val == null) return ''
-  const s = String(val)
+  let s = String(val)
   if (s.length <= PSV_VIDEO_INFO_URL_MAX) return s
   logger.warn(`[presales-video-task] psv_video_info.url 超过 ${PSV_VIDEO_INFO_URL_MAX} 字符已截断`)
-  return s.slice(0, PSV_VIDEO_INFO_URL_MAX)
+  s = s.slice(0, PSV_VIDEO_INFO_URL_MAX)
+  // 避免截断在百分号编码中间（% 或 %X 半截），导致后续解析/展示异常
+  for (;;) {
+    if (s.endsWith('%')) {
+      s = s.slice(0, -1)
+      continue
+    }
+    if (s.length >= 2 && /^%[0-9A-Fa-f]$/i.test(s.slice(-2))) {
+      s = s.slice(0, -2)
+      continue
+    }
+    break
+  }
+  return s
 }
 
 function clipPsvVideoInfoTitle(val) {
@@ -161,20 +174,20 @@ function getPsvVideoInfoPublicOrigin() {
   return `${scheme}://${hostTrim}${portPart}`.replace(/\/+$/, '')
 }
 
-/** 从回调里的完整 URL 或相对路径得到「路径 + 查询 + 哈希」，用于与对外基址拼接 */
+/**
+ * 从回调里的完整 URL 或相对路径得到「路径 + 查询 + 哈希」，用于与对外基址拼接。
+ * http(s) 不用 URL.pathname：pathname 会把百分号编码解码成 Unicode，再入库/截断时易与回调原文不一致或出现乱码；
+ * 这里按原串截取，保留回调中的编码（含中文直写或 %E5%xx 形式）。
+ */
 function extractPathFromPsvSourceUrl(raw) {
   const s = raw != null ? String(raw).trim() : ''
   if (!s) return ''
-  try {
-    if (/^https?:\/\//i.test(s)) {
-      const u = new URL(s)
-      let path = u.pathname || ''
-      if (u.search) path += u.search
-      if (u.hash) path += u.hash
-      return path.startsWith('/') ? path : `/${path}`
-    }
-  } catch (_) {
-    /* 非合法绝对 URL 时按相对路径处理 */
+  if (/^https?:\/\//i.test(s)) {
+    const proto = s.indexOf('//')
+    if (proto === -1) return s.startsWith('/') ? s : `/${s}`
+    const pathStart = s.indexOf('/', proto + 2)
+    if (pathStart === -1) return '/'
+    return s.slice(pathStart)
   }
   return s.startsWith('/') ? s : `/${s}`
 }
@@ -491,5 +504,7 @@ module.exports = {
   updatePipelineStatus,
   applyWorkflowCallback,
   toApiShape,
-  buildPresalesVideoPublicPlayUrl
+  buildPresalesVideoPublicPlayUrl,
+  /** 与 psv_video_info.id 入库规则一致（最长 64），企微卡片 {id} 须用此值才能对上库 */
+  clipExecuteIdForPsvVideoInfo: clipPsvVideoInfoId
 }
