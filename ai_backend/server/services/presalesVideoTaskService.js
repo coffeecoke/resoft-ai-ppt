@@ -2,7 +2,7 @@
  * 售前视频生成主任务：Coze 上传与工作流信息落库
  *
  * analysis_content 回调成功时，内容除入库外会写入本地 .md（目录见 PRESALES_VIDEO_ANALYSIS_MD_DIR），文件名为录音显示名安全化 + .md（original_file_name / name），成功落盘路径写入 reserve_3（最长 500 字符，超出截断）
- * video_create 成功回调可选 body.playlist_url / playlistUrl：播放列表（如 m3u8）等写入 reserve_5（最长 500，超出截断）
+ * video_create 成功回调可选 body.playlist_url / playlistUrl：播放列表（如 m3u8）等写入 reserve_5（最长 500，超出截断）；同时 upsert psv_video_info（id=execute_id，url 优先 playlist 否则主视频地址，title=转录 original_file_name / name）。对外播放链接由 buildPresalesVideoPublicPlayUrl 生成：默认读 PRESALES_VIDEO_PSV_INFO_*；企微卡片可传 originOverride 使用 PRESALES_VIDEO_WECOM_PUSH_PUBLIC_BASE_URL
  */
 
 const fs = require('fs/promises')
@@ -111,6 +111,135 @@ const VIDEO_ADDRESS_MAX_LEN = 2000
 const LAST_ERROR_MAX_LEN = 2000
 const RESERVE3_MAX_LEN = 500
 const RESERVE5_MAX_LEN = 500
+/** psv_video_info 与库表 VarChar 一致 */
+const PSV_VIDEO_INFO_ID_MAX = 64
+const PSV_VIDEO_INFO_URL_MAX = 512
+const PSV_VIDEO_INFO_TITLE_MAX = 255
+
+function clipPsvVideoInfoId(executeId) {
+  const s = String(executeId).trim()
+  if (s.length <= PSV_VIDEO_INFO_ID_MAX) return s
+  logger.warn(
+    `[presales-video-task] psv_video_info.id（execute_id）超过 ${PSV_VIDEO_INFO_ID_MAX} 字符已截断`
+  )
+  return s.slice(0, PSV_VIDEO_INFO_ID_MAX)
+}
+
+function clipPsvVideoInfoUrl(val) {
+  if (val == null) return ''
+  const s = String(val)
+  if (s.length <= PSV_VIDEO_INFO_URL_MAX) return s
+  logger.warn(`[presales-video-task] psv_video_info.url 超过 ${PSV_VIDEO_INFO_URL_MAX} 字符已截断`)
+  return s.slice(0, PSV_VIDEO_INFO_URL_MAX)
+}
+
+function clipPsvVideoInfoTitle(val) {
+  const s = val != null ? String(val) : ''
+  if (s.length <= PSV_VIDEO_INFO_TITLE_MAX) return s
+  return s.slice(0, PSV_VIDEO_INFO_TITLE_MAX)
+}
+
+/**
+ * 写入 psv_video_info 时的对外访问基址（无尾部 /）。
+ * 优先整段：PRESALES_VIDEO_PSV_INFO_BASE_URL，例 http://127.0.0.1:9010
+ * 否则：PRESALES_VIDEO_PSV_INFO_HOST + 可选 PRESALES_VIDEO_PSV_INFO_PORT + PRESALES_VIDEO_PSV_INFO_SCHEME（默认 http）
+ */
+function getPsvVideoInfoPublicOrigin() {
+  const base = process.env.PRESALES_VIDEO_PSV_INFO_BASE_URL
+  if (base != null && String(base).trim() !== '') {
+    return String(base).trim().replace(/\/+$/, '')
+  }
+  const host = process.env.PRESALES_VIDEO_PSV_INFO_HOST
+  if (host == null || !String(host).trim()) return null
+  let scheme = process.env.PRESALES_VIDEO_PSV_INFO_SCHEME
+  scheme = scheme != null && String(scheme).trim() !== '' ? String(scheme).trim().replace(/:+$/, '') : 'http'
+  if (!scheme) scheme = 'http'
+  const portRaw = process.env.PRESALES_VIDEO_PSV_INFO_PORT
+  const port = portRaw != null && String(portRaw).trim() !== '' ? String(portRaw).trim() : ''
+  const hostTrim = String(host).trim()
+  const portPart = port ? `:${port}` : ''
+  return `${scheme}://${hostTrim}${portPart}`.replace(/\/+$/, '')
+}
+
+/** 从回调里的完整 URL 或相对路径得到「路径 + 查询 + 哈希」，用于与对外基址拼接 */
+function extractPathFromPsvSourceUrl(raw) {
+  const s = raw != null ? String(raw).trim() : ''
+  if (!s) return ''
+  try {
+    if (/^https?:\/\//i.test(s)) {
+      const u = new URL(s)
+      let path = u.pathname || ''
+      if (u.search) path += u.search
+      if (u.hash) path += u.hash
+      return path.startsWith('/') ? path : `/${path}`
+    }
+  } catch (_) {
+    /* 非合法绝对 URL 时按相对路径处理 */
+  }
+  return s.startsWith('/') ? s : `/${s}`
+}
+
+/**
+ * 生成对外可访问的播放地址：有基址则「基址 + 路径」；否则沿用原文。
+ * @param {string|null|undefined} urlRaw 回调或库中的 playlist / 主视频 URL 或路径
+ * @param {string|null|undefined} [originOverride] 非空时优先作为对外基址（如企微 PRESALES_VIDEO_WECOM_PUSH_PUBLIC_BASE_URL）
+ */
+function buildPresalesVideoPublicPlayUrl(urlRaw, originOverride) {
+  const raw = urlRaw != null ? String(urlRaw).trim() : ''
+  if (!raw) return ''
+  let origin = null
+  if (originOverride != null && String(originOverride).trim() !== '') {
+    origin = String(originOverride).trim().replace(/\/+$/, '')
+  } else {
+    origin = getPsvVideoInfoPublicOrigin()
+  }
+  if (!origin) return raw
+  const pathPart = extractPathFromPsvSourceUrl(raw)
+  if (!pathPart) return ''
+  return `${origin}${pathPart}`
+}
+
+/**
+ * video_create 成功：同步售前视频元数据表（供播放端等查询）
+ * url：有 playlist 用 playlist，否则用主视频地址（path/url 等解析结果）
+ */
+async function upsertPsvVideoInfoOnVideoCreate(executeId, transcriptionId, mainVideoUrl, playlistUrl) {
+  const id = clipPsvVideoInfoId(executeId)
+  const pl = playlistUrl != null && String(playlistUrl).trim() !== '' ? String(playlistUrl).trim() : ''
+  const main = mainVideoUrl != null && String(mainVideoUrl).trim() !== '' ? String(mainVideoUrl).trim() : ''
+  const urlRaw = pl || main
+
+  let title = ''
+  try {
+    const trRow = await prisma.transcriptions.findUnique({
+      where: { id: transcriptionId },
+      select: { original_file_name: true, name: true }
+    })
+    const o = trRow?.original_file_name != null ? String(trRow.original_file_name).trim() : ''
+    const n = trRow?.name != null ? String(trRow.name).trim() : ''
+    title = o || n || ''
+  } catch (e) {
+    logger.warn('[presales-video-task] psv_video_info 读取转录录音名失败:', e.message)
+  }
+  if (!title) title = id || '售前视频'
+
+  const url = clipPsvVideoInfoUrl(buildPresalesVideoPublicPlayUrl(urlRaw))
+  const titleDb = clipPsvVideoInfoTitle(title)
+
+  await prisma.psv_video_info.upsert({
+    where: { id },
+    create: {
+      id,
+      title: titleDb,
+      url
+    },
+    update: {
+      title: titleDb,
+      url,
+      updated_at: new Date()
+    }
+  })
+}
 
 function clipLastError(val) {
   if (val == null) return null
@@ -308,6 +437,19 @@ async function applyWorkflowCallback(callbackType, executeId, payloadText, outco
       where: { id: task.id },
       data
     })
+    try {
+      await upsertPsvVideoInfoOnVideoCreate(
+        executeId,
+        task.transcription_id,
+        text,
+        options.playlistUrl
+      )
+    } catch (e) {
+      logger.warn(
+        '[presales-video-task] video_create 同步 psv_video_info 失败（主任务已更新）:',
+        e && e.message
+      )
+    }
     return { ok: true, task: updated, truncated }
   }
 
@@ -348,5 +490,6 @@ module.exports = {
   saveAfterSubmitWorkflow,
   updatePipelineStatus,
   applyWorkflowCallback,
-  toApiShape
+  toApiShape,
+  buildPresalesVideoPublicPlayUrl
 }

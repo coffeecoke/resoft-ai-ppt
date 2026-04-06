@@ -1,5 +1,5 @@
 /**
- * 企业微信 HTTP：gettoken + appchat 建群 + 群发 Markdown / 视频
+ * 企业微信 HTTP：gettoken + appchat 建群 + 群发 Markdown / 文本卡片 / 视频
  * 需自建应用 Secret（与智能机器人 WebSocket Secret 不同），且应用可见范围内包含所选成员。
  * @see https://developer.work.weixin.qq.com/document/path/90245
  * @see https://developer.work.weixin.qq.com/document/path/90253 上传临时素材
@@ -63,6 +63,22 @@ function httpsPostJson(urlString, bodyObj) {
   })
 }
 
+/**
+ * 企微接口 errcode 补充中文说明（常见运维问题）
+ * @see https://developer.work.weixin.qq.com/document/path/90313 全局错误码
+ */
+function formatQyApiError(context, j) {
+  const code = Number(j.errcode)
+  const raw = j.errmsg != null ? String(j.errmsg) : String(j.errcode)
+  const head = `${context}: ${raw}`
+  if (code === 60020) {
+    return (
+      `${head}\n【60020 可信 IP】管理后台 → 应用管理 → 与 WECOM_APPCHAT_SECRET 对应的自建应用 → 企业可信 IP，将报错里的 from ip（本服务访问 qyapi.weixin.qq.com 的出口公网 IP）加入白名单。云主机填公网/弹性 IP；本地开发填当前出口 IP；IP 常变需固定出口或使用具备固定 IP 的中转。文档：https://developer.work.weixin.qq.com/document/path/90313`
+    )
+  }
+  return head
+}
+
 function isAppChatConfigured() {
   const id = process.env.WECOM_CORP_ID && String(process.env.WECOM_CORP_ID).trim()
   const sec = process.env.WECOM_APPCHAT_SECRET && String(process.env.WECOM_APPCHAT_SECRET).trim()
@@ -82,7 +98,7 @@ async function getAccessToken() {
   const url = `https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid=${encodeURIComponent(corpId)}&corpsecret=${encodeURIComponent(secret)}`
   const j = await httpsGetJson(url)
   if (j.errcode != null && j.errcode !== 0) {
-    throw new Error(`企业微信 gettoken 失败: ${j.errmsg || j.errcode}`)
+    throw new Error(formatQyApiError('企业微信 gettoken 失败', j))
   }
   if (!j.access_token) {
     throw new Error('企业微信 gettoken 未返回 access_token')
@@ -121,7 +137,7 @@ async function createAppChat(opts) {
   }
   const j = await httpsPostJson(url, body)
   if (j.errcode != null && j.errcode !== 0) {
-    throw new Error(`appchat/create 失败: ${j.errmsg || j.errcode}`)
+    throw new Error(formatQyApiError('appchat/create 失败', j))
   }
   if (!j.chatid) {
     throw new Error('appchat/create 未返回 chatid')
@@ -144,7 +160,50 @@ async function sendAppChatMarkdown(chatid, markdownContent) {
   }
   const j = await httpsPostJson(url, body)
   if (j.errcode != null && j.errcode !== 0) {
-    throw new Error(`appchat/send 失败: ${j.errmsg || j.errcode}`)
+    throw new Error(formatQyApiError('appchat/send 失败', j))
+  }
+  return true
+}
+
+/** 企微限制：title 约 128 字节、description 约 512 字节（UTF-8） */
+function truncateUtf8Bytes(str, maxBytes) {
+  const b = Buffer.from(String(str || ''), 'utf8')
+  if (b.length <= maxBytes) return String(str || '')
+  let end = maxBytes
+  while (end > 0 && (b[end] & 0xc0) === 0x80) end -= 1
+  return b.slice(0, end).toString('utf8')
+}
+
+/**
+ * 文本卡片（可点击跳转链接）
+ * @param {string} chatid
+ * @param {{ title: string, description: string, url: string, btntxt?: string }} opts
+ */
+async function sendAppChatTextCard(chatid, opts) {
+  const token = await getAccessToken()
+  const url = `https://qyapi.weixin.qq.com/cgi-bin/appchat/send?access_token=${encodeURIComponent(token)}`
+  const o = opts && typeof opts === 'object' ? opts : {}
+  const title = truncateUtf8Bytes(o.title || '售前视频', 128)
+  const description = truncateUtf8Bytes(o.description || '<div class="normal">点击查看</div>', 512)
+  const jump = String(o.url || '').trim()
+  if (!jump) {
+    throw new Error('textcard 缺少 url')
+  }
+  const btntxt = truncateUtf8Bytes((o.btntxt != null ? String(o.btntxt) : '详情') || '详情', 12).slice(0, 4)
+  const body = {
+    chatid: String(chatid).trim(),
+    msgtype: 'textcard',
+    textcard: {
+      title,
+      description,
+      url: jump,
+      btntxt: btntxt || '详情'
+    },
+    safe: 0
+  }
+  const j = await httpsPostJson(url, body)
+  if (j.errcode != null && j.errcode !== 0) {
+    throw new Error(formatQyApiError('appchat/send(textcard) 失败', j))
   }
   return true
 }
@@ -205,7 +264,7 @@ async function uploadTempMediaVideo(absoluteFilePath) {
   })
 
   if (j.errcode != null && j.errcode !== 0) {
-    throw new Error(`media/upload(video) 失败: ${j.errmsg || j.errcode}`)
+    throw new Error(formatQyApiError('media/upload(video) 失败', j))
   }
   if (!j.media_id) {
     throw new Error('media/upload 未返回 media_id')
@@ -268,7 +327,7 @@ async function uploadTempMediaFile(absoluteFilePath) {
   })
 
   if (j.errcode != null && j.errcode !== 0) {
-    throw new Error(`media/upload(file) 失败: ${j.errmsg || j.errcode}`)
+    throw new Error(formatQyApiError('media/upload(file) 失败', j))
   }
   if (!j.media_id) {
     throw new Error('media/upload(file) 未返回 media_id')
@@ -288,7 +347,7 @@ async function sendAppChatFile(chatid, mediaId) {
   }
   const j = await httpsPostJson(url, body)
   if (j.errcode != null && j.errcode !== 0) {
-    throw new Error(`appchat/send(file) 失败: ${j.errmsg || j.errcode}`)
+    throw new Error(formatQyApiError('appchat/send(file) 失败', j))
   }
   return true
 }
@@ -313,7 +372,7 @@ async function sendAppChatVideo(chatid, mediaId, opts) {
   }
   const j = await httpsPostJson(url, body)
   if (j.errcode != null && j.errcode !== 0) {
-    throw new Error(`appchat/send(video) 失败: ${j.errmsg || j.errcode}`)
+    throw new Error(formatQyApiError('appchat/send(video) 失败', j))
   }
   return true
 }
@@ -323,6 +382,7 @@ module.exports = {
   getAccessToken,
   createAppChat,
   sendAppChatMarkdown,
+  sendAppChatTextCard,
   sendAppChatVideo,
   sendAppChatFile,
   uploadTempMediaVideo,

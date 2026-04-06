@@ -1,13 +1,8 @@
 /**
- * 售前视频：企微应用群发会话推送「交流报备摘要 + 视频信息」
+ * 售前视频：企微应用群发会话推送「交流报备摘要 + 售前视频文本卡片（跳转可配置对外播放地址）」
  */
-const fs = require('fs')
-const path = require('path')
-const os = require('os')
-const http = require('http')
-const https = require('https')
-const { URL } = require('url')
 const wecomAppChatApi = require('./wecomAppChatApi')
+const presalesVideoTaskService = require('./presalesVideoTaskService')
 
 function escapeMdLine(s) {
   return String(s || '')
@@ -137,85 +132,38 @@ function formatVideoMarkdown(transcription, videoTask) {
   return `**售前视频**\n转录：${name}\n服务器路径：\`${escapeMdLine(v)}\``
 }
 
-function resolveLocalVideoFile(v) {
-  const s = String(v || '').trim()
-  if (!s || /^https?:\/\//i.test(s)) return null
-  const abs = path.resolve(s)
-  try {
-    if (fs.existsSync(abs) && fs.statSync(abs).isFile()) return abs
-  } catch {
-    return null
-  }
-  return null
+/** 卡片跳转用原始串：优先 http(s) 的 reserve_5（如 m3u8），否则 video_address */
+function pickRawVideoLinkForWecomCard(videoTask) {
+  if (!videoTask) return ''
+  const r5 = videoTask.reserve_5 != null ? String(videoTask.reserve_5).trim() : ''
+  const va = videoTask.video_address != null ? String(videoTask.video_address).trim() : ''
+  if (r5 && /^https?:\/\//i.test(r5)) return r5
+  if (va) return va
+  return r5 || va
 }
 
-/**
- * 将 http(s) 视频下载到临时文件（不超过 maxBytes）
- * @returns {Promise<string>} 临时文件绝对路径，调用方负责 unlink
- */
-function downloadVideoToTempFile(urlString, maxBytes) {
-  return new Promise((resolve, reject) => {
-    let u
-    try {
-      u = new URL(urlString)
-    } catch {
-      reject(new Error('无效的视频 URL'))
-      return
-    }
-    if (u.protocol !== 'http:' && u.protocol !== 'https:') {
-      reject(new Error('仅支持 http/https 视频地址'))
-      return
-    }
-    const lib = u.protocol === 'https:' ? https : http
-    const tmp = path.join(
-      os.tmpdir(),
-      `wecom_pv_${Date.now()}_${Math.random().toString(36).slice(2, 10)}.mp4`
-    )
-    const req = lib.get(
-      urlString,
-      { headers: { 'User-Agent': 'presales-video-wecom-push/1.0' } },
-      (res) => {
-        if (res.statusCode !== 200) {
-          reject(new Error(`下载视频失败 HTTP ${res.statusCode}`))
-          return
-        }
-        const cl = parseInt(res.headers['content-length'] || '0', 10)
-        if (cl > maxBytes) {
-          reject(new Error(`视频过大（约 ${Math.round(cl / 1024 / 1024)}MB），超过企微临时素材约 10MB 上限`))
-          return
-        }
-        const w = fs.createWriteStream(tmp)
-        let received = 0
-        res.on('data', (chunk) => {
-          received += chunk.length
-          if (received > maxBytes) {
-            res.destroy()
-            w.destroy()
-            try {
-              fs.unlinkSync(tmp)
-            } catch {}
-            reject(new Error(`视频超过 ${maxBytes} 字节（企微临时素材上限约 10MB）`))
-          }
-        })
-        res.pipe(w)
-        w.on('finish', () => w.close(() => resolve(tmp)))
-        w.on('error', (e) => {
-          try {
-            fs.unlinkSync(tmp)
-          } catch {}
-          reject(e)
-        })
-      }
-    )
-    req.on('error', reject)
-    req.setTimeout(180000, () => {
-      req.destroy()
-      try {
-        fs.unlinkSync(tmp)
-      } catch {}
-      reject(new Error('下载视频超时'))
-    })
-  })
+function isWindowsStyleFilePath(s) {
+  return /^[a-zA-Z]:[\\/]/.test(String(s || '').trim())
+}
+
+function wecomCardPublicOriginOverride() {
+  const w = process.env.PRESALES_VIDEO_WECOM_PUSH_PUBLIC_BASE_URL
+  if (w != null && String(w).trim() !== '') return String(w).trim()
+  return undefined
+}
+
+function defaultCardDescription() {
+  const fromEnv = process.env.PRESALES_VIDEO_WECOM_CARD_DESCRIPTION
+  if (fromEnv != null && String(fromEnv).trim() !== '') {
+    return String(fromEnv).trim()
+  }
+  return '<div class="gray">售前视频</div><div class="normal">点击下方按钮在浏览器中打开播放页</div>'
+}
+
+function defaultCardBtntxt() {
+  const b = process.env.PRESALES_VIDEO_WECOM_CARD_BTNTXT
+  if (b != null && String(b).trim() !== '') return String(b).trim().slice(0, 4)
+  return '播放'
 }
 
 /**
@@ -223,7 +171,7 @@ function downloadVideoToTempFile(urlString, maxBytes) {
  * @param {import('@prisma/client').PrismaClient} ctx.prisma
  * @param {string} ctx.transcriptionId
  * @param {string|string[]} ctx.userIdsRaw 逗号分隔或数组
- * @returns {Promise<{ chatid: string, reportMatched: boolean, userCount: number, videoPushedAsMedia?: boolean }>}
+ * @returns {Promise<{ chatid: string, reportMatched: boolean, userCount: number, videoPushedAsMedia?: boolean, videoPushedAsCard?: boolean }>}
  */
 async function pushPresalesVideoToWecomAppChat(ctx) {
   const { prisma, transcriptionId, userIdsRaw } = ctx
@@ -264,58 +212,41 @@ async function pushPresalesVideoToWecomAppChat(ctx) {
   const md1 = formatReportMarkdown(report)
   await wecomAppChatApi.sendAppChatMarkdown(chatid, md1)
 
-  const v = videoTask && videoTask.video_address && String(videoTask.video_address).trim()
-  const maxDownload = wecomAppChatApi.TEMP_FILE_MAX_BYTES
-  let videoPushedAsMedia = false
-  let tempDownloadPath = null
+  const rawLink = pickRawVideoLinkForWecomCard(videoTask)
+  let videoPushedAsCard = false
 
-  if (v) {
-    try {
-      let filePath = resolveLocalVideoFile(v)
-      if (!filePath && /^https?:\/\//i.test(v)) {
-        tempDownloadPath = await downloadVideoToTempFile(v, maxDownload)
-        filePath = tempDownloadPath
-      }
-      if (filePath) {
-        const st = fs.statSync(filePath)
-        if (st.size > wecomAppChatApi.TEMP_FILE_MAX_BYTES) {
-          throw new Error(
-            `文件约 ${Math.round(st.size / 1024 / 1024)}MB，超过企微临时素材上限（约 20MB）`
-          )
-        }
-        const title = String(tr.original_file_name || tr.name || '售前视频').slice(0, 128)
-        if (st.size <= wecomAppChatApi.TEMP_VIDEO_MAX_BYTES) {
-          const mediaId = await wecomAppChatApi.uploadTempMediaVideo(filePath)
-          await wecomAppChatApi.sendAppChatVideo(chatid, mediaId, {
-            title,
-            description: '售前视频 · 请在客户端播放'
-          })
-        } else {
-          const mediaId = await wecomAppChatApi.uploadTempMediaFile(filePath)
-          await wecomAppChatApi.sendAppChatFile(chatid, mediaId)
-        }
-        videoPushedAsMedia = true
-        const cap =
-          st.size <= wecomAppChatApi.TEMP_VIDEO_MAX_BYTES
-            ? `**售前视频**\n转录：${escapeMdLine(title)}\n> 上方为视频消息，请在企业微信内直接播放。`
-            : `**售前视频**\n转录：${escapeMdLine(title)}\n> 文件大于 10MB，已以「文件」消息发送，请下载后播放。`
-        await wecomAppChatApi.sendAppChatMarkdown(chatid, cap)
-      } else {
-        await wecomAppChatApi.sendAppChatMarkdown(chatid, formatVideoMarkdown(tr, videoTask))
-      }
-    } catch (e) {
-      const errLine = escapeMdLine((e && e.message) || String(e))
+  if (rawLink) {
+    if (isWindowsStyleFilePath(rawLink) && !/^https?:\/\//i.test(rawLink)) {
       await wecomAppChatApi.sendAppChatMarkdown(
         chatid,
-        `${formatVideoMarkdown(tr, videoTask)}\n> 以视频/文件推送失败：${errLine}\n> 请确认本机路径可读、mp4 优先；单段不超过约 20MB（大于 10MB 时将走文件消息）；http 链接需可下载且同限制。`
+        `${formatVideoMarkdown(tr, videoTask)}\n> 当前为 Windows 本地路径，无法在卡片中作为可点击链接。请改为 http(s) 地址，或配置 \`PRESALES_VIDEO_PSV_INFO_BASE_URL\` / \`PRESALES_VIDEO_WECOM_PUSH_PUBLIC_BASE_URL\` 做路径拼接。`
       )
-    } finally {
-      if (tempDownloadPath) {
+    } else {
+      const originOv = wecomCardPublicOriginOverride()
+      const cardUrl = presalesVideoTaskService.buildPresalesVideoPublicPlayUrl(rawLink, originOv)
+      if (/^https?:\/\//i.test(cardUrl)) {
+        const title =
+          String(tr.original_file_name || tr.name || '售前视频').trim() || '售前视频'
         try {
-          fs.unlinkSync(tempDownloadPath)
-        } catch {
-          /* ignore */
+          await wecomAppChatApi.sendAppChatTextCard(chatid, {
+            title,
+            description: defaultCardDescription(),
+            url: cardUrl,
+            btntxt: defaultCardBtntxt()
+          })
+          videoPushedAsCard = true
+        } catch (e) {
+          const errLine = escapeMdLine((e && e.message) || String(e))
+          await wecomAppChatApi.sendAppChatMarkdown(
+            chatid,
+            `${formatVideoMarkdown(tr, videoTask)}\n> 发送文本卡片失败：${errLine}`
+          )
         }
+      } else {
+        await wecomAppChatApi.sendAppChatMarkdown(
+          chatid,
+          `${formatVideoMarkdown(tr, videoTask)}\n> 无法生成 http(s) 卡片链接。请配置 \`PRESALES_VIDEO_PSV_INFO_BASE_URL\`（或 HOST+PORT+SCHEME），或单独配置 \`PRESALES_VIDEO_WECOM_PUSH_PUBLIC_BASE_URL\`，将回调中的路径拼成群内可点的地址。`
+        )
       }
     }
   } else {
@@ -326,7 +257,8 @@ async function pushPresalesVideoToWecomAppChat(ctx) {
     chatid,
     reportMatched: Boolean(report),
     userCount: userIds.length,
-    videoPushedAsMedia
+    videoPushedAsMedia: false,
+    videoPushedAsCard
   }
 }
 

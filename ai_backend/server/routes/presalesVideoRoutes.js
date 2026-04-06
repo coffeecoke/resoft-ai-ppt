@@ -12,7 +12,7 @@
  * - PRESALES_VIDEO_REPORT_ASYNC_PROMPT 可选，异步任务 Body 中 prompt 默认值覆盖（默认文案：根据报告内容，生成视频，使用默认主题）
  * - PRESALES_VIDEO_REPORT_PUSH_URL     未配置 ASYNC_URL 时：旧版推送本地售前分析 JSON POST（可选）
  * - PRESALES_VIDEO_FETCH_URL           获取视频 GET（可选，query: transcriptionId）
- * - WECOM_CORP_ID / WECOM_APPCHAT_SECRET  推送视频：企业微信「应用群发会话」appchat 建群+发 Markdown（自建应用 Secret，非智能机器人）
+ * - WECOM_CORP_ID / WECOM_APPCHAT_SECRET  推送视频：企微 appchat 建群；报备 Markdown + 售前视频文本卡片（跳转 URL 见 PRESALES_VIDEO_PSV_INFO_* / PRESALES_VIDEO_WECOM_PUSH_PUBLIC_BASE_URL）
  * - PRESALES_VIDEO_WORKFLOW_SUBMIT_URL 提交工作流 JSON POST（可选）
  * - PRESALES_VIDEO_WORKFLOW_SUBMIT_TOKEN 可选，Bearer Token 鉴权
  * - PRESALES_VIDEO_WORKFLOW_CALLBACK_SECRET 可选，工作流回调鉴权；请求需带 Header X-Presales-Video-Callback-Secret 或 query ?secret=
@@ -1443,7 +1443,7 @@ router.post('/transcriptions/:id/push-report', async (req, res) => {
 /**
  * POST /api/presales-video/transcriptions/:id/push-video
  * Body: { userIds: "userid1,userid2" } 或 { members: ["id1","id2"] }
- * 使用企业微信应用 API 创建 appchat，向群内推送：交流报备摘要（按客户名匹配）+ 视频信息（video_address）
+ * 使用企业微信应用 API 创建 appchat，向群内推送：交流报备摘要（按客户名匹配）+ 售前视频文本卡片（标题为音频名，跳转 URL 由环境变量拼接/覆盖，见 PRESALES_VIDEO_PSV_INFO_* / PRESALES_VIDEO_WECOM_PUSH_PUBLIC_BASE_URL）
  */
 router.post('/transcriptions/:id/push-video', async (req, res) => {
   const { id } = req.params
