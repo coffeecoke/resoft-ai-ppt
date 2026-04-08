@@ -1268,6 +1268,7 @@ model scraping_infos {
 
 // ==================== 数据库新增表（introspect 同步，仅追加） ====================
 
+/// 企微视频H5模块配置与库表元信息
 model psa_wec_config {
   id           BigInt    @id @default(autoincrement())
   config_key   String    @unique(map: "uk_psa_wec_config_key") @db.VarChar(128)
@@ -1277,7 +1278,7 @@ model psa_wec_config {
   created_at   DateTime? @default(now()) @db.DateTime(0)
   updated_at   DateTime? @default(now()) @db.DateTime(0)
 }
-
+/// 企微用户表（从外部系统同步的用户信息）
 model psa_wxwork_user {
   id             BigInt    @id @default(autoincrement())
   user_id        String    @unique(map: "user_id") @db.VarChar(64)
@@ -1296,6 +1297,7 @@ model psa_wxwork_user {
   @@index([user_id], map: "idx_psa_wxwork_user_user_id")
 }
 
+/// 视频播放心跳表（记录用户观看视频的心跳数据）
 model psv_playback_heartbeat {
   id                BigInt    @id @default(autoincrement())
   user_id           String    @db.VarChar(64)
@@ -1315,6 +1317,7 @@ model psv_playback_heartbeat {
   @@index([user_id, video_id], map: "idx_heartbeat_user_video")
 }
 
+/// 视频播放汇总表（定期汇总用户观看视频的统计数据）
 model psv_playback_summary {
   id                   BigInt    @id @default(autoincrement())
   user_id              String    @db.VarChar(64)
@@ -1337,6 +1340,7 @@ model psv_playback_summary {
   @@index([updated_at], map: "idx_summary_updated")
 }
 
+/// 用户统计表（记录用户的观看行为和统计数据）
 model psv_user_statistics {
   id                    BigInt    @id @default(autoincrement())
   user_id               String    @unique(map: "user_id") @db.VarChar(64)
@@ -1353,7 +1357,7 @@ model psv_user_statistics {
 
   @@index([updated_at], map: "idx_statistics_updated")
 }
-
+/// 视频信息表（存储视频的元信息）
 model psv_video_info {
   id          String    @id @db.VarChar(64)
   title       String    @db.VarChar(255)
@@ -1370,7 +1374,7 @@ model psv_video_info {
   @@index([category], map: "idx_video_category")
   @@index([created_at], map: "idx_video_created")
 }
-
+/// 视频播放历史表（记录用户每次观看视频的历史数据）
 model psv_watch_history {
   id                   BigInt    @id @default(autoincrement())
   user_id              String    @db.VarChar(64)

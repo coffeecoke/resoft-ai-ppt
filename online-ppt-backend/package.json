@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "start": "tsx src/index.js",
-    "dev": "tsx watch src/index.js"
+    "dev": "tsx watch src/index.js && npm run sync:comments",
+    "sync:comments": "node scripts/sync-table-comments.js"
   },
   "dependencies": {
     "adm-zip": "^0.5.16",
