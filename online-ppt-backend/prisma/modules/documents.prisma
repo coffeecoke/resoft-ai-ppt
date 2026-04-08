@@ -1,0 +1,154 @@
+// ==================== PPT文档相关表 ====================
+
+/// PPT文档表
+model documents {
+  // 基础信息
+  id       String  @id @db.VarChar(50) /// 文档ID
+  name     String  @db.VarChar(255) /// 文档名称
+  cover    String? @db.VarChar(500) /// 封面图URL
+  category String  @default("uncategorized") @db.VarChar(50) /// 分类
+  status   String  @default("draft") @db.VarChar(20) /// 状态：draft=草稿，published=已发布
+  tag      String  @default("public") @db.VarChar(20) /// 标签：public=公共版，practical=实战版
+
+  // 文件信息
+  content_file_path String @db.VarChar(500) /// 内容文件路径
+  slide_count       Int    @default(0) /// 幻灯片数量
+  file_size         BigInt @default(0) /// 文件大小（字节）
+
+  // 业务字段
+  customer_name  String? @db.VarChar(255) /// 客户名称
+  product        Json? /// 产品（数组，兼容旧数据）
+  industry       Json? /// 行业（数组）
+  audience       Json? /// 受众（数组，如：技术、业务等）
+  audience_names String? @db.Text /// 交流对象人员姓名（多个用逗号分隔）
+  language       String? @db.VarChar(50) /// 语言
+
+  // 🆕 回传PPT相关字段
+  product_id String? @db.VarChar(50) /// 关联产品ID（回传时选择）
+  session_id String? @db.VarChar(50) /// 关联交流场次ID
+
+  // 溯源字段
+  source_document_id   String? @db.VarChar(50) /// 源文档ID
+  source_document_name String? @db.VarChar(255) /// 源文档名称
+
+  // 时间戳
+  created_at     DateTime  @default(now()) /// 创建时间
+  updated_at     DateTime /// 更新时间
+  last_opened_at DateTime? /// 最后打开时间
+  view_count     Int       @default(0) /// 阅读次数
+  created_by     String?   @db.VarChar(50) /// 创建人用户ID
+
+  // 关联
+  document_concerns document_concerns[]
+  products          products?           @relation(fields: [product_id], references: [id])
+  sessions          sessions?           @relation(fields: [session_id], references: [id])
+  product_documents product_documents[]
+  thumbnails        thumbnails[]
+
+  @@index([category], map: "idx_category")
+  @@index([created_at], map: "idx_created_at")
+  @@index([customer_name], map: "idx_customer")
+  @@index([product_id], map: "idx_product_id")
+  @@index([session_id], map: "idx_session_id")
+  @@index([status], map: "idx_status")
+  @@index([created_by], map: "idx_created_by")
+}
+
+/// 缩略图表
+model thumbnails {
+  // 主键
+  id String @id @db.VarChar(100) /// 缩略图ID
+
+  // 关联字段
+  document_id String @db.VarChar(50) /// 文档ID
+  slide_id    String @db.VarChar(50) /// 幻灯片ID
+  slide_index Int /// 幻灯片索引（从0开始）
+
+  // 缩略图信息
+  url    String @db.VarChar(500) /// 缩略图URL
+  width  Int    @default(800) /// 宽度（像素）
+  height Int    @default(450) /// 高度（像素）
+  size   Int? /// 文件大小（字节）
+  format String @default("jpeg") @db.VarChar(20) /// 图片格式
+
+  // 元数据
+  has_text      Boolean @default(false) /// 是否包含文本
+  has_image     Boolean @default(false) /// 是否包含图片
+  element_count Int     @default(0) /// 元素数量
+
+  // 🆕 AI分析的页面类型标签
+  page_type            String?   @db.VarChar(100) /// AI分析的页面类型（如"产品简介"）
+  page_type_confidence Float? /// AI分析置信度（0-1）
+  analyzed_at          DateTime? /// AI分析时间
+
+  // 审核：待审核→已通过/已拒绝，修改后通过记录在 slide_analysis_review_records
+  review_status String  @default("pending") @db.VarChar(20) /// pending=待审核, approved=已通过, rejected=已拒绝
+  reviewed_at   DateTime? /// 审核时间
+  reviewer_id   String?  @db.VarChar(50) /// 审核人ID
+
+  // 时间戳
+  generated_at DateTime @default(now()) /// 生成时间
+
+  // 关联
+  documents  documents @relation(fields: [document_id], references: [id], onDelete: Cascade)
+  slide_analysis_review_records    slide_analysis_review_records[]
+
+  @@unique([document_id, slide_id], map: "uk_document_slide")
+  @@index([document_id], map: "idx_document_id")
+  @@index([page_type], map: "idx_page_type")
+  @@index([slide_id], map: "idx_slide_id")
+  @@index([slide_index], map: "idx_slide_index")
+  @@index([review_status], map: "idx_thumbnails_review_status")
+}
+
+/// PPT 分析结果审核历史（修改后通过等记录）
+model slide_analysis_review_records {
+  id           String   @id @db.VarChar(50) /// 主键
+  thumbnail_id String   @db.VarChar(100) /// 关联 thumbnails.id
+  action       String   @db.VarChar(20) /// approve=通过, reject=拒绝, modify_approve=修改后通过
+  content_before Json? /// 修改前 { page_type, page_type_confidence }
+  content_after  Json? /// 修改后（仅 modify_approve 时有值）
+  reviewer_id  String?  @db.VarChar(50) /// 审核人ID
+  review_time  DateTime @default(now()) /// 审核时间
+  remark       String?  @db.Text /// 备注（拒绝原因等）
+
+  thumbnails thumbnails @relation(fields: [thumbnail_id], references: [id], onDelete: Cascade)
+
+  @@index([thumbnail_id], map: "idx_sar_thumbnail_id")
+  @@index([review_time], map: "idx_sar_review_time")
+}
+
+/// 幻灯片合并内容表（用于存储提取的幻灯片文本内容）
+model slide_merged_contents {
+  id             String   @id @db.VarChar(50) /// 内容ID
+  document_id    String   @db.VarChar(50) /// 文档ID
+  slide_id       String   @db.VarChar(50) /// 幻灯片ID
+  merged_content String   @db.Text /// 合并后的文本内容
+  content_length Int      @default(0) /// 内容长度
+  slide_order    Int /// 幻灯片顺序
+  file_name      String   @db.VarChar(255) /// 文件名
+  extract_method String   @default("auto") @db.VarChar(20) /// 提取方法：auto=自动，manual=手动
+  created_at     DateTime @default(now()) /// 创建时间
+  updated_at     DateTime /// 更新时间
+
+  @@unique([document_id, slide_id], map: "uk_document_slide")
+  @@index([document_id], map: "idx_document_id")
+  @@index([slide_id], map: "idx_slide_id")
+  @@index([slide_order], map: "idx_slide_order")
+  @@fulltext([merged_content], map: "ft_merged_content")
+}
+
+/// 文档-关心问题关联表
+model document_concerns {
+  id          String    @id @db.VarChar(50) /// 关联ID
+  document_id String    @db.VarChar(50) /// 文档ID
+  concern_id  String    @db.VarChar(50) /// 问题ID
+  sort_order  Int       @default(0) /// 排序字段
+  created_at  DateTime  @default(now()) /// 创建时间
+  concerns    concerns  @relation(fields: [concern_id], references: [id], onDelete: Cascade)
+  documents   documents @relation(fields: [document_id], references: [id], onDelete: Cascade)
+
+  @@unique([document_id, concern_id], map: "uk_document_concern")
+  @@index([concern_id], map: "idx_concern_id")
+  @@index([document_id], map: "idx_document_id")
+}

@@ -1,0 +1,65 @@
+// ==================== 用户认证相关表 ====================
+
+/// 用户表
+model users {
+  id              String    @id @db.VarChar(50)
+  username        String    @unique @db.VarChar(100)  /// 登录账号
+  name            String    @db.VarChar(100)           /// 姓名（显示用）
+  department_id   String?   @db.VarChar(50)            /// 所属部门ID（关联部门表）
+  department_name String?   @db.VarChar(100)           /// 所属部门名称（冗余，避免频繁join）
+  email           String?   @unique @db.VarChar(255)  /// 邮箱（可选）
+  password_hash   String?   @db.VarChar(255)          /// bcrypt哈希，SSO用户可为空
+  role            String    @default("user") @db.VarChar(20)   /// "admin" | "user"
+  status          String    @default("active") @db.VarChar(20) /// "active" | "disabled"
+  cas_username    String?   @unique @db.VarChar(100)  /// 期2 CAS SSO绑定账号
+  last_login_at   DateTime?
+  login_count     Int       @default(0)
+  created_by      String?   @db.VarChar(50)            /// 创建人ID
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  // departments departments? @relation(fields: [department_id], references: [id])
+
+  @@index([role], map: "idx_users_role")
+  @@index([status], map: "idx_users_status")
+  @@index([department_id], map: "idx_users_department_id")
+}
+
+/// 审计日志表
+model audit_logs {
+  id          String   @id @db.VarChar(50)
+  user_id     String   @db.VarChar(50)
+  username    String   @db.VarChar(100)  /// 冗余存储，防止用户被删后丢失
+  action      String   @db.VarChar(50)   /// "login" | "logout" | "create" | "update" | "delete"
+  resource    String   @db.VarChar(50)   /// "user" | "document" | "session" | ...
+  resource_id String?  @db.VarChar(50)
+  detail      Json?                       /// 操作详情
+  ip_address  String?  @db.VarChar(50)
+  user_agent  String?  @db.VarChar(500)
+  created_at  DateTime @default(now())
+
+  @@index([user_id], map: "idx_audit_user_id")
+  @@index([action], map: "idx_audit_action")
+  @@index([resource], map: "idx_audit_resource")
+  @@index([created_at], map: "idx_audit_created_at")
+}
+
+/// 个人文档表（用户通过合并章节创建的文档，仅创建者可见）
+model personal_documents {
+  id          String   @id @db.VarChar(50)
+  name        String   @db.VarChar(255)    /// 文件名称
+  file_path   String   @db.VarChar(500)    /// 存储路径
+  file_type   String   @default(".docx") @db.VarChar(20)
+  file_size   BigInt   @default(0)         /// 文件大小（字节）
+
+  /// 来源信息（记录是从哪些章节合并而来）
+  source_type String?  @db.VarChar(20)     /// 'tender' | 'bid'
+  source_ids  Json?                         /// 合并的章节ID列表
+
+  created_by  String   @db.VarChar(50)     /// 所属用户
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  @@index([created_by], map: "idx_personal_docs_created_by")
+  @@index([created_at], map: "idx_personal_docs_created_at")
+}
