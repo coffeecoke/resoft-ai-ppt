@@ -1,0 +1,62 @@
+// ==================== 交流场次相关表 ====================
+
+/// 交流场次-关心问题关联表
+model session_concerns {
+  id         String   @id @db.VarChar(50) /// 关联ID
+  session_id String   @db.VarChar(50) /// 场次ID
+  concern_id String   @db.VarChar(50) /// 问题ID
+  sort_order Int      @default(0) /// 排序字段
+  created_at DateTime @default(now()) /// 创建时间
+  concerns   concerns @relation(fields: [concern_id], references: [id], onDelete: Cascade)
+  sessions   sessions @relation(fields: [session_id], references: [id], onDelete: Cascade)
+
+  @@unique([session_id, concern_id], map: "uk_session_concern")
+  @@index([concern_id], map: "idx_concern_id")
+  @@index([session_id], map: "idx_session_id")
+}
+
+/// 潜在需求表
+model session_needs {
+  id         String   @id @db.VarChar(50) /// 需求ID
+  session_id String   @db.VarChar(50) /// 场次ID
+  need       String   @db.Text /// 需求内容
+  priority   String?  @db.VarChar(20) /// 优先级：high=高，medium=中，low=低
+  status     String   @default("pending") @db.VarChar(20) /// 状态：pending=待确认，confirmed=已确认
+  sort_order Int      @default(0) /// 排序字段
+
+  created_at DateTime @default(now()) /// 创建时间
+  updated_at DateTime /// 更新时间
+  sessions   sessions @relation(fields: [session_id], references: [id], onDelete: Cascade)
+
+  @@index([session_id], map: "idx_session_id")
+}
+
+/// 交流场次表（客户交流会议信息）
+model sessions {
+  id                   String                 @id @db.VarChar(50) /// 场次ID
+  title                String                 @db.VarChar(255) /// 会议主题
+  customer_name        String                 @db.VarChar(255) /// 客户名称
+  session_date         DateTime /// 会议时间
+  duration             Int? /// 会议时长（分钟）
+  location             String?                @db.VarChar(255) /// 会议地点
+  video_url            String?                @db.VarChar(500) /// 视频录像URL
+  thumbnail            String?                @db.VarChar(500) /// 视频缩略图URL
+  participants         Json? /// 参与人员（数组）
+  product_id           String?                @db.VarChar(50) /// 主要讨论的产品ID
+  industry             Json? /// 行业（数组）
+  status               String                 @default("draft") @db.VarChar(20) /// 状态：draft=草稿，completed=已完成
+  created_at           DateTime               @default(now()) /// 创建时间
+  updated_at           DateTime /// 更新时间
+  created_by           String?                @db.VarChar(50) /// 创建人ID
+  documents            documents[]
+  session_concerns     session_concerns[]
+  session_needs        session_needs[]
+  transcriptions       transcriptions[]
+  dialogue_adjustments dialogue_adjustments[]
+  products             products?              @relation(fields: [product_id], references: [id])
+
+  @@index([created_by], map: "idx_created_by")
+  @@index([customer_name], map: "idx_customer_name")
+  @@index([product_id], map: "idx_product_id")
+  @@index([session_date], map: "idx_session_date")
+}

@@ -1,0 +1,206 @@
+// ==================== 外部系统同步相关表 ====================
+
+/// 部门表（树形层级结构，从外部系统同步）
+model departments {
+  id         String   @id @db.VarChar(50)           /// 部门唯一标识
+  name       String   @db.VarChar(255)              /// 部门名称（如 华东大区、售前支持团队）
+  parent_id  String?  @db.VarChar(50)               /// 父部门ID，顶级部门为 null
+  code       String?  @db.VarChar(100)              /// 部门代码（如 HQ-001）
+  level      Int      @default(1)                   /// 层级深度（1=根节点）
+  sort_order Int      @default(0)                   /// 同级排序权重
+  leader     String?  @db.VarChar(100)              /// 部门负责人
+  phone      String?  @db.VarChar(50)               /// 联系电话
+  email      String?  @db.VarChar(255)              /// 邮箱
+  status     String   @default("active") @db.VarChar(20) /// active=启用，disabled=停用
+  created_at DateTime @default(now())               /// 创建时间
+  updated_at DateTime @updatedAt                    /// 更新时间
+
+  /// 自关联（树形父子关系）
+  // parent   departments?  @relation("dept_tree", fields: [parent_id], references: [id])
+  // children departments[] @relation("dept_tree")
+
+  /// 反向关联
+  // users users[]
+
+  @@index([parent_id], map: "idx_departments_parent_id")
+  @@index([status], map: "idx_departments_status")
+  @@index([level], map: "idx_departments_level")
+}
+
+/// 线索分类表（从外部系统同步）
+model lead_categories {
+  id         String   @id @db.VarChar(50)           /// 分类唯一标识
+  name       String   @db.VarChar(255)              /// 分类名称
+  code       String?  @unique @db.VarChar(100)      /// 分类代码（唯一稳定）
+  sort_order Int      @default(0)                   /// 排序权重
+  is_active  Boolean  @default(true)                /// 是否启用
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // leads leads[]
+
+  @@index([is_active], map: "idx_lead_categories_is_active")
+}
+
+/// 客户类型表（如城商行、外资行、股份制银行，从外部系统同步）
+model customer_types {
+  id         String   @id @db.VarChar(50)           /// 类型唯一标识
+  p_id       String?  @db.VarChar(50)               /// 父类型ID
+  name       String   @db.VarChar(255)              /// 类型名称（如 城商行、外资行）
+  code       String   @unique @db.VarChar(100)      /// 类型代码（如 CITY_BANK），唯一且稳定
+  sort_order Int      @default(0)                   /// 排序权重（控制筛选栏顺序）
+  is_active  Boolean  @default(true)                /// 是否启用
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // customers customers[]
+
+  @@index([is_active], map: "idx_customer_types_is_active")
+}
+
+/// 客户表（从外部系统同步）
+model customers {
+  id         String   @id @db.VarChar(50)           /// 客户唯一标识
+  name       String   @db.VarChar(255)              /// 客户名称（如 XX城商行）
+  short_name String?  @db.VarChar(100)              /// 客户简称（界面简短展示）
+  type_id    String?  @db.VarChar(50)               /// 客户类型ID
+  type_name  String?  @db.VarChar(100)              /// 客户类型名称（冗余）
+  industry   String?  @db.VarChar(100)              /// 所属行业
+  region     String?  @db.VarChar(100)              /// 所在地区/省份（如 华东、浙江省）
+  owner_id   String?  @db.VarChar(50)               /// 客户负责人用户ID
+  owner_name String?  @db.VarChar(100)              /// 客户负责人姓名（冗余）
+  status     String   @default("active") @db.VarChar(20) /// active=活跃，inactive=非活跃
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt                    /// 最后更新时间（用于增量同步）
+
+  // customer_type customer_types? @relation(fields: [type_id], references: [id])
+  // leads         leads[]
+
+  @@index([type_id], map: "idx_customers_type_id")
+  @@index([industry], map: "idx_customers_industry")
+  @@index([region], map: "idx_customers_region")
+  @@index([status], map: "idx_customers_status")
+  @@index([updated_at], map: "idx_customers_updated_at")
+}
+
+/// 线索表（从外部系统同步）
+model leads {
+  id            String   @id @db.VarChar(50)        /// 线索唯一标识
+  name          String   @db.VarChar(255)            /// 线索名称/标题（如 XX银行-一表通 商务洽谈）
+  category_id   String?  @db.VarChar(50)             /// 线索分类ID
+  category_name String?  @db.VarChar(255)            /// 线索分类名称（冗余）
+  customer_id   String?  @db.VarChar(50)             /// 关联客户ID
+  customer_name String?  @db.VarChar(255)            /// 客户名称（未关联时也存文本）
+  industry      String?  @db.VarChar(100)            /// 所属行业（如 城商行、农商行）
+  product_ids   Json?                                /// 关联产品ID数组
+  product_names String?  @db.VarChar(500)            /// 关联产品名称（冗余，逗号分隔）
+  owner_id      String?  @db.VarChar(50)             /// 负责人用户ID
+  owner_name    String?  @db.VarChar(100)            /// 负责人姓名（冗余）
+  status        String   @default("new") @db.VarChar(20) /// new=新建，following=跟进中，converted=已转化，lost=已丢失
+  source        String?  @db.VarChar(100)            /// 线索来源（如 展会、转介绍、官网）
+  created_at    DateTime @default(now())             /// 创建时间
+  updated_at    DateTime @updatedAt                  /// 最后更新时间（用于增量同步）
+  // lead_category lead_categories? @relation(fields: [category_id], references: [id])
+  // customer      customers?       @relation(fields: [customer_id], references: [id])
+  communication_reports communication_reports[] /// 交流报备记录
+  @@index([category_id], map: "idx_leads_category_id")
+  @@index([customer_id], map: "idx_leads_customer_id")
+  @@index([owner_id], map: "idx_leads_owner_id")
+  @@index([status], map: "idx_leads_status")
+  @@index([updated_at], map: "idx_leads_updated_at")
+
+}
+
+// ==================== 交流报备相关表 ====================
+
+/// 交流报备表（客户交流报备记录）
+model communication_reports {
+  id                   String    @id @db.VarChar(50) /// 报备ID
+  lead_code            String?   @db.VarChar(100) /// 线索编号
+  lead_id              String?   @db.VarChar(50) /// 关联线索ID（可选，关联 leads.id）
+  report_date          DateTime /// 交流日期
+  start_at             DateTime? /// 开始时间（可与 report_date 组合表示具体时段）
+  end_at               DateTime? /// 结束时间
+  record_method        String?   @db.VarChar(50) /// 记录方式（如 录屏、录音、笔记）
+  communication_form   String?   @db.VarChar(50) /// 交流形式（如 现场会议、线上会议、电话）
+  speaker              String?   @db.VarChar(100) /// 主讲人
+  our_participants     String?   @db.Text /// 我方其他参会人（多人用逗号分隔）
+  client_participants  String?   @db.Text /// 客户方参会人（多人用逗号分隔）
+  customer_name        String    @db.VarChar(255) /// 客户名称
+  lead_name            String?   @db.VarChar(255) /// 线索名称
+  main_content         String?   @db.VarChar(500) /// 主讲内容
+  system_name          String?   @db.VarChar(255) /// 系统名称
+  report_note          String?   @db.Text /// 报备说明（如 第2次交流，我方发起）
+  objectives           String?   @db.Text /// 我欲达到的目的（多行文本）
+  created_at           DateTime  @default(now()) /// 创建时间
+  updated_at           DateTime  @updatedAt /// 更新时间
+  created_by           String?   @db.VarChar(50) /// 创建人用户ID
+  /// 企微机器人等来源
+  source_channel       String?   @db.VarChar(50) /// 如 wecom_bot
+  wecom_msg_id         String?   @db.VarChar(100) /// 企微消息 msgid，用于去重
+  snapshot_json_path   String?   @db.VarChar(500) /// 落盘 JSON 相对上传根目录路径
+
+  leads leads? @relation(fields: [lead_id], references: [id])
+
+  @@index([lead_code], map: "idx_comm_report_lead_code")
+  @@index([lead_id], map: "idx_comm_report_lead_id")
+  @@index([customer_name], map: "idx_comm_report_customer")
+  @@index([report_date], map: "idx_comm_report_date")
+  @@index([created_by], map: "idx_comm_report_created_by")
+  @@index([wecom_msg_id], map: "idx_comm_report_wecom_msg")
+}
+
+/// 交流报备推送临时表（接收推送的原始报备，再解析入库 communication_reports）
+model communication_report_inbox {
+  id        String   @id @db.VarChar(50) /// 主键
+  sender    String   @db.VarChar(100) /// 谁发的报备（发送人标识/姓名）
+  sent_at   DateTime /// 什么时候发的报备（推送时间）
+  content   String   @db.Text /// 报备具体内容（原始正文）
+  created_at DateTime @default(now()) /// 入库时间
+
+  @@index([sent_at], map: "idx_inbox_sent_at")
+  @@index([sender], map: "idx_inbox_sender")
+}
+
+// ==================== 网站爬取信息表 ====================
+
+/// 网站爬取信息表（招标/中标等爬取数据）
+model scraping_infos {
+  id                    Int       @id @default(autoincrement())
+  keyword               String?   @db.VarChar(200)   /// 关键字
+  type                  String?   @db.VarChar(100)   /// 类型
+  sub_type              String?   @db.VarChar(100)   /// 细分类型
+  title                 String?   @db.VarChar(500)   /// 标题
+  province              String?   @db.VarChar(100)   /// 省份/直辖市
+  city                  String?   @db.VarChar(100)   /// 城市
+  district              String?   @db.VarChar(100)   /// 区/县
+  detail                String?   @db.Text          /// 信息详情
+  published_at          DateTime? /// 发布时间
+  bid_doc_fetched_at    DateTime? /// 标书获取时间
+  project_no            String?   @db.VarChar(100)   /// 项目编号
+  project_budget        String?   @db.VarChar(100)   /// 项目预算
+  winning_amount       String?   @db.VarChar(100)   /// 中标金额
+  bidding_method        String?   @db.VarChar(100)   /// 招标方式
+  project_owner         String?   @db.VarChar(255)   /// 项目业主
+  owner_contact         String?   @db.VarChar(100)   /// 业主联系人
+  owner_phone           String?   @db.VarChar(50)   /// 业主联系电话
+  winning_bidder        String?   @db.VarChar(255)   /// 中标单位
+  winning_bidder_contact String?  @db.VarChar(100)   /// 中标单位联系人
+  winning_bidder_phone  String?   @db.VarChar(50)   /// 中标单位联系电话
+  bidding_agent         String?   @db.VarChar(255)   /// 招标代理
+  bid_deadline          DateTime? /// 投标截止时间
+  detail_url            String?   @db.VarChar(1000)  /// 详情页地址
+  product_related       String?   @db.VarChar(500)   /// 产品相关
+  reserve1              String?   @db.VarChar(500)   /// 备用字段1
+  reserve2              String?   @db.VarChar(500)   /// 备用字段2
+  created_at            DateTime  @default(now())    /// 入库创建时间
+  updated_at            DateTime  @updatedAt        /// 更新时间
+
+  @@index([keyword], map: "idx_scraping_keyword")
+  @@index([type], map: "idx_scraping_type")
+  @@index([province], map: "idx_scraping_province")
+  @@index([city], map: "idx_scraping_city")
+  @@index([published_at], map: "idx_scraping_published_at")
+  @@index([bid_deadline], map: "idx_scraping_bid_deadline")
+  @@index([created_at], map: "idx_scraping_created_at")
+}

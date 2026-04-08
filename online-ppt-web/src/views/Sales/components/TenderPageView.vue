@@ -4,7 +4,6 @@
 
     <!-- 筛选区域 -->
     <CommonFilters
-      :industry-tags="industryTags"
       :selected-industry="selectedIndustry"
       :filter-groups="filterGroups"
       :filter-values="filterValues"
@@ -47,18 +46,6 @@ const filterValues = ref<Record<string, string | null>>({
 // 数据状态
 const isLoading = ref(false)
 const rawList = ref<any[]>([])
-
-// 行业领域标签
-const industryTags = [
-  { id: 'national', name: '全国/股份制/政策性银行' },
-  { id: 'city', name: '城商行' },
-  { id: 'foreign', name: '外资行' },
-  { id: 'rural', name: '农商' },
-  { id: 'finance', name: '财务公司' },
-  { id: 'trust', name: '信托公司' },
-  { id: 'auto', name: '汽车/消费金融' },
-  { id: 'leasing', name: '金融租赁' }
-]
 
 // 采购方式选项
 const procurementMethods = [

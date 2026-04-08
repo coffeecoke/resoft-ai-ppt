@@ -12,18 +12,9 @@ export const PRODUCTS = [
   { label: '金数', value: '金数' },
 ]
 
-// 行业类型
-export const INDUSTRIES = [
-  { label: '全国/股份制/政策性银行', value: '全国/股份制/政策性银行' },
-  { label: '城商行', value: '城商行' },
-  { label: '外资行', value: '外资行' },
-  { label: '农商', value: '农商' },
-  { label: '财务公司', value: '财务公司' },
-  { label: '信托公司', value: '信托公司' },
-  { label: '汽车/消费金融', value: '汽车/消费金融' },
-  { label: '金融租赁', value: '金融租赁' },
-  { label: '其他', value: '其他' },
-]
+// 行业类型 - 已迁移到数据库 customer_types 表，请使用 useSalesOptions().industryOptions
+/** @deprecated */
+export const INDUSTRIES: { label: string; value: string }[] = []
 
 // 交流对象
 export const AUDIENCES = [

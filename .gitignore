@@ -147,7 +147,17 @@ vite.config.ts.timestamp-*
 .env
 online-ppt-backend/.env
 # 数据文件
-online-ppt-backend/data/documents
-online-ppt-backend/data/templates
-online-ppt-backend/data/covers
-online-ppt-backend/data/snapshots
+online-ppt-backend/data
+# AI后端目录
+ai_backend/
+
+# OnlyOffice 数据目录（镜像约 2GB+，不提交到 git）
+onlyoffice-data/
+# 文档
+docs/
+
+# Lock files
+package-lock.json
+pnpm-lock.yaml
+*/package-lock.json
+*/pnpm-lock.yaml

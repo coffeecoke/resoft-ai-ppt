@@ -371,10 +371,10 @@
 </template>
 
 <script setup>
-import { defineProps, defineEmits } from 'vue'
+import { defineProps, defineEmits, onMounted, computed } from 'vue'
+import { useSalesOptions } from '@/hooks/useSalesOptions'
 import {
   productSolutionOptions,
-  industryOptions,
   audienceOptions,
   languageOptions,
   pptCatalogOptions,
@@ -390,6 +390,9 @@ import {
   contractBusinessOptions,
   companyStructure
 } from '../constants/salesConfig'
+
+const { load, industryOptions } = useSalesOptions()
+onMounted(() => load())
 
 const props = defineProps({
   visible: {

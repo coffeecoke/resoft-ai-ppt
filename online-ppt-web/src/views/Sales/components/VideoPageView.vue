@@ -5,7 +5,7 @@
     <!-- 筛选区域（独立页面显示） -->
     <CommonFilters
       v-if="showHeader"
-      :industry-tags="industryTags"
+
       :selected-industry="selectedIndustry"
       :filter-groups="filterGroups"
       :hidden-filter-groups="hiddenFilterGroups"
@@ -53,6 +53,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
+import { useSalesOptions } from '@/hooks/useSalesOptions'
 import { defineProps, defineEmits, inject } from 'vue'
 import VideoGrid from './VideoGrid.vue'
 import CommonFilters from './CommonFilters.vue'
@@ -106,18 +107,6 @@ const filterValues = ref<Record<string, string | null>>({
   language: null
 })
 const selectedSort = ref<string>('latest')
-
-// 行业领域标签
-const industryTags = [
-  { id: 'national', name: '全国/股份制/政策性银行' },
-  { id: 'city', name: '城商行' },
-  { id: 'foreign', name: '外资行' },
-  { id: 'rural', name: '农商' },
-  { id: 'finance', name: '财务公司' },
-  { id: 'trust', name: '信托公司' },
-  { id: 'auto', name: '汽车/消费金融' },
-  { id: 'leasing', name: '金融租赁' }
-]
 
 // 会议类型
 const meetingTypes = [
@@ -189,17 +178,8 @@ const hiddenFilterGroups = computed(() => [
   }
 ])
 
-// 行业领域映射（将筛选标签ID映射到中文，用于请求 API）
-const industryMap: Record<string, string> = {
-  'national': '全国/股份制/政策性银行',
-  'city': '城商行',
-  'foreign': '外资行',
-  'rural': '农商',
-  'finance': '财务公司',
-  'trust': '信托公司',
-  'auto': '汽车/消费金融',
-  'leasing': '金融租赁'
-}
+// selectedIndustry 已经是中文名（tag.name），直接用于 API 请求
+const { load: loadSalesOptions } = useSalesOptions()
 
 // 将筛选选项 id 转为中文（API 使用中文）
 function filterValueToName(key: string, id: string | null): string | undefined {
@@ -243,7 +223,7 @@ async function fetchList(reset = false) {
   }
 
   try {
-    const industry = selectedIndustry.value ? industryMap[selectedIndustry.value] : undefined
+    const industry = selectedIndustry.value || undefined
     // 同时传递 productCode 和 productName，后端优先使用 productCode
     const productFilter = props.fProduct || undefined
     const res = await getTranscriptionList({
@@ -342,7 +322,7 @@ const gridItems = computed(() => {
   return list
 })
 
-onMounted(() => { fetchList(true) })
+onMounted(() => { loadSalesOptions(); fetchList(true) })
 
 // 筛选变化时重置列表
 watch([selectedIndustry, filterValues], () => {

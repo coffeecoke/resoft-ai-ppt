@@ -197,6 +197,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
+import { useSalesOptions } from '@/hooks/useSalesOptions'
 import { ElInput } from 'element-plus'
 import { salesData } from '../../../configs/salesData'
 import { getConcernCategories } from '@/services/concernsApi'
@@ -468,17 +469,7 @@ const filterCategories = computed(() => {
         id: 'industry',
         name: '行业领域',
         hasMore: false,
-        options: [
-          { id: 'national', name: '全国/股份制/政策性银行' },
-          { id: 'city', name: '城商行' },
-          { id: 'foreign', name: '外资行' },
-          { id: 'rural', name: '农商' },
-          { id: 'finance', name: '财务公司' },
-          { id: 'trust', name: '信托公司' },
-          { id: 'auto', name: '汽车/消费金融' },
-          { id: 'leasing', name: '金融租赁' },
-          { id: 'other', name: '其他' }
-        ]
+        options: industryOptions.value
       },
       {
         id: 'essenceType',
@@ -512,17 +503,7 @@ const filterCategories = computed(() => {
         id: 'industry',
         name: '行业',
         hasMore: false,
-        options: [
-          { id: '全国/股份制/政策性银行', name: '全国/股份制/政策性银行' },
-          { id: '城商行', name: '城商行' },
-          { id: '外资行', name: '外资行' },
-          { id: '农商', name: '农商' },
-          { id: '财务公司', name: '财务公司' },
-          { id: '信托公司', name: '信托公司' },
-          { id: '汽车/消费金融', name: '汽车/消费金融' },
-          { id: '金融租赁', name: '金融租赁' },
-          { id: '其他', name: '其他' }
-        ]
+        options: industryOptions.value
       }
     ]
   } else if (props.activeTab === 'video') {
@@ -571,17 +552,7 @@ const filterCategories = computed(() => {
         id: 'industry',
         name: '客户类型',
         hasMore: false,
-        options: [
-          { id: '全国/股份制/政策性银行', name: '全国/股份制/政策性银行' },
-          { id: '城商行', name: '城商行' },
-          { id: '外资行', name: '外资行' },
-          { id: '农商', name: '农商' },
-          { id: '财务公司', name: '财务公司' },
-          { id: '信托公司', name: '信托公司' },
-          { id: '汽车/消费金融', name: '汽车/消费金融' },
-          { id: '金融租赁', name: '金融租赁' },
-          { id: '其他', name: '其他' }
-        ]
+        options: industryOptions.value
       },
       {
         id: 'audience',
@@ -629,17 +600,7 @@ const filterCategories = computed(() => {
         id: 'industry',
         name: '客户类型',
         hasMore: false,
-        options: [
-          { id: '全国/股份制/政策性银行', name: '全国/股份制/政策性银行' },
-          { id: '城商行', name: '城商行' },
-          { id: '外资行', name: '外资行' },
-          { id: '农商', name: '农商' },
-          { id: '财务公司', name: '财务公司' },
-          { id: '信托公司', name: '信托公司' },
-          { id: '汽车/消费金融', name: '汽车/消费金融' },
-          { id: '金融租赁', name: '金融租赁' },
-          { id: '其他', name: '其他' }
-        ]
+        options: industryOptions.value
       }
     ]
   } else {
@@ -661,17 +622,7 @@ const filterCategories = computed(() => {
         id: 'industry',
         name: '客户类型',
         hasMore: false,
-        options: [
-          { id: '全国/股份制/政策性银行', name: '全国/股份制/政策性银行' },
-          { id: '城商行', name: '城商行' },
-          { id: '外资行', name: '外资行' },
-          { id: '农商', name: '农商' },
-          { id: '财务公司', name: '财务公司' },
-          { id: '信托公司', name: '信托公司' },
-          { id: '汽车/消费金融', name: '汽车/消费金融' },
-          { id: '金融租赁', name: '金融租赁' },
-          { id: '其他', name: '其他' }
-        ]
+        options: industryOptions.value
       },
       {
         id: 'audience',
@@ -902,7 +853,15 @@ const scrollNavRight = () => {
 }
 
 // 监听导航栏滚动
+const { load: loadSalesOptions, industryTags: _industryTags } = useSalesOptions()
+// FilterPanel 内部 option 约定 {id, name}，将 code 映射为 id
+// FilterPanel option 约定 {id, name}，id 用 code（存数据库）
+const industryOptions = computed(() =>
+  _industryTags.value.map(t => ({ id: t.code, name: t.name }))
+)
+
 onMounted(() => {
+  loadSalesOptions()
   // 加载问题分类数据
   loadQuestionCategories()
 

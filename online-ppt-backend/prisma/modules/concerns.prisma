@@ -1,0 +1,91 @@
+/// 问答对分类表（用于AI分类的问答对）
+model concern_categories {
+  id          String  @id @db.VarChar(50) /// 分类ID
+  code        String  @unique @db.VarChar(50) /// 分类代码（如"1.1", "2.3", "I1"）
+  name        String  @db.VarChar(255) /// 分类名称
+  type        String  @db.VarChar(20) /// 类型：level=分类层面，category=分类类别，intent=问题性质
+  parent_code String? @db.VarChar(50) /// 父级代码（用于层级关系，如"2.3"的父级是"2"）
+  level       Int     @default(1) /// 层级：1=分类层面，2=分类类别，3=问题性质
+  description String? @db.Text /// 类别定义说明
+  keywords    Json? /// 识别关键词（JSON数组）
+  sort_order  Int     @default(0) /// 排序字段
+  is_active   Boolean @default(true) /// 是否启用
+  created_at  DateTime @default(now()) /// 创建时间
+  updated_at  DateTime @updatedAt /// 更新时间
+
+  // 关联
+  concerns concerns[] /// 关联的问答对
+
+  @@index([type], map: "idx_type")
+  @@index([parent_code], map: "idx_parent_code")
+  @@index([level], map: "idx_level")
+  @@index([is_active], map: "idx_is_active")
+  @@index([sort_order], map: "idx_sort_order")
+}
+
+/// 关心的问题表
+model concerns {
+  id       String  @id @db.VarChar(50) /// 问题ID
+  question String  @db.Text /// 问题内容
+  category String? @db.VarChar(100) /// 问题分类（兼容旧数据/降级，存储分类代码或名称）
+  category_code String? @db.VarChar(50) /// 关联分类代码（关联 concern_categories.code，稳定不变）
+  intent_code String? @db.VarChar(10) /// 问题性质代码（I1-I5）
+  priority String? @db.VarChar(20) /// 优先级：high=高，medium=中，low=低
+  answer   String? @db.Text /// 回答内容
+  status   String  @default("pending") @db.VarChar(20) /// 状态：pending=待回答，answered=已回答
+
+  /// 优化前原文（问答对优化时备份，仅首次优化时写入）
+  question_original String? @db.Text /// 优化前的问题内容
+  answer_original   String? @db.Text /// 优化前的回答内容
+
+  // ✅ 新增字段：问答对元数据（用于从转录记录中提取的问答对）
+  time_range       String? @db.VarChar(100) /// 问题时间范围 "[00:10-00:30]"（兼容旧数据）
+  time_range1      String? @db.VarChar(100) /// 问题时间范围 "[开始时间-结束时间]"
+  time_range2      String? @db.VarChar(100) /// 回答时间范围 "[开始时间-结束时间]"
+  question_speaker String? @db.VarChar(50) /// 提问者ID "SPEAKER_1"
+  answer_speaker   String? @db.VarChar(50) /// 回答者ID "SPEAKER_2"
+  transcription_id String? @db.VarChar(50) /// 关联的转录ID（用于直接查询）
+
+  /// 前端 QA 展示用
+  likes           Int     @default(0) /// 点赞数
+  expert_approved Boolean @default(false) /// 是否专家核准
+  expert_advice   String? @db.Text /// 专家建议内容
+  expert_reviewer String? @db.VarChar(100) /// 专家审核人
+
+  /// 审核：待审核→已通过/已拒绝，修改后通过记录在 concern_review_records
+  review_status String  @default("pending") @db.VarChar(20) /// pending=待审核, approved=已通过, rejected=已拒绝
+  reviewed_at   DateTime? /// 审核时间
+  reviewer_id   String? @db.VarChar(50) /// 审核人ID
+
+  created_at        DateTime            @default(now()) /// 创建时间
+  updated_at        DateTime            @updatedAt /// 更新时间（自动更新）
+  document_concerns document_concerns[]
+  session_concerns  session_concerns[]
+  concern_categories concern_categories? @relation(fields: [category_code], references: [code])
+  concern_review_records concern_review_records[]
+
+  @@index([category], map: "idx_category")
+  @@index([category_code], map: "idx_category_code")
+  @@index([intent_code], map: "idx_intent_code")
+  @@index([status], map: "idx_status")
+  @@index([transcription_id], map: "idx_transcription_id")
+  @@index([review_status], map: "idx_review_status")
+}
+
+/// 问答对审核/修改历史（修改后通过时记录前后内容）
+model concern_review_records {
+  id          String   @id @db.VarChar(50) /// 主键
+  concern_id  String   @db.VarChar(50) /// 关联 concerns.id
+  action      String   @db.VarChar(30) /// approve=通过, reject=拒绝, modify_approve=修改后通过
+  reviewer_id String?  @db.VarChar(50) /// 审核人ID
+  review_time DateTime @default(now()) /// 审核时间
+  remark      String?  @db.Text /// 备注（拒绝原因等）
+  content_before Json? /// 修改前内容 { question, answer, category_code, intent_code }
+  content_after  Json? /// 修改后内容（仅 modify_approve 时有值）
+  created_at  DateTime @default(now())
+
+  concerns concerns @relation(fields: [concern_id], references: [id], onDelete: Cascade)
+
+  @@index([concern_id], map: "idx_concern_review_concern_id")
+  @@index([review_time], map: "idx_concern_review_time")
+}

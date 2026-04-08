@@ -27,7 +27,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
+import { useSalesOptions } from '@/hooks/useSalesOptions'
 import Header from './components/Header.vue'
 import SearchBar from './components/SearchBar.vue'
 import ConcernedQuestionsView from './components/ConcernedQuestionsView.vue'
@@ -37,17 +38,9 @@ import ConcernedQuestionsFilters from './components/ConcernedQuestionsFilters.vu
 const selectedSubFilter = ref<string | null>(null)
 const selectedEssenceType = ref<string | null>(null)
 
-// 行业领域标签
-const subFilterTags = ref([
-  { id: 'national', name: '全国/股份制/政策性银行' },
-  { id: 'city', name: '城商行' },
-  { id: 'foreign', name: '外资行' },
-  { id: 'rural', name: '农商' },
-  { id: 'finance', name: '财务公司' },
-  { id: 'trust', name: '信托公司' },
-  { id: 'auto', name: '汽车/消费金融' },
-  { id: 'leasing', name: '金融租赁' }
-])
+// 行业领域标签（动态从 customer_types 表加载）
+const { load: loadSalesOptions, industryTags: subFilterTags } = useSalesOptions()
+onMounted(() => loadSalesOptions())
 
 // 本质类型选项
 const essenceTypes = ref([
