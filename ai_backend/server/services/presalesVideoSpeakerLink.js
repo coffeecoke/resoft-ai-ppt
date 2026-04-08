@@ -2,6 +2,7 @@
  * 售前视频 · 企微「角色确认」外链 token（HMAC 签名，无状态）
  */
 const crypto = require('crypto')
+const { getAiBackendStaticPathPrefix } = require('../utils/aiBackendPublicPath')
 
 const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
@@ -46,8 +47,9 @@ function buildSpeakerConfirmPageUrl(token) {
     throw new Error('未配置 PRESALES_VIDEO_PUBLIC_BASE_URL（外网可访问的 ai_backend 根地址，无末尾斜杠）')
   }
   const root = String(base).trim().replace(/\/$/, '')
-  const path = '/pages/presales-video-speaker-confirm.html'
-  return `${root}${path}?token=${encodeURIComponent(token)}`
+  const pfx = getAiBackendStaticPathPrefix()
+  const pagePath = `${pfx}/pages/presales-video-speaker-confirm.html`
+  return `${root}${pagePath}?token=${encodeURIComponent(token)}`
 }
 
 module.exports = {

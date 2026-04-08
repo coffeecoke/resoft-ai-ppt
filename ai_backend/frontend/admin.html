@@ -4,6 +4,18 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AI管理后台</title>
+  <!-- 支持挂在 /ai_backend/admin.html 等子路径：相对路径页面/脚本解析到正确目录 -->
+  <script>
+    (function () {
+      var path = window.location.pathname || ''
+      var m = path.match(/^(.*)\/admin\.html$/)
+      var baseHref = m && m[1] ? m[1] + '/' : '/'
+      var b = document.createElement('base')
+      b.href = baseHref
+      document.head.insertBefore(b, document.head.firstChild)
+      window.__AI_BACKEND_STATIC_PREFIX__ = m && m[1] ? m[1] : ''
+    })()
+  </script>
   <link rel="stylesheet" href="css/common.css">
   <script src="/lib/jszip/jszip.min.js"></script>
   <script src="/lib/docx-preview/docx-preview.min.js"></script>

@@ -37,6 +37,7 @@ const { getWeComBotClient } = require('../services/wecomBotService')
 const presalesVideoWecomPushService = require('../services/presalesVideoWecomPushService')
 const presalesVideoPipelineOrchestrator = require('../services/presalesVideoPipelineOrchestrator')
 const logger = require('../utils/logger')
+const { getAiBackendStaticPathPrefix } = require('../utils/aiBackendPublicPath')
 
 const router = express.Router()
 const prisma = new PrismaClient()
@@ -1645,6 +1646,49 @@ router.post('/transcriptions/:id/notify-role-confirm', async (req, res) => {
   } catch (error) {
     logger.error('[presales-video] notify-role-confirm 失败:', error)
     res.status(500).json({ success: false, error: error.message || '推送失败' })
+  }
+})
+
+/**
+ * GET /api/presales-video/transcriptions/:id/speaker-confirm-link
+ * 管理端「查看信息」：签发与企微角色确认外链相同的 token，用于打开同一套说话人确认页（GET/PUT /public/speaker-confirm）
+ * 依赖环境变量 PRESALES_VIDEO_SPEAKER_LINK_SECRET（与发卡片一致）
+ */
+router.get('/transcriptions/:id/speaker-confirm-link', async (req, res) => {
+  try {
+    const id = req.params.id != null ? String(req.params.id).trim() : ''
+    if (!id) {
+      return res.status(400).json({ success: false, error: '缺少 transcription id' })
+    }
+    const tr = await prisma.transcriptions.findUnique({ where: { id } })
+    if (!tr) {
+      return res.status(404).json({ success: false, error: '转录不存在' })
+    }
+    let token
+    try {
+      token = presalesVideoSpeakerLink.signSpeakerConfirmToken(tr.id)
+    } catch (e) {
+      const msg = (e && e.message) || String(e)
+      return res.status(503).json({
+        success: false,
+        error: msg.includes('PRESALES_VIDEO_SPEAKER_LINK_SECRET')
+          ? msg
+          : `无法签发沟通信息链接：${msg}（需配置 PRESALES_VIDEO_SPEAKER_LINK_SECRET，与角色确认卡片一致）`
+      })
+    }
+    const pfx = getAiBackendStaticPathPrefix()
+    const pagePath = `${pfx}/pages/presales-video-speaker-confirm.html?token=${encodeURIComponent(token)}`
+    return res.json({
+      success: true,
+      data: {
+        transcriptionId: tr.id,
+        token,
+        pagePath
+      }
+    })
+  } catch (error) {
+    logger.error('[presales-video] speaker-confirm-link 失败:', error)
+    res.status(500).json({ success: false, error: error.message || '签发链接失败' })
   }
 })
 

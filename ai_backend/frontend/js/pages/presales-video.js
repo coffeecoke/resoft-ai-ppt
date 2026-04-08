@@ -304,6 +304,7 @@ function pvRenderTable() {
         <td class="pv-col-report">${reportBadge}</td>
         <td class="pv-col-actions">
           <div class="pv-actions">
+            <button type="button" class="btn btn-sm btn-outline pv-act-info" title="新标签页打开与企微角色确认相同的页面：查看/修改对话与说话人角色并保存" onclick="pvOpenCommunicationInfo('${row.id}')">查看信息</button>
             <button type="button" class="btn btn-sm btn-outline" style="border:1px solid var(--primary-color,#1890ff);color:var(--primary-color,#1890ff);background:transparent;" title="选择企微接收人并推送角色确认卡片（默认创建人 userid）" onclick="pvOpenRoleConfirmDialog('${row.id}')">角色确认</button>
             <button type="button" class="btn btn-sm btn-primary" title="仅 Coze 文件上传（字段 file），返回 file_id/file_name；会议分析请点右侧「提交工作流」" onclick="pvPushDialogue('${row.id}')">推送对话</button>
             <button type="button" class="btn btn-sm pv-act-workflow" title="Coze：用「推送对话」缓存的 fileId/fileName 调 meeting-analysis 取 execute_id；或通用工作流 URL" onclick="pvSubmitWorkflow('${row.id}')">提交工作流</button>
@@ -337,6 +338,33 @@ window.pvChangePage = function (delta) {
   if (next < 1 || next > pvState.totalPages) return
   pvState.page = next
   pvLoadList()
+}
+
+window.pvOpenCommunicationInfo = async function (id) {
+  if (!id) return
+  pvShowOverlay(true, '正在打开…')
+  try {
+    const res = await fetch(`${PV_API}/presales-video/transcriptions/${encodeURIComponent(id)}/speaker-confirm-link`, {
+      headers: { 'ngrok-skip-browser-warning': 'true' }
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok || !json.success) {
+      pvToast((json && json.error) || `打开失败 HTTP ${res.status}`, 'error', PV_PUSH_WORKFLOW_TOAST_MS)
+      return
+    }
+    const path = json.data && json.data.pagePath
+    if (!path) {
+      pvToast('接口未返回页面路径', 'error')
+      return
+    }
+    const url = (window.location.origin || '') + path
+    window.open(url, '_blank', 'noopener,noreferrer')
+    pvToast('已在新标签页打开（与「角色确认」外链同一页面，可保存）', 'info', 5000)
+  } catch (e) {
+    pvToast((e && e.message) || '请求失败', 'error')
+  } finally {
+    pvShowOverlay(false)
+  }
 }
 
 window.pvOpenRoleConfirmDialog = function (id) {

@@ -32,6 +32,7 @@ const presalesInboundRoutes = require('./routes/presalesInboundRoutes')
 const { startWeComBot, stopWeComBot } = require('./services/wecomBotService')
 const presalesVideoPipelineOrchestrator = require('./services/presalesVideoPipelineOrchestrator')
 const presalesVideoRoleConfirmReminderService = require('./services/presalesVideoRoleConfirmReminderService')
+const { getAiBackendStaticPathPrefix } = require('./utils/aiBackendPublicPath')
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -70,8 +71,23 @@ const upload = multer({
 app.use(express.json({ limit: '50mb' }))
 app.use(express.urlencoded({ extended: true, limit: '50mb' }))
 
-// 静态文件服务
-app.use(express.static(path.join(__dirname, '../frontend')))
+// 静态文件服务（管理后台 HTML/JS/CSS：可配置挂在 /ai_backend 等子路径下）
+const frontendDir = path.join(__dirname, '../frontend')
+const adminStaticPrefix = getAiBackendStaticPathPrefix()
+if (adminStaticPrefix) {
+  app.use(adminStaticPrefix, express.static(frontendDir))
+  app.get(adminStaticPrefix, (req, res) => {
+    res.redirect(302, `${adminStaticPrefix}/admin.html`)
+  })
+  app.get(`${adminStaticPrefix}/`, (req, res) => {
+    res.redirect(302, `${adminStaticPrefix}/admin.html`)
+  })
+  app.get('/admin.html', (req, res) => {
+    res.redirect(302, `${adminStaticPrefix}/admin.html`)
+  })
+} else {
+  app.use(express.static(frontendDir))
+}
 app.use('/output', express.static(path.join(__dirname, '../output')))
 app.use('/scraper_output', express.static(path.join(__dirname, '../scraper_output')))
 app.use('/lib/jszip', express.static(path.join(__dirname, '../node_modules/jszip/dist')))
@@ -295,6 +311,8 @@ app.listen(PORT, HOST, () => {
   console.log('文档文本提取器 - Web 服务已启动')
   console.log('='.repeat(60))
   console.log(`🌐 本机访问: http://127.0.0.1:${PORT}  或  http://localhost:${PORT}`)
+  const adminEntry = adminStaticPrefix ? `${adminStaticPrefix}/admin.html` : '/admin.html'
+  console.log(`📎 AI 管理后台: http://127.0.0.1:${PORT}${adminEntry}`)
   if (HOST === '0.0.0.0') {
     console.log(`📡 监听: 0.0.0.0:${PORT}（同网段设备可用你电脑的局域网 IP + 端口访问）`)
   }
