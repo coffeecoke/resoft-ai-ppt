@@ -155,3 +155,9 @@ ai_backend/
 onlyoffice-data/
 # 文档
 docs/
+
+# Lock files
+package-lock.json
+pnpm-lock.yaml
+*/package-lock.json
+*/pnpm-lock.yaml
