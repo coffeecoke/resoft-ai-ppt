@@ -97,6 +97,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { useSalesOptions } from '@/hooks/useSalesOptions'
 import { getConcerns, getConcernCategories, likeConcern, type ConcernItem } from '@/services/concernsApi'
 import QuestionCategorySidebar from './QuestionCategorySidebar.vue'
 import HotSearchPanel from './HotSearchPanel.vue'
@@ -361,18 +362,11 @@ watch(selectedProduct, (newProduct) => {
   loadConcerns(true)
 })
 
-// 行业选项映射
-const industryOptions: Record<string, string> = {
-  'national': '全国/股份制/政策性银行',
-  'city': '城商行',
-  'foreign': '外资行',
-  'rural': '农商',
-  'finance': '财务公司',
-  'trust': '信托公司',
-  'auto': '汽车/消费金融',
-  'leasing': '金融租赁',
-  'other': '其他'
-}
+// 行业选项映射（动态从 customer_types 表加载）
+const { load: loadSalesOptions, industryTags: _industryTags } = useSalesOptions()
+const industryOptions = computed(() =>
+  Object.fromEntries(_industryTags.value.map(t => [t.code, t.name]))
+)
 
 // 本质类型选项映射
 const essenceTypeOptions: Record<string, string> = {
@@ -423,7 +417,7 @@ const hasActiveExternalFilters = computed(() => {
 const getFilterName = (filterId: string, filterType?: 'questionCategory' | 'industry' | 'essenceType'): string => {
   // 如果指定了类型，按类型查找
   if (filterType === 'industry') {
-    return industryOptions[filterId] || filterId
+    return industryOptions.value[filterId] || filterId
   }
   if (filterType === 'essenceType') {
     return essenceTypeOptions[filterId] || filterId
@@ -518,6 +512,7 @@ const setupLoadMoreObserver = () => {
 
 // 初始化（loadConcerns 由 watch externalFilters immediate:true 触发，此处不重复调用）
 onMounted(() => {
+  loadSalesOptions()
   loadCategories()
   nextTick(() => setupLoadMoreObserver())
 })

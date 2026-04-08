@@ -8,11 +8,11 @@
       </div>
       <div class="sub-filter-tags">
         <button
-          v-for="tag in industryTags"
-          :key="tag.id"
+          v-for="tag in resolvedIndustryTags"
+          :key="tag.code"
           class="sub-filter-tag"
-          :class="{ active: selectedIndustry === tag.id }"
-          @click="handleIndustryChange(tag.id)"
+          :class="{ active: selectedIndustry === tag.code }"
+          @click="handleIndustryChange(tag.code)"
         >
           {{ tag.name }}
         </button>
@@ -111,10 +111,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { useSalesOptions } from '@/hooks/useSalesOptions'
 
 interface FilterOption {
-  id: string
+  code: string
   name: string
 }
 
@@ -151,19 +152,13 @@ interface Props {
   showSort?: boolean
 }
 
+const { load, industryTags: dynamicIndustryTags } = useSalesOptions()
+onMounted(() => load())
+
 const props = withDefaults(defineProps<Props>(), {
   industryLabel: '行业领域',
   industryLabelIcon: 'ri-building-2-line',
-  industryTags: () => [
-    { id: 'national', name: '全国/股份制/政策性银行' },
-    { id: 'city', name: '城商行' },
-    { id: 'foreign', name: '外资行' },
-    { id: 'rural', name: '农商' },
-    { id: 'finance', name: '财务公司' },
-    { id: 'trust', name: '信托公司' },
-    { id: 'auto', name: '汽车/消费金融' },
-    { id: 'leasing', name: '金融租赁' }
-  ],
+  industryTags: () => [],
   selectedIndustry: null,
   customerButtonText: '全部客户',
   productButtonText: '产品与解决方案',
@@ -193,6 +188,11 @@ const showMoreFilters = ref(true)
 const getSelectedValue = (key: string): string | null => {
   return props.filterValues?.[key] || null
 }
+
+// 行业标签：优先使用 prop 传入，否则用动态接口数据
+const resolvedIndustryTags = computed(() =>
+  props.industryTags.length > 0 ? props.industryTags : dynamicIndustryTags.value
+)
 
 // 处理行业变化
 const handleIndustryChange = (tagId: string) => {

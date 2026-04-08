@@ -8,11 +8,11 @@
       </div>
       <div class="sub-filter-tags">
         <button
-          v-for="tag in subFilterTags"
-          :key="tag.id"
+          v-for="tag in resolvedSubFilterTags"
+          :key="tag.code"
           class="sub-filter-tag"
-          :class="{ active: selectedSubFilter === tag.id }"
-          @click="handleSubFilterChange(tag.id)"
+          :class="{ active: selectedSubFilter === tag.code }"
+          @click="handleSubFilterChange(tag.code)"
         >
           {{ tag.name }}
         </button>
@@ -131,10 +131,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { useSalesOptions } from '@/hooks/useSalesOptions'
 
 interface SubFilterTag {
-  id: string
+  code: string
   name: string
 }
 
@@ -178,22 +179,16 @@ interface Props {
   filterValues?: Record<string, string | null>
 }
 
+const { load, industryTags: dynamicSubFilterTags } = useSalesOptions()
+onMounted(() => load())
+
 const props = withDefaults(defineProps<Props>(), {
   selectedSubFilter: null,
   selectedEssenceType: null,
   selectedVersion: null,
   selectedSort: 'latest',
   showVersion: false,
-  subFilterTags: () => [
-    { id: 'national', name: '全国/股份制/政策性银行' },
-    { id: 'city', name: '城商行' },
-    { id: 'foreign', name: '外资行' },
-    { id: 'rural', name: '农商' },
-    { id: 'finance', name: '财务公司' },
-    { id: 'trust', name: '信托公司' },
-    { id: 'auto', name: '汽车/消费金融' },
-    { id: 'leasing', name: '金融租赁' }
-  ],
+  subFilterTags: () => [],
   essenceTypes: () => [
     { id: 'regulatory', name: '监管条线' },
     { id: 'xinchuang', name: '信创协同条线' },
@@ -213,6 +208,11 @@ const props = withDefaults(defineProps<Props>(), {
   hiddenFilterGroups: () => [],
   filterValues: () => ({})
 })
+
+// 行业标签：优先使用 prop 传入，否则用动态接口数据
+const resolvedSubFilterTags = computed(() =>
+  props.subFilterTags.length > 0 ? props.subFilterTags : dynamicSubFilterTags.value
+)
 
 // 更多筛选显示状态
 const showMoreFilters = ref(false)

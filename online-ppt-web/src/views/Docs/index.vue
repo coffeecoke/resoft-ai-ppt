@@ -345,7 +345,8 @@ import {
   type DocumentMetadata,
   type UpdateDocumentMetadataParams,
 } from '@/services/documentService'
-import { INDUSTRIES, AUDIENCES, LANGUAGES } from '@/configs/salesConstants'
+import { AUDIENCES, LANGUAGES } from '@/configs/salesConstants'
+import { useSalesOptions } from '@/hooks/useSalesOptions'
 import { useProductOptions } from '@/composables/useProductOptions'
 import { parsePPTXToSlides } from '@/utils/pptxParser'
 import message from '@/utils/message'
@@ -430,8 +431,8 @@ const sourceDocumentOptions = computed(() => {
 // 产品选项（从API获取）
 const { productOptions } = useProductOptions()
 
-// 行业选项（多选，不需要"请选择"）
-const industryOptions = INDUSTRIES
+// 行业选项（动态从 customer_types 表加载）
+const { load: loadSalesOptions, industryOptions } = useSalesOptions()
 
 // 交流对象选项（多选，不需要"请选择"）
 const audienceOptions = AUDIENCES
@@ -751,6 +752,7 @@ const handleRenameConfirm = async () => {
 }
 
 onMounted(() => {
+  loadSalesOptions()
   loadDocuments()
 })
 </script>

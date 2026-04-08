@@ -26,15 +26,11 @@
             <div class="filter-options">
               <el-checkbox-group v-model="pptFilters.industry">
                 <div class="filter-row">
-                  <el-checkbox label="全国/股份制/政策性银行">全国/股份制/政策性银行</el-checkbox>
-                  <el-checkbox label="城商行">城商行</el-checkbox>
-                  <el-checkbox label="外资行">外资行</el-checkbox>
-                  <el-checkbox label="农商">农商</el-checkbox>
-                  <el-checkbox label="财务公司">财务公司</el-checkbox>
-                  <el-checkbox label="信托公司">信托公司</el-checkbox>
-                  <el-checkbox label="汽车/消费金融">汽车/消费金融</el-checkbox>
-                  <el-checkbox label="金融租赁">金融租赁</el-checkbox>
-                  <el-checkbox label="其他">其他</el-checkbox>
+                  <el-checkbox
+                    v-for="tag in industryTags"
+                    :key="tag.code"
+                    :label="tag.code"
+                  >{{ tag.name }}</el-checkbox>
                 </div>
               </el-checkbox-group>
             </div>
@@ -488,6 +484,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, watch, inject } from 'vue'
+import { useSalesOptions } from '@/hooks/useSalesOptions'
 import { useRoute, useRouter } from 'vue-router'
 import { VideoPlay, Filter, MagicStick, Download, Document } from '@element-plus/icons-vue'
 import Header from './components/Header.vue'
@@ -873,7 +870,10 @@ watch(catalogMode, () => {
   updateContent([])
 })
 
+const { load: loadSalesOptions, industryTags } = useSalesOptions()
+
 onMounted(() => {
+  loadSalesOptions()
   updateContent([])
 })
 </script>

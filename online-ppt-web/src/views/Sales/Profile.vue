@@ -479,7 +479,8 @@ import { salesData } from '@/configs/salesData'
 import { uploadSalesPpt } from '@/services/salesService'
 import type { UploadSalesPptParams } from '@/services/salesService'
 import { parsePPTXToSlides } from '@/utils/pptxParser'
-import { PRODUCTS, INDUSTRIES, AUDIENCES, LANGUAGES } from '@/configs/salesConstants'
+import { PRODUCTS, AUDIENCES, LANGUAGES } from '@/configs/salesConstants'
+import { useSalesOptions } from '@/hooks/useSalesOptions'
 import { getDocumentList, createDocument } from '@/services/documentService'
 import { getPersonalDocumentList, deletePersonalDocument, type PersonalDocument } from '@/services/wopiService'
 const router = useRouter()
@@ -523,6 +524,7 @@ const handleCreatePpt = async () => {
 }
 
 onMounted(() => {
+  loadSalesOptions()
   loadPersonalPpts()
   loadPersonalDocuments()
 })
@@ -946,8 +948,8 @@ const uploadRules = {
 }
 
 // 选项数据
+const { load: loadSalesOptions, industryOptions } = useSalesOptions()
 const productOptions = PRODUCTS
-const industryOptions = INDUSTRIES
 const audienceOptions = AUDIENCES
 const languageOptions = LANGUAGES
 

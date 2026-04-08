@@ -352,6 +352,7 @@ import CommonFilters from './components/CommonFilters.vue'
 import PptGrid from './components/PptGrid.vue'
 import PptDialog from './components/PptDialog.vue'
 import { AUDIENCES } from '@/configs/salesConstants'
+import { useSalesOptions } from '@/hooks/useSalesOptions'
 import { useDialogs } from './composables/useDialogs'
 import { useProductCatalogs } from './composables/useProductCatalogs'
 import { useFilters } from './composables/useFilters'
@@ -381,17 +382,8 @@ const filterValues = ref<Record<string, string | null>>({
 })
 const selectedSort = ref<string>('latest')
 
-// 行业领域标签
-const industryTags = [
-  { id: 'national', name: '全国/股份制/政策性银行' },
-  { id: 'city', name: '城商行' },
-  { id: 'foreign', name: '外资行' },
-  { id: 'rural', name: '农商' },
-  { id: 'finance', name: '财务公司' },
-  { id: 'trust', name: '信托公司' },
-  { id: 'auto', name: '汽车/消费金融' },
-  { id: 'leasing', name: '金融租赁' }
-]
+// 行业领域标签（动态从 customer_types 表加载）
+const { load: loadSalesOptions, industryTags } = useSalesOptions()
 
 // 版本选项
 const versions = [
@@ -802,6 +794,7 @@ watch(() => route.query.product, (code) => {
 }, { immediate: true })
 
 onMounted(() => {
+  loadSalesOptions()
   // 无 product 时 useFilters 已会 loadDocuments（所有产品）；有 product 时 useProductCatalogs 会按 product 拉取
 })
 </script>
