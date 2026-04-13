@@ -3,6 +3,7 @@
  */
 const express = require('express')
 const { getWeComBotClient, getInternalApiTokensSafe } = require('../services/wecomBotService')
+const { isWeComBotWsStartupDisabled } = require('../wecomBot/config')
 const { getLogger } = require('../wecomBot/logger')
 
 const router = express.Router()
@@ -26,8 +27,10 @@ function authenticate(req, tokens) {
 router.get('/status', (req, res) => {
   const c = getWeComBotClient()
   const tokens = getInternalApiTokensSafe()
+  const wsStartupDisabled = isWeComBotWsStartupDisabled()
   res.json({
     enabled: Boolean(c),
+    wsStartupDisabled,
     wsState: c ? c.getState() : null,
     wsAuthenticated: c ? c.isConnected() : false,
     sendApiEnabled: Boolean(tokens && tokens.length)

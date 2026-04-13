@@ -3,7 +3,11 @@
  */
 const { WeComBotClient } = require('../wecomBot/WeComBotClient')
 const { registerDefaultMessageHandlers } = require('../wecomBot/defaultMessageHandlers')
-const { isWeComBotConfigured, loadInternalApiTokens } = require('../wecomBot/config')
+const {
+  isWeComBotConfigured,
+  isWeComBotWsStartupDisabled,
+  loadInternalApiTokens
+} = require('../wecomBot/config')
 const { getLogger } = require('../wecomBot/logger')
 
 let client = null
@@ -25,6 +29,12 @@ function getInternalApiTokensSafe() {
 }
 
 function startWeComBot() {
+  if (isWeComBotWsStartupDisabled()) {
+    console.info(
+      '[wecom-bot] 已关闭智能机器人 WebSocket（WECOM_BOT_WS_DISABLED 或 WECOM_DISABLE_BOT_WS），跳过连接'
+    )
+    return
+  }
   if (!isWeComBotConfigured()) {
     console.info('[wecom-bot] 未配置 WECOM_BOT_ID / WECOM_BOT_SECRET，跳过智能机器人长连接')
     return

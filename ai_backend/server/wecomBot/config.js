@@ -69,9 +69,21 @@ function isWeComBotConfigured() {
   return Boolean(id && String(id).trim() && sec && String(sec).trim())
 }
 
+/**
+ * 为 true 时不启动智能机器人 WebSocket（不连 wss://openws…），其它 HTTP 能力不受影响。
+ * 取值：1 / true / yes / on（不区分大小写）；兼容别名 WECOM_DISABLE_BOT_WS。
+ */
+function isWeComBotWsStartupDisabled() {
+  const primary = String(process.env.WECOM_BOT_WS_DISABLED || '').trim().toLowerCase()
+  const alias = String(process.env.WECOM_DISABLE_BOT_WS || '').trim().toLowerCase()
+  const v = primary || alias
+  return ['1', 'true', 'yes', 'on'].includes(v)
+}
+
 module.exports = {
   loadWeComBotConfig,
   loadInternalApiTokens,
   validateWeComBotConfig,
-  isWeComBotConfigured
+  isWeComBotConfigured,
+  isWeComBotWsStartupDisabled
 }
