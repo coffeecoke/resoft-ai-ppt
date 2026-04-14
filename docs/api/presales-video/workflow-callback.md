@@ -27,6 +27,7 @@
 | id | string | 与 execute_id 二选一 | 工作流 execute_id |
 | execute_id | string | 与 id 二选一 | 同 `id` |
 | content / text / url / path 等 | string | 否 | 分析全文或视频 URL/路径，见下表 |
+| playlist_url / playlistUrl | string | 否 | 仅 **视频生成成功**（`type: video_create` 且成功）时：播放列表 URL（如 m3u8），写入库字段 `reserve_5`（最长 500）；不传则不修改 `reserve_5` |
 
 **承载「分析内容」或「视频地址」时可选用以下任一字段名**（服务端取第一个非空）：  
 `content`、`text`、`result`、`url`、`path`、`video_url`、`videoUrl`、`video_path`、`videoPath`、`address`、`payload`、`value`，或 `data` 为字符串时取 `data`。
@@ -36,7 +37,7 @@
 | type | 库表状态 `pipeline_status` | 写入字段 | 说明 |
 |------|----------------------------|----------|------|
 | `analysis_content` | `分析完成` | `analysis_content`（LONGTEXT，可存约 2 万字量级） | 分析完内容 |
-| `video_create` | `视频生成` | `video_address`（最长 2000 字符，超出截断） | 视频地址 |
+| `video_create` | `视频生成` | `video_address`（最长 2000 字符，超出截断）；可选 `playlist_url` → `reserve_5`（最长 500） | 主视频地址；播放列表 URL 可选 |
 
 ### 可选鉴权
 
@@ -71,7 +72,8 @@ X-Presales-Video-Callback-Secret: your-secret-if-configured
 {
   "type": "video_create",
   "execute_id": "7432908123456789012",
-  "path": "https://cdn.example.com/presales/videos/xxx.mp4"
+  "path": "https://cdn.example.com/presales/videos/xxx.mp4",
+  "playlist_url": "https://cdn.example.com/presales/videos/xxx_segments.m3u8"
 }
 ```
 
@@ -135,5 +137,6 @@ curl -sS -X POST "http://127.0.0.1:3000/api/presales-video/workflow-callback" \
 
 | 版本 | 日期 | 说明 |
 |------|------|------|
+| v1.2 | 2026-04-02 | `video_split` 回调参数更名为 `playlist_url` / `playlistUrl`，仍写入 `reserve_5` |
 | v1.1 | 2026-03-28 | 库字段 `reserve_1/2` 更名为 `analysis_content` / `video_address`，分析内容改 LONGTEXT |
 | v1.0 | 2026-03-28 | 初始回调接口 |

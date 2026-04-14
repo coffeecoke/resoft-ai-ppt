@@ -10,6 +10,9 @@
  * - PRESALES_VIDEO_REPORT_ASYNC_URL    推送报告：异步任务 POST 完整 URL（如 …/async），Body { name, execute_id, filePaths }（优先于下方旧推送）
  * - PRESALES_VIDEO_REPORT_ASYNC_TOKEN  可选，异步任务请求 Authorization: Bearer
  * - PRESALES_VIDEO_REPORT_ASYNC_PROMPT 可选，异步任务 Body 中 prompt 默认值覆盖（默认文案：根据报告内容，生成视频，使用默认主题）
+ * - PRESALES_VIDEO_SUBTITLE_VIDEO_ASYNC_URL 可选；音频时长 < PRESALES_VIDEO_REPORT_DURATION_SPLIT_SEC（默认 600s）且本 URL、合并 txt 路径、音频路径齐全时 POST { audio_path, txt_path, name, execute_id }，否则仍走 REPORT_ASYNC_URL
+ * - PRESALES_VIDEO_SUBTITLE_VIDEO_ASYNC_TOKEN 可选；缺省时短音频分支复用 PRESALES_VIDEO_REPORT_ASYNC_TOKEN
+ * - PRESALES_VIDEO_REPORT_DURATION_SPLIT_SEC 可选；整数秒，短音频走字幕接口的时长上界（不含等于），默认 600；非法或超出 86400 则回退默认
  * - PRESALES_VIDEO_REPORT_PUSH_URL     未配置 ASYNC_URL 时：旧版推送本地售前分析 JSON POST（可选）
  * - PRESALES_VIDEO_FETCH_URL           获取视频 GET（可选，query: transcriptionId）
  * - WECOM_CORP_ID / WECOM_APPCHAT_SECRET  推送视频：企微 appchat 建群；报备 Markdown + 售前视频文本卡片（跳转 URL 见 PRESALES_VIDEO_PSV_INFO_* / PRESALES_VIDEO_WECOM_PUSH_PUBLIC_BASE_URL）
@@ -45,6 +48,28 @@ const prisma = new PrismaClient()
 /** 推送报告（异步）第三方 Body 字段 prompt 的默认文案 */
 const PRESALES_VIDEO_ASYNC_DEFAULT_PROMPT = '根据报告内容，生成视频，使用默认主题'
 
+/** 未配置 PRESALES_VIDEO_REPORT_DURATION_SPLIT_SEC 时的默认分界（秒）：≥ 此值走 REPORT_ASYNC_URL */
+const PRESALES_VIDEO_REPORT_DURATION_SPLIT_DEFAULT_SEC = 10 * 60
+const PRESALES_VIDEO_REPORT_DURATION_SPLIT_MAX_SEC = 86400
+
+/**
+ * 读环境变量：短音频（走字幕视频）为 duration < 返回值；≥ 返回值走原 REPORT_ASYNC_URL
+ */
+function getReportDurationSplitSec() {
+  const raw = process.env.PRESALES_VIDEO_REPORT_DURATION_SPLIT_SEC
+  if (raw == null || String(raw).trim() === '') {
+    return PRESALES_VIDEO_REPORT_DURATION_SPLIT_DEFAULT_SEC
+  }
+  const n = parseInt(String(raw).trim(), 10)
+  if (Number.isNaN(n) || n < 1) {
+    return PRESALES_VIDEO_REPORT_DURATION_SPLIT_DEFAULT_SEC
+  }
+  if (n > PRESALES_VIDEO_REPORT_DURATION_SPLIT_MAX_SEC) {
+    return PRESALES_VIDEO_REPORT_DURATION_SPLIT_MAX_SEC
+  }
+  return n
+}
+
 /** 列表查询：YYYY-MM-DD → 服务器本地时区当日 00:00:00.000 */
 function parseListDateFrom(s) {
   if (s == null || String(s).trim() === '') return null
@@ -72,6 +97,15 @@ function transcriptionAudioDisplayName(tr) {
   if (orig) return orig
   const n = tr.name != null && String(tr.name).trim() ? String(tr.name).trim() : ''
   return n
+}
+
+/** 音频展示名去掉扩展名（用于 subtitle-video 的 name） */
+function audioDisplayNameWithoutExt(tr, fallbackId) {
+  const disp = transcriptionAudioDisplayName(tr)
+  if (!disp) return fallbackId || ''
+  const pe = path.parse(disp)
+  if (pe.ext) return (pe.name && pe.name.trim()) || fallbackId || ''
+  return disp
 }
 
 /** 企微模板卡主标题不宜过长 */
@@ -1330,6 +1364,83 @@ router.post('/transcriptions/:id/push-report', async (req, res) => {
         return res.status(400).json({
           success: false,
           error: '缺少 execute_id：请先「提交工作流」并确保 presales_video_tasks.execute_id 已落库'
+        })
+      }
+
+      const tr = await prisma.transcriptions.findUnique({ where: { id } })
+      if (!tr) {
+        return res.status(404).json({ success: false, error: '转录不存在' })
+      }
+
+      const durationSec =
+        tr.audio_duration != null ? Number(tr.audio_duration) : NaN
+      const durationOk = !Number.isNaN(durationSec) && durationSec >= 0
+      const subtitleUrlRaw = process.env.PRESALES_VIDEO_SUBTITLE_VIDEO_ASYNC_URL
+      const subtitleUrl =
+        subtitleUrlRaw && String(subtitleUrlRaw).trim()
+          ? String(subtitleUrlRaw).trim()
+          : ''
+      const localTxt =
+        taskRow?.local_dialogue_txt_path != null
+          ? String(taskRow.local_dialogue_txt_path).trim()
+          : ''
+      const audioPath =
+        tr.audio_file_path != null ? String(tr.audio_file_path).trim() : ''
+
+      const splitSec = getReportDurationSplitSec()
+
+      const useSubtitleVideo =
+        durationOk &&
+        durationSec < splitSec &&
+        Boolean(subtitleUrl) &&
+        Boolean(localTxt) &&
+        Boolean(audioPath)
+
+      if (durationOk && durationSec < splitSec && !useSubtitleVideo) {
+        logger.warn(
+          `[presales-video] push-report 短音频(${durationSec}s)但走原 report async：subtitleUrl=${Boolean(
+            subtitleUrl
+          )} localTxt=${Boolean(localTxt)} audioPath=${Boolean(audioPath)} transcription=${id}`
+        )
+      }
+
+      if (useSubtitleVideo) {
+        const nameNoExt = audioDisplayNameWithoutExt(tr, id)
+        const subPayload = {
+          audio_path: audioPath,
+          txt_path: localTxt,
+          name: nameNoExt || id,
+          execute_id: executeId
+        }
+        const subHeaders = {}
+        const subTokRaw =
+          process.env.PRESALES_VIDEO_SUBTITLE_VIDEO_ASYNC_TOKEN ||
+          process.env.PRESALES_VIDEO_REPORT_ASYNC_TOKEN
+        if (subTokRaw && String(subTokRaw).trim()) {
+          subHeaders.Authorization = `Bearer ${String(subTokRaw).trim()}`
+        }
+        logger.info(
+          `[presales-video] 推送字幕视频(短音频 duration<${splitSec}s) POST ${subtitleUrl} transcription=${id} durationSec=${durationSec}`
+        )
+        const remoteSub = await httpRequestJson('POST', subtitleUrl, subPayload, subHeaders)
+        let remoteSubJson = null
+        try {
+          remoteSubJson = JSON.parse(remoteSub.body)
+        } catch {
+          // ignore
+        }
+        return res.json({
+          success: remoteSub.status >= 200 && remoteSub.status < 300,
+          data: {
+            mode: 'subtitle_video_async',
+            requestPayload: subPayload,
+            remoteStatus: remoteSub.status,
+            remoteBody:
+              remoteSub.body.length > 4000
+                ? remoteSub.body.slice(0, 4000) + '…'
+                : remoteSub.body,
+            remoteJson: remoteSubJson
+          }
         })
       }
 
