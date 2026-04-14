@@ -1,9 +1,10 @@
 /**
  * 售前视频：企微应用群发会话推送「交流报备摘要 + 售前视频文本卡片」
- * 卡片 URL：优先 PRESALES_VIDEO_WECOM_CARD_URL_TEMPLATE（{id}=execute_id/psv_video_info.id）；否则「基址+playlist/path」拼接
+ * 卡片 URL：优先 PRESALES_VIDEO_WECOM_CARD_URL_TEMPLATE（{id}=execute_id/psv_video_info.id；{chatId}=本次会话 chatid 或从 reserve_4 解析）；否则「基址+playlist/path」拼接
  */
 const wecomAppChatApi = require('./wecomAppChatApi')
 const presalesVideoTaskService = require('./presalesVideoTaskService')
+const logger = require('../utils/logger')
 
 function escapeMdLine(s) {
   return String(s || '')
@@ -148,6 +149,24 @@ function isWindowsStyleFilePath(s) {
 }
 
 /**
+ * 从 presales_video_tasks.reserve_4 解析企微 appchat 的 chatid。
+ * 落库格式：wecom_appchat:{chatid}@{ISO8601}，只返回中间 chatid；无前缀则按第一个 @ 截断取前段。
+ */
+function extractWecomAppChatIdFromReserve4(reserve4) {
+  const s = String(reserve4 || '').trim()
+  if (!s) return ''
+  const prefix = 'wecom_appchat:'
+  if (s.startsWith(prefix)) {
+    const rest = s.slice(prefix.length)
+    const at = rest.indexOf('@')
+    if (at <= 0) return rest.trim()
+    return rest.slice(0, at).trim()
+  }
+  const at = s.indexOf('@')
+  return (at === -1 ? s : s.slice(0, at)).trim()
+}
+
+/**
  * 卡片 H5 地址模板：{id} = psv_video_info.id（与 presales_video_tasks.execute_id 一致），{chatId} 可选
  * 优先 PRESALES_VIDEO_WECOM_CARD_URL_TEMPLATE；否则若 PRESALES_VIDEO_WECOM_PUSH_PUBLIC_BASE_URL 含 {id} 也视为模板（兼容旧键名）
  */
@@ -166,11 +185,23 @@ function wecomCardPublicOriginOverride() {
   return undefined
 }
 
-function fillWecomCardUrlTemplate(tpl, executeId) {
-  const chatId =
-    process.env.PRESALES_VIDEO_WECOM_CARD_CHAT_ID != null
-      ? String(process.env.PRESALES_VIDEO_WECOM_CARD_CHAT_ID).trim()
-      : ''
+/**
+ * @param {string} tpl
+ * @param {string} executeId
+ * @param {{ chatId?: string, reserve4?: string|null }} [opts]
+ * {chatId} 替换顺序：优先从 reserve4 解析（与 presales_video_tasks.reserve_4 落库格式一致）；否则 opts.chatId；再否则 PRESALES_VIDEO_WECOM_CARD_CHAT_ID。
+ */
+function fillWecomCardUrlTemplate(tpl, executeId, opts = {}) {
+  let chatId = ''
+  if (opts.reserve4 != null && String(opts.reserve4).trim()) {
+    chatId = extractWecomAppChatIdFromReserve4(opts.reserve4)
+  }
+  if (!chatId && opts.chatId != null) {
+    chatId = String(opts.chatId).trim()
+  }
+  if (!chatId && process.env.PRESALES_VIDEO_WECOM_CARD_CHAT_ID != null) {
+    chatId = String(process.env.PRESALES_VIDEO_WECOM_CARD_CHAT_ID).trim()
+  }
   return String(tpl)
     .split('{id}')
     .join(encodeURIComponent(executeId))
@@ -235,6 +266,16 @@ async function pushPresalesVideoToWecomAppChat(ctx) {
     userIds
   })
 
+  const reserve4Stamp = `wecom_appchat:${chatid}@${new Date().toISOString()}`.slice(0, 500)
+  try {
+    await prisma.presales_video_tasks.updateMany({
+      where: { transcription_id: transcriptionId },
+      data: { reserve_4: reserve4Stamp }
+    })
+  } catch (e) {
+    logger.warn('[presales-video] 推送前回写 reserve_4 失败:', e && e.message)
+  }
+
   const md1 = formatReportMarkdown(report)
   await wecomAppChatApi.sendAppChatMarkdown(chatid, md1)
 
@@ -271,7 +312,9 @@ async function pushPresalesVideoToWecomAppChat(ctx) {
       )
     } else {
       const idForCard = presalesVideoTaskService.clipExecuteIdForPsvVideoInfo(execId)
-      const cardUrl = fillWecomCardUrlTemplate(cardTpl, idForCard)
+      const cardUrl = fillWecomCardUrlTemplate(cardTpl, idForCard, {
+        reserve4: reserve4Stamp
+      })
       if (/^https?:\/\//i.test(cardUrl)) {
         await sendCardWithUrl(cardUrl)
       } else {
@@ -317,5 +360,7 @@ module.exports = {
   findLatestMatchingReport,
   formatReportMarkdown,
   formatVideoMarkdown,
+  extractWecomAppChatIdFromReserve4,
+  fillWecomCardUrlTemplate,
   pushPresalesVideoToWecomAppChat
 }

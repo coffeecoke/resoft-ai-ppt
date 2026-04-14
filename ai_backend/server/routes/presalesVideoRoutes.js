@@ -1585,15 +1585,7 @@ router.post('/transcriptions/:id/push-video', async (req, res) => {
       transcriptionId: id,
       userIdsRaw: userIds
     })
-    try {
-      const stamp = `wecom_appchat:${result.chatid}@${new Date().toISOString()}`
-      await prisma.presales_video_tasks.updateMany({
-        where: { transcription_id: id },
-        data: { reserve_4: stamp.slice(0, 500) }
-      })
-    } catch (e) {
-      logger.warn('[presales-video] push-video 回写 reserve_4 失败:', e.message)
-    }
+    // reserve_4（wecom_appchat:{chatid}@时间）已在 push 服务内、发卡片前写入，供模板 {chatId} 解析
     logger.info(
       `[presales-video] push-video 成功 transcription=${id} chatid=${result.chatid} users=${result.userCount}`
     )
