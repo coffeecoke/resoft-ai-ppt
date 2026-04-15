@@ -5,7 +5,7 @@
 
 const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client')
 const logger = require('../utils/logger')
-const { getWeComBotClient } = require('./wecomBotService')
+const wecomAppChatApi = require('./wecomAppChatApi')
 const presalesVideoTaskService = require('./presalesVideoTaskService')
 
 const prisma = new PrismaClient()
@@ -48,8 +48,7 @@ async function tickRoleConfirmReminders() {
     return
   }
 
-  const bot = getWeComBotClient()
-  if (!bot || !bot.isConnected()) {
+  if (!wecomAppChatApi.isApplicationMessageConfigured()) {
     return
   }
 
@@ -103,7 +102,7 @@ async function tickRoleConfirmReminders() {
 
     const md = reminderMarkdown(label)
     try {
-      await bot.sendMsg(wxUser, md, 'text')
+      await wecomAppChatApi.sendApplicationMarkdownToUser(wxUser, md)
       await prisma.presales_video_tasks.update({
         where: { id: row.id },
         data: { role_confirm_reminder_sent_at: new Date() }

@@ -15,7 +15,7 @@
  * - PRESALES_VIDEO_REPORT_DURATION_SPLIT_SEC 可选；整数秒，短音频走字幕接口的时长上界（不含等于），默认 600；非法或超出 86400 则回退默认
  * - PRESALES_VIDEO_REPORT_PUSH_URL     未配置 ASYNC_URL 时：旧版推送本地售前分析 JSON POST（可选）
  * - PRESALES_VIDEO_FETCH_URL           获取视频 GET（可选，query: transcriptionId）
- * - WECOM_CORP_ID / WECOM_APPCHAT_SECRET  推送视频：企微 appchat 建群；报备 Markdown + 售前视频文本卡片（跳转 URL 见 PRESALES_VIDEO_PSV_INFO_* / PRESALES_VIDEO_WECOM_PUSH_PUBLIC_BASE_URL）
+ * - WECOM_CORP_ID / WECOM_APPCHAT_SECRET / WECOM_AGENT_ID  推送视频：appchat 建群；说话人角色确认：自建应用 message/send textcard；超时提醒：同应用 markdown（接收人须在应用可见范围）
  * - PRESALES_VIDEO_WORKFLOW_SUBMIT_URL 提交工作流 JSON POST（可选）
  * - PRESALES_VIDEO_WORKFLOW_SUBMIT_TOKEN 可选，Bearer Token 鉴权
  * - PRESALES_VIDEO_WORKFLOW_CALLBACK_SECRET 可选，工作流回调鉴权；请求需带 Header X-Presales-Video-Callback-Secret 或 query ?secret=
@@ -36,7 +36,7 @@ const mergedDialogueService = require('../services/transcriptionMergedDialogueSe
 const presalesAnalysisService = require('../services/presalesAnalysisService')
 const presalesVideoTaskService = require('../services/presalesVideoTaskService')
 const presalesVideoSpeakerLink = require('../services/presalesVideoSpeakerLink')
-const { getWeComBotClient } = require('../services/wecomBotService')
+const wecomAppChatApi = require('../services/wecomAppChatApi')
 const presalesVideoWecomPushService = require('../services/presalesVideoWecomPushService')
 const presalesVideoPipelineOrchestrator = require('../services/presalesVideoPipelineOrchestrator')
 const logger = require('../utils/logger')
@@ -1653,7 +1653,7 @@ router.get('/transcriptions/:id/video', async (req, res) => {
 /**
  * POST /api/presales-video/transcriptions/:id/notify-role-confirm
  * Body 可选：{ wecomUserId } 接收人企微 userid；缺省时用 transcriptions.created_by。
- * 发模板卡片/Markdown，内含角色确认外链（需机器人 WS 已连接 + 环境变量）
+ * 自建应用 message/send：textcard（失败则 markdown），内含角色确认外链（需 WECOM_CORP_ID、WECOM_APPCHAT_SECRET、WECOM_AGENT_ID，接收人须在应用可见范围）
  */
 router.post('/transcriptions/:id/notify-role-confirm', async (req, res) => {
   const { id } = req.params
@@ -1684,11 +1684,11 @@ router.post('/transcriptions/:id/notify-role-confirm', async (req, res) => {
     }
     const token = presalesVideoSpeakerLink.signSpeakerConfirmToken(id)
     const pageUrl = presalesVideoSpeakerLink.buildSpeakerConfirmPageUrl(token)
-    const bot = getWeComBotClient()
-    if (!bot || !bot.isConnected()) {
+    if (!wecomAppChatApi.isApplicationMessageConfigured()) {
       return res.status(503).json({
         success: false,
-        error: '企业微信机器人未连接（WebSocket 未认证），无法推送消息'
+        error:
+          '角色确认由自建应用推送：请配置 WECOM_CORP_ID、WECOM_APPCHAT_SECRET（该应用 Secret）、WECOM_AGENT_ID，并确保接收人在应用可见范围内'
       })
     }
     const audioName = transcriptionAudioDisplayName(tr)
@@ -1697,24 +1697,22 @@ router.post('/transcriptions/:id/notify-role-confirm', async (req, res) => {
       : '说话人角色确认'
     const mdAudio = audioName ? `\n\n音频：${audioName}` : ''
     const md = `**售前视频 · 说话人确认**${mdAudio}\n\n请打开链接核对对话并修正说话人（可批量改同一标签），保存后即可在后台继续「推送对话」等流程。\n\n[点此打开角色确认页面](${pageUrl})`
-    const taskId = `pvsc_${id.replace(/-/g, '').slice(0, 24)}_${Date.now()}`
+    const textcardDesc =
+      '<div class="normal">请完成核对后再推送对话</div><div class="gray">点击本卡片进入网页（需与服务器网络互通）</div>'
     try {
-      await bot.sendTextNoticeCard(wxUser, {
-        pageUrl,
-        taskId,
+      await wecomAppChatApi.sendApplicationTextCardToUser(wxUser, {
         title: roleConfirmTitle,
-        desc: '请完成核对后再推送对话',
-        subTitle: '点击本卡片或「打开确认页面」进入网页（需与服务器网络互通）'
+        description: textcardDesc,
+        url: pageUrl,
+        btntxt: '打开确认'
       })
-      logger.info(
-        `[presales-video] 已推送角色确认模板卡片 transcription=${id} -> ${wxUser} taskId=${taskId}`
-      )
+      logger.info(`[presales-video] 已推送角色确认 textcard（自建应用） transcription=${id} -> ${wxUser}`)
     } catch (cardErr) {
       logger.warn(
-        `[presales-video] 模板卡片发送失败，降级为 Markdown: ${cardErr.message || cardErr}`
+        `[presales-video] textcard 发送失败，降级为 markdown: ${cardErr.message || cardErr}`
       )
-      await bot.sendMsg(wxUser, md, 'text')
-      logger.info(`[presales-video] 已推送角色确认 Markdown transcription=${id} -> ${wxUser}`)
+      await wecomAppChatApi.sendApplicationMarkdownToUser(wxUser, md)
+      logger.info(`[presales-video] 已推送角色确认 markdown（自建应用） transcription=${id} -> ${wxUser}`)
     }
     try {
       await presalesVideoTaskService.getOrCreateTask(id)
