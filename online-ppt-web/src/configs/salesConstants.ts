@@ -3,6 +3,9 @@
  * 存放所有选项常量
  */
 
+// 重点关注产品展示顺序（按 code 排列，调整顺序直接改这里即可）
+export const FEATURED_PRODUCT_CODES = ['0122A1', '0121131', '0121421', '012211']
+
 // 产品列表
 export const PRODUCTS = [
   { label: '一表通', value: '一表通' },

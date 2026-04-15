@@ -42,7 +42,7 @@ model product_catalogs {
   updated_at             DateTime /// 更新时间
   product_catalogs       product_catalogs?   @relation("product_catalogsToproduct_catalogs", fields: [parent_id], references: [id], onDelete: Cascade)
   other_product_catalogs product_catalogs[]  @relation("product_catalogsToproduct_catalogs")
-  products               products?           @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  // products               products?           @relation(fields: [product_id], references: [id], onDelete: Cascade)
   product_documents      product_documents[]
 
   @@index([level], map: "idx_level")
