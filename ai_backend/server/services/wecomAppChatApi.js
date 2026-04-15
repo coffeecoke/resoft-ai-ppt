@@ -1,8 +1,10 @@
 /**
- * 企业微信 HTTP：gettoken + appchat 建群 + 群发 Markdown / 文本卡片 / 视频
+ * 企业微信 HTTP：gettoken + appchat 建群 + 群发 Markdown / 文本卡片 / 视频；
+ * 以及自建应用 message/send（成员 textcard / markdown，售前视频「说话人角色确认」与超时提醒）。
  * 需自建应用 Secret（与智能机器人 WebSocket Secret 不同），且应用可见范围内包含所选成员。
  * @see https://developer.work.weixin.qq.com/document/path/90245
  * @see https://developer.work.weixin.qq.com/document/path/90253 上传临时素材
+ * @see https://developer.work.weixin.qq.com/document/path/90236 message/send
  */
 const fs = require('fs')
 const path = require('path')
@@ -83,6 +85,18 @@ function isAppChatConfigured() {
   const id = process.env.WECOM_CORP_ID && String(process.env.WECOM_CORP_ID).trim()
   const sec = process.env.WECOM_APPCHAT_SECRET && String(process.env.WECOM_APPCHAT_SECRET).trim()
   return Boolean(id && sec)
+}
+
+/** @returns {number|null} 自建应用 AgentId，未配置或非法时返回 null */
+function getApplicationAgentId() {
+  const raw = String(process.env.WECOM_AGENT_ID || '').trim()
+  const n = parseInt(raw, 10)
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+
+/** 是否可调用 message/send（角色确认 textcard、超时提醒 markdown） */
+function isApplicationMessageConfigured() {
+  return isAppChatConfigured() && getApplicationAgentId() != null
 }
 
 async function getAccessToken() {
@@ -204,6 +218,82 @@ async function sendAppChatTextCard(chatid, opts) {
   const j = await httpsPostJson(url, body)
   if (j.errcode != null && j.errcode !== 0) {
     throw new Error(formatQyApiError('appchat/send(textcard) 失败', j))
+  }
+  return true
+}
+
+/**
+ * 自建应用 message/send → 成员 textcard（单聊 touser=userid）
+ * @param {string} touser
+ * @param {{ title: string, description: string, url: string, btntxt?: string }} opts
+ */
+async function sendApplicationTextCardToUser(touser, opts) {
+  const agentid = getApplicationAgentId()
+  if (!agentid) {
+    throw new Error('未配置 WECOM_AGENT_ID，无法发送应用消息 textcard')
+  }
+  const uid = String(touser || '').trim()
+  if (!uid) {
+    throw new Error('缺少接收人 userid')
+  }
+  const token = await getAccessToken()
+  const url = `https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token=${encodeURIComponent(token)}`
+  const o = opts && typeof opts === 'object' ? opts : {}
+  const title = truncateUtf8Bytes(o.title || '通知', 128)
+  const description = truncateUtf8Bytes(o.description || '<div class="normal">点击查看</div>', 512)
+  const jump = String(o.url || '').trim()
+  if (!jump) {
+    throw new Error('textcard 缺少 url')
+  }
+  const btntxt = truncateUtf8Bytes((o.btntxt != null ? String(o.btntxt) : '详情') || '详情', 12)
+  const body = {
+    touser: uid,
+    msgtype: 'textcard',
+    agentid,
+    textcard: {
+      title,
+      description,
+      url: jump,
+      btntxt: btntxt || '详情'
+    },
+    safe: 0,
+    enable_id_trans: 0
+  }
+  const j = await httpsPostJson(url, body)
+  if (j.errcode != null && j.errcode !== 0) {
+    throw new Error(formatQyApiError('message/send(textcard) 失败', j))
+  }
+  return true
+}
+
+/**
+ * 自建应用 message/send → 成员 markdown
+ * @param {string} touser
+ * @param {string} markdownContent 最长约 4096 字节（UTF-8）
+ */
+async function sendApplicationMarkdownToUser(touser, markdownContent) {
+  const agentid = getApplicationAgentId()
+  if (!agentid) {
+    throw new Error('未配置 WECOM_AGENT_ID，无法发送应用消息 markdown')
+  }
+  const uid = String(touser || '').trim()
+  if (!uid) {
+    throw new Error('缺少接收人 userid')
+  }
+  const token = await getAccessToken()
+  const url = `https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token=${encodeURIComponent(token)}`
+  const content = truncateUtf8Bytes(markdownContent || '', 4096)
+  const body = {
+    touser: uid,
+    msgtype: 'markdown',
+    agentid,
+    markdown: { content },
+    safe: 0,
+    enable_id_trans: 0
+  }
+  const j = await httpsPostJson(url, body)
+  if (j.errcode != null && j.errcode !== 0) {
+    throw new Error(formatQyApiError('message/send(markdown) 失败', j))
   }
   return true
 }
@@ -379,10 +469,14 @@ async function sendAppChatVideo(chatid, mediaId, opts) {
 
 module.exports = {
   isAppChatConfigured,
+  isApplicationMessageConfigured,
+  getApplicationAgentId,
   getAccessToken,
   createAppChat,
   sendAppChatMarkdown,
   sendAppChatTextCard,
+  sendApplicationTextCardToUser,
+  sendApplicationMarkdownToUser,
   sendAppChatVideo,
   sendAppChatFile,
   uploadTempMediaVideo,

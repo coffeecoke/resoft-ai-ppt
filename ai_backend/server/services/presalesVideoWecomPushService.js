@@ -1,6 +1,6 @@
 /**
  * 售前视频：企微应用群发会话推送「交流报备摘要 + 售前视频文本卡片」
- * 卡片 URL：优先 PRESALES_VIDEO_WECOM_CARD_URL_TEMPLATE（{id}=execute_id/psv_video_info.id；{chatId}=本次会话 chatid 或从 reserve_4 解析）；否则「基址+playlist/path」拼接
+ * 卡片 URL：优先 PRESALES_VIDEO_WECOM_CARD_URL_TEMPLATE（{id}、{chatId}、{timestape}/{timestamp}=推送时刻 Unix 毫秒时间戳）；否则「基址+playlist/path」拼接
  */
 const wecomAppChatApi = require('./wecomAppChatApi')
 const presalesVideoTaskService = require('./presalesVideoTaskService')
@@ -167,7 +167,7 @@ function extractWecomAppChatIdFromReserve4(reserve4) {
 }
 
 /**
- * 卡片 H5 地址模板：{id} = psv_video_info.id（与 presales_video_tasks.execute_id 一致），{chatId} 可选
+ * 卡片 H5 地址模板：{id} = psv_video_info.id（与 presales_video_tasks.execute_id 一致）；{chatId}；{timestape} 或 {timestamp} = 推送时刻 Unix 毫秒（如 1776061188343，非库读）
  * 优先 PRESALES_VIDEO_WECOM_CARD_URL_TEMPLATE；否则若 PRESALES_VIDEO_WECOM_PUSH_PUBLIC_BASE_URL 含 {id} 也视为模板（兼容旧键名）
  */
 function resolveWecomCardUrlTemplate() {
@@ -188,8 +188,9 @@ function wecomCardPublicOriginOverride() {
 /**
  * @param {string} tpl
  * @param {string} executeId
- * @param {{ chatId?: string, reserve4?: string|null }} [opts]
+ * @param {{ chatId?: string, reserve4?: string|null, pushAt?: Date }} [opts]
  * {chatId} 替换顺序：优先从 reserve4 解析（与 presales_video_tasks.reserve_4 落库格式一致）；否则 opts.chatId；再否则 PRESALES_VIDEO_WECOM_CARD_CHAT_ID。
+ * {timestape} / {timestamp}：opts.pushAt 或当前时间的 getTime() 毫秒字符串（如 state=1776061188343），不经库表。
  */
 function fillWecomCardUrlTemplate(tpl, executeId, opts = {}) {
   let chatId = ''
@@ -202,11 +203,18 @@ function fillWecomCardUrlTemplate(tpl, executeId, opts = {}) {
   if (!chatId && process.env.PRESALES_VIDEO_WECOM_CARD_CHAT_ID != null) {
     chatId = String(process.env.PRESALES_VIDEO_WECOM_CARD_CHAT_ID).trim()
   }
+  const pushAt =
+    opts.pushAt instanceof Date && !Number.isNaN(opts.pushAt.getTime()) ? opts.pushAt : new Date()
+  const stateMs = String(pushAt.getTime())
   return String(tpl)
     .split('{id}')
     .join(encodeURIComponent(executeId))
     .split('{chatId}')
     .join(encodeURIComponent(chatId))
+    .split('{timestape}')
+    .join(stateMs)
+    .split('{timestamp}')
+    .join(stateMs)
 }
 
 function defaultCardDescription() {
@@ -266,7 +274,8 @@ async function pushPresalesVideoToWecomAppChat(ctx) {
     userIds
   })
 
-  const reserve4Stamp = `wecom_appchat:${chatid}@${new Date().toISOString()}`.slice(0, 500)
+  const pushMoment = new Date()
+  const reserve4Stamp = `wecom_appchat:${chatid}@${pushMoment.toISOString()}`.slice(0, 500)
   try {
     await prisma.presales_video_tasks.updateMany({
       where: { transcription_id: transcriptionId },
@@ -313,7 +322,8 @@ async function pushPresalesVideoToWecomAppChat(ctx) {
     } else {
       const idForCard = presalesVideoTaskService.clipExecuteIdForPsvVideoInfo(execId)
       const cardUrl = fillWecomCardUrlTemplate(cardTpl, idForCard, {
-        reserve4: reserve4Stamp
+        reserve4: reserve4Stamp,
+        pushAt: pushMoment
       })
       if (/^https?:\/\//i.test(cardUrl)) {
         await sendCardWithUrl(cardUrl)

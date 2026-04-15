@@ -481,7 +481,7 @@ app.listen(PORT, HOST, () => {
     }, scanMs)
     const intervalMin = presalesVideoRoleConfirmReminderService.reminderIntervalMinutes()
     console.log(
-      `  [售前视频·角色确认提醒] 扫描 ${scanMs}ms，每 ${intervalMin} 分钟重复催（参数 PRESALES_VIDEO_ROLE_CONFIRM_REMINDER_INTERVAL_MINUTES；关闭: PRESALES_VIDEO_ROLE_CONFIRM_REMINDER_DISABLED=true）`
+      `  [售前视频·角色确认提醒] 扫描 ${scanMs}ms，每 ${intervalMin} 分钟重复催（自建应用 message/send markdown；需 WECOM_AGENT_ID 等；关闭: PRESALES_VIDEO_ROLE_CONFIRM_REMINDER_DISABLED=true）`
     )
   } else {
     console.log('  [售前视频·角色确认超时提醒] 已禁用')
