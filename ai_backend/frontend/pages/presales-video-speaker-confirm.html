@@ -127,11 +127,20 @@
       right: 0;
       bottom: 0;
       padding: 12px 16px;
+      padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
       background: rgba(20, 20, 20, 0.95);
       border-top: 1px solid var(--border);
       display: flex;
       justify-content: center;
-      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .fixed-bar .btn {
+      min-height: 44px;
+      min-width: 88px;
+      padding: 10px 18px;
+      -webkit-tap-highlight-color: transparent;
     }
   </style>
 </head>
@@ -143,7 +152,7 @@
 
   <div class="toolbar" id="pvsc-toolbar" style="display: none;">
     <div class="speaker-map-hint">
-      按说话人标签平铺：左侧为当前标签（如 speaker_1），右侧填写角色名；修改后失焦即应用到所有相同标签的段落。
+      说话人角色确认：左侧为speaker，右侧为对应角色名；在右侧文本框内填写说话人姓名，光标移开后，即可批量修改，记得点击：保存确认结果
     </div>
     <div id="pvsc-speaker-map" class="speaker-map" aria-label="说话人批量改名"></div>
   </div>
@@ -151,6 +160,7 @@
   <div class="list" id="pvsc-list"></div>
 
   <div class="fixed-bar" id="pvsc-bar" style="display: none;">
+    <button type="button" class="btn btn-secondary" id="pvsc-refresh" title="从服务器重新加载对话">刷新</button>
     <button type="button" class="btn btn-primary" id="pvsc-save">保存确认结果</button>
   </div>
 
@@ -175,7 +185,7 @@
     ;(function () {
       var scriptUrl =
         (window.location.origin || '') +
-        '/api/presales-video/public/speaker-confirm-page.js?v=6'
+        '/api/presales-video/public/speaker-confirm-page.js?v=8'
       var hdrs = { 'ngrok-skip-browser-warning': 'true' }
       fetch(scriptUrl, { credentials: 'same-origin', headers: hdrs })
         .then(function (r) {

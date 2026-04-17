@@ -18,8 +18,11 @@
   var elList = document.getElementById('pvsc-list')
   var elBar = document.getElementById('pvsc-bar')
   var elSave = document.getElementById('pvsc-save')
+  var elRefresh = document.getElementById('pvsc-refresh')
 
   var dialogues = []
+  /** 是否在加载数据后做过说话人修改（未保存则刷新前提示） */
+  var dataDirty = false
   var loadedName = ''
   var renderIndex = 0
   /** GET 返回的 speaker_roles，用于平铺区展示可读角色名 */
@@ -95,7 +98,7 @@
     return keys
   }
 
-  /** 平铺：每个标签一行，右侧输入新角色名；失焦触发 change 后批量替换 */
+  /** 左侧 speaker 标签、右侧角色名；右侧失焦后批量替换同标签段落，需用户点击「保存确认结果」落库 */
   function renderSpeakerMap() {
     if (!elSpeakerMap) return
     var keys = uniqueSpeakerKeys()
@@ -277,6 +280,7 @@
     if (!t || !t.classList || !t.classList.contains('speaker-in')) return
     var i = parseInt(t.getAttribute('data-spk-idx'), 10)
     if (isNaN(i) || !dialogues[i]) return
+    dataDirty = true
     dialogues[i] = Object.assign({}, dialogues[i], {
       speaker: (t.value || '').trim() || '未知'
     })
@@ -288,6 +292,7 @@
       showErr('链接无效：未携带 token')
       return
     }
+    if (elRefresh) elRefresh.disabled = true
     elMeta.textContent = '正在请求数据…'
     var url = API + '/public/speaker-confirm?token=' + encodeURIComponent(token)
     fetch(url, {
@@ -335,11 +340,15 @@
           ' 条，正在渲染界面…'
         elToolbar.style.display = 'flex'
         elBar.style.display = 'flex'
+        dataDirty = false
         render(null)
       })
       .catch(function (e) {
         showErr(e.message || String(e))
         elMeta.textContent = '网络错误'
+      })
+      .then(function () {
+        if (elRefresh) elRefresh.disabled = false
       })
   }
 
@@ -352,6 +361,7 @@
       var toRaw = t.value
       var n = applySpeakerMapOne(fromKey, toRaw)
       if (n <= 0) return
+      dataDirty = true
       hideMsgs()
       render(null)
       var toShow = (toRaw != null ? String(toRaw) : '').trim() || fromKey
@@ -359,6 +369,17 @@
       setTimeout(function () {
         elOk.style.display = 'none'
       }, 3000)
+    })
+  }
+
+  if (elRefresh) {
+    elRefresh.addEventListener('click', function () {
+      if (dataDirty) {
+        var ok = window.confirm('将重新从服务器加载对话，未保存的修改会丢失，是否继续？')
+        if (!ok) return
+      }
+      hideMsgs()
+      load()
     })
   }
 
@@ -396,6 +417,7 @@
           showErr((r.data && r.data.error) || '保存失败')
           return
         }
+        dataDirty = false
         showOk('已保存。您可返回企微继续后续流程。')
       })
       .catch(function (e) {

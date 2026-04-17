@@ -1,5 +1,7 @@
 # 输出目录
 output/
+# 讯飞转录本地导出（JSON/TXT，默认 data/xunfei_transcripts）
+data/xunfei_transcripts/
 *.txt
 
 # 上传目录（临时文件）

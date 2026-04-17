@@ -49,7 +49,8 @@ function buildSpeakerConfirmPageUrl(token) {
   const root = String(base).trim().replace(/\/$/, '')
   const pfx = getAiBackendStaticPathPrefix()
   const pagePath = `${pfx}/pages/presales-video-speaker-confirm.html`
-  return `${root}${pagePath}?token=${encodeURIComponent(token)}`
+  // pv：静态页改版时递增，减少企微/手机强缓存旧 HTML
+  return `${root}${pagePath}?token=${encodeURIComponent(token)}&pv=8`
 }
 
 module.exports = {

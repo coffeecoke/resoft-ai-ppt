@@ -1697,8 +1697,7 @@ router.post('/transcriptions/:id/notify-role-confirm', async (req, res) => {
       : '说话人角色确认'
     const mdAudio = audioName ? `\n\n音频：${audioName}` : ''
     const md = `**售前视频 · 说话人确认**${mdAudio}\n\n请打开链接核对对话并修正说话人（可批量改同一标签），保存后即可在后台继续「推送对话」等流程。\n\n[点此打开角色确认页面](${pageUrl})`
-    const textcardDesc =
-      '<div class="normal">请完成核对后再推送对话</div><div class="gray">点击本卡片进入网页（需与服务器网络互通）</div>'
+    const textcardDesc = '<div class="normal">你好请点击卡片进入网页确认说话人。</div>'
     try {
       await wecomAppChatApi.sendApplicationTextCardToUser(wxUser, {
         title: roleConfirmTitle,
@@ -1778,7 +1777,7 @@ router.get('/transcriptions/:id/speaker-confirm-link', async (req, res) => {
       })
     }
     const pfx = getAiBackendStaticPathPrefix()
-    const pagePath = `${pfx}/pages/presales-video-speaker-confirm.html?token=${encodeURIComponent(token)}`
+    const pagePath = `${pfx}/pages/presales-video-speaker-confirm.html?token=${encodeURIComponent(token)}&pv=8`
     return res.json({
       success: true,
       data: {
