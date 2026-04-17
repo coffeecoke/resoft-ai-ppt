@@ -94,8 +94,9 @@ router.get('/', async (req, res) => {
  */
 router.get('/stats', async (req, res) => {
   try {
-    // 1. 获取所有产品列表
+    // 1. 获取重点关注产品列表（is_featured = 1）
     const products = await prisma.products.findMany({
+      where: { is_featured: true },
       select: {
         code: true,
         name: true

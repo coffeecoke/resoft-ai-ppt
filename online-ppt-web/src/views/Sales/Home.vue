@@ -259,6 +259,7 @@ import BrandMaterials from './components/BrandMaterials.vue'
 import { salesData, responseTocSections } from '@/configs/salesData'
 import { BRAND_TAB_OPTIONS } from '@/configs/salesConstants'
 import { getProductStats } from '@/services/salesService'
+import { FEATURED_PRODUCT_CODES } from '@/configs/salesConstants'
 
 // ============================================
 // 🔧 Composable函数导入（所有业务逻辑都在这里）
@@ -434,7 +435,13 @@ const loadProductStats = async () => {
   try {
     const res = await getProductStats()
     if (res.success && res.data && Array.isArray(res.data)) {
-      productStats.value = res.data
+      // 按 FEATURED_PRODUCT_CODES 顺序排序；不在列表中的排到最后
+      const orderMap = new Map(FEATURED_PRODUCT_CODES.map((code, i) => [code, i]))
+      productStats.value = [...res.data].sort((a, b) => {
+        const ia = orderMap.has(a.code) ? orderMap.get(a.code)! : Infinity
+        const ib = orderMap.has(b.code) ? orderMap.get(b.code)! : Infinity
+        return ia - ib
+      })
     }
   } catch (e) {
     console.error('[Sales首页] 加载产品统计失败:', e)
