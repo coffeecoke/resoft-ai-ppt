@@ -1,0 +1,31 @@
+-- 单人简历子表（与 bid_resume_records 配套）
+CREATE TABLE IF NOT EXISTS `bid_resume_persons` (
+  `id` VARCHAR(50) NOT NULL,
+  `resume_record_id` VARCHAR(50) NULL,
+  `run_batch_id` VARCHAR(50) NULL,
+  `source_docx_basename` VARCHAR(255) NOT NULL,
+  `h1_section_title` VARCHAR(500) NOT NULL,
+  `l2_section_title` VARCHAR(500) NULL,
+  `sort_order` INT NOT NULL DEFAULT 0,
+  `role_label` VARCHAR(120) NULL,
+  `person_name` VARCHAR(80) NULL,
+  `gender` VARCHAR(20) NULL,
+  `age` VARCHAR(32) NULL,
+  `education_level` VARCHAR(80) NULL,
+  `major` VARCHAR(200) NULL,
+  `graduate_school` VARCHAR(200) NULL,
+  `work_years_hint` VARCHAR(64) NULL,
+  `phone` VARCHAR(50) NULL,
+  `email` VARCHAR(120) NULL,
+  `project_experience` LONGTEXT NULL,
+  `raw_fragment` LONGTEXT NULL,
+  `structured_json` JSON NULL,
+  `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  KEY `idx_bidresperson_parent` (`resume_record_id`),
+  KEY `idx_bidresperson_batch` (`run_batch_id`),
+  KEY `idx_bidresperson_name` (`person_name`),
+  KEY `idx_bidresperson_created` (`created_at`),
+  CONSTRAINT `bid_resume_persons_resume_record_id_fkey`
+    FOREIGN KEY (`resume_record_id`) REFERENCES `bid_resume_records` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
