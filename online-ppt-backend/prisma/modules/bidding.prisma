@@ -195,3 +195,70 @@ model bid_section_types {
   @@index([is_active], map: "idx_bidsectype_active")
   @@index([sort_order], map: "idx_bidsectype_sort")
 }
+
+/// 投标文件「人员简历」独立拆分抽取结果（与 bid_sections 并存，专用于简历库）
+model bid_resume_records {
+  id                   String   @id @db.VarChar(50)
+  run_batch_id         String?  @db.VarChar(50) /// 同一次脚本运行批次（manifest.batch_id）
+  source_docx_path     String   @db.VarChar(800) /// 原始 docx 路径（可存绝对路径便于追溯）
+  source_docx_basename String   @db.VarChar(255) /// 原始文件名
+  h1_section_title     String   @db.VarChar(500) /// 一级章节标题
+  l2_section_title     String?  @db.VarChar(500) /// 二级切片标题（单人块）
+  person_name          String?  @db.VarChar(100)
+  role_title           String?  @db.VarChar(200)
+  raw_text             String?  @db.LongText
+  extracted_json       Json?    /// 规则抽取字段，可扩展为 AI 结果
+  split_docx_path      String?  @db.VarChar(500) /// 切片 docx 绝对或相对路径
+  manifest_path        String?  @db.VarChar(800) /// 本次 manifest.json 路径
+  created_at           DateTime @default(now())
+
+  bid_resume_persons bid_resume_persons[]
+
+  @@index([run_batch_id], map: "idx_bidresume_batch")
+  @@index([source_docx_basename], map: "idx_bidresume_srcbase")
+  @@index([person_name], map: "idx_bidresume_person")
+  @@index([created_at], map: "idx_bidresume_created")
+}
+
+/// 从章节级简历文本中再拆出的「单人」结构化记录
+model bid_resume_persons {
+  id                    String   @id @db.VarChar(50)
+  resume_record_id      String?  @db.VarChar(50) /// 关联 bid_resume_records.id（入库时写入）
+  run_batch_id          String?  @db.VarChar(50)
+  source_docx_basename  String   @db.VarChar(255)
+  h1_section_title      String   @db.VarChar(500)
+  l2_section_title      String?  @db.VarChar(500)
+  sort_order            Int      @default(0)
+  role_label            String?  @db.VarChar(120) /// 如 项目总监、开发工程师（来自「角色-姓名」行）
+  person_name           String?  @db.VarChar(80)
+  gender                String?  @db.VarChar(20)
+  age                   String?  @db.VarChar(32)
+  education_level       String?  @db.VarChar(80) /// 学历
+  major                 String?  @db.VarChar(200)
+  graduate_school       String?  @db.VarChar(200)
+  work_years_hint       String?  @db.VarChar(64)
+  /// 表格「工作时间」等（如 12 年），可与 work_years_hint 并存
+  work_duration_text    String?  @db.VarChar(64)
+  phone                 String?  @db.VarChar(50)
+  email                 String?  @db.VarChar(120)
+  id_card               String?  @db.VarChar(24) /// 身份证号码（脱敏或完整）
+  degree                String?  @db.VarChar(40) /// 学位
+  employer              String?  @db.VarChar(200) /// 现所在单位
+  proposed_project_role String?  @db.VarChar(120) /// 拟在本项目担任职务
+  project_experience    String?  @db.LongText /// 项目/工作经验长文本
+  raw_fragment          String?  @db.LongText /// 该人原文块
+  structured_json       Json?    /// 其它键值、兜底
+  /// 从切片 docx 拆出的内嵌图片绝对路径列表（JSON 数组，由 resume_split_extract 写入）
+  education_cert_image_paths Json? /// 学历/学位证书等截图路径
+  work_proof_image_paths     Json? /// 项目经验证明、工作履历承诺等截图路径
+  other_image_paths          Json? /// 未归类图片路径
+  created_at            DateTime @default(now())
+
+  bid_resume_records bid_resume_records? @relation(fields: [resume_record_id], references: [id], onDelete: Cascade)
+
+  @@index([resume_record_id], map: "idx_bidresperson_parent")
+  @@index([run_batch_id], map: "idx_bidresperson_batch")
+  @@index([person_name], map: "idx_bidresperson_name")
+  @@index([created_at], map: "idx_bidresperson_created")
+}
+
