@@ -27,6 +27,8 @@ const intelligentScraperRoutes = require('./routes/intelligentScraperRoutes')
 const tenderAnalysisRoutes = require('./routes/tenderAnalysisRoutes')
 const bidAnalysisRoutes = require('./routes/bidAnalysisRoutes')
 const bidCompositionRoutes = require('./routes/bidCompositionRoutes')
+const bidResumeRecordsRoutes = require('./routes/bidResumeRecordsRoutes')
+const resumeBatchRoutes = require('./routes/resumeBatchRoutes')
 const wecomBotRoutes = require('./routes/wecomBotRoutes')
 const presalesInboundRoutes = require('./routes/presalesInboundRoutes')
 const { startWeComBot, stopWeComBot } = require('./services/wecomBotService')
@@ -133,6 +135,12 @@ app.use('/api/tender-analysis', tenderAnalysisRoutes)
 
 // 路由：投标文件分析（新增）
 app.use('/api/bid-analysis', bidAnalysisRoutes)
+
+// 路由：简历抽取结果查询（列表 / 详情 / 附件下载 / 打包）
+app.use('/api/bid-resume-records', bidResumeRecordsRoutes)
+
+// 路由：简历批量拆解（扫描目录 → 最大 docx 探测 → 抽取入库）
+app.use('/api/resume-batch', resumeBatchRoutes)
 
 // 路由：投标文件组合（新增）
 app.use('/api/bid-composition', bidCompositionRoutes)

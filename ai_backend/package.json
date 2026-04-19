@@ -8,7 +8,11 @@
     "dev": "node --watch server/app.js",
     "test": "node scripts/test-extractor.js",
     "batch": "node scripts/batch-extract.js",
-    "import-bidding": "node scripts/import-bidding-keyword-exports.js"
+    "import-bidding": "node scripts/import-bidding-keyword-exports.js",
+    "resume-extract": "python python_services/resume_split/resume_split_extract.py",
+    "resume-import": "node scripts/import-bid-resume-records.js --latest",
+    "resume-probe-docx": "python python_services/resume_split/resume_split_extract.py --probe-docx",
+    "resume-batch-root": "node scripts/run-resume-batch-root.js"
   },
   "keywords": [
     "document",

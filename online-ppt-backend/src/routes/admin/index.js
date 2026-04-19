@@ -18,7 +18,6 @@ const router = Router()
 // 注册子路由
 router.use('/file-scan', fileScanRouter)
 router.use('/bid-documents', bidDocumentsRouter)
-
 // 系统管理路由
 router.use('/system/dict', dictRouter)
 router.use('/system/role', roleRouter)
