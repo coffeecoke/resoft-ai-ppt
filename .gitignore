@@ -148,8 +148,7 @@ vite.config.ts.timestamp-*
 online-ppt-backend/.env
 # 数据文件
 online-ppt-backend/data
-# AI后端目录
-ai_backend/
+# ai_backend 纳入版本库；排除规则见 ai_backend/.gitignore
 
 # OnlyOffice 数据目录（镜像约 2GB+，不提交到 git）
 onlyoffice-data/

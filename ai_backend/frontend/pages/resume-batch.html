@@ -1,0 +1,36 @@
+<!-- 简历批量拆解：每子目录内 .docx 按体积从大到小探测，命中后再抽取入库 -->
+<div class="page-header rq-page-header">
+  <div class="rq-page-header__top">
+    <h1>📂 简历拆解提取（批量）</h1>
+    <p class="page-description rq-page-desc">
+      输入<strong>根文件夹</strong>绝对路径。若根下有一级子目录，则<strong>每个子目录</strong>视为一个项目包；
+      否则只处理该根目录本身。每个目录内递归列出全部 <strong>.docx</strong>，按<strong>体积从大到小</strong>依次做「简历大纲」探测：
+      最大的不含简历相关则继续试次大的，直到<strong>某个命中</strong>则对该文件<strong>拆解、抽取并入库</strong>（同目录其余 .docx 不再处理）；
+      若<strong>全部试完仍无简历相关</strong>则跳过本目录，进入下一目录。
+    </p>
+  </div>
+</div>
+
+<div class="rb-wrap" style="max-width:960px;">
+  <div class="rq-toolbar" style="flex-direction:column;align-items:stretch;">
+    <label style="font-size:13px;font-weight:600;">根文件夹路径（例：E:\toubiao）</label>
+    <input type="text" id="rb-root-path" class="rq-input" style="max-width:none;" placeholder="E:\toubiao">
+    <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:10px;">
+      <button type="button" class="btn btn-primary" id="rb-btn-start">开始拆解提取</button>
+      <button type="button" class="btn btn-secondary" id="rb-btn-clear-log">清空日志</button>
+    </div>
+  </div>
+
+  <div style="margin-top:18px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+      <span style="font-size:13px;font-weight:600;">进度</span>
+      <span id="rb-progress-text" style="font-size:13px;color:var(--text-secondary,#666);">就绪</span>
+    </div>
+    <progress id="rb-progress" value="0" max="100" style="width:100%;height:14px;"></progress>
+  </div>
+
+  <div style="margin-top:16px;">
+    <div style="font-size:13px;font-weight:600;margin-bottom:6px;">运行日志</div>
+    <pre id="rb-log" style="margin:0;padding:12px;background:var(--bg-secondary,#f7f8fa);border:1px solid var(--border-color,#e5e5e5);border-radius:8px;font-size:12px;line-height:1.5;max-height:420px;overflow:auto;white-space:pre-wrap;word-break:break-word;"></pre>
+  </div>
+</div>

@@ -2,10 +2,28 @@
 output/
 # 讯飞转录本地导出（JSON/TXT，默认 data/xunfei_transcripts）
 data/xunfei_transcripts/
+# 简历解析等运行产出（体积大）
+data/resume-extract-output/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+
 *.txt
 
 # 上传目录（临时文件）
 uploads/
+uploads_data/
+
+# 运行日志目录
+logs/
+
+# 抓取/批处理产出
+scraper_output/
+outputs/
 
 # Node.js
 node_modules/
