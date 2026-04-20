@@ -293,6 +293,33 @@ function normalizeAnalysisContent(val) {
   return String(val)
 }
 
+/**
+ * 将正文里误存成的「字面量 \n / \t」（反斜杠 + 字母）还原为真实换行/制表。
+ * 常见于回调体被二次 JSON 编码；不处理时整篇在编辑器里会变成一行，且无法按行折行。
+ * 仅在字面量 \\n 明显多于真实换行时处理，降低误伤含「\\n」说明文字的概率。
+ */
+function normalizeLiteralEscapedNewlines(text) {
+  if (text == null) return text
+  const s = String(text)
+  if (s.length === 0 || !s.includes('\\n')) return s
+  const literalCount = (s.match(/\\n/g) || []).length
+  const realNewlines = (s.match(/\n/g) || []).length
+  if (literalCount < 2) return s
+  const shouldUnescape =
+    (realNewlines <= 2 && literalCount >= realNewlines + 1) ||
+    literalCount > realNewlines * 3 ||
+    (literalCount >= 8 && realNewlines * 4 < literalCount)
+  if (!shouldUnescape) return s
+  let out = s.replace(/\\r\\n/g, '\n').replace(/\\r/g, '\n').replace(/\\n/g, '\n').replace(/\\t/g, '\t')
+  if (out.includes('\\n')) {
+    out = out.replace(/\\\\n/g, '\n')
+  }
+  logger.info(
+    `[presales-video-task] 字面量换行已规范化 len=${s.length} literalSlashN=${literalCount} realNL=${realNewlines}`
+  )
+  return out
+}
+
 /** 文件名片段：去掉路径非法字符 */
 function safeFilenamePart(s) {
   if (s == null || String(s).trim() === '') return 'unknown'
@@ -383,7 +410,7 @@ async function applyWorkflowCallback(callbackType, executeId, payloadText, outco
       })
       return { ok: true, task: updated, truncated: false }
     }
-    const text = normalizeAnalysisContent(payloadText)
+    const text = normalizeLiteralEscapedNewlines(normalizeAnalysisContent(payloadText))
     const execKey = String(executeId).trim()
 
     let recordingDisplayName = null
@@ -493,6 +520,117 @@ function toApiShape(row) {
   }
 }
 
+/** 解析后的 md 绝对路径须落在分析目录下，防止路径穿越 */
+function resolveAnalysisMdPathUnderDir(reserve3Raw) {
+  const r = reserve3Raw != null ? String(reserve3Raw).trim() : ''
+  if (!r) return null
+  const mdDir = getAnalysisMarkdownDir()
+  const candidate = path.isAbsolute(r) ? path.resolve(r) : path.resolve(mdDir, r)
+  const dir = path.resolve(mdDir)
+  const base = dir.endsWith(path.sep) ? dir : dir + path.sep
+  if (candidate === dir) return null
+  if (!candidate.startsWith(base)) return null
+  return candidate
+}
+
+/**
+ * 供推送前预览/编辑：优先读 reserve_3 对应 md；不存在则读库中 analysis_content
+ * @returns {Promise<{ ok: true, content: string, readFromFile: boolean, reserve3: string|null } | { ok: false, code: string, message: string }>}
+ */
+async function readAnalysisForPushEdit(transcriptionId) {
+  const task = await getByTranscriptionId(transcriptionId)
+  if (!task) {
+    return { ok: false, code: 'NO_TASK', message: '无主任务记录' }
+  }
+  const resolved = resolveAnalysisMdPathUnderDir(task.reserve_3)
+  if (resolved) {
+    try {
+      const rawFile = await fs.readFile(resolved, 'utf8')
+      const content = normalizeLiteralEscapedNewlines(rawFile)
+      return {
+        ok: true,
+        content,
+        readFromFile: true,
+        reserve3: task.reserve_3 != null ? String(task.reserve_3).trim() : null
+      }
+    } catch (e) {
+      if (e && e.code !== 'ENOENT') {
+        return { ok: false, code: 'READ_ERR', message: (e && e.message) || '读取 md 失败' }
+      }
+    }
+  }
+  const ac = normalizeLiteralEscapedNewlines(normalizeAnalysisContent(task.analysis_content))
+  if (ac && ac.trim()) {
+    return {
+      ok: true,
+      content: ac,
+      readFromFile: false,
+      reserve3: task.reserve_3 != null ? String(task.reserve_3).trim() : null
+    }
+  }
+  return { ok: false, code: 'EMPTY', message: '暂无分析正文或 md 文件，请先完成分析回调' }
+}
+
+/**
+ * 保存编辑后的分析正文：写入允许目录下的 md，并同步 analysis_content / reserve_3
+ * @returns {Promise<{ ok: true, reserve3: string|null } | { ok: false, code: string, message: string }>}
+ */
+async function saveAnalysisForPushEdit(transcriptionId, rawBody) {
+  const text = normalizeLiteralEscapedNewlines(normalizeAnalysisContent(rawBody))
+  if (!text || !text.trim()) {
+    return { ok: false, code: 'EMPTY', message: '正文不能为空' }
+  }
+  const task = await getByTranscriptionId(transcriptionId)
+  if (!task) {
+    return { ok: false, code: 'NO_TASK', message: '无主任务记录' }
+  }
+
+  let targetPath = resolveAnalysisMdPathUnderDir(task.reserve_3)
+
+  if (!targetPath) {
+    const execKey = task.execute_id != null ? String(task.execute_id).trim() : 'manual'
+    let recordingDisplayName = null
+    try {
+      const trRow = await prisma.transcriptions.findUnique({
+        where: { id: transcriptionId },
+        select: { original_file_name: true, name: true }
+      })
+      const o = trRow?.original_file_name != null ? String(trRow.original_file_name).trim() : ''
+      const n = trRow?.name != null ? String(trRow.name).trim() : ''
+      recordingDisplayName = o || n || null
+    } catch (e) {
+      logger.warn('[presales-video-task] saveAnalysisForPushEdit 读取转录文件名失败:', e.message)
+    }
+    const { absolutePath, writeError } = await writeAnalysisContentMarkdownFile(
+      transcriptionId,
+      execKey,
+      text,
+      recordingDisplayName
+    )
+    if (writeError || !absolutePath) {
+      return { ok: false, code: 'WRITE_FAIL', message: writeError || '无法写入 md 文件' }
+    }
+    targetPath = absolutePath
+  } else {
+    try {
+      await fs.mkdir(path.dirname(targetPath), { recursive: true })
+      await fs.writeFile(targetPath, text, 'utf8')
+    } catch (e) {
+      return { ok: false, code: 'WRITE_FAIL', message: (e && e.message) || '写入 md 失败' }
+    }
+  }
+
+  const reserve3Value = clipReserve3Path(targetPath)
+  await prisma.presales_video_tasks.update({
+    where: { transcription_id: transcriptionId },
+    data: {
+      analysis_content: text,
+      reserve_3: reserve3Value
+    }
+  })
+  return { ok: true, reserve3: reserve3Value }
+}
+
 module.exports = {
   PipelineStatus,
   getByTranscriptionId,
@@ -505,6 +643,8 @@ module.exports = {
   applyWorkflowCallback,
   toApiShape,
   buildPresalesVideoPublicPlayUrl,
+  readAnalysisForPushEdit,
+  saveAnalysisForPushEdit,
   /** 与 psv_video_info.id 入库规则一致（最长 64），企微卡片 {id} 须用此值才能对上库 */
   clipExecuteIdForPsvVideoInfo: clipPsvVideoInfoId
 }

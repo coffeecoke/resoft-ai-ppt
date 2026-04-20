@@ -232,8 +232,8 @@
     }
     #pv-report-dialog[open] {
       margin: auto;
-      max-width: 880px;
-      width: min(92vw, 880px);
+      max-width: 1120px;
+      width: min(98vw, 1120px);
       border: none;
       border-radius: 12px;
       box-shadow: var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.2));
@@ -242,20 +242,322 @@
     #pv-report-dialog::backdrop {
       background: rgba(0, 0, 0, 0.45);
     }
-    #pv-report-dialog .dialog-body {
-      max-height: min(70vh, 560px);
-      overflow: auto;
-      padding: 16px 20px;
+    #pv-report-dialog .pv-report-dialog-body {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      padding: 0;
+      max-height: min(82vh, 760px);
+      overflow: hidden;
+      background: var(--bg-color, #f0f2f5);
+    }
+    .pv-report-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px 14px;
+      padding: 10px 16px;
+      background: var(--card-bg, #fff);
+      border-bottom: 1px solid var(--border-color, #d9d9d9);
+    }
+    .pv-report-toolbar-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary, #8c8c8c);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .pv-report-layout-group {
+      display: inline-flex;
+      border: 1px solid var(--border-color, #d9d9d9);
+      border-radius: 8px;
+      overflow: hidden;
       background: var(--card-bg, #fff);
     }
-    #pv-report-pre {
-      white-space: pre-wrap;
-      word-break: break-word;
+    .pv-report-layout-btn {
+      margin: 0;
+      border: none;
+      border-radius: 0;
+      box-shadow: none;
+      padding: 6px 14px;
+      font-size: 13px;
+      color: var(--text-primary, #262626);
+      background: transparent;
+    }
+    .pv-report-layout-btn + .pv-report-layout-btn {
+      border-left: 1px solid var(--border-color, #d9d9d9);
+    }
+    .pv-report-layout-btn:hover {
+      background: var(--bg-color, #f0f2f5);
+      color: var(--primary-color, #1890ff);
+    }
+    .pv-report-layout-btn.is-active {
+      background: #e6f7ff;
+      color: var(--primary-dark, #096dd9);
+      font-weight: 600;
+    }
+    .pv-report-toolbar-hint {
+      font-size: 12px;
+      color: var(--text-secondary, #8c8c8c);
+      line-height: 1.4;
+      flex: 1 1 160px;
+      min-width: 0;
+    }
+    .pv-report-panels {
+      display: grid;
+      gap: 0;
+      flex: 1;
+      min-height: 0;
+      grid-template-columns: 1fr 1fr;
+    }
+    .pv-report-panels[data-layout='edit'] {
+      grid-template-columns: 1fr;
+    }
+    .pv-report-panels[data-layout='edit'] .pv-report-pane--preview {
+      display: none;
+    }
+    .pv-report-panels[data-layout='preview'] {
+      grid-template-columns: 1fr;
+    }
+    .pv-report-panels[data-layout='preview'] .pv-report-pane--editor {
+      display: none;
+    }
+    .pv-report-pane {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      min-width: 0;
+      background: var(--card-bg, #fff);
+    }
+    .pv-report-pane--editor {
+      border-right: 1px solid #3c3f41;
+      background: #2b2b2b;
+    }
+    .pv-report-panels[data-layout='preview'] .pv-report-pane--preview {
+      border-right: none;
+    }
+    .pv-report-pane-hd {
+      flex-shrink: 0;
+      padding: 8px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary, #595959);
+      background: linear-gradient(180deg, #fafafa 0%, #f5f5f5 100%);
+      border-bottom: 1px solid var(--border-color, #e8e8e8);
+    }
+    .pv-report-pane--editor .pv-report-pane-hd {
+      background: #323232;
+      color: #a9b7c6;
+      border-bottom-color: #515151;
+    }
+    .pv-report-pane-sub {
+      font-weight: 400;
+      color: var(--text-secondary, #8c8c8c);
+      margin-left: 6px;
+    }
+    .pv-report-cm-wrap {
+      flex: 1;
+      min-height: 280px;
+      display: flex;
+      flex-direction: column;
+      background: #2b2b2b;
+    }
+    #pv-report-editor {
+      width: 100%;
+      flex: 1;
+      min-height: 280px;
+      box-sizing: border-box;
+      margin: 0;
+      padding: 12px 14px;
       font-size: 13px;
       line-height: 1.55;
-      margin: 0;
-      font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+      font-family: ui-monospace, 'Cascadia Code', 'SF Mono', Consolas, monospace;
+      color: #bbb;
+      background: #2b2b2b;
+      border: none;
+      border-radius: 0;
+      resize: vertical;
+    }
+    .pv-report-pane--editor .CodeMirror {
+      flex: 1;
+      min-height: 280px;
+      height: auto;
+      font-size: 13px;
+      line-height: 1.55;
+      font-family: 'JetBrains Mono', ui-monospace, 'Cascadia Code', 'SF Mono', Consolas, monospace;
+      border: none;
+    }
+    /* 与 lineWrapping 配合：中文、长 URL 等无空格时也在可视区内折行（不插入额外换行符） */
+    .pv-report-pane--editor .CodeMirror-wrap .CodeMirror-line,
+    .pv-report-pane--editor .CodeMirror-wrap .CodeMirror-line > span {
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    .pv-report-pane--editor .CodeMirror-scroll {
+      min-height: 280px;
+    }
+    .pv-report-pane--editor .CodeMirror-gutters {
+      border-right: 1px solid #515151;
+      background: #313335;
+    }
+    .pv-report-pane--editor .CodeMirror-linenumber {
+      color: #606366;
+      padding: 0 10px 0 6px;
+    }
+    .pv-report-pane--editor .cm-s-darcula.CodeMirror-focused .CodeMirror-cursor {
+      border-left-color: #a9b7c6;
+    }
+    #pv-report-preview-wrap {
+      flex: 1;
+      min-height: 280px;
+      overflow: auto;
+      padding: 16px 18px 20px;
+      -webkit-overflow-scrolling: touch;
+    }
+    #pv-report-preview.pv-md-preview {
+      font-size: 14px;
+      line-height: 1.65;
       color: var(--text-primary, #262626);
+      word-break: break-word;
+    }
+    .pv-md-preview > *:first-child {
+      margin-top: 0;
+    }
+    .pv-md-preview > *:last-child {
+      margin-bottom: 0;
+    }
+    .pv-md-preview h1,
+    .pv-md-preview h2,
+    .pv-md-preview h3,
+    .pv-md-preview h4 {
+      margin: 1.1em 0 0.45em;
+      font-weight: 600;
+      line-height: 1.35;
+      color: var(--text-primary, #262626);
+      border-bottom: 1px solid var(--border-color, #f0f0f0);
+      padding-bottom: 0.25em;
+    }
+    .pv-md-preview h1 {
+      font-size: 1.45em;
+    }
+    .pv-md-preview h2 {
+      font-size: 1.25em;
+    }
+    .pv-md-preview h3 {
+      font-size: 1.1em;
+      border-bottom: none;
+    }
+    .pv-md-preview p {
+      margin: 0.65em 0;
+    }
+    .pv-md-preview ul,
+    .pv-md-preview ol {
+      margin: 0.5em 0 0.5em 1.2em;
+      padding-left: 0.2em;
+    }
+    .pv-md-preview li {
+      margin: 0.25em 0;
+    }
+    .pv-md-preview blockquote {
+      margin: 0.75em 0;
+      padding: 0.35em 0 0.35em 12px;
+      border-left: 4px solid var(--primary-light, #40a9ff);
+      color: var(--text-secondary, #595959);
+      background: #f6ffed;
+      border-radius: 0 6px 6px 0;
+    }
+    .pv-md-preview code {
+      font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+      font-size: 0.88em;
+      padding: 0.12em 0.4em;
+      background: #f5f5f5;
+      border: 1px solid #eee;
+      border-radius: 4px;
+    }
+    .pv-md-preview pre {
+      margin: 0.85em 0;
+      padding: 12px 14px;
+      overflow-x: auto;
+      font-size: 12.5px;
+      line-height: 1.5;
+      background: #282c34;
+      color: #abb2bf;
+      border-radius: 8px;
+    }
+    .pv-md-preview pre code {
+      padding: 0;
+      background: transparent;
+      border: none;
+      color: inherit;
+      font-size: inherit;
+    }
+    .pv-md-preview table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0.85em 0;
+      font-size: 13px;
+    }
+    .pv-md-preview th,
+    .pv-md-preview td {
+      border: 1px solid var(--border-color, #e8e8e8);
+      padding: 8px 10px;
+      text-align: left;
+    }
+    .pv-md-preview th {
+      background: #fafafa;
+      font-weight: 600;
+    }
+    .pv-md-preview tr:nth-child(even) td {
+      background: #fcfcfc;
+    }
+    .pv-md-preview a {
+      color: var(--primary-color, #1890ff);
+      text-decoration: none;
+    }
+    .pv-md-preview a:hover {
+      text-decoration: underline;
+    }
+    .pv-md-preview hr {
+      margin: 1.2em 0;
+      border: none;
+      border-top: 1px solid var(--border-color, #e8e8e8);
+    }
+    .pv-md-preview-empty {
+      margin: 0;
+      font-size: 13px;
+      color: var(--text-secondary, #8c8c8c);
+    }
+    .pv-md-preview-error {
+      margin: 0;
+      font-size: 13px;
+      color: var(--error-color, #f5222d);
+    }
+    #pv-report-dialog .pv-report-footer.dialog-actions {
+      margin-top: 0;
+      padding: 12px 16px;
+      border-top: 1px solid var(--border-color, #d9d9d9);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      background: var(--card-bg, #fff);
+    }
+    #pv-report-dialog .pv-report-footer-right {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+    @media (max-width: 800px) {
+      .pv-report-panels[data-layout='split'] {
+        grid-template-columns: 1fr;
+        grid-template-rows: minmax(200px, 42vh) minmax(220px, 42vh);
+      }
+      .pv-report-panels[data-layout='split'] .pv-report-pane--editor {
+        border-right: none;
+        border-bottom: 1px solid var(--border-color, #d9d9d9);
+      }
     }
     .pv-empty-inner {
       padding: 40px 24px;
@@ -592,10 +894,10 @@
     </div>
   </dialog>
 
-  <dialog id="pv-report-dialog">
-    <div class="dialog-content">
+  <dialog id="pv-report-dialog" class="pv-modal-dialog">
+    <div class="dialog-content" style="min-width: min(360px, 92vw); max-width: 1120px; width: min(98vw, 1120px);">
       <div class="dialog-header">
-        <h2>报告内容</h2>
+        <h2>推送报告 · Markdown</h2>
         <button type="button" class="icon-btn" onclick="pvCloseReportDialog()" aria-label="关闭">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
             <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -603,12 +905,66 @@
           </svg>
         </button>
       </div>
-      <div class="dialog-body">
-        <pre id="pv-report-pre"></pre>
+      <div class="dialog-body pv-report-dialog-body">
+        <div class="pv-report-toolbar">
+          <span class="pv-report-toolbar-title">视图</span>
+          <div class="pv-report-layout-group" role="group" aria-label="编辑区布局">
+            <button
+              type="button"
+              class="btn btn-sm pv-report-layout-btn is-active"
+              data-layout="split"
+              aria-pressed="true"
+              onclick="pvSetReportLayout('split')"
+            >
+              分栏
+            </button>
+            <button
+              type="button"
+              class="btn btn-sm pv-report-layout-btn"
+              data-layout="edit"
+              aria-pressed="false"
+              onclick="pvSetReportLayout('edit')"
+            >
+              仅编辑
+            </button>
+            <button
+              type="button"
+              class="btn btn-sm pv-report-layout-btn"
+              data-layout="preview"
+              aria-pressed="false"
+              onclick="pvSetReportLayout('preview')"
+            >
+              仅预览
+            </button>
+          </div>
+          <span class="pv-report-toolbar-hint"
+            >左侧为 <strong>CodeMirror</strong>（Darcula 主题、行号、Markdown 语法高亮）；右侧 <strong>markdown-it</strong> 预览。</span>
+        </div>
+        <div id="pv-report-panels" class="pv-report-panels" data-layout="split">
+          <div class="pv-report-pane pv-report-pane--editor">
+            <div class="pv-report-pane-hd">
+              Markdown 源文 <span class="pv-report-pane-sub">CodeMirror · 行号</span>
+            </div>
+            <div class="pv-report-cm-wrap">
+              <label for="pv-report-editor" class="sr-only">报告 Markdown 源文</label>
+              <textarea id="pv-report-editor" spellcheck="false" autocomplete="off"></textarea>
+            </div>
+          </div>
+          <div class="pv-report-pane pv-report-pane--preview">
+            <div class="pv-report-pane-hd">预览 <span class="pv-report-pane-sub">markdown-it</span></div>
+            <div id="pv-report-preview-wrap">
+              <div id="pv-report-preview" class="pv-md-preview"></div>
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="dialog-actions">
-        <button type="button" class="btn btn-secondary" onclick="pvCloseReportDialog()">关闭</button>
-        <button type="button" class="btn btn-primary" onclick="pvCopyReport()">复制</button>
+      <div class="dialog-actions pv-report-footer">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="pvCloseReportDialog()">取消</button>
+        <div class="pv-report-footer-right">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="pvCopyReport()">复制源文</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="pvSavePushReportOnly()">仅保存</button>
+          <button type="button" class="btn btn-primary btn-sm" onclick="pvSavePushReportAndPush()">保存并推送</button>
+        </div>
       </div>
     </div>
   </dialog>

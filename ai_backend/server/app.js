@@ -94,6 +94,8 @@ app.use('/output', express.static(path.join(__dirname, '../output')))
 app.use('/scraper_output', express.static(path.join(__dirname, '../scraper_output')))
 app.use('/lib/jszip', express.static(path.join(__dirname, '../node_modules/jszip/dist')))
 app.use('/lib/docx-preview', express.static(path.join(__dirname, '../node_modules/docx-preview/dist')))
+app.use('/lib/markdown-it', express.static(path.join(__dirname, '../node_modules/markdown-it/dist')))
+app.use('/lib/codemirror', express.static(path.join(__dirname, '../node_modules/codemirror')))
 
 // ==================== AI管理后台路由（新架构） ====================
 const adminRoutes = require('./routes')

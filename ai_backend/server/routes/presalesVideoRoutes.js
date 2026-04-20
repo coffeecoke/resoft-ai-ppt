@@ -1334,6 +1334,71 @@ router.get('/transcriptions/:id/report', async (req, res) => {
 })
 
 /**
+ * GET /api/presales-video/transcriptions/:id/analysis-for-push
+ * 推送报告前编辑用：返回分析正文（优先 md 文件，否则库中 analysis_content）
+ */
+router.get('/transcriptions/:id/analysis-for-push', async (req, res) => {
+  try {
+    const { id } = req.params
+    const tr = await prisma.transcriptions.findUnique({ where: { id } })
+    if (!tr) {
+      return res.status(404).json({ success: false, error: '转录不存在' })
+    }
+    const r = await presalesVideoTaskService.readAnalysisForPushEdit(id)
+    if (!r.ok) {
+      const code = r.code || 'ERR'
+      const status =
+        code === 'NO_TASK' ? 404 : code === 'EMPTY' ? 400 : code === 'READ_ERR' ? 500 : 400
+      return res.status(status).json({ success: false, error: r.message, code })
+    }
+    res.json({
+      success: true,
+      data: {
+        content: r.content,
+        readFromFile: r.readFromFile,
+        reserve3: r.reserve3
+      }
+    })
+  } catch (error) {
+    logger.error('[presales-video] 读取推送用分析正文失败:', error)
+    res.status(500).json({ success: false, error: error.message || '读取失败' })
+  }
+})
+
+/**
+ * PUT /api/presales-video/transcriptions/:id/analysis-for-push
+ * Body: { content: string } — 落盘 md（与回调同目录规则）并更新 presales_video_tasks.analysis_content / reserve_3
+ */
+router.put('/transcriptions/:id/analysis-for-push', async (req, res) => {
+  try {
+    const { id } = req.params
+    const tr = await prisma.transcriptions.findUnique({ where: { id } })
+    if (!tr) {
+      return res.status(404).json({ success: false, error: '转录不存在' })
+    }
+    const body = req.body || {}
+    const content = body.content != null ? String(body.content) : ''
+    const r = await presalesVideoTaskService.saveAnalysisForPushEdit(id, content)
+    if (!r.ok) {
+      const code = r.code || 'ERR'
+      const status =
+        code === 'NO_TASK' ? 404 : code === 'EMPTY' ? 400 : code === 'WRITE_FAIL' ? 500 : 400
+      return res.status(status).json({ success: false, error: r.message, code })
+    }
+    res.json({
+      success: true,
+      data: {
+        reserve3: r.reserve3,
+        videoTask: await getVideoTaskShape(id)
+      }
+    })
+  } catch (error) {
+    logger.error('[presales-video] 保存推送用分析正文失败:', error)
+    res.status(500).json({ success: false, error: error.message || '保存失败' })
+  }
+})
+
+/**
  * POST /api/presales-video/transcriptions/:id/push-report
  * 优先：PRESALES_VIDEO_REPORT_ASYNC_URL — POST 异步任务 { name, execute_id, filePaths, prompt }（prompt 默认见代码常量，可被 body.prompt 或 env 覆盖）
  * 否则：PRESALES_VIDEO_REPORT_PUSH_URL — 旧版 POST 本地售前分析 JSON

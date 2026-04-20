@@ -29,7 +29,8 @@ const pvState = {
   total: 0,
   totalPages: 1,
   list: [],
-  lastReportText: '',
+  /** 「推送报告」编辑弹窗当前转录 id */
+  pushReportTranscriptionId: null,
   /** 流水线筛选：all | __none__ | 具体状态 */
   pipelineStatus: 'all',
   /** 列表名称模糊查询（与接口 name 参数一致） */
@@ -308,7 +309,7 @@ function pvRenderTable() {
             <button type="button" class="btn btn-sm btn-outline" style="border:1px solid var(--primary-color,#1890ff);color:var(--primary-color,#1890ff);background:transparent;" title="选择企微接收人并推送角色确认卡片（默认创建人 userid）" onclick="pvOpenRoleConfirmDialog('${row.id}')">角色确认</button>
             <button type="button" class="btn btn-sm btn-primary" title="仅 Coze 文件上传（字段 file），返回 file_id/file_name；会议分析请点右侧「提交工作流」" onclick="pvPushDialogue('${row.id}')">推送对话</button>
             <button type="button" class="btn btn-sm pv-act-workflow" title="Coze：用「推送对话」缓存的 fileId/fileName 调 meeting-analysis 取 execute_id；或通用工作流 URL" onclick="pvSubmitWorkflow('${row.id}')">提交工作流</button>
-            <button type="button" class="btn btn-sm pv-act-secondary" title="优先：POST 异步任务（md 路径 reserve_3 + execute_id）；未配异步地址时推送本地售前 JSON" onclick="pvPushReport('${row.id}')">推送报告</button>
+            <button type="button" class="btn btn-sm pv-act-secondary" title="先打开可编辑报告正文，保存后再调用推送接口（异步 md 或旧版 JSON）" onclick="pvPushReport('${row.id}')">推送报告</button>
             <button type="button" class="btn btn-sm pv-act-secondary" title="填写企微 userid 建应用群发会话，推送报备摘要与视频" onclick="pvOpenPushVideoDialog('${row.id}')">推送视频</button>
             <button type="button" class="btn btn-sm btn-secondary" title="服务端自动串联：角色确认→推送对话→提交工作流→（等回调）→推送报告→推送视频；可不关页面" onclick="pvOpenPipelineDialog('${row.id}')">服务端流水线</button>
           </div>
@@ -583,13 +584,308 @@ window.pvPushDialogue = async function (id) {
   }
 }
 
+/** markdown-it 脚本只加载一次 */
+let pvMarkdownItLoadPromise = null
+let pvMarkdownRenderer = null
+
+function pvLoadMarkdownItOnce() {
+  if (typeof window.markdownit === 'function') {
+    return Promise.resolve()
+  }
+  if (pvMarkdownItLoadPromise) {
+    return pvMarkdownItLoadPromise
+  }
+  pvMarkdownItLoadPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script')
+    s.src = '/lib/markdown-it/markdown-it.min.js'
+    s.async = true
+    s.onload = () => resolve()
+    s.onerror = () => {
+      pvMarkdownItLoadPromise = null
+      reject(new Error('无法加载 markdown-it'))
+    }
+    document.head.appendChild(s)
+  })
+  return pvMarkdownItLoadPromise
+}
+
+function pvLoadScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script')
+    s.src = src
+    s.async = true
+    s.onload = () => resolve()
+    s.onerror = () => reject(new Error('脚本加载失败: ' + src))
+    document.head.appendChild(s)
+  })
+}
+
+function pvEnsureCmStyles() {
+  if (document.getElementById('pv-codemirror-base-css')) return
+  const base = document.createElement('link')
+  base.id = 'pv-codemirror-base-css'
+  base.rel = 'stylesheet'
+  base.href = '/lib/codemirror/lib/codemirror.css'
+  document.head.appendChild(base)
+  const theme = document.createElement('link')
+  theme.id = 'pv-codemirror-theme-css'
+  theme.rel = 'stylesheet'
+  theme.href = '/lib/codemirror/theme/darcula.css'
+  document.head.appendChild(theme)
+}
+
+let pvCmMarkdownPromise = null
+let pvCodeMirrorInstance = null
+let pvReportCmResizeObs = null
+let pvReportCmResizeRaf = 0
+
+function pvCmMarkdownModeReady() {
+  if (typeof window.CodeMirror !== 'function') return false
+  try {
+    const m = window.CodeMirror.getMode({ indentUnit: 2, tabSize: 2 }, 'markdown')
+    return !!(m && m.name && m.name !== 'null')
+  } catch (_) {
+    return false
+  }
+}
+
+function pvDisconnectReportCmResize() {
+  cancelAnimationFrame(pvReportCmResizeRaf)
+  pvReportCmResizeRaf = 0
+  if (pvReportCmResizeObs) {
+    pvReportCmResizeObs.disconnect()
+    pvReportCmResizeObs = null
+  }
+}
+
+function pvObserveReportCmResize() {
+  const wrap = document.querySelector('.pv-report-cm-wrap')
+  const cm = pvCodeMirrorInstance
+  if (!wrap || !cm) return
+  pvDisconnectReportCmResize()
+  pvReportCmResizeObs = new ResizeObserver(function (entries) {
+    cancelAnimationFrame(pvReportCmResizeRaf)
+    pvReportCmResizeRaf = requestAnimationFrame(function () {
+      for (let i = 0; i < entries.length; i++) {
+        const h = Math.max(220, Math.floor(entries[i].contentRect.height))
+        cm.setSize(null, h)
+      }
+      cm.refresh()
+    })
+  })
+  pvReportCmResizeObs.observe(wrap)
+}
+
+function pvDisposeReportCodeMirrorIfStale() {
+  const cm = pvCodeMirrorInstance
+  if (!cm) return
+  let wrapEl
+  try {
+    wrapEl = cm.getWrapperElement()
+  } catch (_) {
+    pvCodeMirrorInstance = null
+    return
+  }
+  if (wrapEl && document.body.contains(wrapEl)) return
+  pvDisconnectReportCmResize()
+  try {
+    cm.toTextArea()
+  } catch (_) {}
+  pvCodeMirrorInstance = null
+}
+
+function pvEnsureCodeMirrorMarkdown() {
+  if (pvCmMarkdownModeReady()) {
+    return Promise.resolve()
+  }
+  if (pvCmMarkdownPromise) {
+    return pvCmMarkdownPromise
+  }
+  pvCmMarkdownPromise = (async function () {
+    pvEnsureCmStyles()
+    if (typeof window.CodeMirror !== 'function') {
+      await pvLoadScript('/lib/codemirror/lib/codemirror.js')
+    }
+    if (!pvCmMarkdownModeReady()) {
+      await pvLoadScript('/lib/codemirror/mode/xml/xml.js')
+      await pvLoadScript('/lib/codemirror/mode/markdown/markdown.js')
+    }
+    if (!pvCmMarkdownModeReady()) {
+      pvCmMarkdownPromise = null
+      throw new Error('CodeMirror Markdown 模式加载失败')
+    }
+  })().catch(function (e) {
+    pvCmMarkdownPromise = null
+    throw e
+  })
+  return pvCmMarkdownPromise
+}
+
+/**
+ * 与后端一致：把误存成的字面量 \\n（反斜杠+n）还原为真换行，否则整篇一行、编辑器无法折行。
+ */
+function pvUnescapeReportBodyNewlines(s) {
+  const str = s != null ? String(s) : ''
+  if (!str.includes('\\n')) return str
+  const literalCount = (str.match(/\\n/g) || []).length
+  const realNewlines = (str.match(/\n/g) || []).length
+  if (literalCount < 2) return str
+  const shouldUnescape =
+    (realNewlines <= 2 && literalCount >= realNewlines + 1) ||
+    literalCount > realNewlines * 3 ||
+    (literalCount >= 8 && realNewlines * 4 < literalCount)
+  if (!shouldUnescape) return str
+  let out = str.replace(/\\r\\n/g, '\n').replace(/\\r/g, '\n').replace(/\\n/g, '\n').replace(/\\t/g, '\t')
+  if (out.includes('\\n')) {
+    out = out.replace(/\\\\n/g, '\n')
+  }
+  return out
+}
+
+function pvGetReportEditorValue() {
+  const cm = pvCodeMirrorInstance
+  if (cm) {
+    try {
+      const w = cm.getWrapperElement()
+      if (w && document.body.contains(w)) {
+        return cm.getValue()
+      }
+    } catch (_) {}
+  }
+  const ta = document.getElementById('pv-report-editor')
+  return ta ? String(ta.value || '') : ''
+}
+
+function pvGetMarkdownRenderer() {
+  if (typeof window.markdownit !== 'function') {
+    return null
+  }
+  if (!pvMarkdownRenderer) {
+    pvMarkdownRenderer = window.markdownit({
+      html: false,
+      linkify: true,
+      breaks: true,
+      typographer: true
+    })
+  }
+  return pvMarkdownRenderer
+}
+
+let pvReportPreviewTimer = null
+
+function pvRenderReportPreviewNow() {
+  const wrap = document.getElementById('pv-report-preview')
+  if (!wrap) return
+  const md = pvGetMarkdownRenderer()
+  if (!md) {
+    wrap.innerHTML = '<p class="pv-md-preview-empty">正在加载预览引擎…</p>'
+    return
+  }
+  const raw = pvGetReportEditorValue()
+  if (!raw.trim()) {
+    wrap.innerHTML = '<p class="pv-md-preview-empty">（暂无内容）</p>'
+    return
+  }
+  try {
+    wrap.innerHTML = md.render(raw)
+  } catch (e) {
+    wrap.innerHTML =
+      '<p class="pv-md-preview-error">预览解析失败：' +
+      pvEscapeHtml((e && e.message) || String(e)) +
+      '</p>'
+  }
+}
+
+function pvScheduleReportPreview() {
+  if (pvReportPreviewTimer) {
+    clearTimeout(pvReportPreviewTimer)
+  }
+  pvReportPreviewTimer = setTimeout(function () {
+    pvReportPreviewTimer = null
+    pvRenderReportPreviewNow()
+  }, 140)
+}
+
+window.pvSetReportLayout = function (layout) {
+  const panels = document.getElementById('pv-report-panels')
+  if (!panels) return
+  const norm = layout === 'edit' || layout === 'preview' ? layout : 'split'
+  panels.setAttribute('data-layout', norm)
+  document.querySelectorAll('.pv-report-layout-btn').forEach(function (btn) {
+    const active = btn.getAttribute('data-layout') === norm
+    btn.classList.toggle('is-active', active)
+    btn.setAttribute('aria-pressed', active ? 'true' : 'false')
+  })
+  pvRenderReportPreviewNow()
+}
+
 window.pvCloseReportDialog = function () {
+  pvDisconnectReportCmResize()
   const dlg = document.getElementById('pv-report-dialog')
-  if (dlg) dlg.close()
+  if (dlg) {
+    if (typeof dlg.close === 'function') dlg.close()
+    else dlg.removeAttribute('open')
+  }
+  pvState.pushReportTranscriptionId = null
+}
+
+async function pvOpenPushReportEditor(id, content) {
+  await pvEnsureCodeMirrorMarkdown()
+  const dlg = document.getElementById('pv-report-dialog')
+  const ta = document.getElementById('pv-report-editor')
+  if (!dlg || !ta || typeof window.CodeMirror !== 'function') {
+    pvToast('页面缺少报告编辑弹窗或 CodeMirror 未加载', 'error')
+    return
+  }
+  pvDisposeReportCodeMirrorIfStale()
+  pvState.pushReportTranscriptionId = id
+  const text = pvUnescapeReportBodyNewlines(content != null ? String(content) : '')
+
+  let cm = pvCodeMirrorInstance
+  const reuse = cm && document.body.contains(cm.getWrapperElement())
+  if (!reuse) {
+    if (cm) {
+      try {
+        cm.toTextArea()
+      } catch (_) {}
+      pvCodeMirrorInstance = null
+    }
+    cm = window.CodeMirror.fromTextArea(ta, {
+      mode: 'markdown',
+      theme: 'darcula',
+      lineNumbers: true,
+      /** 软换行：超长一行在编辑区内自动折行显示，不会在正文里插入换行符 */
+      lineWrapping: true,
+      indentUnit: 2,
+      tabSize: 2,
+      viewportMargin: 120
+    })
+    pvCodeMirrorInstance = cm
+    if (!cm._pvPreviewBound) {
+      cm.on('change', pvScheduleReportPreview)
+      cm._pvPreviewBound = true
+    }
+  }
+  cm.setValue(text)
+  window.pvSetReportLayout('split')
+  pvRenderReportPreviewNow()
+  if (typeof dlg.showModal === 'function') dlg.showModal()
+  else dlg.setAttribute('open', '')
+  requestAnimationFrame(function () {
+    requestAnimationFrame(function () {
+      const wrap = document.querySelector('.pv-report-cm-wrap')
+      if (wrap) {
+        const h = Math.max(220, Math.floor(wrap.getBoundingClientRect().height))
+        if (h > 0) cm.setSize(null, h)
+      }
+      cm.refresh()
+      pvObserveReportCmResize()
+    })
+  })
 }
 
 window.pvCopyReport = async function () {
-  const t = pvState.lastReportText || ''
+  const t = pvGetReportEditorValue()
   if (!t) return
   try {
     await navigator.clipboard.writeText(t)
@@ -599,20 +895,11 @@ window.pvCopyReport = async function () {
   }
 }
 
-window.pvPushReport = async function (id) {
-  if (
-    !confirm(
-      '将调用服务端「推送报告」：\n' +
-        '· 若已配置 PRESALES_VIDEO_REPORT_ASYNC_URL：POST 异步任务，参数为 name（md 文件名）、execute_id（工作流 ID）、filePaths（库中 reserve_3 的 md 路径）。需已提交工作流且分析回调已落盘 md。\n' +
-        '· 否则：按旧逻辑 POST 本地售前分析 JSON（PRESALES_VIDEO_REPORT_PUSH_URL）。\n' +
-        '确定执行？'
-    )
-  ) {
-    return
-  }
+/** 调用服务端推送报告（不在此弹窗内保存正文） */
+async function pvDoPushReport(id) {
   pvShowOverlay(true, '正在推送报告...')
   try {
-    const res = await fetch(`${PV_API}/presales-video/transcriptions/${id}/push-report`, {
+    const res = await fetch(`${PV_API}/presales-video/transcriptions/${encodeURIComponent(id)}/push-report`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: '{}'
@@ -633,14 +920,115 @@ window.pvPushReport = async function (id) {
     const okMsg =
       d.mode === 'async_task'
         ? `异步任务已提交（HTTP ${d.remoteStatus}）`
-        : `推送报告成功（HTTP ${d.remoteStatus}）`
+        : d.mode === 'subtitle_video_async'
+          ? `字幕视频任务已提交（HTTP ${d.remoteStatus}）`
+          : `推送报告成功（HTTP ${d.remoteStatus}）`
     pvToast(okMsg, 'success')
     console.log('[presales-video] push-report', d)
+    if (typeof window.pvLoadList === 'function') window.pvLoadList()
   } catch (e) {
     pvToast('推送报告失败: ' + e.message, 'error')
   } finally {
     pvShowOverlay(false)
   }
+}
+
+window.pvSavePushReportOnly = async function () {
+  const id = pvState.pushReportTranscriptionId
+  if (!id) {
+    pvToast('未选择转录', 'error')
+    return
+  }
+  pvShowOverlay(true, '正在保存…')
+  try {
+    const res = await fetch(
+      `${PV_API}/presales-video/transcriptions/${encodeURIComponent(id)}/analysis-for-push`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: pvGetReportEditorValue() })
+      }
+    )
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || !data.success) {
+      pvToast(data.error || '保存失败', 'error')
+      return
+    }
+    pvToast('已保存到服务器（md 与库已同步）', 'success')
+    if (typeof window.pvLoadList === 'function') window.pvLoadList()
+  } catch (e) {
+    pvToast('保存失败: ' + e.message, 'error')
+  } finally {
+    pvShowOverlay(false)
+  }
+}
+
+window.pvSavePushReportAndPush = async function () {
+  const id = pvState.pushReportTranscriptionId
+  if (!id) {
+    pvToast('未选择转录', 'error')
+    return
+  }
+  pvShowOverlay(true, '正在保存…')
+  try {
+    const res = await fetch(
+      `${PV_API}/presales-video/transcriptions/${encodeURIComponent(id)}/analysis-for-push`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: pvGetReportEditorValue() })
+      }
+    )
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || !data.success) {
+      pvToast(data.error || '保存失败', 'error')
+      return
+    }
+  } catch (e) {
+    pvToast('保存失败: ' + e.message, 'error')
+    return
+  } finally {
+    pvShowOverlay(false)
+  }
+  pvCloseReportDialog()
+  await pvDoPushReport(id)
+}
+
+window.pvPushReport = async function (id) {
+  if (!id) return
+  pvShowOverlay(true, '正在加载报告…')
+  try {
+    await Promise.all([pvLoadMarkdownItOnce(), pvEnsureCodeMirrorMarkdown()])
+    const res = await fetch(
+      `${PV_API}/presales-video/transcriptions/${encodeURIComponent(id)}/analysis-for-push`
+    )
+    const data = await res.json().catch(() => ({}))
+    if (res.ok && data.success && data.data && typeof data.data.content === 'string') {
+      await pvOpenPushReportEditor(id, data.data.content)
+      return
+    }
+  } catch (e) {
+    const msg = e && e.message ? String(e.message) : ''
+    if (msg.includes('markdown-it') || msg.includes('CodeMirror') || msg.includes('脚本加载')) {
+      pvToast(msg || '资源加载失败', 'error')
+      return
+    }
+    console.warn('[presales-video] analysis-for-push GET', e)
+  } finally {
+    pvShowOverlay(false)
+  }
+
+  if (
+    !confirm(
+      '未能从服务器加载可编辑的分析正文（无主任务、分析尚未回调或仅有旧版售前 JSON 时会出现）。\n\n' +
+        '是否跳过编辑，直接调用「推送报告」接口？\n' +
+        '· 异步：需 md 路径（reserve_3）与 execute_id；\n' +
+        '· 旧版：需本地售前分析 JSON。'
+    )
+  ) {
+    return
+  }
+  await pvDoPushReport(id)
 }
 
 window.pvSubmitWorkflow = async function (id) {
@@ -818,6 +1206,7 @@ function pvInitPipelineSelect() {
       pvState.dateTo = dateTo
     }
     await window.pvLoadList()
+    Promise.all([pvLoadMarkdownItOnce(), pvEnsureCodeMirrorMarkdown()]).catch(function () {})
   } catch (e) {
     console.error(e)
     pvToast('页面初始化失败: ' + e.message, 'error')
