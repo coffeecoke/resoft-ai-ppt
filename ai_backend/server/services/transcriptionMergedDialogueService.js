@@ -159,6 +159,29 @@ function buildSafeMarkdownFilename(displayName) {
   return `${base || `analysis_${Date.now()}`}.md`
 }
 
+/** 常见音视频/文档/压缩包等后缀，用于 Coze 工作流入参去扩展名（可重复匹配如 .tar.gz） */
+const WORKFLOW_COZE_PARAM_EXT_RE =
+  /\.(?:mp3|wav|m4a|flac|aac|wma|ogg|opus|mp4|m4v|avi|mov|mkv|flv|wmv|webm|3gp|3g2|txt|md|pdf|doc|docx|xls|xlsx|ppt|pptx|zip|7z|rar|json|csv|xml|html?|jpe?g|png|gif|webp|svg|tar|gz)$/i
+
+/**
+ * Coze 会议分析等：fileId / fileName / meetingName 传工作流时不带路径与文件后缀
+ * @param {string|null|undefined} value
+ * @returns {string}
+ */
+function stripWorkflowCozeParam(value) {
+  if (value == null) return ''
+  let s = String(value).trim()
+  if (!s) return ''
+  s = s.replace(/^.*[/\\]/, '')
+  let t = s
+  for (let i = 0; i < 8; i++) {
+    const next = t.replace(WORKFLOW_COZE_PARAM_EXT_RE, '').trim()
+    if (next === t) break
+    t = next
+  }
+  return t || s
+}
+
 /**
  * 曾有过「合并」或「再次合并」步骤的转录 ID（去重）
  */
@@ -193,6 +216,7 @@ module.exports = {
   buildMergedDialogueTxt,
   buildSafeTxtFilename,
   buildSafeMarkdownFilename,
+  stripWorkflowCozeParam,
   listTranscriptionIdsWithMergeStep,
   writeDialogueFile,
   NOTE_MERGE,

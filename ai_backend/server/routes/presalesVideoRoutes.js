@@ -4,7 +4,7 @@
  * 环境变量：
  * - PRESALES_VIDEO_DIALOGUE_LOCAL_DIR       合并对话 txt 落地目录（默认 uploads_data/presales_video_dialogue）
  * - PRESALES_VIDEO_COZE_FILE_UPLOAD_URL     推送对话：multipart 仅字段 file → 返回 file_id、file_name（不落会议分析）
- * - PRESALES_VIDEO_COZE_MEETING_ANALYSIS_URL 提交工作流：JSON { fileId, fileName } → execute_id（body 可空，缺省读 presales_video_tasks）
+ * - PRESALES_VIDEO_COZE_MEETING_ANALYSIS_URL 提交工作流：JSON { fileId, fileName, meetingName } → execute_id（body 可空，缺省读 presales_video_tasks；三者均去掉路径与常见文件后缀再转发）
  * - PRESALES_VIDEO_COZE_TOKEN               可选，Coze 上传/会议分析请求带 Authorization: Bearer <token>
  * - PRESALES_VIDEO_REPORT_FETCH_URL    获取报告：请求第三方 GET（可选，与本地库二选一逻辑见下）
  * - PRESALES_VIDEO_REPORT_ASYNC_URL    推送报告：异步任务 POST 完整 URL（如 …/async），Body { name, execute_id, filePaths }（优先于下方旧推送）
@@ -1003,7 +1003,7 @@ router.post('/transcriptions/:id/push-dialogue', async (req, res) => {
 
 /**
  * POST /api/presales-video/transcriptions/:id/submit-workflow
- * Coze：Body 可选 { fileId, fileName }；缺省时从 presales_video_tasks 读取。转发 JSON 含 meetingName=转录音频文件名（original_file_name / name），fileName 仍为上传 txt 名。
+ * Coze：Body 可选 { fileId, fileName }；缺省时从 presales_video_tasks 读取。转发 Coze 的 JSON 含 fileId、fileName、meetingName，三者均经 stripWorkflowCozeParam（无路径、无常见后缀）。
  * 通用：PRESALES_VIDEO_WORKFLOW_SUBMIT_URL。
  */
 router.post('/transcriptions/:id/submit-workflow', async (req, res) => {
@@ -1056,9 +1056,9 @@ router.post('/transcriptions/:id/submit-workflow', async (req, res) => {
       }
 
       const meetingPayload = {
-        fileId: String(fileId).trim(),
-        fileName,
-        meetingName
+        fileId: mergedDialogueService.stripWorkflowCozeParam(String(fileId).trim()),
+        fileName: mergedDialogueService.stripWorkflowCozeParam(fileName),
+        meetingName: mergedDialogueService.stripWorkflowCozeParam(meetingName)
       }
 
       const auth = cozeAuthHeaders()

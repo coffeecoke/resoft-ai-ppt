@@ -2,7 +2,7 @@
  * 售前视频生成主任务：Coze 上传与工作流信息落库
  *
  * analysis_content 回调成功时，内容除入库外会写入本地 .md（目录见 PRESALES_VIDEO_ANALYSIS_MD_DIR），文件名为录音显示名安全化 + .md（original_file_name / name），成功落盘路径写入 reserve_3（最长 500 字符，超出截断）
- * video_create 成功回调可选 body.playlist_url / playlistUrl：播放列表（如 m3u8）等写入 reserve_5（最长 500，超出截断）；同时 upsert psv_video_info（id=execute_id，url 优先 playlist 否则主视频地址，title=转录 original_file_name / name）。对外播放链接由 buildPresalesVideoPublicPlayUrl 生成：默认读 PRESALES_VIDEO_PSV_INFO_*；企微卡片可传 originOverride 使用 PRESALES_VIDEO_WECOM_PUSH_PUBLIC_BASE_URL
+ * video_create 成功回调可选 body.playlist_url / playlistUrl：播放列表（如 m3u8）等写入 reserve_5（最长 500，超出截断）；同时 upsert psv_video_info：id=execute_id；title=转录名去路径与常见后缀；url 与 reserve_5 同值（有 playlist 时）；cover 与 url 同源路径但最后一档改为 cover.jpg（如 …/index.m3u8 → …/cover.jpg，由完整 playlist 串计算）。无 playlist 时 url 仍走 buildPresalesVideoPublicPlayUrl(主视频)，cover 同规则由主视频 URL 推导。
  */
 
 const fs = require('fs/promises')
@@ -153,6 +153,47 @@ function clipPsvVideoInfoTitle(val) {
 }
 
 /**
+ * 与 reserve_5 / playlist 同形态地址：最后一档文件名改为 cover.jpg；保留 ?query #hash
+ * 例 …/path/index.m3u8 → …/path/cover.jpg；http(s) 无路径时补 /cover.jpg
+ */
+function coverUrlByReplacingLastPathSegmentWithCoverJpg(raw) {
+  const s = raw != null ? String(raw).trim() : ''
+  if (!s) return null
+  let hash = ''
+  let base = s
+  const hashIdx = base.indexOf('#')
+  if (hashIdx !== -1) {
+    hash = base.slice(hashIdx)
+    base = base.slice(0, hashIdx)
+  }
+  let query = ''
+  const qIdx = base.indexOf('?')
+  if (qIdx !== -1) {
+    query = base.slice(qIdx)
+    base = base.slice(0, qIdx)
+  }
+
+  if (/^https?:\/\//i.test(base)) {
+    const proto = base.indexOf('//')
+    const pathStart = proto === -1 ? -1 : base.indexOf('/', proto + 2)
+    if (pathStart === -1) {
+      return `${base}/cover.jpg${query}${hash}`
+    }
+    const origin = base.slice(0, pathStart)
+    const pathPart = base.slice(pathStart)
+    const lastSlash = pathPart.lastIndexOf('/')
+    const newPath =
+      lastSlash <= 0 ? '/cover.jpg' : `${pathPart.slice(0, lastSlash + 1)}cover.jpg`
+    return `${origin}${newPath}${query}${hash}`
+  }
+
+  const lastSlash = base.lastIndexOf('/')
+  const newPath =
+    lastSlash === -1 ? 'cover.jpg' : `${base.slice(0, lastSlash + 1)}cover.jpg`
+  return `${newPath}${query}${hash}`
+}
+
+/**
  * 写入 psv_video_info 时的对外访问基址（无尾部 /）。
  * 优先整段：PRESALES_VIDEO_PSV_INFO_BASE_URL，例 http://127.0.0.1:9010
  * 否则：PRESALES_VIDEO_PSV_INFO_HOST + 可选 PRESALES_VIDEO_PSV_INFO_PORT + PRESALES_VIDEO_PSV_INFO_SCHEME（默认 http）
@@ -214,13 +255,13 @@ function buildPresalesVideoPublicPlayUrl(urlRaw, originOverride) {
 
 /**
  * video_create 成功：同步售前视频元数据表（供播放端等查询）
- * url：有 playlist 用 playlist，否则用主视频地址（path/url 等解析结果）
+ * 有 playlist：url 与 reserve_5 一致（clipReserve5）；cover 由完整 playlist 将末段换为 cover.jpg
+ * 无 playlist：url 仍用对外基址 + 主视频；cover 由主视频 URL 同规则推导（可能为 …/cover.jpg）
  */
 async function upsertPsvVideoInfoOnVideoCreate(executeId, transcriptionId, mainVideoUrl, playlistUrl) {
   const id = clipPsvVideoInfoId(executeId)
   const pl = playlistUrl != null && String(playlistUrl).trim() !== '' ? String(playlistUrl).trim() : ''
   const main = mainVideoUrl != null && String(mainVideoUrl).trim() !== '' ? String(mainVideoUrl).trim() : ''
-  const urlRaw = pl || main
 
   let title = ''
   try {
@@ -235,20 +276,30 @@ async function upsertPsvVideoInfoOnVideoCreate(executeId, transcriptionId, mainV
     logger.warn('[presales-video-task] psv_video_info 读取转录录音名失败:', e.message)
   }
   if (!title) title = id || '售前视频'
+  const titleDb = clipPsvVideoInfoTitle(mergedDialogueService.stripWorkflowCozeParam(title))
 
-  const url = clipPsvVideoInfoUrl(buildPresalesVideoPublicPlayUrl(urlRaw))
-  const titleDb = clipPsvVideoInfoTitle(title)
+  const reserve5Same = pl ? clipReserve5(pl) : null
+  const urlRawForPublicFallback = pl || main
+  const url = reserve5Same
+    ? clipPsvVideoInfoUrl(reserve5Same)
+    : clipPsvVideoInfoUrl(buildPresalesVideoPublicPlayUrl(urlRawForPublicFallback))
+
+  const coverSource = pl || main
+  const coverRaw = coverSource ? coverUrlByReplacingLastPathSegmentWithCoverJpg(coverSource) : null
+  const cover = coverRaw ? clipPsvVideoInfoUrl(coverRaw) : null
 
   await prisma.psv_video_info.upsert({
     where: { id },
     create: {
       id,
       title: titleDb,
-      url
+      url,
+      cover: cover || null
     },
     update: {
       title: titleDb,
       url,
+      cover: cover || null,
       updated_at: new Date()
     }
   })

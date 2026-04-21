@@ -9,7 +9,8 @@
     "dev": "concurrently -n schema,server -c cyan,green \"node scripts/build-schema.js --watch\" \"tsx watch src/index.js\" && npm run sync:comments",
     "sync:comments": "node scripts/sync-table-comments.js",
     "schema:build": "node scripts/build-schema.js",
-    "schema:watch": "node scripts/build-schema.js --watch"
+    "schema:watch": "node scripts/build-schema.js --watch",
+    "prisma:generate": "node scripts/build-schema.js && prisma generate"
   },
   "dependencies": {
     "@prisma/client": "6.19.1",
