@@ -100,6 +100,39 @@ function formatDateTime(d) {
   return x.toLocaleString('zh-CN', { hour12: false })
 }
 
+function normalizeRoleValue(raw) {
+  const s = String(raw == null ? '' : raw).trim().toLowerCase()
+  if (!s) return ''
+  if (s === 'customer' || s === '客户方' || s === '客户') return 'customer'
+  if (
+    s === 'our_side' ||
+    s === 'our side' ||
+    s === '我方' ||
+    s === '我方/供应商' ||
+    s === '供应商'
+  ) {
+    return 'our_side'
+  }
+  return ''
+}
+
+function roleLabelZh(role) {
+  if (role === 'customer') return '客户方'
+  if (role === 'our_side') return '我方'
+  return ''
+}
+
+function roleFromDialogue(dialogue) {
+  if (!dialogue || typeof dialogue !== 'object') return ''
+  return normalizeRoleValue(
+    dialogue.speaker_role != null
+      ? dialogue.speaker_role
+      : dialogue.speakerRole != null
+        ? dialogue.speakerRole
+        : ''
+  )
+}
+
 function buildMergedDialogueTxt(transcription, dialogues) {
   const speakerList = uniqueSpeakers(dialogues)
   let content = '语音转文本结果\n\n'
@@ -112,11 +145,13 @@ function buildMergedDialogueTxt(transcription, dialogues) {
   for (const d of dialogues) {
     const timeRange = d.timeRange || d.startTime || ''
     const speaker = d.speaker || d.role || '未知说话人'
+    const roleLabel = roleLabelZh(roleFromDialogue(d))
+    const speakerWithRole = roleLabel ? `${speaker}（${roleLabel}）` : speaker
     const text = d.text || d.correctedText || d.originalText || ''
     if (timeRange) {
-      content += `[${timeRange}] 【${speaker}】\n${text}\n\n`
+      content += `[${timeRange}] 【${speakerWithRole}】\n${text}\n\n`
     } else {
-      content += `【${speaker}】\n${text}\n\n`
+      content += `【${speakerWithRole}】\n${text}\n\n`
     }
   }
   return content

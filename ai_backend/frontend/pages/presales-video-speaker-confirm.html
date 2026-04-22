@@ -43,6 +43,26 @@
       color: var(--muted);
       line-height: 1.45;
     }
+    .search-box {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .search-in {
+      flex: 1;
+      min-width: 180px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: #262626;
+      color: var(--text);
+    }
+    .search-result {
+      font-size: 12px;
+      color: var(--muted);
+      min-height: 18px;
+    }
     .speaker-map {
       display: flex;
       flex-direction: column;
@@ -69,13 +89,32 @@
       margin-left: 4px;
     }
     .speaker-map-in {
-      flex: 1;
-      min-width: 160px;
+      flex: 0 0 200px;
+      width: 200px;
+      max-width: 56vw;
+      min-width: 120px;
       padding: 8px 10px;
       border-radius: 6px;
       border: 1px solid var(--border);
       background: #262626;
       color: var(--text);
+    }
+    .speaker-role-group {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .speaker-role-opt {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      color: var(--text);
+      cursor: pointer;
+    }
+    .speaker-role-opt input {
+      margin: 0;
     }
     .btn {
       padding: 8px 16px;
@@ -94,6 +133,10 @@
       border-radius: 8px;
       padding: 10px 12px;
     }
+    .row.search-hit {
+      border-color: #fadb14;
+      box-shadow: 0 0 0 2px rgba(250, 219, 20, 0.2);
+    }
     .row-head {
       display: flex;
       flex-wrap: wrap;
@@ -104,13 +147,35 @@
       color: var(--muted);
     }
     .row-head input.speaker-in {
-      flex: 1;
-      min-width: 140px;
+      flex: 0 0 180px;
+      width: 180px;
+      max-width: 52vw;
+      min-width: 110px;
       padding: 6px 8px;
       border-radius: 4px;
       border: 1px solid var(--border);
       background: #262626;
       color: var(--text);
+    }
+    .role-badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 10px;
+      padding: 1px 8px;
+      font-size: 12px;
+      line-height: 18px;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .role-badge-customer {
+      color: #91d5ff;
+      background: rgba(24, 144, 255, 0.2);
+      border: 1px solid rgba(24, 144, 255, 0.5);
+    }
+    .role-badge-our-side {
+      color: #b7eb8f;
+      background: rgba(82, 196, 26, 0.2);
+      border: 1px solid rgba(82, 196, 26, 0.5);
     }
     .row .text {
       font-size: 14px;
@@ -152,8 +217,19 @@
 
   <div class="toolbar" id="pvsc-toolbar" style="display: none;">
     <div class="speaker-map-hint">
-      说话人角色确认：左侧为speaker，右侧为对应角色名；在右侧文本框内填写说话人姓名，光标移开后，即可批量修改，记得点击：保存确认结果
+      说话人角色确认：每个 speaker 必须勾选「客户方/我方」，并可批量改名；改完记得点击：保存确认结果
     </div>
+    <div class="search-box" aria-label="关键字搜索">
+      <input
+        id="pvsc-search-input"
+        class="search-in"
+        type="text"
+        placeholder="输入关键字后点击搜索，将自动定位到内容位置"
+        autocomplete="off"
+      />
+      <button type="button" class="btn btn-secondary" id="pvsc-search-btn">搜索</button>
+    </div>
+    <div class="search-result" id="pvsc-search-result"></div>
     <div id="pvsc-speaker-map" class="speaker-map" aria-label="说话人批量改名"></div>
   </div>
 
@@ -185,7 +261,7 @@
     ;(function () {
       var scriptUrl =
         (window.location.origin || '') +
-        '/api/presales-video/public/speaker-confirm-page.js?v=8'
+        '/api/presales-video/public/speaker-confirm-page.js?v=10'
       var hdrs = { 'ngrok-skip-browser-warning': 'true' }
       fetch(scriptUrl, { credentials: 'same-origin', headers: hdrs })
         .then(function (r) {
