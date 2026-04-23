@@ -1,0 +1,29 @@
+<div class="container">
+  <div class="config-section">
+    <h3>👥 视频跑批固定成员设置</h3>
+    <div class="config-form">
+      <div class="form-row">
+        <label>固定成员（逗号分隔）</label>
+        <textarea id="video-fixed-members" rows="4" style="width: 100%; padding: 10px;" placeholder="例如：rxkf01,zhangsan,wangwu"></textarea>
+      </div>
+      <div class="form-row">
+        <label></label>
+        <div class="helper-text">跑批建群时会自动加入这些成员，且必选包含 rxkf01（管理员）。</div>
+      </div>
+      <div class="form-row">
+        <label></label>
+        <button class="btn btn-primary" onclick="saveVideoBatchGroupSettings()">💾 保存固定成员</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="log-section">
+    <h3>📌 当前线索群映射（可重绑/清除）</h3>
+    <div id="video-lead-chat-list" class="log-list">
+      <div class="empty-logs">
+        <div class="icon">📝</div>
+        <div>暂无映射记录</div>
+      </div>
+    </div>
+  </div>
+</div>

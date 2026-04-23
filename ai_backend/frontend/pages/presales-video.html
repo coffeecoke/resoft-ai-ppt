@@ -819,6 +819,9 @@
           placeholder="例：ZhangSan,LiSi,WangWu"
           autocomplete="off"
         ></textarea>
+        <p id="pv-push-video-preview" class="pv-push-video-hint" style="margin-top:8px; margin-bottom:0;">
+          正在加载自动推送人员...
+        </p>
       </div>
       <div class="dialog-actions">
         <button type="button" class="btn btn-secondary" onclick="pvClosePushVideoDialog()">取消</button>
@@ -881,6 +884,9 @@
         <div class="pv-pipeline-row">
           <label class="pv-pipeline-label" for="pv-pipeline-push-users">推送视频成员 userid（逗号分隔，≥2 人）</label>
           <textarea id="pv-pipeline-push-users" placeholder="例：ZhangSan,LiSi" autocomplete="off" spellcheck="false"></textarea>
+          <p id="pv-pipeline-push-users-preview" class="pv-pipeline-hint" style="margin-top:6px; margin-bottom:0;">
+            正在加载自动推送人员...
+          </p>
         </div>
         <div class="pv-pipeline-row" style="display:flex;align-items:center;gap:8px;">
           <input type="checkbox" id="pv-pipeline-skip-role" />

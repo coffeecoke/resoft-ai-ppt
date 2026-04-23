@@ -1618,9 +1618,40 @@ router.post('/transcriptions/:id/push-report', async (req, res) => {
 })
 
 /**
+ * GET /api/presales-video/transcriptions/:id/push-video-users
+ * 预览推送视频成员（自动规则：from_user/created_by + 上级链 + 固定成员 + rxkf01，再应用 env 排除）
+ */
+router.get('/transcriptions/:id/push-video-users', async (req, res) => {
+  const { id } = req.params
+  try {
+    const result = await presalesVideoWecomPushService.resolvePushVideoUserIds({
+      prisma,
+      transcriptionId: id,
+      userIdsRaw: null
+    })
+    res.json({
+      success: true,
+      data: {
+        source: result.source,
+        userIds: result.userIds,
+        userCount: result.userIds.length,
+        excludedUserIds: result.excludedUserIds || [],
+        fixedMembers: result.fixedMembers || []
+      }
+    })
+  } catch (error) {
+    logger.error('[presales-video] push-video-users 预览失败:', error)
+    const msg = error.message || '获取推送成员失败'
+    const clientErr = msg.includes('不存在') || msg.includes('未配置')
+    res.status(clientErr ? 400 : 500).json({ success: false, error: msg })
+  }
+})
+
+/**
  * POST /api/presales-video/transcriptions/:id/push-video
- * Body: { userIds: "userid1,userid2" } 或 { members: ["id1","id2"] }
- * 使用企业微信应用 API 创建 appchat，向群内推送：交流报备摘要（按客户名匹配）+ 售前视频文本卡片（标题为音频名，跳转 URL 由环境变量拼接/覆盖，见 PRESALES_VIDEO_PSV_INFO_* / PRESALES_VIDEO_WECOM_PUSH_PUBLIC_BASE_URL）
+ * Body: { userIds: "userid1,userid2" } 或 { members: ["id1","id2"] }（可选）
+ * 未传 userIds 时，自动按 transcriptions.created_by 向上找上级链并加固定成员（含 rxkf01）。
+ * 使用企业微信应用 API 创建/复用 appchat，向群内推送：报备 main_content + 售前视频文本卡片。
  */
 router.post('/transcriptions/:id/push-video', async (req, res) => {
   const { id } = req.params
@@ -1634,21 +1665,10 @@ router.post('/transcriptions/:id/push-video', async (req, res) => {
           : body.userList != null
             ? body.userList
             : null
-    if (
-      userIds == null ||
-      (typeof userIds === 'string' && !String(userIds).trim()) ||
-      (Array.isArray(userIds) && userIds.length === 0)
-    ) {
-      return res.status(400).json({
-        success: false,
-        error:
-          '请提供 userIds：企业微信成员 userid，逗号分隔，至少 2 人（须在该自建应用可见范围内）'
-      })
-    }
     const result = await presalesVideoWecomPushService.pushPresalesVideoToWecomAppChat({
       prisma,
       transcriptionId: id,
-      userIdsRaw: userIds
+      userIdsRaw: userIds == null ? null : userIds
     })
     // reserve_4（wecom_appchat:{chatid}@时间）已在 push 服务内、发卡片前写入，供模板 {chatId} 解析
     logger.info(

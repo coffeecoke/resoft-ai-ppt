@@ -6,6 +6,8 @@ const express = require('express')
 const autoProcessService = require('../services/autoProcessService')
 const audioAutoProcessService = require('../services/audioAutoProcessService')
 const qaAutoProcessService = require('../services/qaAutoProcessService')
+const videoGenerationBatchService = require('../services/videoGenerationBatchService')
+const presalesVideoGroupSettingsService = require('../services/presalesVideoGroupSettingsService')
 const logger = require('../utils/logger')
 
 const router = express.Router()
@@ -689,6 +691,179 @@ router.post('/qa/run-once', async (req, res) => {
       success: false,
       error: error.message || '触发执行失败'
     })
+  }
+})
+
+// ==================== 视频生成跑批路由 ====================
+
+router.get('/video/status', async (req, res) => {
+  try {
+    res.json({ success: true, data: videoGenerationBatchService.getStatus() })
+  } catch (error) {
+    logger.error('获取视频跑批状态失败:', error.message)
+    res.status(500).json({ success: false, error: error.message || '获取状态失败' })
+  }
+})
+
+router.post('/video/start', async (req, res) => {
+  try {
+    const status = await videoGenerationBatchService.start()
+    res.json({ success: true, message: '视频生成跑批已启动', data: status })
+  } catch (error) {
+    logger.error('启动视频跑批失败:', error.message)
+    res.status(400).json({ success: false, error: error.message || '启动失败' })
+  }
+})
+
+router.post('/video/stop', async (req, res) => {
+  try {
+    const status = await videoGenerationBatchService.stop()
+    res.json({ success: true, message: '视频生成跑批已停止', data: status })
+  } catch (error) {
+    logger.error('停止视频跑批失败:', error.message)
+    res.status(400).json({ success: false, error: error.message || '停止失败' })
+  }
+})
+
+router.post('/video/run-once', async (req, res) => {
+  try {
+    videoGenerationBatchService.runOnce().catch((err) => {
+      logger.error('手动执行视频跑批失败:', err.message)
+    })
+    res.json({ success: true, message: '已触发视频跑批执行' })
+  } catch (error) {
+    logger.error('触发视频跑批失败:', error.message)
+    res.status(500).json({ success: false, error: error.message || '触发失败' })
+  }
+})
+
+router.get('/video/config', async (req, res) => {
+  try {
+    res.json({ success: true, data: videoGenerationBatchService.getConfig() })
+  } catch (error) {
+    logger.error('获取视频跑批配置失败:', error.message)
+    res.status(500).json({ success: false, error: error.message || '获取配置失败' })
+  }
+})
+
+router.put('/video/config', async (req, res) => {
+  try {
+    const { pollingInterval, maxConcurrent, scanLimit, scanWindowHours, autoContinueAfterRoleConfirm } =
+      req.body || {}
+    const updated = await videoGenerationBatchService.updateConfig({
+      pollingInterval,
+      maxConcurrent,
+      scanLimit,
+      scanWindowHours,
+      autoContinueAfterRoleConfirm
+    })
+    res.json({ success: true, message: '视频跑批配置已更新', data: updated })
+  } catch (error) {
+    logger.error('更新视频跑批配置失败:', error.message)
+    res.status(400).json({ success: false, error: error.message || '更新配置失败' })
+  }
+})
+
+router.get('/video/statistics', async (req, res) => {
+  try {
+    const stats = await videoGenerationBatchService.getStatistics()
+    res.json({ success: true, data: stats })
+  } catch (error) {
+    logger.error('获取视频跑批统计失败:', error.message)
+    res.status(500).json({ success: false, error: error.message || '获取统计失败' })
+  }
+})
+
+router.get('/video/logs', async (req, res) => {
+  try {
+    const { limit = 100 } = req.query
+    const logs = videoGenerationBatchService.getLogs(parseInt(limit, 10) || 100)
+    res.json({ success: true, total: logs.length, data: logs })
+  } catch (error) {
+    logger.error('获取视频跑批日志失败:', error.message)
+    res.status(500).json({ success: false, error: error.message || '获取日志失败' })
+  }
+})
+
+router.delete('/video/logs', async (req, res) => {
+  try {
+    videoGenerationBatchService.clearLogs()
+    res.json({ success: true, message: '视频跑批日志已清空' })
+  } catch (error) {
+    logger.error('清空视频跑批日志失败:', error.message)
+    res.status(500).json({ success: false, error: error.message || '清空失败' })
+  }
+})
+
+router.get('/video/group-settings', async (req, res) => {
+  try {
+    const settings = await presalesVideoGroupSettingsService.readSettings()
+    res.json({
+      success: true,
+      data: {
+        fixedMembers: settings.fixedMembers,
+        leadChatCount: Object.keys(settings.leadChats || {}).length,
+        leadChats: settings.leadChats
+      }
+    })
+  } catch (error) {
+    logger.error('获取视频群设置失败:', error.message)
+    res.status(500).json({ success: false, error: error.message || '获取设置失败' })
+  }
+})
+
+router.put('/video/group-settings', async (req, res) => {
+  try {
+    const body = req.body || {}
+    const fixedMembers = Array.isArray(body.fixedMembers)
+      ? body.fixedMembers
+      : String(body.fixedMembers || '')
+        .split(/[,，、;；\s]+/)
+    const updated = await presalesVideoGroupSettingsService.updateFixedMembers(fixedMembers)
+    res.json({ success: true, message: '固定成员已更新', data: updated })
+  } catch (error) {
+    logger.error('更新视频群设置失败:', error.message)
+    res.status(400).json({ success: false, error: error.message || '更新失败' })
+  }
+})
+
+router.put('/video/group-settings/lead-chat', async (req, res) => {
+  try {
+    const body = req.body || {}
+    const leadKey = body.leadKey != null ? String(body.leadKey).trim() : ''
+    const chatid = body.chatid != null ? String(body.chatid).trim() : ''
+    const name = body.name != null ? String(body.name).trim() : ''
+    if (!leadKey) {
+      return res.status(400).json({ success: false, error: 'leadKey 不能为空' })
+    }
+    if (!chatid) {
+      return res.status(400).json({ success: false, error: 'chatid 不能为空' })
+    }
+    await presalesVideoGroupSettingsService.setLeadChatByKey(leadKey, { chatid, name })
+    const settings = await presalesVideoGroupSettingsService.readSettings()
+    res.json({ success: true, message: '线索群映射已更新', data: settings })
+  } catch (error) {
+    logger.error('更新线索群映射失败:', error.message)
+    res.status(400).json({ success: false, error: error.message || '更新失败' })
+  }
+})
+
+router.delete('/video/group-settings/lead-chat', async (req, res) => {
+  try {
+    const leadKey = req.query && req.query.leadKey != null ? String(req.query.leadKey).trim() : ''
+    if (!leadKey) {
+      return res.status(400).json({ success: false, error: 'leadKey 不能为空' })
+    }
+    const removed = await presalesVideoGroupSettingsService.removeLeadChatByKey(leadKey)
+    const settings = await presalesVideoGroupSettingsService.readSettings()
+    res.json({
+      success: true,
+      message: removed ? '线索群映射已清除' : '未找到该映射',
+      data: settings
+    })
+  } catch (error) {
+    logger.error('清除线索群映射失败:', error.message)
+    res.status(500).json({ success: false, error: error.message || '清除失败' })
   }
 })
 

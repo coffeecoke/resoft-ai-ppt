@@ -42,6 +42,9 @@
         <a href="#auto-process" class="menu-item" data-page="auto-process">
           <span>🤖</span> 自动跑批监控
         </a>
+        <a href="#video-batch-settings" class="menu-item" data-page="video-batch-settings">
+          <span>👥</span> 视频跑批固定成员
+        </a>
         <a href="#transcription" class="menu-item" data-page="transcription">
           <span>🎙️</span> 语音转文本
         </a>
@@ -102,6 +105,7 @@
         'model-config': './pages/model-config.html',
         'prompt-templates': './pages/prompt-templates.html',
         'auto-process': './pages/auto-process.html',
+        'video-batch-settings': './pages/video-batch-settings.html',
         'transcription': './pages/transcription.html',
         'qa-management': './pages/qa-management.html',
         'ppt-analysis': './pages/ppt-analysis.html',
@@ -129,6 +133,11 @@
           console.log('🧹 清理音频跑批定时器');
           clearInterval(window.audioRefreshInterval);
           window.audioRefreshInterval = null;
+        }
+        if (window.videoRefreshInterval) {
+          console.log('🧹 清理视频跑批定时器');
+          clearInterval(window.videoRefreshInterval);
+          window.videoRefreshInterval = null;
         }
         
         // 更新菜单激活状态

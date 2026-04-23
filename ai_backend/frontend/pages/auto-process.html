@@ -284,6 +284,7 @@
     <button class="tab-btn active" id="ap-ppt-tab" onclick="switchAutoProcessTab('ppt')">📄 PPT跑批</button>
     <button class="tab-btn" id="ap-audio-tab" onclick="switchAutoProcessTab('audio')">🎤 音频跑批</button>
     <button class="tab-btn" id="ap-qa-tab" onclick="switchAutoProcessTab('qa')">❓ 问答对提取跑批</button>
+    <button class="tab-btn" id="ap-video-tab" onclick="switchAutoProcessTab('video')">🎬 视频生成跑批</button>
   </div>
 
   <!-- PPT跑批内容 -->
@@ -669,6 +670,84 @@
           <div class="icon">📝</div>
           <div>暂无日志记录</div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 视频生成跑批内容 -->
+  <div class="container" id="video-process-content" style="display: none;">
+    <div class="control-panel">
+      <h2>
+        <span class="status-indicator" id="video-status-indicator"></span>
+        <span>🎬 视频生成自动跑批监控</span>
+      </h2>
+      <div class="status-text" id="video-status-text">正在加载...</div>
+      <div class="control-buttons">
+        <button class="btn btn-success" id="video-start-btn" onclick="videoStartProcess()" disabled>▶️ 启动跑批</button>
+        <button class="btn btn-danger" id="video-stop-btn" onclick="videoStopProcess()" disabled>⏸️ 停止跑批</button>
+        <button class="btn btn-primary" id="video-run-once-btn" onclick="videoRunOnce()">🚀 立即执行一次</button>
+        <button class="btn btn-secondary" onclick="videoRefreshStatus()">🔄 刷新状态</button>
+      </div>
+    </div>
+
+    <div class="current-task" id="video-current-task" style="display: none;">
+      <h4>⏳ 当前正在处理</h4>
+      <div class="task-info" id="video-task-info"></div>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card"><div class="label">待处理记录</div><div class="value warning" id="video-stat-pending">-</div></div>
+      <div class="stat-card"><div class="label">处理中</div><div class="value" id="video-stat-processing">-</div></div>
+      <div class="stat-card"><div class="label">已进入确认中</div><div class="value success" id="video-stat-completed">-</div></div>
+      <div class="stat-card"><div class="label">总运行次数</div><div class="value" id="video-stat-total-runs">-</div></div>
+      <div class="stat-card"><div class="label">成功/失败</div><div class="value"><span class="success" id="video-stat-success">-</span> / <span class="danger" id="video-stat-failed">-</span></div></div>
+      <div class="stat-card"><div class="label">下次运行</div><div class="value" id="video-stat-next-run" style="font-size: 16px;">-</div></div>
+    </div>
+
+    <div class="config-section">
+      <h3>⚙️ 跑批配置</h3>
+      <div class="config-form">
+        <div class="form-row">
+          <label>轮询间隔（分钟）</label>
+          <input type="number" id="video-config-interval" min="1" max="1440" value="5">
+        </div>
+        <div class="form-row">
+          <label>最大并发</label>
+          <input type="number" id="video-config-concurrent" min="1" max="5" value="1">
+        </div>
+        <div class="form-row">
+          <label>单次扫描上限</label>
+          <input type="number" id="video-config-scan-limit" min="1" max="500" value="50">
+        </div>
+        <div class="form-row">
+          <label>扫描时间窗口（小时）</label>
+          <input type="number" id="video-config-window-hours" min="0" max="720" value="72">
+        </div>
+        <div class="form-row">
+          <label></label>
+          <div class="helper-text">只扫描最近 N 小时的 crm_report_file；填 0 表示不限制。</div>
+        </div>
+        <div class="form-row">
+          <label>确认后自动继续</label>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <input type="checkbox" id="video-config-auto-continue" checked onchange="videoSaveConfig()">
+            <span class="helper-text">开启：角色确认后自动跑后续流程；关闭：仅发角色确认卡片，后续手动触发。</span>
+          </div>
+        </div>
+        <div class="form-row">
+          <span></span>
+          <button class="btn btn-primary" onclick="videoSaveConfig()">💾 保存配置</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="log-section">
+      <h3>
+        <span>📋 跑批日志</span>
+        <button class="btn btn-sm btn-secondary" onclick="videoClearLogs()">🗑️ 清空日志</button>
+      </h3>
+      <div class="log-list" id="video-log-list">
+        <div class="empty-logs"><div class="icon">📝</div><div>暂无日志记录</div></div>
       </div>
     </div>
   </div>

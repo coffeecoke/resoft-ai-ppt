@@ -111,33 +111,46 @@ class TranscriptionService {
    */
   async saveTranscription(data) {
     // ✅ prisma 已在文件顶部导入，无需重复导入
-    const transcription = await prisma.transcriptions.create({
-      data: {
-        id: uuidv4(),
-        name: data.name || data.originalFileName,
-        original_file_name: data.originalFileName,
-        audio_file_path: data.audioFilePath,
-        audio_file_size: data.audioFileSize || 0,
-        audio_format: data.audioFormat || '',
-        audio_duration: data.audioDuration || null,
-        result_file_path: data.resultFilePath || null,
-        dialogues: JSON.stringify(data.dialogues || []),
-        full_text: data.fullText || null,
-        speaker_count: data.speakerCount || 0,
-        has_role_separation: true,
-        session_id: data.sessionId || null,
-        product_id: data.productId || null,
-        customer_name: data.customerName || null,
-        created_by:
-          data.createdBy != null && String(data.createdBy).trim() !== ''
-            ? String(data.createdBy).trim().slice(0, 50)
-            : null,
-        status: 'completed',
-        progress: 100,
-        completed_at: new Date(),
-        updated_at: new Date()
+    const basePayload = {
+      id: uuidv4(),
+      name: data.name || data.originalFileName,
+      original_file_name: data.originalFileName,
+      audio_file_path: data.audioFilePath,
+      audio_file_size: data.audioFileSize || 0,
+      audio_format: data.audioFormat || '',
+      audio_duration: data.audioDuration || null,
+      result_file_path: data.resultFilePath || null,
+      dialogues: JSON.stringify(data.dialogues || []),
+      full_text: data.fullText || null,
+      speaker_count: data.speakerCount || 0,
+      has_role_separation: true,
+      session_id: data.sessionId || null,
+      report_id: data.reportId || null,
+      product_id: data.productId || null,
+      customer_name: data.customerName || null,
+      created_by:
+        data.createdBy != null && String(data.createdBy).trim() !== ''
+          ? String(data.createdBy).trim().slice(0, 50)
+          : null,
+      status: 'completed',
+      progress: 100,
+      completed_at: new Date(),
+      updated_at: new Date()
+    };
+
+    let transcription;
+    try {
+      transcription = await prisma.transcriptions.create({ data: basePayload });
+    } catch (error) {
+      const msg = String((error && error.message) || '').toLowerCase();
+      if (!msg.includes('report_id')) {
+        throw error;
       }
-    });
+      // 兼容未完成结构升级的环境：先降级写入，避免阻断转录流程
+      const fallbackPayload = { ...basePayload };
+      delete fallbackPayload.report_id;
+      transcription = await prisma.transcriptions.create({ data: fallbackPayload });
+    }
 
     // ✅ 转换 BigInt 为 Number，避免 JSON 序列化错误
     return {

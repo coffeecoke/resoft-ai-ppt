@@ -15,6 +15,8 @@ let audioCurrentStatus = null;
 // 问答对提取跑批相关变量
 let qaRefreshInterval = null;
 let qaCurrentStatus = null;
+let videoRefreshInterval = null;
+let videoCurrentStatus = null;
 
 // ✅ 页面加载时清理可能存在的旧定时器
 if (window.autoRefreshInterval) {
@@ -29,11 +31,16 @@ if (window.qaRefreshInterval) {
   clearInterval(window.qaRefreshInterval);
   window.qaRefreshInterval = null;
 }
+if (window.videoRefreshInterval) {
+  clearInterval(window.videoRefreshInterval);
+  window.videoRefreshInterval = null;
+}
 
 // ✅ 将定时器暴露到全局，方便页面切换时清理
 window.autoRefreshInterval = autoRefreshInterval;
 window.audioRefreshInterval = audioRefreshInterval;
 window.qaRefreshInterval = qaRefreshInterval;
+window.videoRefreshInterval = videoRefreshInterval;
 
 // ✅ 页面卸载时清理定时器
 window.addEventListener('beforeunload', () => {
@@ -51,6 +58,11 @@ window.addEventListener('beforeunload', () => {
     console.log('🧹 清理问答对提取跑批刷新定时器');
     clearInterval(qaRefreshInterval);
     qaRefreshInterval = null;
+  }
+  if (videoRefreshInterval) {
+    console.log('🧹 清理视频跑批刷新定时器');
+    clearInterval(videoRefreshInterval);
+    videoRefreshInterval = null;
   }
 });
 
@@ -523,11 +535,13 @@ window.switchAutoProcessTab = function(tab) {
   document.getElementById('ap-ppt-tab').classList.toggle('active', tab === 'ppt');
   document.getElementById('ap-audio-tab').classList.toggle('active', tab === 'audio');
   document.getElementById('ap-qa-tab').classList.toggle('active', tab === 'qa');
+  document.getElementById('ap-video-tab').classList.toggle('active', tab === 'video');
   
   // 切换内容显示
   document.getElementById('ppt-process-content').style.display = tab === 'ppt' ? 'block' : 'none';
   document.getElementById('audio-process-content').style.display = tab === 'audio' ? 'block' : 'none';
   document.getElementById('qa-process-content').style.display = tab === 'qa' ? 'block' : 'none';
+  document.getElementById('video-process-content').style.display = tab === 'video' ? 'block' : 'none';
   
   // 清理旧的定时器
   if (autoRefreshInterval) {
@@ -541,6 +555,10 @@ window.switchAutoProcessTab = function(tab) {
   if (qaRefreshInterval) {
     clearInterval(qaRefreshInterval);
     qaRefreshInterval = null;
+  }
+  if (videoRefreshInterval) {
+    clearInterval(videoRefreshInterval);
+    videoRefreshInterval = null;
   }
   
   // 加载对应的数据
@@ -562,6 +580,12 @@ window.switchAutoProcessTab = function(tab) {
     qaLoadConfig();
     qaLoadStatistics();
     qaLoadLogs();
+  } else if (tab === 'video') {
+    console.log('🔄 切换到视频生成跑批');
+    videoLoadStatus();
+    videoLoadConfig();
+    videoLoadStatistics();
+    videoLoadLogs();
   }
 };
 
@@ -1214,5 +1238,207 @@ window.qaRefreshStatus = qaRefreshStatus;
 window.qaSaveConfig = qaSaveConfig;
 window.qaClearLogs = qaClearLogs;
 
-console.log('✅ 自动跑批监控页面JS已加载（PPT + 音频 + 问答对提取）');
+// ==================== 视频生成跑批功能 ====================
+
+async function videoLoadStatus() {
+  try {
+    const response = await fetch(`${AUTO_API_BASE}/video/status`);
+    const result = await response.json();
+    if (result.success) {
+      videoCurrentStatus = result.data;
+      const status = result.data;
+      const indicator = document.getElementById('video-status-indicator');
+      const statusText = document.getElementById('video-status-text');
+      const startBtn = document.getElementById('video-start-btn');
+      const stopBtn = document.getElementById('video-stop-btn');
+      const taskBox = document.getElementById('video-current-task');
+      const taskInfo = document.getElementById('video-task-info');
+
+      if (status.isRunning) {
+        indicator.className = 'status-indicator running';
+        statusText.textContent = '✅ 运行中：自动扫描 crm_report_file 并触发视频流水线';
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+        if (!videoRefreshInterval) {
+          videoRefreshInterval = setInterval(() => {
+            videoLoadStatus();
+            videoLoadStatistics();
+            videoLoadLogs();
+          }, 5000);
+          window.videoRefreshInterval = videoRefreshInterval;
+        }
+      } else {
+        indicator.className = 'status-indicator stopped';
+        statusText.textContent = '⏸️ 已停止';
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+        if (videoRefreshInterval) {
+          clearInterval(videoRefreshInterval);
+          videoRefreshInterval = null;
+          window.videoRefreshInterval = null;
+        }
+      }
+
+      if (status.currentTask) {
+        taskBox.style.display = 'block';
+        taskInfo.textContent = `CRM记录 ${status.currentTask.crmId || '-'}，报备ID ${status.currentTask.reportId || '-'}，发起人 ${status.currentTask.fromUser || '-'}`;
+      } else {
+        taskBox.style.display = 'none';
+      }
+    }
+  } catch (error) {
+    console.error('❌ 加载视频跑批状态失败:', error);
+  }
+}
+
+async function videoLoadConfig() {
+  try {
+    const response = await fetch(`${AUTO_API_BASE}/video/config`);
+    const result = await response.json();
+    if (result.success) {
+      const cfg = result.data || {};
+      document.getElementById('video-config-interval').value = Math.round((cfg.pollingInterval || 300000) / 60000);
+      document.getElementById('video-config-concurrent').value = cfg.maxConcurrent || 1;
+      document.getElementById('video-config-scan-limit').value = cfg.scanLimit || 50;
+      document.getElementById('video-config-window-hours').value = cfg.scanWindowHours != null ? cfg.scanWindowHours : 72;
+      document.getElementById('video-config-auto-continue').checked =
+        cfg.autoContinueAfterRoleConfirm !== false;
+    }
+  } catch (error) {
+    console.error('❌ 加载视频跑批配置失败:', error);
+  }
+}
+
+async function videoSaveConfig() {
+  try {
+    const pollingInterval = parseInt(document.getElementById('video-config-interval').value, 10) * 60000;
+    const maxConcurrent = parseInt(document.getElementById('video-config-concurrent').value, 10);
+    const scanLimit = parseInt(document.getElementById('video-config-scan-limit').value, 10);
+    const scanWindowHours = parseInt(document.getElementById('video-config-window-hours').value, 10);
+    const autoContinueAfterRoleConfirm = document.getElementById('video-config-auto-continue').checked;
+    const response = await fetch(`${AUTO_API_BASE}/video/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        pollingInterval,
+        maxConcurrent,
+        scanLimit,
+        scanWindowHours,
+        autoContinueAfterRoleConfirm
+      })
+    });
+    const result = await response.json();
+    if (result.success) {
+      showToast('✅ 视频跑批配置已保存', 'success');
+      await videoLoadConfig();
+    } else {
+      showToast(`保存失败: ${result.error}`, 'error');
+    }
+  } catch (error) {
+    console.error('❌ 保存视频跑批配置失败:', error);
+    showToast(`保存失败: ${error.message}`, 'error');
+  }
+}
+
+async function videoLoadStatistics() {
+  try {
+    const response = await fetch(`${AUTO_API_BASE}/video/statistics`);
+    const result = await response.json();
+    if (result.success) {
+      const stats = result.data || {};
+      document.getElementById('video-stat-pending').textContent = stats.pendingRecords || 0;
+      document.getElementById('video-stat-processing').textContent = stats.processingRecords || 0;
+      document.getElementById('video-stat-completed').textContent = stats.completedRecords || 0;
+      document.getElementById('video-stat-total-runs').textContent = stats.totalRuns || 0;
+      document.getElementById('video-stat-success').textContent = stats.successfulRuns || 0;
+      document.getElementById('video-stat-failed').textContent = stats.failedRuns || 0;
+      document.getElementById('video-stat-next-run').textContent = stats.nextRunTime ? new Date(stats.nextRunTime).toLocaleString('zh-CN') : '-';
+    }
+  } catch (error) {
+    console.error('❌ 加载视频跑批统计失败:', error);
+  }
+}
+
+async function videoLoadLogs() {
+  try {
+    const response = await fetch(`${AUTO_API_BASE}/video/logs?limit=50`);
+    const result = await response.json();
+    if (!result.success) return;
+    const logs = result.data || [];
+    const box = document.getElementById('video-log-list');
+    if (logs.length === 0) {
+      box.innerHTML = '<div class="empty-logs"><div class="icon">📝</div><div>暂无日志记录</div></div>';
+      return;
+    }
+    box.innerHTML = logs.map(log => {
+      const time = new Date(log.timestamp).toLocaleTimeString('zh-CN');
+      const details = log.data && Object.keys(log.data).length > 0
+        ? `<div class="log-details">${JSON.stringify(log.data, null, 2)}</div>`
+        : '';
+      return `<div class="log-item ${log.level || 'info'}"><span class="log-time">${time}</span><span class="log-message">${log.message || ''}</span>${details}</div>`;
+    }).join('');
+  } catch (error) {
+    console.error('❌ 加载视频跑批日志失败:', error);
+  }
+}
+
+async function videoStartProcess() {
+  const response = await fetch(`${AUTO_API_BASE}/video/start`, { method: 'POST' });
+  const result = await response.json();
+  if (result.success) {
+    showToast('✅ 视频生成跑批已启动', 'success');
+    await videoRefreshStatus();
+  } else {
+    showToast(`启动失败: ${result.error}`, 'error');
+  }
+}
+
+async function videoStopProcess() {
+  const response = await fetch(`${AUTO_API_BASE}/video/stop`, { method: 'POST' });
+  const result = await response.json();
+  if (result.success) {
+    showToast('✅ 视频生成跑批已停止', 'success');
+    await videoRefreshStatus();
+  } else {
+    showToast(`停止失败: ${result.error}`, 'error');
+  }
+}
+
+async function videoRunOnce() {
+  const response = await fetch(`${AUTO_API_BASE}/video/run-once`, { method: 'POST' });
+  const result = await response.json();
+  if (result.success) {
+    showToast('✅ 已触发执行', 'success');
+    setTimeout(videoRefreshStatus, 1000);
+  } else {
+    showToast(`触发失败: ${result.error}`, 'error');
+  }
+}
+
+async function videoClearLogs() {
+  if (!confirm('确定要清空视频跑批日志吗？')) return;
+  const response = await fetch(`${AUTO_API_BASE}/video/logs`, { method: 'DELETE' });
+  const result = await response.json();
+  if (result.success) {
+    showToast('✅ 日志已清空', 'success');
+    await videoLoadLogs();
+  } else {
+    showToast(`清空失败: ${result.error}`, 'error');
+  }
+}
+
+async function videoRefreshStatus() {
+  await videoLoadStatus();
+  await videoLoadStatistics();
+  await videoLoadLogs();
+}
+
+window.videoStartProcess = videoStartProcess;
+window.videoStopProcess = videoStopProcess;
+window.videoRunOnce = videoRunOnce;
+window.videoRefreshStatus = videoRefreshStatus;
+window.videoSaveConfig = videoSaveConfig;
+window.videoClearLogs = videoClearLogs;
+
+console.log('✅ 自动跑批监控页面JS已加载（PPT + 音频 + 问答对提取 + 视频生成）');
 

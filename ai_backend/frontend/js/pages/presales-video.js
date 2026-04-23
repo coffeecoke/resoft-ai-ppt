@@ -397,6 +397,7 @@ window.pvOpenPipelineDialog = function (id) {
   const dlg = document.getElementById('pv-pipeline-dialog')
   const wx = document.getElementById('pv-pipeline-wecom')
   const pv = document.getElementById('pv-pipeline-push-users')
+  const hint = document.getElementById('pv-pipeline-push-users-preview')
   const sk = document.getElementById('pv-pipeline-skip-role')
   if (!dlg || !pv) {
     pvToast('页面缺少服务端流水线弹窗', 'error')
@@ -408,9 +409,11 @@ window.pvOpenPipelineDialog = function (id) {
     row && row.createdBy != null && String(row.createdBy).trim() ? String(row.createdBy).trim() : ''
   if (wx) wx.value = defWx
   pv.value = ''
+  if (hint) hint.textContent = '正在加载自动推送人员...'
   if (sk) sk.checked = false
   if (typeof dlg.showModal === 'function') dlg.showModal()
   else dlg.setAttribute('open', '')
+  pvLoadPipelinePushUsersPreview(id)
 }
 
 window.pvClosePipelineDialog = function () {
@@ -1132,11 +1135,66 @@ window.pvSubmitWorkflow = async function (id) {
 
 let pvPushVideoTranscriptionId = null
 
+async function pvLoadPipelinePushUsersPreview(id) {
+  const ta = document.getElementById('pv-pipeline-push-users')
+  const hint = document.getElementById('pv-pipeline-push-users-preview')
+  if (!ta) return
+  if (hint) hint.textContent = '正在按 from_user + 上级链 + 固定成员计算推送人员...'
+  try {
+    const res = await fetch(`${PV_API}/presales-video/transcriptions/${encodeURIComponent(id)}/push-video-users`)
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || '加载推送人员失败')
+    }
+    const d = data.data || {}
+    const users = Array.isArray(d.userIds) ? d.userIds : []
+    ta.value = users.join(',')
+    const excluded = Array.isArray(d.excludedUserIds) ? d.excludedUserIds : []
+    if (hint) {
+      const part1 = `已自动反显 ${users.length} 人（启动流水线时将按当前文本框名单发送）`
+      const part2 = excluded.length > 0 ? `；env 已排除：${excluded.join(',')}` : ''
+      hint.textContent = part1 + part2
+    }
+  } catch (e) {
+    if (hint) hint.textContent = `自动反显失败：${e.message || e}；可手动填写 userid`
+    ta.value = ''
+  }
+}
+
+async function pvLoadPushVideoUsersPreview(id) {
+  const ta = document.getElementById('pv-push-video-users')
+  const hint = document.getElementById('pv-push-video-preview')
+  if (!ta) return
+  if (hint) hint.textContent = '正在按 from_user + 上级链 + 固定成员计算推送人员...'
+  try {
+    const res = await fetch(`${PV_API}/presales-video/transcriptions/${encodeURIComponent(id)}/push-video-users`)
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || '加载推送人员失败')
+    }
+    const d = data.data || {}
+    const users = Array.isArray(d.userIds) ? d.userIds : []
+    ta.value = users.join(',')
+    const excluded = Array.isArray(d.excludedUserIds) ? d.excludedUserIds : []
+    if (hint) {
+      const part1 = `已自动反显 ${users.length} 人（保存推送时将按当前文本框名单发送）`
+      const part2 = excluded.length > 0 ? `；env 已排除：${excluded.join(',')}` : ''
+      hint.textContent = part1 + part2
+    }
+  } catch (e) {
+    if (hint) hint.textContent = `自动反显失败：${e.message || e}；可手动填写 userid`
+    ta.value = ''
+  }
+}
+
 window.pvOpenPushVideoDialog = function (id) {
   pvPushVideoTranscriptionId = id
   const ta = document.getElementById('pv-push-video-users')
+  const hint = document.getElementById('pv-push-video-preview')
   if (ta) ta.value = ''
+  if (hint) hint.textContent = '正在加载自动推送人员...'
   document.getElementById('pv-push-video-dialog')?.showModal()
+  pvLoadPushVideoUsersPreview(id)
 }
 
 window.pvClosePushVideoDialog = function () {

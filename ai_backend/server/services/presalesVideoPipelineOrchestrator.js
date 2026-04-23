@@ -209,13 +209,8 @@ async function advanceOneStep(run) {
 
   if (phase === 'push_video') {
     const userIds = pvUsers != null ? String(pvUsers).trim() : ''
-    if (!userIds) {
-      await failRun(runId, '缺少 push_video_user_ids')
-      return false
-    }
-    const r = await internalPost(`/api/presales-video/transcriptions/${tid}/push-video`, {
-      userIds
-    })
+    const body = userIds ? { userIds } : {}
+    const r = await internalPost(`/api/presales-video/transcriptions/${tid}/push-video`, body)
     if (!r.ok || !r.json || r.json.success !== true) {
       await failRun(runId, `推送视频: ${pickErr(r)}`)
       return false
@@ -289,9 +284,6 @@ async function startPipelineRun(opts) {
     (opts.pushVideoUserIds != null && String(opts.pushVideoUserIds).trim()) ||
     (defaultPush != null && String(defaultPush).trim()) ||
     ''
-  if (!pvUsers) {
-    throw new Error('请传入 pushVideoUserIds，或配置环境变量 PRESALES_VIDEO_PIPELINE_DEFAULT_PUSH_VIDEO_USERIDS')
-  }
 
   const skipRoleConfirm = Boolean(opts.skipRoleConfirm)
   let wx = opts.wecomUserId != null && String(opts.wecomUserId).trim() ? String(opts.wecomUserId).trim() : ''

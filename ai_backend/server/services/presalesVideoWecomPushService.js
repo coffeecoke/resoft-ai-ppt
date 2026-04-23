@@ -4,6 +4,7 @@
  */
 const wecomAppChatApi = require('./wecomAppChatApi')
 const presalesVideoTaskService = require('./presalesVideoTaskService')
+const presalesVideoGroupSettingsService = require('./presalesVideoGroupSettingsService')
 const logger = require('../utils/logger')
 
 function escapeMdLine(s) {
@@ -27,6 +28,118 @@ function parseUserIds(raw) {
         .filter(Boolean)
     )
   ]
+}
+
+function getExcludeUserIdsFromEnv() {
+  const raw = process.env.PRESALES_VIDEO_GROUP_EXCLUDE_USERIDS
+  if (raw == null || String(raw).trim() === '') return []
+  return parseUserIds(String(raw))
+}
+
+function applyExcludedUsers(userIds) {
+  const excludes = new Set(getExcludeUserIdsFromEnv())
+  if (excludes.size === 0) return userIds
+  return (userIds || []).filter((u) => !excludes.has(String(u || '').trim()))
+}
+
+function diffExcludedUsers(before, after) {
+  const keep = new Set((after || []).map((x) => String(x || '').trim()).filter(Boolean))
+  return (before || []).filter((x) => {
+    const id = String(x || '').trim()
+    return id && !keep.has(id)
+  })
+}
+
+function trimToLength(s, max = 40) {
+  const arr = Array.from(String(s || '').trim())
+  return arr.length <= max ? arr.join('') : `${arr.slice(0, max - 1).join('')}…`
+}
+
+function stripFileSuffix(name) {
+  const s = String(name || '').trim()
+  if (!s) return ''
+  return s.replace(/\.[^./\\]{1,10}$/g, '').trim()
+}
+
+async function collectLeaderChainUserIds(prisma, startUserId) {
+  const start = String(startUserId || '').trim()
+  if (!start) return []
+  const ids = []
+  const visited = new Set()
+  let cursor = start
+  for (let i = 0; i < 20; i++) {
+    if (!cursor || visited.has(cursor)) break
+    visited.add(cursor)
+    const row = await prisma.org_user.findUnique({
+      where: { user_id: cursor },
+      select: {
+        user_id: true,
+        leader_id: true,
+        org_id: true,
+        is_deleted: true
+      }
+    })
+    if (!row || row.is_deleted) break
+    ids.push({
+      userId: String(row.user_id || '').trim(),
+      leaderId: row.leader_id ? String(row.leader_id).trim() : '',
+      orgId: row.org_id ? String(row.org_id).trim() : ''
+    })
+    cursor = row.leader_id ? String(row.leader_id).trim() : ''
+  }
+  if (ids.length === 0) return []
+  const orgIds = [...new Set(ids.map((x) => x.orgId).filter(Boolean))]
+  let activeOrg = new Set()
+  if (orgIds.length > 0) {
+    const deps = await prisma.departments.findMany({
+      where: { id: { in: orgIds }, status: 'active' },
+      select: { id: true }
+    })
+    activeOrg = new Set(deps.map((d) => String(d.id)))
+  }
+  return ids
+    .filter((x) => !x.orgId || activeOrg.has(x.orgId))
+    .map((x) => x.userId)
+    .filter(Boolean)
+}
+
+async function buildAutoUserIds(prisma, transcription, fixedMembers) {
+  const fromUser = transcription && transcription.created_by ? String(transcription.created_by).trim() : ''
+  const chain = await collectLeaderChainUserIds(prisma, fromUser)
+  const fixed = presalesVideoGroupSettingsService.normalizeUserIds(fixedMembers)
+  return [...new Set([...chain, ...fixed, 'rxkf01'].filter(Boolean))]
+}
+
+async function resolvePushVideoUserIds(ctx) {
+  const { prisma, transcriptionId, userIdsRaw } = ctx
+  const tr = await prisma.transcriptions.findUnique({ where: { id: transcriptionId } })
+  if (!tr) throw new Error('转录不存在')
+
+  const settings = await presalesVideoGroupSettingsService.readSettings()
+  const fixedMembers = settings.fixedMembers || []
+  const fromInput = parseUserIds(userIdsRaw)
+
+  let beforeExclude = []
+  let source = 'auto'
+  if (fromInput.length > 0) {
+    source = 'manual'
+    beforeExclude = [...new Set([...fromInput, ...fixedMembers, 'rxkf01'].filter(Boolean))]
+  } else {
+    beforeExclude = await buildAutoUserIds(prisma, tr, fixedMembers)
+  }
+
+  let userIds = applyExcludedUsers(beforeExclude)
+  // 管理员/必选人员不允许被排除
+  if (!userIds.includes('rxkf01')) userIds.push('rxkf01')
+  userIds = [...new Set(userIds.filter(Boolean))]
+
+  return {
+    transcription: tr,
+    userIds,
+    source,
+    excludedUserIds: diffExcludedUsers(beforeExclude, userIds),
+    fixedMembers: presalesVideoGroupSettingsService.normalizeUserIds(fixedMembers)
+  }
 }
 
 /**
@@ -98,7 +211,110 @@ async function findLatestMatchingReport(prisma, tr) {
   return null
 }
 
-function formatReportMarkdown(report) {
+function normalizeReportId(value) {
+  const id = String(value || '').trim()
+  return id || ''
+}
+
+async function findReportByKnownIds(prisma, tr) {
+  const reportId = normalizeReportId(tr && tr.report_id)
+  if (reportId) {
+    const report = await prisma.communication_reports.findUnique({ where: { id: reportId } })
+    if (report) return report
+  }
+  const sid = normalizeReportId(tr && tr.session_id)
+  if (sid) {
+    const report = await prisma.communication_reports.findUnique({ where: { id: sid } })
+    if (report) return report
+  }
+  return null
+}
+
+async function findReportBySyncLog(prisma, transcriptionId) {
+  const tid = String(transcriptionId || '').trim()
+  if (!tid) return null
+  const rows = await prisma.log_sync_status.findMany({
+    where: { sync_type: 'crm_video_batch' },
+    orderBy: { id: 'desc' },
+    take: 300,
+    select: { sync_params: true }
+  })
+  for (const row of rows) {
+    const params = row && row.sync_params && typeof row.sync_params === 'object' ? row.sync_params : null
+    if (!params) continue
+    const pTid = String(params.transcription_id || '').trim()
+    if (!pTid || pTid !== tid) continue
+    const reportId = normalizeReportId(params.report_id)
+    if (!reportId) return null
+    const report = await prisma.communication_reports.findUnique({ where: { id: reportId } })
+    if (report) return report
+    return null
+  }
+  return null
+}
+
+function splitParticipantNames(raw) {
+  return String(raw || '')
+    .split(/[，,、;；\n\r]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
+function formatDateOnlyZh(raw) {
+  const s = String(raw || '').trim()
+  if (!s) return '暂无'
+  const t = Date.parse(s)
+  if (Number.isNaN(t)) return s
+  const d = new Date(t)
+  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
+}
+
+function inferDayPeriod(report) {
+  const pick = report && (report.start_at || report.report_date)
+  if (!pick) return ''
+  const t = Date.parse(String(pick))
+  if (Number.isNaN(t)) return ''
+  const h = new Date(t).getHours()
+  if (h < 6) return '凌晨'
+  if (h < 12) return '上午'
+  if (h < 14) return '中午'
+  if (h < 19) return '下午'
+  return '晚上'
+}
+
+async function calcLeadReportNth(prisma, report) {
+  if (!report) return null
+  const reportDate = report.report_date ? new Date(report.report_date) : null
+  const createdAt = report.created_at ? new Date(report.created_at) : null
+
+  const keyWhere = report.lead_id
+    ? { lead_id: String(report.lead_id).trim() }
+    : report.lead_code
+      ? { lead_code: String(report.lead_code).trim() }
+      : report.lead_name
+        ? { lead_name: String(report.lead_name).trim() }
+        : report.customer_name
+          ? { customer_name: String(report.customer_name).trim() }
+          : null
+  if (!keyWhere) return null
+
+  const timeWhere =
+    reportDate && !Number.isNaN(reportDate.getTime())
+      ? { report_date: { lte: reportDate } }
+      : createdAt && !Number.isNaN(createdAt.getTime())
+        ? { created_at: { lte: createdAt } }
+        : {}
+
+  const n = await prisma.communication_reports.count({
+    where: {
+      ...keyWhere,
+      ...timeWhere
+    }
+  })
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+
+function formatReportMarkdown(report, nth) {
   if (!report) {
     return (
       '**交流报备**\n' +
@@ -107,19 +323,254 @@ function formatReportMarkdown(report) {
       '> 处理：在语音转写里补全该转录的客户名称，或保证企微报备中的客户/线索名与文件名中的客户关键词一致；也可先在企微发送标准「交流报备」模板入库后再推送。'
     )
   }
-  const rd = report.report_date ? new Date(report.report_date) : null
-  const rdStr = rd && !Number.isNaN(rd.getTime()) ? rd.toLocaleString('zh-CN', { hour12: false }) : '-'
+  const rawContent = String(report.main_content || '').trim()
+  const nthText = Number.isFinite(nth) && nth > 0 ? nth : 'N'
+  const reportBody = rawContent || '（该报备无 main_content 原文）'
   const lines = [
-    '**交流报备**（自动关联）',
-    `客户名称：${escapeMdLine(report.customer_name)}`,
-    report.lead_name ? `线索名称：${escapeMdLine(report.lead_name)}` : null,
-    report.communication_form ? `交流形式：${escapeMdLine(report.communication_form)}` : null,
-    `交流日期：${escapeMdLine(rdStr)}`,
-    report.client_participants ? `客户方人员：${escapeMdLine(report.client_participants)}` : null,
-    report.our_participants ? `我方人员：${escapeMdLine(report.our_participants)}` : null,
-    report.report_note ? `备注：${escapeMdLine(report.report_note)}` : null
-  ].filter(Boolean)
+    `此为该线索的第${nthText}次交流报备`,
+    '现将与客户交流的报告发至群内，请大家查阅关注',
+    '',
+    reportBody,
+    '',
+    '注：交流报备次数统计自市场序列群'
+  ]
   return lines.join('\n')
+}
+
+function safeObj(v) {
+  return v && typeof v === 'object' && !Array.isArray(v) ? v : null
+}
+
+function pickFirstValue(obj, keys) {
+  if (!obj) return ''
+  for (const k of keys) {
+    const v = obj[k]
+    if (v != null && String(v).trim() !== '') return String(v).trim()
+  }
+  return ''
+}
+
+function pickFirstValueFromObjects(objs, keys) {
+  for (const obj of objs || []) {
+    const v = pickFirstValue(obj, keys)
+    if (v) return v
+  }
+  return ''
+}
+
+function pickAnyMeaningfulField(obj) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return ''
+  for (const [k, v] of Object.entries(obj)) {
+    if (v == null) continue
+    if (typeof v !== 'string' && typeof v !== 'number') continue
+    const key = String(k || '').toLowerCase()
+    if (key.includes('id') || key.includes('time') || key.includes('date')) continue
+    const text = String(v).trim()
+    if (text) return text
+  }
+  return ''
+}
+
+function extractInfo221FromFollowUpLogList(clue) {
+  const root = clue && typeof clue === 'object' ? clue : null
+  if (!root) return ''
+  const followUpLogList = Array.isArray(root.followUpLogList)
+    ? root.followUpLogList
+    : Array.isArray(root.follow_up_log_list)
+      ? root.follow_up_log_list
+      : Array.isArray(root.FOLLOWUPLOGLIST)
+        ? root.FOLLOWUPLOGLIST
+        : []
+  if (followUpLogList.length === 0) return ''
+  // 通常最后一条是最新跟进，优先展示最新一条内容
+  const latest = followUpLogList[followUpLogList.length - 1]
+  if (latest == null) return ''
+  if (typeof latest === 'string' || typeof latest === 'number') {
+    return String(latest).trim()
+  }
+  const hit = pickFirstValue(latest, [
+    'FOLLOWUPCONTENT',
+    'followUpContent',
+    'follow_up_content',
+    'CONTENT',
+    'content',
+    'REMARK',
+    'remark',
+    'NOTE',
+    'note',
+    'DESCRIPTION',
+    'description',
+    'SUMMARY',
+    'summary'
+  ])
+  if (hit) return hit
+  return pickAnyMeaningfulField(latest)
+}
+
+function formatDateZh(raw) {
+  const s = String(raw || '').trim()
+  if (!s) return '暂无'
+  const t = Date.parse(s)
+  if (Number.isNaN(t)) return s
+  const d = new Date(t)
+  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
+}
+
+function resolveClueInfoApiConfig() {
+  const url = String(process.env.PRESALES_VIDEO_CLUE_FULL_INFO_URL || '').trim()
+  const apiKey = String(process.env.PRESALES_VIDEO_CLUE_FULL_INFO_API_KEY || '').trim()
+  const timeoutMsRaw = Number(process.env.PRESALES_VIDEO_CLUE_FULL_INFO_TIMEOUT_MS || 5000)
+  const timeoutMs =
+    Number.isFinite(timeoutMsRaw) && timeoutMsRaw >= 1000 && timeoutMsRaw <= 30000
+      ? timeoutMsRaw
+      : 5000
+  return { url, apiKey, timeoutMs }
+}
+
+function resolveClueChatGroupSaveApiConfig() {
+  // URL 独立配置；key/timeout 复用线索完整信息接口配置
+  const url = String(process.env.PRESALES_VIDEO_CLUE_CHAT_GROUP_SAVE_URL || '').trim()
+  const apiKey = String(process.env.PRESALES_VIDEO_CLUE_FULL_INFO_API_KEY || '').trim()
+  const timeoutMsRaw = Number(process.env.PRESALES_VIDEO_CLUE_FULL_INFO_TIMEOUT_MS || 5000)
+  const timeoutMs =
+    Number.isFinite(timeoutMsRaw) && timeoutMsRaw >= 1000 && timeoutMsRaw <= 30000
+      ? timeoutMsRaw
+      : 5000
+  return { url, apiKey, timeoutMs }
+}
+
+async function saveClueChatGroupToThirdParty({ chatId, xsbh, chatName }) {
+  const cfg = resolveClueChatGroupSaveApiConfig()
+  if (!cfg.url || !cfg.apiKey) {
+    logger.info('[presales-video] saveClueChatGroup 跳过：未配置 URL 或 API Key')
+    return { skipped: true }
+  }
+  const payload = {
+    chatId: String(chatId || '').trim(),
+    xsbh: String(xsbh || '').trim(),
+    chatName: String(chatName || '').trim()
+  }
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), cfg.timeoutMs)
+  try {
+    const res = await fetch(cfg.url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': cfg.apiKey
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    })
+    const bodyText = await res.text()
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status} ${bodyText.slice(0, 300)}`)
+    }
+    logger.info(
+      `[presales-video] saveClueChatGroup 成功 chatId=${payload.chatId} xsbh=${payload.xsbh} chatName=${payload.chatName} body=${bodyText.slice(0, 300)}`
+    )
+    return { skipped: false, ok: true }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function fetchClueFullInfo(xsbh) {
+  const cfg = resolveClueInfoApiConfig()
+  if (!cfg.url || !cfg.apiKey) return null
+  const u = new URL(cfg.url)
+  u.searchParams.set('xsbh', String(xsbh || '').trim())
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), cfg.timeoutMs)
+  try {
+    const res = await fetch(u.toString(), {
+      method: 'GET',
+      headers: { 'X-API-Key': cfg.apiKey },
+      signal: controller.signal
+    })
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`)
+    }
+    const json = await res.json()
+    const root = safeObj(json)
+    const lvl1 =
+      safeObj(root && root.data) ||
+      safeObj(root && root.result) ||
+      safeObj(root && root.payload) ||
+      root ||
+      null
+    const lvl2 = safeObj(lvl1 && lvl1.data) || safeObj(lvl1 && lvl1.result) || lvl1
+    return safeObj(lvl2) || null
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function buildClueSummaryMarkdown(report) {
+  if (!report) return ''
+  const xsbh = String(report.lead_code || report.lead_id || '').trim()
+  if (!xsbh) return ''
+
+  let clue = null
+  try {
+    clue = await fetchClueFullInfo(xsbh)
+  } catch (e) {
+    logger.warn(`[presales-video] 获取线索完整信息失败 xsbh=${xsbh}: ${e && e.message}`)
+  }
+
+  const baseInfo = safeObj(clue && clue.baseInfo) || safeObj(clue && clue.base_info) || null
+  const candidates = [baseInfo, clue].filter(Boolean)
+
+  const leadName =
+    pickFirstValueFromObjects(candidates, ['XSMC', 'leadName', 'lead_name', 'clueName', 'xsmc']) ||
+    String(report.lead_name || '').trim() ||
+    '未知线索'
+  const setupTimeRaw = pickFirstValueFromObjects(candidates, [
+    'LXSJ',
+    'projectCreateTime',
+    'project_create_time',
+    'leadCreateTime',
+    'lead_create_time',
+    'createTime',
+    'create_time',
+    'lxsj'
+  ])
+  const clueType =
+    pickFirstValueFromObjects(candidates, [
+      'XSFL',
+      'leadType',
+      'lead_type',
+      'leadTypeName',
+      'lead_type_name',
+      'clueType',
+      'xslx'
+    ]) || '暂无'
+  const stage =
+    pickFirstValueFromObjects(candidates, [
+      'MQJDNAME',
+      'stageName',
+      'stage_name',
+      'currentStage',
+      'current_stage',
+      'phaseName',
+      'jdmc'
+    ]) || '暂无'
+  const info221FromLogs = extractInfo221FromFollowUpLogList(clue)
+  const info221 =
+    info221FromLogs ||
+    pickFirstValueFromObjects(candidates, ['INFO221', 'info221', 'info_221', 'x221', 'i221']) ||
+    '暂无'
+  const xsbhFinal =
+    pickFirstValueFromObjects(candidates, ['XSBH', 'xsbh', 'leadCode', 'lead_code', 'clueNum']) || xsbh
+
+  return [
+    `此群为线索【${escapeMdLine(leadName)}】售前交流分析群`,
+    `线索立项时间：${escapeMdLine(formatDateZh(setupTimeRaw))}`,
+    `线索类型：【${escapeMdLine(clueType)}】`,
+    `当前线索已到【${escapeMdLine(stage)}】阶段`,
+    `221信息：${escapeMdLine(info221)}`,
+    `线索编号：${escapeMdLine(xsbhFinal)}`
+  ].join('\n')
 }
 
 function formatVideoMarkdown(transcription, videoTask) {
@@ -246,14 +697,11 @@ async function pushPresalesVideoToWecomAppChat(ctx) {
     )
   }
 
-  const userIds = parseUserIds(userIdsRaw)
+  const resolvedUsers = await resolvePushVideoUserIds({ prisma, transcriptionId, userIdsRaw })
+  const tr = resolvedUsers.transcription
+  const userIds = resolvedUsers.userIds
   if (userIds.length < 2) {
-    throw new Error('至少需要 2 个企业微信成员 userid（逗号分隔），且须在该应用可见范围内')
-  }
-
-  const tr = await prisma.transcriptions.findUnique({ where: { id: transcriptionId } })
-  if (!tr) {
-    throw new Error('转录不存在')
+    throw new Error('自动建群成员不足：至少需要2个成员（已强制包含 rxkf01）')
   }
 
   let videoTask = null
@@ -265,14 +713,58 @@ async function pushPresalesVideoToWecomAppChat(ctx) {
     /* optional table */
   }
 
-  const report = await findLatestMatchingReport(prisma, tr)
-  const chatName = `售前视频-${escapeMdLine(tr.original_file_name || tr.name || transcriptionId).slice(0, 40)}`
-  const ownerUserId = userIds[0]
-  const { chatid } = await wecomAppChatApi.createAppChat({
-    name: chatName,
-    ownerUserId,
-    userIds
-  })
+  let report = await findReportByKnownIds(prisma, tr)
+  if (!report) {
+    report = await findReportBySyncLog(prisma, transcriptionId)
+  }
+  if (!report) {
+    report = await findLatestMatchingReport(prisma, tr)
+  }
+
+  const leadKey = presalesVideoGroupSettingsService.makeLeadKey(report)
+  const mappedChat = leadKey
+    ? await presalesVideoGroupSettingsService.getLeadChatByKey(leadKey)
+    : null
+  const preferredLeadName =
+    (report && report.lead_name && String(report.lead_name).trim()) ||
+    (report && report.customer_name && String(report.customer_name).trim()) ||
+    escapeMdLine(tr.original_file_name || tr.name || transcriptionId)
+  const chatName = `${trimToLength(preferredLeadName, 36)}-售前分析`
+  const ownerUserId = 'rxkf01'
+  let chatid = mappedChat && mappedChat.chatid ? String(mappedChat.chatid).trim() : ''
+  let reusedExistingChat = false
+  if (!chatid) {
+    const created = await wecomAppChatApi.createAppChat({
+      name: chatName,
+      ownerUserId,
+      userIds
+    })
+    chatid = created.chatid
+    if (leadKey) {
+      await presalesVideoGroupSettingsService.setLeadChatByKey(leadKey, {
+        chatid,
+        name: chatName
+      })
+    }
+    const xsbh = String((report && report.lead_code) || (report && report.lead_id) || '').trim()
+    if (xsbh) {
+      try {
+        await saveClueChatGroupToThirdParty({
+          chatId: chatid,
+          xsbh,
+          chatName
+        })
+      } catch (e) {
+        logger.warn(
+          `[presales-video] saveClueChatGroup 失败 chatId=${chatid} xsbh=${xsbh} chatName=${chatName} err=${e && e.message}`
+        )
+      }
+    } else {
+      logger.info(`[presales-video] saveClueChatGroup 跳过：未找到 xsbh（lead_code/lead_id） chatId=${chatid}`)
+    }
+  } else {
+    reusedExistingChat = true
+  }
 
   const pushMoment = new Date()
   const reserve4Stamp = `wecom_appchat:${chatid}@${pushMoment.toISOString()}`.slice(0, 500)
@@ -285,7 +777,12 @@ async function pushPresalesVideoToWecomAppChat(ctx) {
     logger.warn('[presales-video] 推送前回写 reserve_4 失败:', e && e.message)
   }
 
-  const md1 = formatReportMarkdown(report)
+  const nth = await calcLeadReportNth(prisma, report)
+  const md1 = formatReportMarkdown(report, nth)
+  const clueMd = await buildClueSummaryMarkdown(report)
+  if (clueMd) {
+    await wecomAppChatApi.sendAppChatMarkdown(chatid, clueMd)
+  }
   await wecomAppChatApi.sendAppChatMarkdown(chatid, md1)
 
   const rawLink = pickRawVideoLinkForWecomCard(videoTask)
@@ -295,7 +792,11 @@ async function pushPresalesVideoToWecomAppChat(ctx) {
   let videoPushedAsCard = false
 
   async function sendCardWithUrl(cardUrl) {
-    const title = String(tr.original_file_name || tr.name || '售前视频').trim() || '售前视频'
+    const titleBase = stripFileSuffix(tr.original_file_name || tr.name || '售前视频')
+    const title = titleBase || '售前视频'
+    logger.info(
+      `[presales-video] 推送视频卡片链接 transcription=${transcriptionId} chatid=${chatid} url=${cardUrl}`
+    )
     try {
       await wecomAppChatApi.sendAppChatTextCard(chatid, {
         title,
@@ -358,6 +859,8 @@ async function pushPresalesVideoToWecomAppChat(ctx) {
 
   return {
     chatid,
+    reusedExistingChat,
+    leadKey: leadKey || null,
     reportMatched: Boolean(report),
     userCount: userIds.length,
     videoPushedAsMedia: false,
@@ -367,6 +870,7 @@ async function pushPresalesVideoToWecomAppChat(ctx) {
 
 module.exports = {
   parseUserIds,
+  resolvePushVideoUserIds,
   findLatestMatchingReport,
   formatReportMarkdown,
   formatVideoMarkdown,

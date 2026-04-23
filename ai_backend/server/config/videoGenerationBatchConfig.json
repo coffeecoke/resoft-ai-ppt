@@ -1,0 +1,7 @@
+{
+  "pollingInterval": 600000,
+  "maxConcurrent": 1,
+  "scanLimit": 50,
+  "scanWindowHours": 8,
+  "autoContinueAfterRoleConfirm": false
+}
