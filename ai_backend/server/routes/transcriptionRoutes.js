@@ -580,12 +580,12 @@ async function handleScanFiles(opts) {
     console.log(`🔍 筛选「未设角色」，剩余 ${filesWithStatus.length} 个文件`);
   }
 
-  // 查询结果按文件修改时间升序（早 → 晚），与列表「修改时间」列一致
+  // 查询结果按文件修改时间降序（最新 → 最旧），默认展示最近修改的文件
   filesWithStatus.sort((a, b) => {
     const ta = new Date(a.modifiedTime).getTime();
     const tb = new Date(b.modifiedTime).getTime();
     if (Number.isFinite(ta) && Number.isFinite(tb) && ta !== tb) {
-      return ta - tb;
+      return tb - ta;
     }
     const pa = a.filePath || '';
     const pb = b.filePath || '';

@@ -507,9 +507,23 @@ async function fetchClueFullInfo(xsbh) {
 }
 
 async function buildClueSummaryMarkdown(report) {
-  if (!report) return ''
+  const summary = report && typeof report === 'object' && report.__clueSummary ? report.__clueSummary : null
+  if (!summary) return ''
+
+  return [
+    `此群为线索【${escapeMdLine(summary.leadName)}】售前交流分析群`,
+    `线索立项时间：${escapeMdLine(formatDateZh(summary.setupTimeRaw))}`,
+    `线索类型：【${escapeMdLine(summary.clueType)}】`,
+    `当前线索已到【${escapeMdLine(summary.stage)}】阶段`,
+    `221信息：${escapeMdLine(summary.info221)}`,
+    `线索编号：${escapeMdLine(summary.xsbhFinal)}`
+  ].join('\n')
+}
+
+async function resolveClueSummary(report) {
+  if (!report) return null
   const xsbh = String(report.lead_code || report.lead_id || '').trim()
-  if (!xsbh) return ''
+  if (!xsbh) return null
 
   let clue = null
   try {
@@ -520,10 +534,9 @@ async function buildClueSummaryMarkdown(report) {
 
   const baseInfo = safeObj(clue && clue.baseInfo) || safeObj(clue && clue.base_info) || null
   const candidates = [baseInfo, clue].filter(Boolean)
-
   const leadName =
     pickFirstValueFromObjects(candidates, ['XSMC', 'leadName', 'lead_name', 'clueName', 'xsmc']) ||
-    String(report.lead_name || '').trim() ||
+    String(report.lead_name || report.customer_name || '').trim() ||
     '未知线索'
   const setupTimeRaw = pickFirstValueFromObjects(candidates, [
     'LXSJ',
@@ -562,14 +575,37 @@ async function buildClueSummaryMarkdown(report) {
     '暂无'
   const xsbhFinal =
     pickFirstValueFromObjects(candidates, ['XSBH', 'xsbh', 'leadCode', 'lead_code', 'clueNum']) || xsbh
+  return { leadName, setupTimeRaw, clueType, stage, info221, xsbhFinal, clueRaw: clue }
+}
 
+function formatReportMarkdownForExistingChat(report, nth, clueSummary) {
+  if (!report) return formatReportMarkdown(report, nth)
+  const nthText = Number.isFinite(nth) && nth > 0 ? nth : 'N'
+  const leadName = String(report.lead_name || report.customer_name || '未知').trim()
+  const communicationForm = String(report.communication_form || '暂无').trim()
+  const dateZh = formatDateOnlyZh(report.report_date)
+  const period = inferDayPeriod(report)
+  const datePart = period ? `${dateZh},${period}` : dateZh
+  const clientNames = splitParticipantNames(report.client_participants)
+  const clientCount = clientNames.length > 0 ? `${clientNames.length}人` : '暂无'
+  const clientDetail = clientNames.length > 0 ? clientNames.join('、') : '暂无'
+  const ourNames = splitParticipantNames(report.our_participants)
+  const ourDetail = ourNames.length > 0 ? ourNames.join('，') : '暂无'
+  const stage = clueSummary && clueSummary.stage ? clueSummary.stage : '暂无'
+  const info221 = clueSummary && clueSummary.info221 ? clueSummary.info221 : '暂无'
+  const xsbh = clueSummary && clueSummary.xsbhFinal ? clueSummary.xsbhFinal : String(report.lead_code || report.lead_id || '').trim() || '暂无'
   return [
-    `此群为线索【${escapeMdLine(leadName)}】售前交流分析群`,
-    `线索立项时间：${escapeMdLine(formatDateZh(setupTimeRaw))}`,
-    `线索类型：【${escapeMdLine(clueType)}】`,
     `当前线索已到【${escapeMdLine(stage)}】阶段`,
     `221信息：${escapeMdLine(info221)}`,
-    `线索编号：${escapeMdLine(xsbhFinal)}`
+    `此为该线索的第${nthText}次交流报备`,
+    '现将与客户交流的报告发至群内，请大家查阅关注',
+    '',
+    '【交流报备】',
+    `1、客户及线索名称：${escapeMdLine(leadName)}`,
+    `2、交流与沟通形式与发生时间：${escapeMdLine(communicationForm)},${escapeMdLine(datePart)}`,
+    `3、客户方人员数量及主要人员：${escapeMdLine(clientCount)},${escapeMdLine(clientDetail)}`,
+    `4、我方人员姓名：${escapeMdLine(ourDetail)}`,
+    `5、线索编号：${escapeMdLine(xsbh)}`
   ].join('\n')
 }
 
@@ -778,9 +814,14 @@ async function pushPresalesVideoToWecomAppChat(ctx) {
   }
 
   const nth = await calcLeadReportNth(prisma, report)
-  const md1 = formatReportMarkdown(report, nth)
-  const clueMd = await buildClueSummaryMarkdown(report)
-  if (clueMd) {
+  const clueSummary = await resolveClueSummary(report)
+  const reportWithSummary =
+    report && clueSummary ? { ...report, __clueSummary: clueSummary } : report
+  const clueMd = await buildClueSummaryMarkdown(reportWithSummary)
+  const md1 = reusedExistingChat
+    ? formatReportMarkdownForExistingChat(report, nth, clueSummary)
+    : formatReportMarkdown(report, nth)
+  if (!reusedExistingChat && clueMd) {
     await wecomAppChatApi.sendAppChatMarkdown(chatid, clueMd)
   }
   await wecomAppChatApi.sendAppChatMarkdown(chatid, md1)

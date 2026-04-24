@@ -440,6 +440,114 @@ async function getByExecuteId(executeId) {
  * @param {{ playlistUrl?: string|null }} [options] video_create 成功时：可选 playlist_url，写入 reserve_5
  * @returns {Promise<{ ok: boolean, task?: object, code?: string, message?: string, truncated?: boolean, analysisMarkdownPath?: string|null, analysisMarkdownWriteError?: string|null }>}
  */
+/**
+ * 按 lead_code/lead_id/lead_name/customer_name 统计 communication_reports 次数，
+ * 并取 最早一条 与 最新一条（按 created_at asc）的 report_date/main_content
+ */
+async function buildFrequencySection(transcriptionId) {
+  try {
+    const tr = await prisma.transcriptions.findUnique({
+      where: { id: String(transcriptionId || '') },
+      select: { report_id: true, session_id: true, customer_name: true }
+    })
+    if (!tr) return null
+
+    // 先按 transcriptions.report_id 找到当前报备
+    let currentReport = null
+    const rid = String(tr.report_id || tr.session_id || '').trim()
+    if (rid) {
+      currentReport = await prisma.communication_reports.findUnique({ where: { id: rid } })
+    }
+
+    // 无法精确关联则靠客户名兜底
+    if (!currentReport && tr.customer_name) {
+      currentReport = await prisma.communication_reports.findFirst({
+        where: { customer_name: String(tr.customer_name).trim() },
+        orderBy: { created_at: 'desc' }
+      })
+    }
+    if (!currentReport) return null
+
+    // 同线索的所有报备（按时间升序）
+    const keyWhere = currentReport.lead_code
+      ? { lead_code: String(currentReport.lead_code).trim() }
+      : currentReport.lead_id
+        ? { lead_id: String(currentReport.lead_id).trim() }
+        : currentReport.lead_name
+          ? { lead_name: String(currentReport.lead_name).trim() }
+          : { customer_name: String(currentReport.customer_name).trim() }
+
+    const allReports = await prisma.communication_reports.findMany({
+      where: keyWhere,
+      orderBy: { created_at: 'asc' },
+      select: { id: true, report_date: true, main_content: true, created_at: true }
+    })
+
+    const total = allReports.length
+    const first = allReports[0] || null
+
+    function pickDateFromReport(r) {
+      if (!r) return null
+      // 优先 report_date
+      if (r.report_date) {
+        const d = new Date(r.report_date)
+        if (!Number.isNaN(d.getTime())) return d
+      }
+      // 从 main_content 里尝试提取日期（简单正则）
+      if (r.main_content) {
+        const m = String(r.main_content).match(/(\d{4})[年\-\/](\d{1,2})[月\-\/](\d{1,2})/)
+        if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+      }
+      return null
+    }
+
+    function formatYmd(d) {
+      if (!d || Number.isNaN(d.getTime())) return null
+      return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
+    }
+
+    const currentDate = pickDateFromReport(currentReport)
+    const firstDate = pickDateFromReport(first)
+
+    const lines = ['', '### 交流频次与时间']
+    lines.push(`- 线索交流次数：第${total}次`)
+    if (currentDate) lines.push(`- 本次交流时间：${formatYmd(currentDate)}`)
+    if (total > 1 && first && firstDate) {
+      lines.push(`- 首次交流时间：${formatYmd(firstDate)}`)
+    }
+    lines.push('')
+    return lines.join('\n')
+  } catch (e) {
+    logger.warn('[presales-video-task] buildFrequencySection 失败:', e && e.message)
+    return null
+  }
+}
+
+/**
+ * 将频次段插入到"## 概述"章节的末尾（即下一个 ## 章节之前）
+ * 找不到概述章节时追加到正文末尾
+ */
+function injectFrequencySectionAfterSummary(content, frequencyMd) {
+  if (!frequencyMd) return content
+  const s = String(content || '')
+  // 找含"概述"字样的任意级别标题行（兼容 ## 一、 概述 / ##概述 / ### **概述** 等格式）
+  const summaryRe = /^(#{1,4}[^\n]*概述)/im
+  const match = summaryRe.exec(s)
+  if (!match) {
+    return s.trimEnd() + '\n' + frequencyMd
+  }
+  // 找概述后面下一个同级（或更高）标题的位置
+  const headLevel = (match[0].match(/^#+/) || ['##'])[0].length
+  const afterSummary = s.slice(match.index + match[0].length)
+  const nextHeadRe = new RegExp(`^#{1,${headLevel}}\\s`, 'm')
+  const nextMatch = nextHeadRe.exec(afterSummary)
+  if (!nextMatch) {
+    return s.trimEnd() + '\n' + frequencyMd
+  }
+  const insertAt = match.index + match[0].length + nextMatch.index
+  return s.slice(0, insertAt).trimEnd() + '\n' + frequencyMd + '\n' + s.slice(insertAt)
+}
+
 async function applyWorkflowCallback(callbackType, executeId, payloadText, outcome = 'success', options = {}) {
   const task = await getByExecuteId(executeId)
   if (!task) {
@@ -461,7 +569,9 @@ async function applyWorkflowCallback(callbackType, executeId, payloadText, outco
       })
       return { ok: true, task: updated, truncated: false }
     }
-    const text = normalizeLiteralEscapedNewlines(normalizeAnalysisContent(payloadText))
+    const rawText = normalizeLiteralEscapedNewlines(normalizeAnalysisContent(payloadText))
+    const frequencyMd = await buildFrequencySection(task.transcription_id)
+    const text = injectFrequencySectionAfterSummary(rawText, frequencyMd)
     const execKey = String(executeId).trim()
 
     let recordingDisplayName = null
