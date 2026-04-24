@@ -6,6 +6,7 @@
 const fs = require('fs').promises;
 const fsSync = require('fs');
 const path = require('path');
+const prisma = require('../utils/prisma');
 
 class AudioScanService {
   constructor() {
@@ -131,9 +132,6 @@ class AudioScanService {
    * @returns {Promise<boolean>} 是否已转录
    */
   async isFileTranscribed(filePath) {
-    const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client');
-    const prisma = new PrismaClient();
-
     try {
       const transcription = await prisma.transcriptions.findFirst({
         where: {
@@ -145,8 +143,6 @@ class AudioScanService {
     } catch (error) {
       console.error('检查转录状态失败:', error);
       return false;
-    } finally {
-      await prisma.$disconnect();
     }
   }
 
@@ -154,9 +150,6 @@ class AudioScanService {
    * 批量检查文件转录状态
    */
   async checkFilesStatus(files) {
-    const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client');
-    const prisma = new PrismaClient();
-
     try {
       const filePaths = files.map(f => f.filePath);
       
@@ -216,8 +209,6 @@ class AudioScanService {
     } catch (error) {
       console.error('批量检查转录状态失败:', error);
       return files.map(file => ({ ...file, transcribed: false, hasRoleSet: false }));
-    } finally {
-      await prisma.$disconnect();
     }
   }
 }

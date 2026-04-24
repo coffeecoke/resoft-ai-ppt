@@ -9,7 +9,7 @@
 
 require('dotenv').config()
 
-const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client')
+const prisma = require('../utils/prisma')
 const aiService = require('./aiService')
 const documentParserService = require('./documentParserService')
 const {
@@ -20,7 +20,6 @@ const {
 const { getSectionTypeName } = require('../config/bidSectionTypes')
 const logger = require('../utils/logger')
 
-const prisma = new PrismaClient()
 
 class TenderAnalysisService {
   constructor() {

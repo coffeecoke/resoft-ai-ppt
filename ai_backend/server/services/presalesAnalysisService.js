@@ -7,13 +7,12 @@
  * 3. 提供可操作的建议和行动方案
  */
 
-const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client')
+const prisma = require('../utils/prisma')
 const aiService = require('./aiServiceUnified')
 const modelConfigService = require('./modelConfigService')
 const promptTemplateService = require('./promptTemplateService')
 const logger = require('../utils/logger')
 
-const prisma = new PrismaClient()
 const SCENE_TYPE = 'presales_analysis'
 
 class PresalesAnalysisService {

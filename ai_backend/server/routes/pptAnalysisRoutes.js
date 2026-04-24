@@ -3,11 +3,10 @@
  */
 
 const express = require('express')
-const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client')
+const prisma = require('../utils/prisma')
 const pptAnalysisService = require('../services/pptAnalysisService')
 
 const router = express.Router()
-const prisma = new PrismaClient()
 
 /**
  * POST /api/ppt-analysis/analyze/:documentId

@@ -10,8 +10,7 @@
 
 require('dotenv').config()
 
-const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client')
-const { spawn } = require('node:child_process')
+const prisma = require('../utils/prisma')
 const path = require('node:path')
 const aiService = require('./aiService')
 const documentParserService = require('./documentParserService')
@@ -29,8 +28,6 @@ const SPLITTER_SCRIPT = path.join(__dirname, '../../python_services/doc_splitter
 function getSectionsOutputDir() {
   return path.join(getUploadBaseDir(), 'bid-sections')
 }
-
-const prisma = new PrismaClient()
 
 class BidAnalysisService {
   constructor() {
@@ -293,7 +290,8 @@ class BidAnalysisService {
       })))
 
       const args = [SPLITTER_SCRIPT, filePath, outputDir, sectionsJson, String(targetOutlineLevel)]
-      const child = spawn('python', args, {
+      const pythonExe = (process.env.PYTHON_PATH || process.env.PYTHON_EXE || 'python').trim()
+      const child = spawn(pythonExe, args, {
         timeout: 120000, // 2分钟超时
       })
 

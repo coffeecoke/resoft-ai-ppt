@@ -30,7 +30,6 @@ const https = require('https')
 const http = require('http')
 const { URL } = require('url')
 
-const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client')
 const { v4: uuidv4 } = require('uuid')
 const mergedDialogueService = require('../services/transcriptionMergedDialogueService')
 const presalesAnalysisService = require('../services/presalesAnalysisService')
@@ -43,7 +42,7 @@ const logger = require('../utils/logger')
 const { getAiBackendStaticPathPrefix } = require('../utils/aiBackendPublicPath')
 
 const router = express.Router()
-const prisma = new PrismaClient()
+const prisma = require('../utils/prisma')
 
 /** 推送报告（异步）第三方 Body 字段 prompt 的默认文案 */
 const PRESALES_VIDEO_ASYNC_DEFAULT_PROMPT = '根据报告内容，生成视频，使用默认主题'

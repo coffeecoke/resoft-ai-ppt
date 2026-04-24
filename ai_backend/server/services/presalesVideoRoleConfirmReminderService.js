@@ -3,12 +3,12 @@
  * 间隔（分钟）由环境变量配置，默认 30。
  */
 
-const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client')
+
 const logger = require('../utils/logger')
 const wecomAppChatApi = require('./wecomAppChatApi')
 const presalesVideoTaskService = require('./presalesVideoTaskService')
 
-const prisma = new PrismaClient()
+const prisma = require('../utils/prisma')
 
 const DEFAULT_INTERVAL_MINUTES = 30
 const DEFAULT_REMINDER_TEXT = '您好，需要尽快点击卡片确认，交流对话中的人员'

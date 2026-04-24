@@ -3,12 +3,12 @@
  * 通过回环 HTTP 调用现有 /api/presales-video/* 接口，定时轮询 + 工作流回调/外链保存后唤醒。
  */
 
-const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client')
+
 const { v4: uuidv4 } = require('uuid')
 const logger = require('../utils/logger')
 const presalesVideoTaskService = require('./presalesVideoTaskService')
 
-const prisma = new PrismaClient()
+const prisma = require('../utils/prisma')
 const { PipelineStatus } = presalesVideoTaskService
 
 const locks = new Set()

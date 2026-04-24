@@ -6,10 +6,9 @@
 
 require('dotenv').config()
 
-const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client')
+const prisma = require('../utils/prisma')
 const logger = require('../utils/logger')
 
-const prisma = new PrismaClient()
 
 class BidCompositionService {
   // ======================== 组合 CRUD ========================

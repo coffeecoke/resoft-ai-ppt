@@ -7,14 +7,13 @@
  * 3. 记录处理日志
  */
 
-const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client')
+const prisma = require('../utils/prisma')
 const fs = require('fs').promises
 const path = require('path')
 const logger = require('../utils/logger')
 const transcriptionService = require('./transcriptionService')
 const transcriptionAiService = require('./transcriptionAiService')
 
-const prisma = new PrismaClient()
 
 class QaAutoProcessService {
   constructor() {

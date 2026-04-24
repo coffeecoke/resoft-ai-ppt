@@ -8,7 +8,7 @@ const http = require('http')
 const https = require('https')
 const { URL, fileURLToPath } = require('url')
 const { v4: uuidv4 } = require('uuid')
-const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client')
+const prisma = require('../utils/prisma')
 const transcriptionService = require('./transcriptionService')
 const {
   coerceReportPayloadToDbRow,
@@ -16,7 +16,6 @@ const {
 } = require('./wecomCommunicationReportService')
 const { getUploadBaseDir, toRelativePath } = require('../utils/pathHelper')
 
-const prisma = new PrismaClient()
 
 function getInboundAudioDir() {
   const env = process.env.PRESALES_INBOUND_AUDIO_DIR

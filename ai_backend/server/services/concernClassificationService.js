@@ -7,12 +7,11 @@
  * 3. 更新concerns表的category_code和intent_code字段
  */
 
-const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client')
+const prisma = require('../utils/prisma')
 const aiService = require('./aiServiceUnified')
 const promptTemplateService = require('./promptTemplateService')
 const logger = require('../utils/logger')
 
-const prisma = new PrismaClient()
 const SCENE_TYPE = 'qa_classification'
 
 class ConcernClassificationService {

@@ -4,7 +4,7 @@
  */
 
 const express = require('express');
-const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client');
+const prisma = require('../utils/prisma');
 const router = express.Router();
 
 /**
@@ -24,9 +24,7 @@ router.get('/test', (req, res) => {
  * 获取所有分类数据（用于前端显示映射）
  */
 router.get('/categories', async (req, res) => {
-  let prisma;
   try {
-    prisma = new PrismaClient();
     
     const categories = await prisma.concern_categories.findMany({
       where: {
@@ -59,7 +57,6 @@ router.get('/categories', async (req, res) => {
     });
   } finally {
     if (prisma) {
-      await prisma.$disconnect();
     }
   }
 });
@@ -70,7 +67,6 @@ router.get('/categories', async (req, res) => {
  * Body: { categoryCode?: string, intentCode?: string } 至少传一个
  */
 router.patch('/concerns/:id/classification', async (req, res) => {
-  const prisma = new PrismaClient();
   try {
     const { id: concernId } = req.params;
     const { categoryCode, intentCode } = req.body || {};
@@ -149,7 +145,6 @@ router.patch('/concerns/:id/classification', async (req, res) => {
       error: error.message || '更新失败'
     });
   } finally {
-    await prisma.$disconnect();
   }
 });
 
@@ -161,7 +156,6 @@ const MAX_EXPORT_SIZE = 10000;
  * Query 与 /concerns 一致（除 page/pageSize 外），返回完整问题与解答，供前端生成 CSV/Excel
  */
 router.get('/concerns/export', async (req, res) => {
-  const prisma = new PrismaClient();
   try {
     const {
       transcriptionName,
@@ -304,7 +298,6 @@ router.get('/concerns/export', async (req, res) => {
       error: error.message || '导出失败'
     });
   } finally {
-    await prisma.$disconnect();
   }
 });
 
@@ -321,7 +314,6 @@ router.get('/concerns/export', async (req, res) => {
  * @query {string} [questionSource] - 问题发起方筛选：our_side=我方，customer=客户方
  */
 router.get('/concerns', async (req, res) => {
-  const prisma = new PrismaClient();
   
   try {
     const {
@@ -374,7 +366,6 @@ router.get('/concerns', async (req, res) => {
             totalPages: 0
           }
         });
-        await prisma.$disconnect();
         return;
       }
       where.transcription_id = { in: transcriptionIds };
@@ -700,7 +691,6 @@ router.get('/concerns', async (req, res) => {
       error: error.message || '查询失败'
     });
   } finally {
-    await prisma.$disconnect();
   }
 });
 
@@ -806,7 +796,6 @@ async function getOptimizeContextForConcern(prisma, concernId, contextAbove = 4,
  * 获取单个问答对的审核上下文：来源对话片段 + 上2条 + 下2条
  */
 router.get('/concerns/:id/review-context', async (req, res) => {
-  const prisma = new PrismaClient();
   try {
     const { id: concernId } = req.params;
     if (!concernId) {
@@ -929,7 +918,6 @@ router.get('/concerns/:id/review-context', async (req, res) => {
     console.error('获取审核上下文失败:', error);
     res.status(500).json({ success: false, error: error.message || '获取失败' });
   } finally {
-    await prisma.$disconnect();
   }
 });
 
@@ -966,7 +954,6 @@ function formatConcernForReview(concern) {
  * 提交单条审核。Body: { action: 'approve'|'reject'|'modify_approve', remark?: string, content_after?: { question?, answer?, category_code?, intent_code? } }
  */
 router.post('/concerns/:id/review', async (req, res) => {
-  const prisma = new PrismaClient();
   try {
     const { id: concernId } = req.params;
     const { action, remark, content_after } = req.body || {};
@@ -1053,7 +1040,6 @@ router.post('/concerns/:id/review', async (req, res) => {
     console.error('提交审核失败:', error);
     res.status(500).json({ success: false, error: error.message || '提交失败' });
   } finally {
-    await prisma.$disconnect();
   }
 });
 
@@ -1062,7 +1048,6 @@ router.post('/concerns/:id/review', async (req, res) => {
  * Body: { concernIds: string[] }
  */
 router.post('/review/batch-approve', async (req, res) => {
-  const prisma = new PrismaClient();
   try {
     const { concernIds } = req.body || {};
     if (!Array.isArray(concernIds) || concernIds.length === 0) {
@@ -1089,7 +1074,6 @@ router.post('/review/batch-approve', async (req, res) => {
     console.error('批量通过失败:', error);
     res.status(500).json({ success: false, error: error.message || '操作失败' });
   } finally {
-    await prisma.$disconnect();
   }
 });
 
@@ -1098,7 +1082,6 @@ router.post('/review/batch-approve', async (req, res) => {
  * Body: { concernIds: string[], remark?: string }
  */
 router.post('/review/batch-reject', async (req, res) => {
-  const prisma = new PrismaClient();
   try {
     const { concernIds, remark } = req.body || {};
     if (!Array.isArray(concernIds) || concernIds.length === 0) {
@@ -1125,7 +1108,6 @@ router.post('/review/batch-reject', async (req, res) => {
     console.error('批量拒绝失败:', error);
     res.status(500).json({ success: false, error: error.message || '操作失败' });
   } finally {
-    await prisma.$disconnect();
   }
 });
 
@@ -1138,7 +1120,6 @@ const transcriptionAiService = require('../services/transcriptionAiService');
  * Body: { save?: boolean, modelName?: string, promptId?: string }
  */
 router.post('/concerns/:id/optimize', async (req, res) => {
-  const prisma = new PrismaClient();
   try {
     const { id: concernId } = req.params;
     const { save = false, modelName, promptId } = req.body || {};
@@ -1194,7 +1175,6 @@ router.post('/concerns/:id/optimize', async (req, res) => {
     console.error('问答对优化失败:', error);
     res.status(500).json({ success: false, error: error.message || '优化失败' });
   } finally {
-    await prisma.$disconnect();
   }
 });
 
@@ -1204,7 +1184,6 @@ router.post('/concerns/:id/optimize', async (req, res) => {
  * Body: { concernIds: string[], save?: boolean, modelName?: string, promptId?: string }
  */
 router.post('/optimize-batch', async (req, res) => {
-  const prisma = new PrismaClient();
   try {
     const { concernIds, save = false, modelName, promptId } = req.body || {};
     if (!Array.isArray(concernIds) || concernIds.length === 0) {
@@ -1258,7 +1237,6 @@ router.post('/optimize-batch', async (req, res) => {
     console.error('批量问答对优化失败:', error);
     res.status(500).json({ success: false, error: error.message || '批量优化失败' });
   } finally {
-    await prisma.$disconnect();
   }
 });
 

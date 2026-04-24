@@ -2,11 +2,10 @@
  * 合并对话解析与导出（与语音转写页「再次合并 > AI修正 > 第一次合并 > 原始」优先级一致）
  */
 
-const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client')
+const prisma = require('../utils/prisma')
 const path = require('path')
 const fs = require('fs').promises
 
-const prisma = new PrismaClient()
 
 const NOTE_REMerged = '再次合并对话'
 const NOTE_ROLE = '角色判断'

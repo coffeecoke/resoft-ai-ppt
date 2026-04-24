@@ -4,12 +4,11 @@
  */
 
 const express = require('express')
-const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client')
+const prisma = require('../utils/prisma')
 const presalesAnalysisService = require('../services/presalesAnalysisService')
 const logger = require('../utils/logger')
 
 const router = express.Router()
-const prisma = new PrismaClient()
 
 /**
  * POST /api/presales-analysis/analyze

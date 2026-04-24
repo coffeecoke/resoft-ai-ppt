@@ -13,8 +13,7 @@ const {
 } = require('../utils/audioCompressForTranscription');
 
 // ✅ 使用正确的 Prisma Client 导入方式
-const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client');
-const prisma = new PrismaClient();
+const prisma = require('../utils/prisma');
 
 class TranscriptionService {
   constructor() {

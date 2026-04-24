@@ -3,7 +3,7 @@
  * 负责会议场次的增删改查操作
  */
 
-const prisma = require('../config/database');
+const prisma = require('../utils/prisma');
 const { v4: uuidv4 } = require('uuid');
 
 class SessionsService {

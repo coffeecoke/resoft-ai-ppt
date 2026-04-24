@@ -6,23 +6,7 @@
 const fs = require('fs').promises
 const path = require('path')
 
-// 尝试多个可能的 Prisma Client 路径
-let PrismaClient;
-try {
-  // 优先尝试从 @prisma/client 包导入（pnpm 软链接）
-  PrismaClient = require('../../../online-ppt-backend/node_modules/@prisma/client').PrismaClient;
-} catch (err) {
-  try {
-    // 回退到 pnpm 实际路径
-  prismaClientPath = path.join(__dirname, '../../../online-ppt-backend/node_modules/.pnpm/@prisma+client@6.19.1_prism_d4c309513f45d21f4e4aa7921d8002c7/node_modules/.prisma/client');
-    PrismaClient = require(prismaClientPath).PrismaClient;
-  } catch (err2) {
-    console.error('❌ 无法加载 Prisma Client，请确保 online-ppt-backend 已正确安装依赖');
-    throw err2;
-  }
-}
-
-const prisma = new PrismaClient()
+const prisma = require('../utils/prisma')
 
 // 生成唯一ID（格式：smc_timestamp_random）
 function generateId() {

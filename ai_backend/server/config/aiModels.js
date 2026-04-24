@@ -6,8 +6,8 @@
  */
 
 // 自定义API端点配置（所有模型共享）
-const CUSTOM_API_KEY = process.env.CUSTOM_OPENAI_API_KEY || 'sk-vA1FLiIkxSmFA6VvC505BcEa71B04aBd83756c4b138fDb0f'
-const CUSTOM_BASE_URL = process.env.CUSTOM_OPENAI_BASE_URL || 'http://10.168.165.50:3000/v1'
+const CUSTOM_API_KEY = process.env.CUSTOM_OPENAI_API_KEY || ''
+const CUSTOM_BASE_URL = process.env.CUSTOM_OPENAI_BASE_URL || ''
 
 const modelConfigs = {
   // ========== OpenAI 系列（本地API） ==========

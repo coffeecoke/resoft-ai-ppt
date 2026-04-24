@@ -3,6 +3,7 @@
  * 处理音频上传、转录、查询等接口
  */
 
+const prisma = require('../utils/prisma');
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
@@ -759,8 +760,6 @@ router.post('/:id/ai-correction', async (req, res) => {
     } else {
       // ⚠️ 优先从合并记录读取（如果存在合并后的对话）
       // 注意：不要读取之前的AI修正记录，只读取合并记录或原始对话
-      const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client');
-      const prisma = new PrismaClient();
       
       try {
         // 1. 优先查找合并记录（note1='合并相邻同一说话人的对话'）
@@ -821,7 +820,6 @@ router.post('/:id/ai-correction', async (req, res) => {
         }
         console.log(`📥 从 transcriptions 表读取对话内容，共 ${originalDialogues?.length || 0} 条`);
       } finally {
-        await prisma.$disconnect();
       }
     }
 
@@ -877,8 +875,6 @@ router.post('/:id/ai-correction', async (req, res) => {
 
       // 6.2 创建 dialogue_adjustments 记录（保存AI修正后的内容）
       const { v4: uuidv4 } = require('uuid');
-      const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client');
-      const prisma = new PrismaClient();
       
       try {
         const adjustmentId = uuidv4();
@@ -915,7 +911,6 @@ router.post('/:id/ai-correction', async (req, res) => {
         console.error('❌ 保存 dialogue_adjustments 记录失败:', error);
         throw error; // 抛出错误，让前端知道保存失败
       } finally {
-        await prisma.$disconnect();
       }
     }
 
@@ -1063,8 +1058,6 @@ router.post('/:id/role-judgment', async (req, res) => {
     let adjustmentRecord = null;
     if (autoSave && result.data && result.data.speakerRoles) {
       try {
-        const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client');
-        const prisma = new PrismaClient();
         
         try {
           // 优先查找AI修正记录（note1='AI错别字修正'），因为角色判断通常是基于AI修正后的对话
@@ -1143,7 +1136,6 @@ router.post('/:id/role-judgment', async (req, res) => {
           adjustmentRecord = transcriptionService.convertBigIntToNumber(adjustmentRecord);
           
         } finally {
-          await prisma.$disconnect();
         }
       } catch (error) {
         console.error('❌ 保存角色判断结果失败:', error);
@@ -1214,8 +1206,6 @@ router.put('/:id/role-settings', async (req, res) => {
     }
 
     // 2. 查找或创建 dialogue_adjustments 记录
-    const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client');
-    const prisma = new PrismaClient();
     
     try {
       // 优先查找AI修正记录（note1='AI错别字修正'）
@@ -1337,7 +1327,6 @@ router.put('/:id/role-settings', async (req, res) => {
       });
       
     } finally {
-      await prisma.$disconnect();
     }
 
   } catch (error) {
@@ -1377,8 +1366,6 @@ router.put('/:id/dialogues', async (req, res) => {
     }
 
     // 2. 获取所有相关的 adjustment 记录
-    const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client');
-    const prisma = new PrismaClient();
     
     try {
       // 查找AI修正记录
@@ -1609,7 +1596,6 @@ router.put('/:id/dialogues', async (req, res) => {
       });
       
     } finally {
-      await prisma.$disconnect();
     }
 
   } catch (error) {
@@ -1667,8 +1653,6 @@ router.post('/:id/re-merge', async (req, res) => {
     if (tabType === 'corrected') {
       // ✅ 数据来源：dialogue_adjustments 表，note1='AI错别字修正'
       // ⚠️ 重要：直接从数据库实时查询，确保获取最新的数据（包括保存后的说话人替换）
-      const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client');
-      const prisma = new PrismaClient();
       try {
         const aiCorrection = await prisma.dialogue_adjustments.findFirst({
           where: {
@@ -1686,13 +1670,10 @@ router.post('/:id/re-merge', async (req, res) => {
           console.log(`📥 再次合并：从数据库实时查询AI修正记录（ID: ${aiCorrection.id}），共 ${sourceDialogues?.length || 0} 条对话`);
         }
       } finally {
-        await prisma.$disconnect();
       }
     } else if (tabType === 'merged') {
       // ✅ 数据来源：dialogue_adjustments 表，note1='合并相邻同一说话人的对话'（第一次合并）
       // ⚠️ 重要：直接从数据库实时查询，确保获取最新的数据（包括保存后的说话人替换）
-      const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client');
-      const prisma = new PrismaClient();
       try {
         const mergeAdjustment = await prisma.dialogue_adjustments.findFirst({
           where: {
@@ -1710,13 +1691,10 @@ router.post('/:id/re-merge', async (req, res) => {
           console.log(`📥 再次合并：从数据库实时查询合并记录（ID: ${mergeAdjustment.id}），共 ${sourceDialogues?.length || 0} 条对话`);
         }
       } finally {
-        await prisma.$disconnect();
       }
     } else if (tabType === 'remerged') {
       // ✅ 数据来源：dialogue_adjustments 表，note1='再次合并对话'（可以从再次合并的记录再次合并）
       // ⚠️ 重要：直接从数据库实时查询，确保获取最新的数据（包括保存后的说话人替换）
-      const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client');
-      const prisma = new PrismaClient();
       try {
         const reMergeAdjustment = await prisma.dialogue_adjustments.findFirst({
           where: {
@@ -1734,7 +1712,6 @@ router.post('/:id/re-merge', async (req, res) => {
           console.log(`📥 再次合并：从数据库实时查询再次合并记录（ID: ${reMergeAdjustment.id}），共 ${sourceDialogues?.length || 0} 条对话`);
         }
       } finally {
-        await prisma.$disconnect();
       }
     } else {
       // 数据来源：transcriptions 表，dialogues 字段
@@ -1802,8 +1779,6 @@ router.post('/:id/qa-extraction', async (req, res) => {
     // 2. ✅ 确定要分析的对话内容（优先使用最后一次合并完成后的内容：再次合并 > AI修正 > 第一次合并 > 原始对话）
     let sourceDialogues = dialogues;
     if (!sourceDialogues || sourceDialogues.length === 0) {
-      const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client');
-      const prisma = new PrismaClient();
       
       try {
         // ✅ 1. 最优先：再次合并后的对话（note1='再次合并对话'）
@@ -1871,7 +1846,6 @@ router.post('/:id/qa-extraction', async (req, res) => {
           console.log(`📥 问答对提取：使用原始对话，共 ${sourceDialogues?.length || 0} 条`);
         }
       } finally {
-        await prisma.$disconnect();
       }
     }
 
@@ -1930,8 +1904,6 @@ router.post('/:id/qa-extraction', async (req, res) => {
     }
 
     // 5. 保存到 concerns 表
-    const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client');
-    const prisma = new PrismaClient();
     
     try {
       const createdConcerns = [];
@@ -2083,7 +2055,6 @@ router.post('/:id/qa-extraction', async (req, res) => {
       console.error('❌ 保存问答对到数据库失败:', dbError);
       throw dbError;
     } finally {
-      await prisma.$disconnect();
     }
 
   } catch (error) {
@@ -2116,9 +2087,6 @@ router.get('/:id/qa-pairs', async (req, res) => {
         error: '转录记录不存在'
       });
     }
-
-    const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client');
-    const prisma = new PrismaClient();
     
     try {
       let concernsList = [];
@@ -2203,7 +2171,6 @@ router.get('/:id/qa-pairs', async (req, res) => {
       });
       
     } finally {
-      await prisma.$disconnect();
     }
 
   } catch (error) {

@@ -8,7 +8,7 @@
  * 4. 记录处理日志
  */
 
-const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client')
+const prisma = require('../utils/prisma')
 const fs = require('fs').promises
 const path = require('path')
 const logger = require('../utils/logger')
@@ -17,7 +17,6 @@ const transcriptionService = require('./transcriptionService') // ✅ 导入转�
 const transcriptionAiService = require('./transcriptionAiService') // ✅ 导入AI修正服务
 const audioExtractor = require('../utils/audioExtractor') // ✅ 导入音频提取工具
 
-const prisma = new PrismaClient()
 
 class AudioAutoProcessService {
   constructor() {

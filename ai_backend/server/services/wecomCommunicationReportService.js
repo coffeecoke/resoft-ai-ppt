@@ -4,11 +4,10 @@
 const fs = require('fs').promises
 const path = require('path')
 const { v4: uuidv4 } = require('uuid')
-const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client')
+const prisma = require('../utils/prisma')
 const { getUploadBaseDir } = require('../utils/pathHelper')
 const { getLogger } = require('../wecomBot/logger')
 
-const prisma = new PrismaClient()
 const SOURCE_WECOM = 'wecom_bot'
 /** HTTP 接口接入（售前报备 + 远程音频转录） */
 const SOURCE_API_INBOUND = 'api_inbound'

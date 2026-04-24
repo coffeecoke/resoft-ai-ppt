@@ -9,8 +9,7 @@ const fs = require('fs').promises
 const bidAnalysisService = require('../services/bidAnalysisService')
 const documentParserService = require('../services/documentParserService')
 const { getUploadBaseDir, toRelativePath } = require('../utils/pathHelper')
-const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client')
-const prisma = new PrismaClient()
+const prisma = require('../utils/prisma')
 
 const router = express.Router()
 

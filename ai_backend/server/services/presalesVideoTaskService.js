@@ -7,12 +7,11 @@
 
 const fs = require('fs/promises')
 const path = require('path')
-const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client')
+const prisma = require('../utils/prisma')
 const { v4: uuidv4 } = require('uuid')
 const logger = require('../utils/logger')
 const mergedDialogueService = require('./transcriptionMergedDialogueService')
 
-const prisma = new PrismaClient()
 
 /** 流水线状态（与库中 pipeline_status 一致） */
 const PipelineStatus = {

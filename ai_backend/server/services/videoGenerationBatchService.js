@@ -1,11 +1,10 @@
 const fs = require('fs').promises
 const path = require('path')
-const { PrismaClient } = require('../../../online-ppt-backend/node_modules/@prisma/client')
+const prisma = require('../utils/prisma')
 const logger = require('../utils/logger')
 const transcriptionService = require('./transcriptionService')
 const presalesVideoPipelineOrchestrator = require('./presalesVideoPipelineOrchestrator')
 
-const prisma = new PrismaClient()
 const SYNC_TYPE = 'crm_video_batch'
 
 class VideoGenerationBatchService {
