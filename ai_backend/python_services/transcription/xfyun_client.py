@@ -156,6 +156,24 @@ XFYUN_ERR_QUERY_TOO_FAST = "100012"
 # 官方建议回调拉结果；轮询间隔不宜过短（秒）
 POLL_INTERVAL_SEC = 8
 UPLOAD_TO_FIRST_QUERY_DELAY_SEC = 3
+UPLOAD_RETRY_INTERVAL_SEC = 60
+UPLOAD_MAX_RETRIES = 3
+
+
+def _read_env_int(name, default_value, min_value=None, max_value=None):
+    """读取整数环境变量，非法时回退默认值。"""
+    raw = os.environ.get(name)
+    if raw is None or str(raw).strip() == "":
+        return default_value
+    try:
+        value = int(str(raw).strip())
+    except (TypeError, ValueError):
+        return default_value
+    if min_value is not None and value < min_value:
+        return default_value
+    if max_value is not None and value > max_value:
+        return max_value
+    return value
 
 # 讯飞API凭证
 APP_ID = "30fb0f0d"
@@ -195,10 +213,24 @@ def transcribe_audio(audio_file):
     
     import httpx
     
+    # 超时参数（支持环境变量覆盖）
+    # 大文件上传默认策略：最少30分钟，最多120分钟；可通过环境变量调整
+    min_timeout_minutes = _read_env_int("XFYUN_UPLOAD_TIMEOUT_MIN_MINUTES", 30, min_value=1, max_value=24 * 60)
+    max_timeout_minutes = _read_env_int("XFYUN_UPLOAD_TIMEOUT_MAX_MINUTES", 120, min_value=1, max_value=24 * 60)
+    if min_timeout_minutes > max_timeout_minutes:
+        min_timeout_minutes = max_timeout_minutes
+
+    small_file_timeout_seconds = _read_env_int(
+        "XFYUN_SMALL_FILE_TIMEOUT_SECONDS",
+        max(min_timeout_minutes * 60, 1800),
+        min_value=60,
+        max_value=24 * 60 * 60
+    )
+
     # 对于大文件（>100MB），需要更长的超时时间
     if file_size_mb > 100:
-        # 计算超时时间：每MB需要约5秒，最小30分钟，最大60分钟
-        timeout_minutes = max(30, min(60, int(file_size_mb * 5 / 60)))
+        # 计算超时时间：每MB需要约5秒，最小/最大由环境变量控制
+        timeout_minutes = max(min_timeout_minutes, min(max_timeout_minutes, int(file_size_mb * 5 / 60)))
         timeout_seconds = timeout_minutes * 60
         
         logger.info(f"📦 检测到大文件 ({file_size_mb:.1f} MB)，设置超时时间为 {timeout_minutes} 分钟")
@@ -212,15 +244,15 @@ def transcribe_audio(audio_file):
         )
         timeout_param = timeout_seconds  # 传入秒数，monkey patch会转换为httpx.Timeout
     else:
-        # 小文件使用默认超时（30分钟）
-        timeout_seconds = 1800
+        # 小文件使用默认超时（可配置，默认不低于30分钟）
+        timeout_seconds = small_file_timeout_seconds
         custom_timeout = httpx.Timeout(
             connect=30.0,
-            read=1800.0,
-            write=1800.0,
+            read=float(timeout_seconds),
+            write=float(timeout_seconds),
             pool=30.0
         )
-        timeout_param = 1800
+        timeout_param = timeout_seconds
     
     # ⭐ 初始化客户端，传入超时参数
     # monkey patch会将数字timeout转换为httpx.Timeout对象
@@ -262,22 +294,32 @@ def transcribe_audio(audio_file):
         logger.info("📤 开始上传文件到讯飞服务器...")
         logger.info("💡 提示：大文件上传可能需要几分钟，请耐心等待...")
         
-        try:
-            upload_resp = client.upload(param_dict, audio_file)
-            upload_data = json.loads(upload_resp)
-        except Exception as upload_error:
-            error_msg = str(upload_error)
-            logger.error(f"❌ 上传过程中发生错误: {error_msg}")
-            
-            # 检查是否是超时错误
-            if "timeout" in error_msg.lower() or "timed out" in error_msg.lower():
-                logger.error("⏱️  上传超时！可能的原因：")
-                logger.error("   1. 文件太大，网络上传速度较慢")
-                logger.error("   2. 网络连接不稳定")
-                logger.error("   3. 讯飞服务器响应较慢")
-                logger.error(f"💡 建议：文件大小 {file_size_mb:.1f} MB，请检查网络连接或稍后重试")
-            
-            raise  # 重新抛出异常，让外层处理
+        upload_data = None
+        for attempt in range(1, UPLOAD_MAX_RETRIES + 2):
+            try:
+                upload_resp = client.upload(param_dict, audio_file)
+                upload_data = json.loads(upload_resp)
+                break
+            except Exception as upload_error:
+                error_msg = str(upload_error)
+                logger.error(f"❌ 上传过程中发生错误（第 {attempt} 次）: {error_msg}")
+                
+                # 检查是否是超时错误
+                if "timeout" in error_msg.lower() or "timed out" in error_msg.lower():
+                    logger.error("⏱️  上传超时！可能的原因：")
+                    logger.error("   1. 文件太大，网络上传速度较慢")
+                    logger.error("   2. 网络连接不稳定")
+                    logger.error("   3. 讯飞服务器响应较慢")
+                    logger.error(f"💡 建议：文件大小 {file_size_mb:.1f} MB，请检查网络连接或稍后重试")
+                
+                if attempt <= UPLOAD_MAX_RETRIES:
+                    logger.warning(
+                        f"⚠️ 上传失败，{UPLOAD_RETRY_INTERVAL_SEC} 秒后重试（第 {attempt}/{UPLOAD_MAX_RETRIES} 次重试）"
+                    )
+                    time.sleep(UPLOAD_RETRY_INTERVAL_SEC)
+                    continue
+                
+                raise  # 超过重试次数，交给外层统一处理
         
         if upload_data["code"] != "000000":
             logger.error(f"❌ 上传失败: {upload_data}")
