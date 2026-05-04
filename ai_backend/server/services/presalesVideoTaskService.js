@@ -447,9 +447,12 @@ async function buildFrequencySection(transcriptionId) {
   try {
     const tr = await prisma.transcriptions.findUnique({
       where: { id: String(transcriptionId || '') },
-      select: { report_id: true, session_id: true, customer_name: true }
+      select: { report_id: true, session_id: true, customer_name: true, name: true, original_file_name: true }
     })
-    if (!tr) return null
+    if (!tr) {
+      logger.info(`[presales-video-task] buildFrequencySection: transcription not found id=${transcriptionId}`)
+      return null
+    }
 
     // 先按 transcriptions.report_id 找到当前报备
     let currentReport = null
@@ -458,13 +461,45 @@ async function buildFrequencySection(transcriptionId) {
       currentReport = await prisma.communication_reports.findUnique({ where: { id: rid } })
     }
 
-    // 无法精确关联则靠客户名兜底
+    // 按 customer_name 精确匹配
     if (!currentReport && tr.customer_name) {
       currentReport = await prisma.communication_reports.findFirst({
         where: { customer_name: String(tr.customer_name).trim() },
         orderBy: { created_at: 'desc' }
       })
     }
+
+    // 按 customer_name 模糊兜底（名字可能有简称）
+    if (!currentReport && tr.customer_name) {
+      const partialName = String(tr.customer_name).trim().slice(0, 6)
+      if (partialName.length >= 2) {
+        currentReport = await prisma.communication_reports.findFirst({
+          where: { customer_name: { contains: partialName } },
+          orderBy: { created_at: 'desc' }
+        })
+      }
+    }
+
+    // 按文件名关键词兜底
+    if (!currentReport) {
+      const nameRaw = String(tr.original_file_name || tr.name || '').trim()
+      const nameClean = nameRaw.replace(/\.[^.]+$/, '').replace(/\d{4}/, '').trim().slice(0, 8)
+      if (nameClean.length >= 2) {
+        currentReport = await prisma.communication_reports.findFirst({
+          where: {
+            OR: [
+              { customer_name: { contains: nameClean } },
+              { lead_name: { contains: nameClean } }
+            ]
+          },
+          orderBy: { created_at: 'desc' }
+        })
+      }
+    }
+
+    logger.info(
+      `[presales-video-task] buildFrequencySection: transcription=${transcriptionId} report_id=${tr.report_id || ''} session_id=${tr.session_id || ''} customer_name=${tr.customer_name || ''} matched=${currentReport ? currentReport.id : 'null'}`
+    )
     if (!currentReport) return null
 
     // 同线索的所有报备（按时间升序）

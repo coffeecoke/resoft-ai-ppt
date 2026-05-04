@@ -339,8 +339,39 @@ function logResponseBody(tag, body, maxLen = 16000) {
 }
 
 /** 工作流回调体中「文本或地址」字段，兼容多种命名 */
+function extractWorkflowPayload(candidate) {
+  if (candidate == null) return null
+
+  // 先处理对象形态（回调直接给对象）
+  if (typeof candidate === 'object') {
+    const outObj = candidate.Output ?? candidate.output
+    if (outObj != null) {
+      const fromOutput = extractWorkflowPayload(outObj)
+      if (fromOutput != null && String(fromOutput) !== '') return fromOutput
+    }
+    if (candidate.data != null && String(candidate.data) !== '') return candidate.data
+    if (candidate.content != null && String(candidate.content) !== '') return candidate.content
+    return null
+  }
+
+  // 字符串形态：可能是纯 markdown，也可能是 JSON 字符串（甚至嵌套 JSON）
+  const s = String(candidate)
+  if (s.trim() === '') return null
+  try {
+    const parsed = JSON.parse(s)
+    const fromParsed = extractWorkflowPayload(parsed)
+    if (fromParsed != null && String(fromParsed) !== '') return fromParsed
+  } catch {}
+  return s
+}
+
 function pickWorkflowCallbackPayload(body) {
   if (!body || typeof body !== 'object') return null
+
+  // 兼容 Coze 返回：{"node_status":"{}","Output":"{\"content_type\":1,\"data\":\"...\"}"}
+  const fromTopOutput = extractWorkflowPayload(body.Output ?? body.output)
+  if (fromTopOutput != null && String(fromTopOutput) !== '') return fromTopOutput
+
   const keys = [
     'content',
     'text',
@@ -357,10 +388,12 @@ function pickWorkflowCallbackPayload(body) {
   ]
   for (const k of keys) {
     const v = body[k]
-    if (v != null && String(v) !== '') return v
+    const extracted = extractWorkflowPayload(v)
+    if (extracted != null && String(extracted) !== '') return extracted
   }
-  if (body.data != null && typeof body.data === 'string' && String(body.data) !== '') {
-    return body.data
+  const fromData = extractWorkflowPayload(body.data)
+  if (fromData != null && String(fromData) !== '') {
+    return fromData
   }
   return null
 }
