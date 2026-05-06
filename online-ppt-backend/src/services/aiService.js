@@ -25,20 +25,42 @@ class AIService {
   }
 
   /**
+   * 处理不支持 system role 的模型：将 system 消息合并到第一条 user 消息
+   */
+  _adaptMessages(modelName, messages) {
+    const config = getModelConfig(modelName)
+    if (!config.supportsSystemRole) {
+      const systemParts = messages.filter(m => m.role === 'system').map(m => m.content)
+      const nonSystem = messages.filter(m => m.role !== 'system')
+      if (systemParts.length > 0) {
+        const systemText = systemParts.join('\n\n')
+        if (nonSystem.length > 0 && nonSystem[0].role === 'user') {
+          nonSystem[0] = { role: 'user', content: systemText + '\n\n' + nonSystem[0].content }
+        } else {
+          nonSystem.unshift({ role: 'user', content: systemText })
+        }
+      }
+      return nonSystem
+    }
+    return messages
+  }
+
+  /**
    * 普通调用（非流式）
    */
   async chat(modelName, messages, options = {}) {
     const config = getModelConfig(modelName)
     const client = this.createClient(modelName)
-    
+    const adaptedMessages = this._adaptMessages(modelName, messages)
+
     const response = await client.chat.completions.create({
       model: config.model,
-      messages,
+      messages: adaptedMessages,
       temperature: options.temperature ?? 0.7,
       max_tokens: options.maxTokens ?? 4096,
       ...options
     })
-    
+
     return response.choices[0].message.content
   }
 
@@ -53,10 +75,11 @@ class AIService {
   async chatStream(modelName, messages, onChunk, options = {}) {
     const config = getModelConfig(modelName)
     const client = this.createClient(modelName)
-    
+    const adaptedMessages = this._adaptMessages(modelName, messages)
+
     const stream = await client.chat.completions.create({
       model: config.model,
-      messages,
+      messages: adaptedMessages,
       temperature: options.temperature ?? 0.7,
       max_tokens: options.maxTokens ?? 4096,
       stream: true,
@@ -90,7 +113,8 @@ class AIService {
   async createStreamResponse(modelName, messages, res, options = {}) {
     const config = getModelConfig(modelName)
     const client = this.createClient(modelName)
-    
+    const adaptedMessages = this._adaptMessages(modelName, messages)
+
     // 设置SSE响应头
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
     res.setHeader('Cache-Control', 'no-cache')
@@ -103,7 +127,7 @@ class AIService {
     try {
       const stream = await client.chat.completions.create({
         model: config.model,
-        messages,
+        messages: adaptedMessages,
         temperature: options.temperature ?? 0.7,
         max_tokens: options.maxTokens ?? 4096,
         stream: true,

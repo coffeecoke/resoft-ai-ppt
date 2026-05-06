@@ -2,6 +2,7 @@
 import dotenv from 'dotenv'
 import { fileURLToPath } from 'url'
 import path from 'path'
+import fs from 'fs'
 
 // 计算当前文件目录
 const __filename = fileURLToPath(import.meta.url)
@@ -33,6 +34,7 @@ import personalDocsRouter from './routes/personal-documents.js'
 import thumbnailsRouter from './routes/thumbnails.js'
 import thumbnailTasksRouter from './routes/thumbnailTasks.js'
 import adminRouter from './routes/admin/index.js'
+import aipptGenRouter from './routes/aipptGen.js'
 import scanScheduler from './services/admin/scanScheduler.js'
 import { setupThumbnailProgressWS } from './routes/websocket/thumbnailProgress.js'
 import authRouter from './routes/auth.js'
@@ -74,6 +76,11 @@ app.use('/covers', express.static(coversDir))
 const snapshotsDir = path.join(DATA_DIR, 'snapshots')
 app.use('/snapshots', express.static(snapshotsDir))
 
+// 静态资源：AI PPT 幻灯片截图预览
+const aipptPreviewsDir = path.join(DATA_DIR, 'aippt-previews')
+if (!fs.existsSync(aipptPreviewsDir)) fs.mkdirSync(aipptPreviewsDir, { recursive: true })
+app.use('/aippt-gen/previews', express.static(aipptPreviewsDir))
+
 // 静态资源：模板页缩略图（data/templates/thumbnails 下的图片）
 const templateThumbsDir = path.join(DATA_DIR, 'templates', 'thumbnails')
 app.use('/templates/thumbnails', express.static(templateThumbsDir))
@@ -89,7 +96,7 @@ app.use((req, res, next) => {
   ]
   // 静态资源路径前缀（无需登录）
   // WOPI 文件接口：OnlyOffice 通过 access_token 验证，不需要登录
-  const publicPrefixes = ['/covers/', '/snapshots/', '/thumbnails/', '/templates/thumbnails/', '/wopi/files/']
+  const publicPrefixes = ['/covers/', '/snapshots/', '/thumbnails/', '/templates/thumbnails/', '/wopi/files/', '/aippt-gen/']
   const isPublic = publicPaths.some(
     p => p.method === req.method && req.path === p.path
   ) || publicPrefixes.some(prefix => req.path.startsWith(prefix))
@@ -109,6 +116,7 @@ app.use('/users', usersRouter)
 // 路由 - 按业务模块区分
 app.use('/tools', toolsRouter)
 app.use('/aippt', aipptChatRouter)
+app.use('/aippt-gen', aipptGenRouter)
 app.use('/images', imagesRouter)
 app.use('/translate', translateRouter)
 app.use('/templates', templatesRouter)
