@@ -3,6 +3,16 @@
  */
 const PV_API = (window.location.origin || 'http://localhost:3000') + '/api'
 
+/**
+ * 与 AI_BACKEND_BASE_PATH 一致：页面在 /{prefix}/pages/... 时，lib 走 /{prefix}/lib（网关常只转发前缀，根路径 /lib 会 404）
+ */
+function pvLibRoot() {
+  const pathname = window.location.pathname || ''
+  const i = pathname.indexOf('/pages/')
+  const prefix = i > 0 ? pathname.slice(0, i) : ''
+  return prefix ? `${prefix}/lib` : '/lib'
+}
+
 /** 推送对话 / 提交工作流 返回信息较长，Toast 多停留一会（毫秒） */
 const PV_PUSH_WORKFLOW_TOAST_MS = 10000
 
@@ -600,7 +610,7 @@ function pvLoadMarkdownItOnce() {
   }
   pvMarkdownItLoadPromise = new Promise((resolve, reject) => {
     const s = document.createElement('script')
-    s.src = '/lib/markdown-it/markdown-it.min.js'
+    s.src = `${pvLibRoot()}/markdown-it/markdown-it.min.js`
     s.async = true
     s.onload = () => resolve()
     s.onerror = () => {
@@ -628,12 +638,12 @@ function pvEnsureCmStyles() {
   const base = document.createElement('link')
   base.id = 'pv-codemirror-base-css'
   base.rel = 'stylesheet'
-  base.href = '/lib/codemirror/lib/codemirror.css'
+  base.href = `${pvLibRoot()}/codemirror/lib/codemirror.css`
   document.head.appendChild(base)
   const theme = document.createElement('link')
   theme.id = 'pv-codemirror-theme-css'
   theme.rel = 'stylesheet'
-  theme.href = '/lib/codemirror/theme/darcula.css'
+  theme.href = `${pvLibRoot()}/codemirror/theme/darcula.css`
   document.head.appendChild(theme)
 }
 
@@ -707,11 +717,11 @@ function pvEnsureCodeMirrorMarkdown() {
   pvCmMarkdownPromise = (async function () {
     pvEnsureCmStyles()
     if (typeof window.CodeMirror !== 'function') {
-      await pvLoadScript('/lib/codemirror/lib/codemirror.js')
+      await pvLoadScript(`${pvLibRoot()}/codemirror/lib/codemirror.js`)
     }
     if (!pvCmMarkdownModeReady()) {
-      await pvLoadScript('/lib/codemirror/mode/xml/xml.js')
-      await pvLoadScript('/lib/codemirror/mode/markdown/markdown.js')
+      await pvLoadScript(`${pvLibRoot()}/codemirror/mode/xml/xml.js`)
+      await pvLoadScript(`${pvLibRoot()}/codemirror/mode/markdown/markdown.js`)
     }
     if (!pvCmMarkdownModeReady()) {
       pvCmMarkdownPromise = null

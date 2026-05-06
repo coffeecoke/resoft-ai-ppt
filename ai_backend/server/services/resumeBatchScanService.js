@@ -37,6 +37,34 @@ function collectFolderUnits (rootResolved) {
   return [rootResolved]
 }
 
+function hasDirectDocx (dir) {
+  try {
+    return fs.readdirSync(dir, { withFileTypes: true })
+      .some((e) => e.isFile() && /\.docx$/i.test(e.name))
+  } catch {
+    return false
+  }
+}
+
+/** 枚举 root 下任意深度、目录内「直接含有」.docx 的文件夹（每层含 docx 的目录都会成为一个任务单元） */
+function collectAllDirsWithDirectDocx (rootResolved) {
+  const units = []
+  function walk (d) {
+    let entries
+    try {
+      entries = fs.readdirSync(d, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const e of entries) {
+      if (e.isDirectory()) walk(path.join(d, e.name))
+    }
+    if (hasDirectDocx(d)) units.push(d)
+  }
+  walk(rootResolved)
+  return units.sort((a, b) => a.length - b.length)
+}
+
 function walkDocxFiles (dir, acc) {
   let entries
   try {
@@ -113,9 +141,10 @@ async function importManifest (manifestPath) {
 /**
  * @param {string} rootResolved 已 resolve 的根目录
  * @param {{ onLine?: (s:string)=>void, onProgress?: (p:{percent:number,unitIndex:number,totalUnits:number,currentFolder:string})=>void }} hooks
+ * @param {{ recursiveUnits?: boolean }} options recursiveUnits=true 时遍历 root 下所有子目录（任意深度），凡目录内直接含有 .docx 的均单独跑一批（适合 F:\\toubiao 整树）
  * @returns {Promise<{ results: object[], logs: string[] }>}
  */
-async function runResumeBatchScan (rootResolved, hooks = {}) {
+async function runResumeBatchScan (rootResolved, hooks = {}, options = {}) {
   const logs = []
   const log = (line) => {
     logs.push(line)
@@ -125,7 +154,15 @@ async function runResumeBatchScan (rootResolved, hooks = {}) {
   const results = []
 
   log(`根目录: ${rootResolved}`)
-  const units = collectFolderUnits(rootResolved)
+  const recursiveUnits = !!options.recursiveUnits
+  const units = recursiveUnits
+    ? collectAllDirsWithDirectDocx(rootResolved)
+    : collectFolderUnits(rootResolved)
+  if (recursiveUnits) {
+    log(
+      `递归模式：共 ${units.length} 个「目录内直接含有 .docx」的文件夹待扫描（任意深度）`,
+    )
+  }
   log(`共 ${units.length} 个文件夹待扫描（每夹内 .docx 按体积从大到小探测，命中简历后再抽取）`)
 
   for (let i = 0; i < units.length; i++) {

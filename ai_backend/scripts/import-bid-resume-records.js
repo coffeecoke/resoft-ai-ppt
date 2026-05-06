@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS \`bid_resume_records\` (
   \`run_batch_id\` VARCHAR(50) NULL,
   \`source_docx_path\` VARCHAR(800) NOT NULL,
   \`source_docx_basename\` VARCHAR(255) NOT NULL,
+  \`source_docx_modified_at\` DATETIME(3) NULL,
   \`h1_section_title\` VARCHAR(500) NOT NULL,
   \`l2_section_title\` VARCHAR(500) NULL,
   \`person_name\` VARCHAR(100) NULL,
@@ -34,6 +35,7 @@ CREATE TABLE IF NOT EXISTS \`bid_resume_records\` (
   KEY \`idx_bidresume_batch\` (\`run_batch_id\`),
   KEY \`idx_bidresume_srcbase\` (\`source_docx_basename\`),
   KEY \`idx_bidresume_person\` (\`person_name\`),
+  KEY \`idx_bidresume_src_mtime\` (\`source_docx_modified_at\`),
   KEY \`idx_bidresume_created\` (\`created_at\`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
 `
@@ -44,6 +46,7 @@ CREATE TABLE IF NOT EXISTS \`bid_resume_persons\` (
   \`resume_record_id\` VARCHAR(50) NULL,
   \`run_batch_id\` VARCHAR(50) NULL,
   \`source_docx_basename\` VARCHAR(255) NOT NULL,
+  \`source_docx_modified_at\` DATETIME(3) NULL,
   \`h1_section_title\` VARCHAR(500) NOT NULL,
   \`l2_section_title\` VARCHAR(500) NULL,
   \`sort_order\` INT NOT NULL DEFAULT 0,
@@ -73,6 +76,8 @@ CREATE TABLE IF NOT EXISTS \`bid_resume_persons\` (
   KEY \`idx_bidresperson_parent\` (\`resume_record_id\`),
   KEY \`idx_bidresperson_batch\` (\`run_batch_id\`),
   KEY \`idx_bidresperson_name\` (\`person_name\`),
+  KEY \`idx_bidresperson_src_mtime\` (\`source_docx_modified_at\`),
+  KEY \`idx_bidresperson_name_mtime\` (\`person_name\`, \`source_docx_modified_at\`),
   KEY \`idx_bidresperson_created\` (\`created_at\`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
 `
@@ -99,6 +104,20 @@ function findLatestManifest (rootDir) {
   return best
 }
 
+/** manifest.source_docx_modified_at（Python 写入）优先，否则对源文件 stat mtime */
+function resolveSourceDocMtime (manifest, sourcePath) {
+  const raw = manifest.source_docx_modified_at
+  if (raw != null && String(raw).trim() !== '') {
+    const d = new Date(String(raw).trim())
+    if (!Number.isNaN(d.getTime())) return d
+  }
+  try {
+    const abs = path.resolve(sourcePath)
+    if (fs.existsSync(abs)) return fs.statSync(abs).mtime
+  } catch (_) { /* ignore */ }
+  return null
+}
+
 async function ensureTables () {
   const one = (sql) => prisma.$executeRawUnsafe(sql.replace(/\s+/g, ' ').trim())
   await one(CREATE_RECORDS_SQL)
@@ -121,6 +140,8 @@ async function ensureTables () {
     'ALTER TABLE `bid_resume_persons` ADD COLUMN `degree` VARCHAR(40) NULL',
     'ALTER TABLE `bid_resume_persons` ADD COLUMN `employer` VARCHAR(200) NULL',
     'ALTER TABLE `bid_resume_persons` ADD COLUMN `proposed_project_role` VARCHAR(120) NULL',
+    'ALTER TABLE `bid_resume_records` ADD COLUMN `source_docx_modified_at` DATETIME(3) NULL',
+    'ALTER TABLE `bid_resume_persons` ADD COLUMN `source_docx_modified_at` DATETIME(3) NULL',
   ]
   for (const sql of alters) {
     try {
@@ -138,6 +159,7 @@ function mapPersonRow (p, common, sortOrder) {
     resume_record_id: common.parentId,
     run_batch_id: common.batchId,
     source_docx_basename: common.basename,
+    source_docx_modified_at: common.docMtime,
     h1_section_title: common.h1,
     l2_section_title: common.l2,
     sort_order: sortOrder,
@@ -186,6 +208,7 @@ async function main () {
   const manifest = JSON.parse(raw)
   const batchId = manifest.batch_id || null
   const sourcePath = manifest.source_docx || ''
+  const docMtime = resolveSourceDocMtime(manifest, sourcePath)
   const base = path.basename(sourcePath)
   const outDir = manifest.output_dir || path.dirname(manifestPath)
   const records = manifest.records || []
@@ -209,6 +232,7 @@ async function main () {
           run_batch_id: batchId,
           source_docx_path: sourcePath.slice(0, 800),
           source_docx_basename: base.slice(0, 255),
+          source_docx_modified_at: docMtime,
           h1_section_title: (rec.h1_section_title || '').slice(0, 500),
           l2_section_title: rec.l2_section_title ? String(rec.l2_section_title).slice(0, 500) : null,
           person_name: ex.person_name ? String(ex.person_name).slice(0, 100) : null,
@@ -226,6 +250,7 @@ async function main () {
         parentId,
         batchId,
         basename: base.slice(0, 255),
+        docMtime,
         h1: (rec.h1_section_title || '').slice(0, 500),
         l2: rec.l2_section_title ? String(rec.l2_section_title).slice(0, 500) : null,
       }

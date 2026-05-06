@@ -28,7 +28,8 @@ import json
 import os
 import re
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
+import unicodedata
 from pathlib import Path
 
 _THIS = Path(__file__).resolve().parent
@@ -46,6 +47,20 @@ def _load_splitter():
 
 _splitter = _load_splitter()
 split_docx = _splitter.split_docx
+
+
+def _load_sibling_module(mod_name: str, file_name: str):
+    p = _THIS / file_name
+    spec = importlib.util.spec_from_file_location(mod_name, p)
+    m = importlib.util.module_from_spec(spec)
+    assert spec.loader
+    spec.loader.exec_module(m)
+    return m
+
+
+_enrich = _load_sibling_module("resume_ai_enrich", "resume_ai_enrich.py")
+enrich_person_row = _enrich.enrich_person_row
+enrich_section_extracted = _enrich.enrich_section_extracted
 
 # 一级章节标题命中任一关键词即视为「可能含人员简历」的章节（可按项目再调）
 RESUME_H1_KEYWORDS = (
@@ -159,7 +174,7 @@ def h2_matches_resume(title: str) -> bool:
 
 def extract_fields_from_text(text: str, fallback_title: str = "") -> dict:
     """轻量规则抽取（不调用大模型）；后续可接 AI 覆盖 extracted_json。"""
-    t = text or ""
+    t = _normalize_resume_text(text or "")
     out = {
         "person_name": None,
         "role_title": None,
@@ -814,6 +829,30 @@ def _sanitize_header_role(role: str) -> str:
     return r[:24]
 
 
+def _source_docx_mtime_iso(path: str) -> str | None:
+    """源 .docx 文件 mtime，UTC ISO，供库表区分同人多版文档。"""
+    try:
+        mt = os.path.getmtime(path)
+        return (
+            datetime.fromtimestamp(mt, tz=timezone.utc)
+            .replace(microsecond=0)
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
+    except OSError:
+        return None
+
+
+def _normalize_resume_text(t: str) -> str:
+    """制表/全角符号粗归一，提高键值正则命中率；保留 \\t 列分隔，避免表格键值错位。"""
+    if not t:
+        return ""
+    t = unicodedata.normalize("NFKC", t)
+    t = t.replace("\r\n", "\n").replace("\r", "\n")
+    t = t.replace("\u3000", " ").replace("\xa0", " ")
+    return t
+
+
 def _loose_scan_kv_in_text(z: str) -> dict[str, str]:
     """
     全文宽松扫描制表/混排简历中常见键值（与 _field 单行规则互补）。
@@ -830,7 +869,7 @@ def _loose_scan_kv_in_text(z: str) -> dict[str, str]:
     if m:
         out["id_card"] = m.group(1).strip()[:24]
     m = re.search(
-        r"(?:手机号码|移动电话|联系电话|办公电话)\s*[：:\t]\s*([0-9+\s\-–—]{6,26})",
+        r"(?:手机号|手机号码|移动电话|联系电话|办公电话|联系手机)\s*[：:\t]?\s*([0-9+\s\-–—]{6,26})",
         z,
     )
     if m:
@@ -843,7 +882,7 @@ def _loose_scan_kv_in_text(z: str) -> dict[str, str]:
     if m:
         out["email"] = m.group(1).strip()[:120]
     m = re.search(
-        r"(?:现所在单位|工作单位|所在单位|单位名称)\s*[：:\t]\s*([^\t\n]{2,200})",
+        r"(?:现所在单位|工作单位|所在单位|单位名称|任职单位|服务单位)\s*[：:\t]\s*([^\t\n]{2,200})",
         z,
     )
     if m:
@@ -875,7 +914,7 @@ def extract_person_structured(
     chunk: str, role_label: str = "", name_hint: str = ""
 ) -> dict:
     """从单人简历原文块抽取列字段（规则引擎，可后续换 AI）。"""
-    t = chunk or ""
+    t = _normalize_resume_text(chunk or "")
     name = _field_person_name(t)
     if not name:
         name = _field(r"姓名\s*[：:\t]\s*([^\s\n，,、;；]{1,24})", t)
@@ -900,15 +939,22 @@ def extract_person_structured(
     if name:
         name = _strip_person_name_doc_noise(name)[:40] or None
 
-    gender = _field(r"性别\s*[：:\t]\s*([^\t\n]{1,12})", t)
-    birth_date = _field(r"出生年月\s*[：:\t]\s*([^\t\n]{1,32})", t)
+    gender = _field(r"性\s*别\s*[：:\t]\s*([^\t\n]{1,12})", t)
+    birth_date = _field(
+        r"(?:出生年月|出生日期)\s*[：:\t]\s*([^\t\n]{1,32})", t
+    )
     age_only = _field(r"年龄\s*[：:\t]\s*([^\t\n]{1,12})", t)
     age = birth_date or age_only
     if not age:
-        age = _field(r"(?:年龄|出生年月)\s*[：:\t]\s*([^\t\n]{1,28})", t)
-    edu = _field(r"学历\s*[：:\t]\s*([^\t\n]{1,40})", t)
+        age = _field(r"(?:年龄|出生年月|出生日期)\s*[：:\t]\s*([^\t\n]{1,28})", t)
+    edu = _field(
+        r"(?:学历|文化程度|最高学历)\s*[：:\t]\s*([^\t\n]{1,40})", t
+    )
     major = _field(r"专业\s*[：:\t]\s*([^\t\n]{1,80})", t)
-    school = _field(r"(?:毕业学校|毕业院校)\s*[：:\t]\s*([^\t\n]{1,120})", t)
+    school = _field(
+        r"(?:毕业学校|毕业院校|就读院校)\s*[：:\t]\s*([^\t\n]{1,120})",
+        t,
+    )
     wy = _field(
         r"(?:工作年限|本项目相关工作年限|相关行业工作年限)\s*[：:\t]\s*([^\t\n]{1,40})",
         t,
@@ -916,26 +962,50 @@ def extract_person_structured(
     work_duration_text = _field(r"工作时间\s*[：:\t]\s*([^\t\n]{1,40})", t)
     if not wy and work_duration_text:
         wy = work_duration_text
-    id_card = _field(r"身份证号码\s*[：:\t]\s*([0-9Xx\*]{15,22})", t)
+    id_card = _field(
+        r"(?:身份证号码|身份证号|证件号码)\s*[：:\t]\s*([0-9Xx\*]{15,22})", t
+    )
     degree = _field(r"学位\s*[：:\t]\s*([^\t\n]{1,24})", t)
-    employer = _field(r"现所在单位\s*[：:\t]\s*([^\t\n]{1,160})", t)
+    employer = _field(
+        r"(?:现所在单位|工作单位|所在单位|单位名称|任职单位|服务单位)\s*[：:\t]\s*([^\t\n]{1,160})",
+        t,
+    )
     proposed_project_role = _field(
-        r"拟在本项目担任职务\s*[：:\t]\s*([^\t\n]{1,80})", t
+        r"(?:拟在本项目担任职务|拟任本项目职务|在本项目拟任职务)\s*[：:\t]\s*([^\t\n]{1,80})",
+        t,
     )
     similar_project_exp = _field(
         r"同类项目工作经验\s*[：:\t]\s*([^\t\n]{1,500})", t
     )
-    phone = _field(r"手机\s*[：:\t]\s*([0-9+\s\-]{6,22})", t)
-    email = _field(r"邮箱\s*[：:\t]\s*([\w.\-+@]{4,120})", t)
+    phone = _field(
+        r"(?:手机|手机号|移动电话|联系电话|联系手机)\s*[：:\t]\s*([0-9+\s\-]{6,26})", t
+    )
+    email = _field(
+        r"(?:邮箱|电子邮箱|E-mail|Email|电子信箱)\s*[：:\t]\s*([\w.\-+@]{4,120})",
+        t,
+        re.IGNORECASE,
+    )
     # 制表排版里「职务」与「工作年限」常在同一行，勿用 [^\n] 以免把「工作年限」吃进职务
-    duty = _field(r"(?:拟任职务|职务|岗位|职位)\s*[：:\t]\s*([^\t\n]{1,40})", t)
+    duty = _field(
+        r"(?:拟任职务|现任职务|职务|岗位|职位)\s*[：:\t]\s*([^\t\n]{1,40})", t
+    )
     professional_title = _field(r"职称\s*[：:\t]\s*([^\t\n]{1,40})", t)
     ethnicity = _field(r"民族\s*[：:\t]\s*([^\t\n]{1,20})", t)
     native_place = _field(r"籍贯\s*[：:\t]\s*([^\t\n]{1,60})", t)
 
     project_experience = None
     # 优先「主要经历 / 工作履历」等小节，避免同块前文里出现「工作经验」误切片
-    for kw in ("主要经历", "工作履历", "工作经验", "工作简历", "项目经验"):
+    for kw in (
+        "主要经历",
+        "工作履历",
+        "工作经验",
+        "工作简历",
+        "项目经验",
+        "近两年业绩",
+        "项目任职经历",
+        "主要工作业绩",
+        "同类项目经验",
+    ):
         idx = t.find(kw)
         if idx == -1:
             continue
@@ -1135,6 +1205,7 @@ def split_resume_into_persons(block: str) -> list[dict]:
         row = extract_person_structured(chunk, role_label=role, name_hint=name_h)
         _postprocess_person_entry_row(row)
         if _should_keep_person_row(row, chunk):
+            enrich_person_row(row, chunk)
             persons.append(row)
     return persons
 
@@ -1235,6 +1306,7 @@ def run_pipeline(
     batch_id: str | None = None,
 ) -> dict:
     input_docx = str(Path(input_docx).resolve())
+    src_mtime_iso = _source_docx_mtime_iso(input_docx)
     base_name = resolve_output_folder_base_name(
         input_docx,
         folder_base_from=folder_base_from,
@@ -1318,6 +1390,7 @@ def run_pipeline(
         **manifest_base,
         "batch_id": bid,
         "source_docx": input_docx,
+        "source_docx_modified_at": src_mtime_iso,
         "path_options": {
             "out_root": str(out_root.resolve()),
             "folder_base_from": folder_base_from,
@@ -1413,6 +1486,10 @@ def run_pipeline(
     manifest["output_dir"] = str(work)
     for rec in manifest.get("records") or []:
         rec["person_entries"] = split_resume_into_persons(rec.get("raw_text") or "")
+        if not rec.get("person_entries") and rec.get("raw_text"):
+            ex = rec.get("extracted")
+            if isinstance(ex, dict):
+                enrich_section_extracted(ex, rec.get("raw_text") or "")
 
     for ri, rec in enumerate(manifest.get("records") or []):
         persons = rec.get("person_entries") or []
@@ -1426,6 +1503,11 @@ def run_pipeline(
             extract_resume_slice_images(str(pth), persons, work, ri)
         except Exception as e_img:
             rec["image_extract_error"] = str(e_img)[:500]
+
+    try:
+        manifest["ai_enrich_enabled"] = bool(_enrich.is_enrich_enabled())
+    except Exception:
+        manifest["ai_enrich_enabled"] = False
 
     _write_manifest(work, manifest)
     return manifest
@@ -1488,6 +1570,12 @@ def main():
         default="",
         help="自定义批次号（默认当前时间）；可用 RESUME_EXTRACT_BATCH_ID",
     )
+    ap.add_argument(
+        "--no-ai",
+        dest="no_ai",
+        action="store_true",
+        help="禁用大模型补缺（与 RESUME_EXTRACT_USE_AI=0 相同）",
+    )
     args = ap.parse_args()
 
     probe_path = (args.probe_docx or "").strip()
@@ -1514,6 +1602,9 @@ def main():
     folder_base = (args.folder_base or os.environ.get("RESUME_EXTRACT_FOLDER_BASE", "") or "").strip()
     folder_tag = (args.folder_tag or os.environ.get("RESUME_EXTRACT_FOLDER_TAG", "") or "").strip() or "简历解析"
     batch_id = (args.batch_id or os.environ.get("RESUME_EXTRACT_BATCH_ID", "") or "").strip() or None
+
+    if getattr(args, "no_ai", False):
+        os.environ["RESUME_EXTRACT_USE_AI"] = "0"
 
     manifest = run_pipeline(
         doc_in,

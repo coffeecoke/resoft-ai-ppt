@@ -202,6 +202,8 @@ model bid_resume_records {
   run_batch_id         String?  @db.VarChar(50) /// 同一次脚本运行批次（manifest.batch_id）
   source_docx_path     String   @db.VarChar(800) /// 原始 docx 路径（可存绝对路径便于追溯）
   source_docx_basename String   @db.VarChar(255) /// 原始文件名
+  /// 源文件操作系统修改时间（区分同人简历在不同版本文档中的重复）
+  source_docx_modified_at DateTime?
   h1_section_title     String   @db.VarChar(500) /// 一级章节标题
   l2_section_title     String?  @db.VarChar(500) /// 二级切片标题（单人块）
   person_name          String?  @db.VarChar(100)
@@ -217,6 +219,7 @@ model bid_resume_records {
   @@index([run_batch_id], map: "idx_bidresume_batch")
   @@index([source_docx_basename], map: "idx_bidresume_srcbase")
   @@index([person_name], map: "idx_bidresume_person")
+  @@index([source_docx_modified_at], map: "idx_bidresume_src_mtime")
   @@index([created_at], map: "idx_bidresume_created")
 }
 
@@ -226,6 +229,8 @@ model bid_resume_persons {
   resume_record_id      String?  @db.VarChar(50) /// 关联 bid_resume_records.id（入库时写入）
   run_batch_id          String?  @db.VarChar(50)
   source_docx_basename  String   @db.VarChar(255)
+  /// 与 bid_resume_records 一致，便于按人+文档版本查询
+  source_docx_modified_at DateTime?
   h1_section_title      String   @db.VarChar(500)
   l2_section_title      String?  @db.VarChar(500)
   sort_order            Int      @default(0)
@@ -259,6 +264,8 @@ model bid_resume_persons {
   @@index([resume_record_id], map: "idx_bidresperson_parent")
   @@index([run_batch_id], map: "idx_bidresperson_batch")
   @@index([person_name], map: "idx_bidresperson_name")
+  @@index([source_docx_modified_at], map: "idx_bidresperson_src_mtime")
+  @@index([person_name, source_docx_modified_at], map: "idx_bidresperson_name_mtime")
   @@index([created_at], map: "idx_bidresperson_created")
 }
 

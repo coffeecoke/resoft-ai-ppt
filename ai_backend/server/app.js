@@ -92,10 +92,18 @@ if (adminStaticPrefix) {
 }
 app.use('/output', express.static(path.join(__dirname, '../output')))
 app.use('/scraper_output', express.static(path.join(__dirname, '../scraper_output')))
-app.use('/lib/jszip', express.static(path.join(__dirname, '../node_modules/jszip/dist')))
-app.use('/lib/docx-preview', express.static(path.join(__dirname, '../node_modules/docx-preview/dist')))
-app.use('/lib/markdown-it', express.static(path.join(__dirname, '../node_modules/markdown-it/dist')))
-app.use('/lib/codemirror', express.static(path.join(__dirname, '../node_modules/codemirror')))
+/** 第三方静态库：根路径 +（可选）AI_BACKEND_BASE_PATH 下各挂一份，便于网关只转发前缀时不丢 /lib */
+function mountVendorLibStatics(urlPrefix) {
+  const base = urlPrefix || ''
+  app.use(`${base}/lib/jszip`, express.static(path.join(__dirname, '../node_modules/jszip/dist')))
+  app.use(`${base}/lib/docx-preview`, express.static(path.join(__dirname, '../node_modules/docx-preview/dist')))
+  app.use(`${base}/lib/markdown-it`, express.static(path.join(__dirname, '../node_modules/markdown-it/dist')))
+  app.use(`${base}/lib/codemirror`, express.static(path.join(__dirname, '../node_modules/codemirror')))
+}
+mountVendorLibStatics('')
+if (adminStaticPrefix) {
+  mountVendorLibStatics(adminStaticPrefix)
+}
 
 // ==================== AI管理后台路由（新架构） ====================
 const adminRoutes = require('./routes')

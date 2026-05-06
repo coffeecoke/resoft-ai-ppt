@@ -23,22 +23,26 @@ function appendLog (job, line) {
   if (job.logs.length > 500) job.logs.splice(0, job.logs.length - 500)
 }
 
-async function runWorker (jobId, rootResolved) {
+async function runWorker (jobId, rootResolved, scanOptions = {}) {
   const job = jobs.get(jobId)
   if (!job) return
   job.status = 'running'
   job.startedAt = new Date().toISOString()
 
   try {
-    const { results } = await runResumeBatchScan(rootResolved, {
-      onLine: (line) => appendLog(job, line),
-      onProgress: (p) => {
-        job.percent = p.percent
-        job.unitIndex = p.unitIndex
-        job.totalUnits = p.totalUnits
-        job.currentFolder = p.currentFolder || ''
+    const { results } = await runResumeBatchScan(
+      rootResolved,
+      {
+        onLine: (line) => appendLog(job, line),
+        onProgress: (p) => {
+          job.percent = p.percent
+          job.unitIndex = p.unitIndex
+          job.totalUnits = p.totalUnits
+          job.currentFolder = p.currentFolder || ''
+        },
       },
-    })
+      scanOptions,
+    )
     job.results = results
     job.percent = 100
     job.status = 'completed'
@@ -63,6 +67,7 @@ router.post('/jobs', express.json(), (req, res) => {
       })
     }
     const rootPath = (req.body && req.body.rootPath) || ''
+    const recursiveUnits = !!(req.body && req.body.recursiveUnits)
     const abs = resolveAndValidateRoot(rootPath)
     const id = newJobId()
     const job = {
@@ -83,7 +88,7 @@ router.post('/jobs', express.json(), (req, res) => {
     jobs.set(id, job)
     activeJobId = id
     setImmediate(() => {
-      runWorker(id, abs).catch((e) => {
+      runWorker(id, abs, { recursiveUnits }).catch((e) => {
         const j = jobs.get(id)
         if (j) {
           j.status = 'failed'
