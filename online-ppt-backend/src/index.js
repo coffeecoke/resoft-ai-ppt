@@ -81,6 +81,11 @@ const aipptPreviewsDir = path.join(DATA_DIR, 'aippt-previews')
 if (!fs.existsSync(aipptPreviewsDir)) fs.mkdirSync(aipptPreviewsDir, { recursive: true })
 app.use('/aippt-gen/previews', express.static(aipptPreviewsDir))
 
+// 静态资源：用户上传的素材图片
+const aipptUserImagesDir = path.join(DATA_DIR, 'aippt-user-images')
+if (!fs.existsSync(aipptUserImagesDir)) fs.mkdirSync(aipptUserImagesDir, { recursive: true })
+app.use('/aippt-gen/user-images', express.static(aipptUserImagesDir))
+
 // 静态资源：模板页缩略图（data/templates/thumbnails 下的图片）
 const templateThumbsDir = path.join(DATA_DIR, 'templates', 'thumbnails')
 app.use('/templates/thumbnails', express.static(templateThumbsDir))

@@ -93,14 +93,14 @@ export function readThemeHtml(themeId, pageType) {
 }
 
 export function ensureTailwind(html) {
-  // 已经有本地 tailwind.js，跳过
-  if (/tailwind\.js/.test(html)) return html
-  // 已经有 CDN 版本，替换为本地
+  // 已经正确以 <script> 方式引入本地 tailwind.js，跳过
+  if (/<script[^>]*tailwind\.js[^>]*>/.test(html)) return html
+  // CDN script 版，替换为本地
   if (/<script[^>]*cdn\.tailwindcss\.com/.test(html)) {
     return html.replace(/<script[^>]*cdn\.tailwindcss\.com[^>]*><\/script>/gi, TAILWIND_SCRIPT)
   }
-  // 去掉错误的 tailwind 引用
-  html = html.replace(/<link[^>]*tailwindcss[^>]*\/?>/gi, '')
+  // AI 有时把 tailwind.js 写成 <link rel="stylesheet">，先去掉再重新注入
+  html = html.replace(/<link[^>]*tailwind(?:css|\.js)[^>]*\/?>/gi, '')
   html = html.replace(/<script[^>]*tailwindcss[^>]*><\/script>/gi, '')
   // 注入本地脚本
   if (html.includes('</head>')) {
@@ -141,7 +141,8 @@ export function sanitizeHtml(raw) {
     return head + cleaned + body
   })
 
-  // 5. 替换所有外部 CDN 为本地路径
+  // 5. 替换所有外部 CDN 为本地路径，并修正 AI 把 tailwind.js 写成 <link> 的错误
+  html = html.replace(/<link[^>]*tailwind(?:css|\.js)[^>]*\/?>/gi, TAILWIND_SCRIPT)
   html = html.replace(/<script[^>]*cdn\.tailwindcss\.com[^>]*><\/script>/gi, TAILWIND_SCRIPT)
   html = html.replace(/<link[^>]*cdnjs\.cloudflare\.com\/ajax\/libs\/font-awesome[^>]*\/?>/gi, '')
   html = html.replace(/<link[^>]*cdn\.jsdelivr\.net\/npm\/font-awesome[^>]*\/?>/gi, '')
@@ -240,12 +241,39 @@ function ensureCanvas(html) {
 function buildSlideSequence(outline) {
   // 新格式：flat pages with description
   if (outline.pages && Array.isArray(outline.pages)) {
-    return outline.pages.map((page, index) => {
+    // 预先找出每个 content 页所属章节，以及同章节其他 content 页标题
+    const pages = outline.pages
+    return pages.map((page, index) => {
       const content = { title: page.title }
       if (page.description) content.description = page.description
       if (page.type === 'cover') content.subtitle = outline.subtitle
-      if (page.type === 'catalog') content.chapters = outline.pages.filter(p => p.type === 'chapter').map(p => p.title)
+      if (page.type === 'catalog') content.chapters = pages.filter(p => p.type === 'chapter').map(p => p.title)
       if (page.type === 'end') content.subtitle = outline.title
+
+      // 内容页：找所属章节 + 同章节其他内容页，避免 AI 重复
+      if (page.type === 'content') {
+        let chapterTitle = ''
+        const siblingTitles = []
+        // 向前找最近的 chapter 页作为所属章节
+        for (let i = index - 1; i >= 0; i--) {
+          if (pages[i].type === 'chapter') { chapterTitle = pages[i].title; break }
+        }
+        // 同章节的其他 content 页（向前到上一个 chapter，向后到下一个 chapter）
+        let start = 0
+        for (let i = index - 1; i >= 0; i--) {
+          if (pages[i].type === 'chapter') { start = i + 1; break }
+        }
+        let end = pages.length
+        for (let i = index + 1; i < pages.length; i++) {
+          if (pages[i].type === 'chapter' || pages[i].type === 'end') { end = i; break }
+        }
+        for (let i = start; i < end; i++) {
+          if (i !== index && pages[i].type === 'content') siblingTitles.push(pages[i].title)
+        }
+        if (chapterTitle) content.chapterTitle = chapterTitle
+        if (siblingTitles.length) content.siblingTitles = siblingTitles
+      }
+
       return { index, type: page.type, content }
     })
   }
@@ -325,6 +353,19 @@ async function screenshotHtml(htmlContent, taskId, pageIndex) {
   return `/aippt-gen/previews/${filename}`
 }
 
+const SEARCH_IMAGES_DIR = path.join(DATA_DIR, 'aippt-user-images', '_search')
+
+async function downloadToLocal(remoteUrl, taskId) {
+  const dir = path.join(SEARCH_IMAGES_DIR, taskId)
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+  const filename = `${nanoid(12)}.jpg`
+  const dest = path.join(dir, filename)
+  const resp = await fetch(remoteUrl)
+  if (!resp.ok) throw new Error(`download failed: ${resp.status}`)
+  fs.writeFileSync(dest, Buffer.from(await resp.arrayBuffer()))
+  return `/aippt-gen/user-images/_search/${taskId}/${filename}`
+}
+
 async function batchReplaceImages(taskId) {
   const task = tasks.get(taskId)
   if (!task) return
@@ -332,7 +373,6 @@ async function batchReplaceImages(taskId) {
   for (const slide of task.slides) {
     if (!slide.htmlContent || slide.isSkipped) continue
 
-    // 找所有 <img alt="..."> 占位符
     const imgRegex = /<img([^>]*?)alt="([^"]+)"([^>]*?)>/gi
     let html = slide.htmlContent
     let matched = false
@@ -340,7 +380,8 @@ async function batchReplaceImages(taskId) {
 
     let m
     while ((m = imgRegex.exec(html)) !== null) {
-      const [fullMatch, , altText] = m
+      const [fullMatch, before, altText, after] = m
+      if (/src=/.test(before) || /src=/.test(after)) continue
       replacements.push({ fullMatch, altText })
     }
 
@@ -348,14 +389,15 @@ async function batchReplaceImages(taskId) {
       try {
         const imgs = await imageService.searchImages(altText, { count: 1, orientation: 'landscape' })
         if (imgs && imgs.length > 0) {
-          const url = imgs[0].url || imgs[0].regularUrl
-          if (url) {
-            html = html.replace(fullMatch, fullMatch.replace(/<img/, `<img src="${url}"`))
+          const remoteUrl = imgs[0].url || imgs[0].regularUrl
+          if (remoteUrl) {
+            const localUrl = await downloadToLocal(remoteUrl, taskId)
+            html = html.replace(fullMatch, fullMatch.replace(/<img/, `<img src="${localUrl}"`))
             matched = true
           }
         }
       } catch (e) {
-        // 搜图失败不影响整体
+        // 搜图或下载失败不影响整体
       }
     }
 

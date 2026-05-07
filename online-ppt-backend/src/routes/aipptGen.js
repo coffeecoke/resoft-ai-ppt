@@ -15,7 +15,7 @@ import {
   saveProject, getProject, listProjects, listThemes,
   readThemeHtml, ensureTailwind,
 } from '../services/aipptGenService.js'
-import { analyzeSystemPrompt, buildOutlinePrompt, buildAiEditMessages } from '../prompts/aipptGenPrompt.js'
+import { analyzeSystemPrompt, buildOutlinePrompt, buildAiEditMessages, buildSlideGenMessages } from '../prompts/aipptGenPrompt.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const router = express.Router()
@@ -24,6 +24,37 @@ const UPLOADS_DIR = path.join(__dirname, '../../data/aippt-uploads')
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true })
 
 const upload = multer({ dest: UPLOADS_DIR, limits: { fileSize: 20 * 1024 * 1024 } })
+
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '../../data')
+const USER_IMAGES_DIR = path.join(DATA_DIR, 'aippt-user-images')
+const AI_GEN_TEMP_DIR = path.join(USER_IMAGES_DIR, 'ai-gen-temp')
+const AI_GEN_DIR = path.join(USER_IMAGES_DIR, 'ai-gen')
+for (const dir of [USER_IMAGES_DIR, AI_GEN_TEMP_DIR, AI_GEN_DIR]) {
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+}
+
+function cleanupTempImages() {
+  const maxAge = 24 * 60 * 60 * 1000
+  const now = Date.now()
+  try {
+    for (const pid of fs.readdirSync(AI_GEN_TEMP_DIR)) {
+      const dir = path.join(AI_GEN_TEMP_DIR, pid)
+      if (!fs.statSync(dir).isDirectory()) continue
+      for (const file of fs.readdirSync(dir)) {
+        const fp = path.join(dir, file)
+        if (now - fs.statSync(fp).mtimeMs > maxAge) {
+          fs.unlinkSync(fp)
+          console.log('[ai-gen-temp] 清理过期图片:', fp)
+        }
+      }
+      if (fs.readdirSync(dir).length === 0) fs.rmdirSync(dir)
+    }
+  } catch (err) {
+    console.error('[ai-gen-temp] 清理失败:', err.message)
+  }
+}
+cleanupTempImages()
+setInterval(cleanupTempImages, 6 * 60 * 60 * 1000)
 
 // 获取主题列表
 router.get('/themes', (req, res) => {
@@ -169,8 +200,11 @@ router.post('/task/create', async (req, res) => {
   const { outline, themeId, illustrationMode = 'standard', model = 'ark-doubao-seed-1.6-flash', summary, options = {} } = req.body
   if (!outline || !themeId) return res.status(400).json({ success: false, message: '缺少outline或themeId' })
 
+  // 从 outline.title 补充 topic，供生成时注入到 prompt 的【PPT主题】字段
+  const enrichedOptions = { ...options, topic: options.topic || outline.title || '' }
+
   try {
-    const taskId = await createTask({ outline, themeId, illustrationMode, model, summary, options })
+    const taskId = await createTask({ outline, themeId, illustrationMode, model, summary, options: enrichedOptions })
     res.json({ success: true, data: { taskId } })
   } catch (err) {
     res.status(500).json({ success: false, message: err.message })
@@ -186,13 +220,30 @@ router.get('/task/:taskId/status', (req, res) => {
 
 // AI编辑单页
 router.post('/ai-edit', async (req, res) => {
-  const { htmlContent, instruction, model = 'ark-doubao-seed-1.6-flash' } = req.body
+  const { htmlContent, instruction, history = [], pageType = 'content', model = 'ark-doubao-seed-1.6-flash' } = req.body
   if (!htmlContent || !instruction) return res.status(400).json({ success: false, message: '参数缺失' })
 
   try {
-    const messages = buildAiEditMessages(htmlContent, instruction)
+    const messages = buildAiEditMessages(htmlContent, instruction, history, pageType)
     const result = await aiService.chat(model, messages, { maxTokens: 8192 })
     res.json({ success: true, data: { htmlContent: ensureTailwind(result) } })
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message })
+  }
+})
+
+// 单页重新生成
+router.post('/slide/regenerate', async (req, res) => {
+  const { pageType, content, themeId, topic, summary, options = {}, model = 'ark-doubao-seed-1.6-flash' } = req.body
+  if (!pageType || !themeId) return res.status(400).json({ success: false, message: '缺少 pageType 或 themeId' })
+
+  try {
+    const themeHtml = readThemeHtml(themeId, pageType)
+    if (!themeHtml) return res.status(404).json({ success: false, message: '主题模板不存在' })
+
+    const messages = buildSlideGenMessages(pageType, content || {}, ensureTailwind(themeHtml), topic || '', summary || '', options)
+    const html = await aiService.chat(model, messages, { maxTokens: 8192, temperature: 0.7 })
+    res.json({ success: true, data: { htmlContent: ensureTailwind(html) } })
   } catch (err) {
     res.status(500).json({ success: false, message: err.message })
   }
@@ -229,6 +280,13 @@ router.post('/project', (req, res) => {
 router.get('/project/:id', (req, res) => {
   const project = getProject(req.params.id)
   if (!project) return res.status(404).json({ success: false, message: '项目不存在' })
+  // 旧数据可能存了错误的 <link tailwind.js>，读取时统一修正，不改磁盘
+  if (project.slides) {
+    project.slides = project.slides.map(s => ({
+      ...s,
+      htmlContent: s.htmlContent ? ensureTailwind(s.htmlContent) : s.htmlContent,
+    }))
+  }
   res.json({ success: true, data: project })
 })
 
@@ -246,6 +304,122 @@ router.get('/images/search', async (req, res) => {
   } catch (err) {
     res.status(500).json({ success: false, message: err.message })
   }
+})
+
+// 查询图像生成服务支持的模型列表
+router.get('/image/models', async (req, res) => {
+  const apiKey = process.env.IMAGE_GEN_API_KEY
+  const baseUrl = process.env.IMAGE_GEN_BASE_URL
+  try {
+    const resp = await fetch(`${baseUrl}/v1/models`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    })
+    const json = await resp.json()
+    res.json({ success: true, data: json })
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message })
+  }
+})
+
+// 智能生图（生成后下载到临时目录）
+router.post('/image/generate', async (req, res) => {
+  const { prompt, projectId, model = 'cogview-3-flash', size = '1024x1024', n = 1 } = req.body
+  if (!prompt) return res.status(400).json({ success: false, message: '缺少 prompt' })
+  if (!projectId) return res.status(400).json({ success: false, message: '缺少 projectId' })
+
+  const apiKey = process.env.IMAGE_GEN_API_KEY
+  const baseUrl = process.env.IMAGE_GEN_BASE_URL
+  if (!apiKey || !baseUrl) return res.status(500).json({ success: false, message: '图像生成服务未配置' })
+
+  try {
+    const resp = await fetch(`${baseUrl}/images/generations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model, prompt, n, size }),
+    })
+    const json = await resp.json()
+    if (!resp.ok) return res.status(500).json({ success: false, message: json.error?.message || json.msg || '生图失败' })
+
+    const remoteUrls = (json.data || []).map(item => item.url).filter(Boolean)
+    const tempDir = path.join(AI_GEN_TEMP_DIR, projectId)
+    fs.mkdirSync(tempDir, { recursive: true })
+
+    const localUrls = await Promise.all(remoteUrls.map(async (remoteUrl) => {
+      const filename = `${nanoid(12)}.jpg`
+      const imgResp = await fetch(remoteUrl)
+      const buffer = Buffer.from(await imgResp.arrayBuffer())
+      fs.writeFileSync(path.join(tempDir, filename), buffer)
+      return `/aippt-gen/user-images/ai-gen-temp/${projectId}/${filename}`
+    }))
+
+    res.json({ success: true, data: { urls: localUrls } })
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message })
+  }
+})
+
+// 使用 AI 生成图片：从临时目录移到正式目录
+router.post('/image/use', (req, res) => {
+  const { url, projectId } = req.body
+  if (!url || !projectId) return res.status(400).json({ success: false, message: '参数缺失' })
+
+  const filename = path.basename(url)
+  const tempPath = path.join(AI_GEN_TEMP_DIR, projectId, filename)
+  const destDir = path.join(AI_GEN_DIR, projectId)
+  fs.mkdirSync(destDir, { recursive: true })
+  const destPath = path.join(destDir, filename)
+
+  if (fs.existsSync(tempPath)) {
+    try { fs.renameSync(tempPath, destPath) } catch {
+      fs.copyFileSync(tempPath, destPath)
+      fs.unlinkSync(tempPath)
+    }
+    return res.json({ success: true, data: { url: `/aippt-gen/user-images/ai-gen/${projectId}/${filename}` } })
+  }
+  res.json({ success: true, data: { url } })
+})
+
+// 用户素材图片上传
+router.post('/project/:projectId/images', (req, res) => {
+  console.log('[upload-images] ===== 收到请求 =====')
+  console.log('[upload-images] content-type:', req.headers['content-type'])
+  console.log('[upload-images] content-length:', req.headers['content-length'])
+  console.log('[upload-images] projectId:', req.params.projectId)
+
+  upload.any()(req, res, (err) => {
+    if (err) {
+      console.error('[upload-images] multer error:', err)
+      return res.status(500).json({ success: false, message: err.message })
+    }
+    console.log('[upload-images] req.files:', JSON.stringify(req.files?.map(f => ({ field: f.fieldname, name: f.originalname, size: f.size }))))
+    if (!req.files?.length) return res.status(400).json({ success: false, message: '未上传图片' })
+    const { projectId } = req.params
+    const dir = path.join(USER_IMAGES_DIR, projectId)
+    fs.mkdirSync(dir, { recursive: true })
+    const urls = []
+    for (const file of req.files) {
+      const ext = path.extname(file.originalname) || '.jpg'
+      const filename = `${nanoid(12)}${ext}`
+      const dest = path.join(dir, filename)
+      try {
+        fs.renameSync(file.path, dest)
+      } catch {
+        fs.copyFileSync(file.path, dest)
+        fs.unlinkSync(file.path)
+      }
+      urls.push(`/aippt-gen/user-images/${projectId}/${filename}`)
+    }
+    res.json({ success: true, data: { urls } })
+  })
+})
+
+// 获取项目已上传的素材图片列表
+router.get('/project/:projectId/images', (req, res) => {
+  const dir = path.join(USER_IMAGES_DIR, req.params.projectId)
+  if (!fs.existsSync(dir)) return res.json({ success: true, data: { urls: [] } })
+  const files = fs.readdirSync(dir).filter(f => /\.(jpe?g|png|webp|gif)$/i.test(f))
+  const urls = files.map(f => `/aippt-gen/user-images/${req.params.projectId}/${f}`)
+  res.json({ success: true, data: { urls } })
 })
 
 // PPTX导出（预留）

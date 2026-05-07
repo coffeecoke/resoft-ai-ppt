@@ -19,8 +19,6 @@
         </el-tooltip>
       </div>
       <div class="topbar-right">
-        <el-button size="small" plain @click="rightPanel = rightPanel === 'ai' ? '' : 'ai'">AI写辅助</el-button>
-        <el-button size="small" plain @click="rightPanel = rightPanel === 'material' ? '' : 'material'">素材</el-button>
         <el-button size="small" type="primary" :loading="saving" @click="saveChanges">保存</el-button>
         <el-button size="small" disabled>导出PPTX</el-button>
       </div>
@@ -105,70 +103,245 @@
         </div>
       </div>
 
-      <!-- 右侧面板 -->
-      <div v-if="rightPanel" class="right-panel">
-        <!-- AI写辅助面板 -->
-        <template v-if="rightPanel === 'ai'">
-          <div class="panel-header">
-            <span>AI写辅助</span>
-            <el-icon class="close-icon" @click="rightPanel = ''"><Close /></el-icon>
-          </div>
-          <div class="ai-chat-body" ref="chatBodyRef">
-            <div v-for="(msg, i) in chatHistory" :key="i" class="chat-msg" :class="msg.role">
-              <div class="msg-bubble">{{ msg.content }}</div>
-            </div>
-            <div v-if="aiEditing" class="chat-msg assistant">
-              <div class="msg-bubble typing">AI 正在修改...</div>
-            </div>
-          </div>
-          <div class="ai-chat-input">
-            <el-input
-              v-model="aiInstruction"
-              placeholder="输入修改要求，如：把标题改得更有吸引力"
-              type="textarea"
-              :rows="2"
-              @keydown.ctrl.enter="sendAiEdit"
-            />
-            <el-button type="primary" size="small" :loading="aiEditing" @click="sendAiEdit">发送</el-button>
-          </div>
-        </template>
-
-        <!-- 素材面板 -->
-        <template v-if="rightPanel === 'material'">
-          <div class="panel-header">
-            <span>素材</span>
-            <el-icon class="close-icon" @click="rightPanel = ''"><Close /></el-icon>
-          </div>
-          <div class="material-tabs">
-            <span
-              v-for="tab in materialTabs"
-              :key="tab.key"
-              class="mat-tab"
-              :class="{ active: materialTab === tab.key }"
-              @click="materialTab = tab.key"
-            >{{ tab.label }}</span>
-          </div>
-
-          <!-- 图库搜图 -->
-          <template v-if="materialTab === 'search'">
-            <div class="search-bar">
-              <el-input v-model="imageKeyword" placeholder="搜索图片" @keydown.enter="searchImages">
-                <template #suffix><el-icon @click="searchImages"><Search /></el-icon></template>
-              </el-input>
-            </div>
-            <div class="image-grid">
-              <div
-                v-for="img in imageResults"
-                :key="img.id"
-                class="img-card"
-                @click="replaceImage(img.url || img.regularUrl)"
-              >
-                <img :src="img.smallUrl || img.url" loading="lazy" />
+      <!-- 右侧区域：图标条 + 弹出面板 -->
+      <div class="right-sidebar">
+        <!-- 滑出面板 -->
+        <transition name="slide-panel">
+          <div v-if="rightPanel" class="right-panel">
+            <!-- AI智能编辑面板 -->
+            <template v-if="rightPanel === 'ai'">
+              <div class="panel-header">
+                <div class="panel-title">
+                  <span>AI智能编辑</span>
+                  <span class="beta-badge">Beta</span>
+                </div>
+                <span class="close-btn" @click="rightPanel = ''">
+                  <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M4.47 3.47a.75.75 0 00-1.06 1.06L6.94 8l-3.53 3.47a.75.75 0 001.06 1.06L8 9.06l3.47 3.47a.75.75 0 001.06-1.06L9.06 8l3.47-3.47a.75.75 0 00-1.06-1.06L8 6.94 4.47 3.47z"/></svg>
+                </span>
               </div>
-              <div v-if="imageLoading" class="img-loading">加载中...</div>
+              <div class="page-tab">第 {{ currentIndex + 1 }} 页</div>
+              <div class="ai-chat-body" ref="chatBodyRef">
+                <!-- 欢迎区 + 快捷按钮：始终显示 -->
+                <div class="preset-chat-box">
+                  <div class="ai-bubble-wrap">
+                    <div class="ai-bubble-msg">您好！我是您的 AI 编辑助手，在下面输入任意指令，我可以理解您的需求，智能修改当页PPT内容。我仍然处于 Beta 测试阶段，所以请对我耐心一点。</div>
+                  </div>
+                  <div class="preset-actions-wrap">
+                    <span class="preset-actions-label">以下是我可以提供的一些帮助：</span>
+                    <div class="preset-actions">
+                      <div
+                        v-for="(action, i) in quickActions"
+                        :key="action"
+                        class="preset-option-btn"
+                        :style="{ animationDelay: i * 0.1 + 's' }"
+                        :class="{ disabled: aiEditing }"
+                        @click="!aiEditing && sendQuickAction(action)"
+                      >{{ action }}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 对话历史：在快捷按钮下方增长 -->
+                <div class="chat-history-container">
+                  <div v-for="(msg, i) in currentChatHistory" :key="i" class="chat-message-item">
+                    <div v-if="msg.role === 'user'" class="user-bubble-wrap">
+                      <div class="user-bubble-msg">{{ msg.content }}</div>
+                    </div>
+                    <div v-else class="ai-bubble-wrap">
+                      <div class="ai-bubble-msg">{{ msg.content }}</div>
+                    </div>
+                  </div>
+                  <div v-if="aiEditing" class="chat-message-item">
+                    <div class="ai-bubble-wrap">
+                      <div class="ai-bubble-msg typing">AI 正在处理...</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="ai-input-wrap">
+                <div class="ai-chat-input">
+                  <el-input
+                    v-model="aiInstruction"
+                    placeholder="您也可以输入想要修改的内容进行自定义修改"
+                    type="textarea"
+                    :rows="4"
+                    @keydown.ctrl.enter="sendAiEdit"
+                  />
+                  <button class="send-btn" :disabled="aiEditing || !aiInstruction.trim()" @click="sendAiEdit">
+                    <svg v-if="!aiEditing" viewBox="0 0 20 20" width="16" height="16" fill="currentColor"><path d="M3.105 2.289a.75.75 0 00-.826.95l1.903 6.557H13.5a.75.75 0 010 1.5H4.182l-1.903 6.557a.75.75 0 00.826.95 28.896 28.896 0 0015.293-7.154.75.75 0 000-1.114A28.897 28.897 0 003.105 2.289z"/></svg>
+                    <svg v-else viewBox="0 0 20 20" width="16" height="16" fill="currentColor" class="spin"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="2" fill="none" stroke-dasharray="22" stroke-dashoffset="8"/></svg>
+                  </button>
+                </div>
+              </div>
+            </template>
+
+            <!-- 素材面板 -->
+            <template v-if="rightPanel === 'material'">
+              <div class="panel-header">
+                <div class="panel-title"><span>素材</span></div>
+                <span class="close-btn" @click="rightPanel = ''">
+                  <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M4.47 3.47a.75.75 0 00-1.06 1.06L6.94 8l-3.53 3.47a.75.75 0 001.06 1.06L8 9.06l3.47 3.47a.75.75 0 001.06-1.06L9.06 8l3.47-3.47a.75.75 0 00-1.06-1.06L8 6.94 4.47 3.47z"/></svg>
+                </span>
+              </div>
+
+              <!-- 三个 tab -->
+              <div class="mat-tab-bar">
+                <span
+                  v-for="tab in materialTabs"
+                  :key="tab.key"
+                  class="mat-tab"
+                  :class="{ active: materialTab === tab.key }"
+                  @click="materialTab = tab.key"
+                >{{ tab.label }}</span>
+              </div>
+
+              <!-- 智能生图 -->
+              <template v-if="materialTab === 'aiGen'">
+                <div class="mat-body">
+                  <div class="gen-input-wrap">
+                    <el-input
+                      v-model="genPrompt"
+                      type="textarea"
+                      :rows="3"
+                      resize="none"
+                      class="gen-prompt-input"
+                      placeholder="输入图片描述，如：银行数据中心，写实风格"
+                    />
+                  </div>
+                  <div class="gen-controls">
+                    <el-select v-model="genStyle" size="small" style="flex:1">
+                      <el-option label="标准配图" value="标准配图" />
+                      <el-option label="写实风格" value="写实风格" />
+                      <el-option label="插画风格" value="插画风格" />
+                      <el-option label="扁平风格" value="扁平风格" />
+                    </el-select>
+                    <el-button type="primary" size="small" :loading="genLoading" @click="generateAiImage">
+                      立即生成 ✨
+                    </el-button>
+                  </div>
+                  <div class="gen-preview">
+                    <div v-if="generatedImages.length" class="gen-img-card" @click="useAiImage(generatedImages[0])">
+                      <img :src="generatedImages[0]" />
+                    </div>
+                    <div v-else class="gen-empty">
+                      <svg viewBox="0 0 40 40" width="36" height="36" fill="none" stroke="#d1d5db" stroke-width="1.5"><rect x="4" y="8" width="32" height="24" rx="3"/><circle cx="14" cy="17" r="3"/><path d="M4 28l9-8 6 6 5-5 8 7"/></svg>
+                      <span>在上方输入描述，AI将为您生成图片</span>
+                    </div>
+                  </div>
+                  <div class="gen-history-section">
+                    <div class="gen-history-title">历史记录</div>
+                    <div v-if="genHistory.length === 0" class="gen-history-empty">暂无历史记录</div>
+                    <div v-else class="gen-history-list">
+                      <span
+                        v-for="(h, i) in genHistory"
+                        :key="i"
+                        class="gen-history-tag"
+                        @click="genPrompt = h; generateAiImage()"
+                      >{{ h }}</span>
+                    </div>
+                  </div>
+                </div>
+              </template>
+
+              <!-- 图库搜图 -->
+              <template v-if="materialTab === 'search'">
+                <div class="search-bar">
+                  <el-input v-model="imageKeyword" placeholder="搜索图片关键词" @keydown.enter="searchImages()">
+                    <template #suffix>
+                      <svg viewBox="0 0 20 20" width="14" height="14" fill="#9ca3af" style="cursor:pointer" @click="searchImages()"><path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd"/></svg>
+                    </template>
+                  </el-input>
+                  <div class="orient-btns">
+                    <span
+                      v-for="o in [{ k: 'all', l: '全部' }, { k: 'landscape', l: '横向' }, { k: 'portrait', l: '纵向' }, { k: 'squarish', l: '方形' }]"
+                      :key="o.k"
+                      class="orient-btn"
+                      :class="{ active: imageOrientation === o.k }"
+                      @click="setImageOrientation(o.k as any)"
+                    >{{ o.l }}</span>
+                  </div>
+                </div>
+
+                <div v-if="!imageResults.length && !imageLoading" class="search-empty">
+                  <svg viewBox="0 0 40 40" width="36" height="36" fill="none" stroke="#d1d5db" stroke-width="1.5"><rect x="4" y="8" width="32" height="24" rx="3"/><circle cx="14" cy="17" r="3"/><path d="M4 28l9-8 6 6 5-5 8 7"/></svg>
+                  <span>输入关键词搜索图片</span>
+                </div>
+
+                <div v-else class="mat-scroll-area">
+                  <div class="image-grid">
+                    <div
+                      v-for="img in imageResults"
+                      :key="img.id"
+                      class="img-card"
+                      @click="replaceImage(img.src)"
+                    >
+                      <img :src="img.src" loading="lazy" />
+                    </div>
+                  </div>
+                  <div class="load-more-wrap">
+                    <div v-if="imageLoading" class="img-loading">加载中...</div>
+                    <button v-else-if="imageHasMore" class="load-more-btn" @click="loadMoreImages">加载更多</button>
+                    <span v-else class="no-more-text">没有更多了</span>
+                  </div>
+                </div>
+              </template>
+
+              <!-- 我的素材 -->
+              <template v-if="materialTab === 'mine'">
+                <div class="mat-body">
+                  <div class="mine-section">
+                    <div class="mine-section-title">
+                      <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M2 3.5A1.5 1.5 0 013.5 2h9A1.5 1.5 0 0114 3.5v9a1.5 1.5 0 01-1.5 1.5h-9A1.5 1.5 0 012 12.5v-9zm1.5 0v9h9v-9h-9z"/><path d="M5 7.5a.5.5 0 01.5-.5h5a.5.5 0 010 1h-5a.5.5 0 01-.5-.5zM5 10a.5.5 0 01.5-.5h3a.5.5 0 010 1h-3A.5.5 0 015 10z"/></svg>
+                      本地图片
+                    </div>
+                    <!-- 本地上传区域 -->
+                    <div v-if="localImages.length === 0" class="upload-zone" @click="triggerFileInput">
+                      <svg viewBox="0 0 40 40" width="28" height="28" fill="none" stroke="#9ca3af" stroke-width="1.5"><path d="M20 26V14M14 20l6-6 6 6"/><path d="M8 28a12 12 0 010-16 12 12 0 0124 0 12 12 0 010 16"/></svg>
+                      <span class="upload-text">点击上传本地图片</span>
+                      <span class="upload-hint">支持 JPG、PNG 格式</span>
+                    </div>
+                    <div v-else class="local-imgs-grid">
+                      <div class="upload-add-btn" @click="triggerFileInput">
+                        <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="#9ca3af" stroke-width="1.5"><path d="M10 4v12M4 10h12"/></svg>
+                      </div>
+                      <div
+                        v-for="(src, i) in localImages"
+                        :key="i"
+                        class="img-card"
+                        @click="replaceImage(src)"
+                      >
+                        <img :src="src" />
+                      </div>
+                    </div>
+                    <input ref="fileInputRef" type="file" accept="image/jpeg,image/png,image/webp" multiple style="display:none" @change="onFileChange" />
+                  </div>
+                  <div class="mine-section" style="margin-top:16px">
+                    <div class="mine-section-title">
+                      <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M2 3.5A1.5 1.5 0 013.5 2h9A1.5 1.5 0 0114 3.5v9a1.5 1.5 0 01-1.5 1.5h-9A1.5 1.5 0 012 12.5v-9zm1.5 0v9h9v-9h-9z"/></svg>
+                      文档中的图片
+                    </div>
+                    <div class="mine-empty">暂无文档图片</div>
+                  </div>
+                </div>
+              </template>
+            </template>
+          </div>
+        </transition>
+
+        <!-- 常驻图标条 -->
+        <div class="icon-strip">
+          <div class="strip-btn" :class="{ active: rightPanel === 'ai' }" @click="rightPanel = rightPanel === 'ai' ? '' : 'ai'">
+            <svg viewBox="0 0 20 20" width="20" height="20" fill="currentColor"><path d="M9.25 3.75a.75.75 0 011.5 0V5h1.5A2.25 2.25 0 0114.5 7.25v.042a8.5 8.5 0 012.03 1.28.75.75 0 01-.96 1.152 7 7 0 00-1.07-.732v4.258a2.25 2.25 0 01-2.25 2.25h-4.5A2.25 2.25 0 015.5 13V8.25a2.25 2.25 0 012.25-2.25H9.25V3.75zM7.75 7.5A.75.75 0 007 8.25V13c0 .414.336.75.75.75h4.5A.75.75 0 0013 13V8.25a.75.75 0 00-.75-.75h-4.5z"/><path d="M16.78 3.22a.75.75 0 010 1.06l-1.5 1.5a.75.75 0 11-1.06-1.06l1.5-1.5a.75.75 0 011.06 0z"/></svg>
+            <span>AI编辑</span>
+          </div>
+          <el-tooltip :content="selectedIsImage ? '素材' : '请先选择幻灯片中的图片'" placement="left">
+            <div class="strip-btn" :class="{ active: rightPanel === 'material', dim: !selectedIsImage }" @click="openMaterial">
+              <svg viewBox="0 0 20 20" width="20" height="20" fill="currentColor"><path d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159M14.25 12.75l1.409-1.409a2.25 2.25 0 013.182 0l.909.909M14.25 7.5a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM3.75 19.5h12.5A2.25 2.25 0 0018.5 17.25V5.25A2.25 2.25 0 0016.25 3H3.75A2.25 2.25 0 001.5 5.25v12A2.25 2.25 0 003.75 19.5z"/></svg>
+              <span>素材</span>
             </div>
-          </template>
-        </template>
+          </el-tooltip>
+        </div>
       </div>
     </div>
   </div>
@@ -180,6 +353,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Picture, Close, Search } from '@element-plus/icons-vue'
 import { aipptGenApi } from '@/services/aipptGenService'
+import api, { authFetch } from '@/services'
 import StyleToolbar from './components/StyleToolbar.vue'
 import { useSlideEditor, modifyHtml, getElementPropFromHtml, type UndoAction } from './composables/useSlideEditor'
 
@@ -198,16 +372,41 @@ const genProgress = ref({ total: 0, completed: 0 })
 
 const rightPanel = ref<'' | 'ai' | 'material'>('')
 const materialTab = ref('search')
-const materialTabs = [{ key: 'search', label: '图库搜图' }]
+const materialTabs = [
+  { key: 'aiGen', label: '智能生图' },
+  { key: 'search', label: '图库搜图' },
+  { key: 'mine', label: '我的素材' },
+]
 
 const aiInstruction = ref('')
 const aiEditing = ref(false)
-const chatHistory = ref<{ role: string; content: string }[]>([])
+type ChatMsg = { role: 'user' | 'assistant'; content: string }
+const chatHistoryMap = ref<Record<number, ChatMsg[]>>({})
+const currentChatHistory = computed(() => chatHistoryMap.value[currentIndex.value] ?? [])
 const chatBodyRef = ref<HTMLElement>()
+const quickActions = ['重新生成该页', '内容超出画面了', '丰富页面布局内容']
 
+// 图库搜图
 const imageKeyword = ref('')
-const imageResults = ref<any[]>([])
+const imageResults = ref<{ id: number; src: string; width: number; height: number }[]>([])
 const imageLoading = ref(false)
+const imageHasMore = ref(false)
+const imagePage = ref(1)
+const imageOrientation = ref<'landscape' | 'portrait' | 'squarish' | 'all'>('all')
+
+// 智能生图
+const genPrompt = ref('')
+const genStyle = ref('标准配图')
+const genLoading = ref(false)
+const generatedImages = ref<string[]>([])
+const genHistory = ref<string[]>([])
+
+// 我的素材
+const fileInputRef = ref<HTMLInputElement>()
+const localImages = ref<string[]>([])
+
+// 当前选中的是图片元素
+const selectedIsImage = computed(() => selectedElementInfo.value?.tagName === 'IMG')
 
 const saving = ref(false)
 const slidePreviewRef = ref<HTMLElement>()
@@ -287,11 +486,24 @@ onMounted(async () => {
   try {
     const res = await aipptGenApi.getProject(projectId)
     project.value = (res as any).data
+    // sessionStorage 里的 summary 优先补入（首次进入编辑页时还没保存过）
+    if (!project.value?.summary) {
+      const storedSummary = sessionStorage.getItem('aippt_summary')
+      if (storedSummary && project.value) project.value.summary = storedSummary
+    }
     if (project.value?.slides?.length) {
       slides.value = project.value.slides
       taskStatus.value = 'completed'
       syncIframeSrcdoc()
     }
+  } catch {}
+
+  // 加载已上传的素材图片
+  try {
+    const SERVER_URL = import.meta.env.VITE_API_BASE_URL || '/api'
+    const imgRes = await aipptGenApi.listUserImages(projectId) as any
+    const urls: string[] = imgRes.data?.urls || []
+    localImages.value = urls.map((url: string) => `${SERVER_URL}${url}`)
   } catch {}
 
   updateScale()
@@ -306,7 +518,8 @@ onMounted(async () => {
   }
   setupObserver()
   // 只在切换页面时重载 iframe，编辑操作通过 postMessage 无感更新
-  watch(currentIndex, () => { setupObserver(); syncIframeSrcdoc() })
+  watch(currentIndex, () => { setupObserver(); syncIframeSrcdoc(); aiInstruction.value = '' })
+
 
   const hasLoading = slides.value.some(s => s.pptLoading)
   if (taskId.value && (slides.value.length === 0 || hasLoading)) {
@@ -403,6 +616,7 @@ async function saveSlides() {
       topic: project.value?.topic,
       themeId: project.value?.themeId,
       outline: project.value?.outline,
+      summary: project.value?.summary,
       slides: slides.value,
     })
   } catch {}
@@ -425,6 +639,12 @@ function handleIframeMessage(e: MessageEvent) {
   if (msg.type === 'elementClick') {
     selectedElementInfo.value = msg.data || null
     selectedRect.value = msg.data?.boundingRect || null
+    // 点击图片元素时自动打开素材面板
+    if (msg.data?.tagName === 'IMG') {
+      rightPanel.value = 'material'
+    } else if (rightPanel.value === 'material') {
+      rightPanel.value = ''
+    }
   } else if (msg.type === 'dragEnd') {
     const { xpath, transform } = msg.data
     if (!currentSlide.value?.htmlContent || !xpath) return
@@ -502,11 +722,8 @@ function applyActionToIframe(action: UndoAction, direction: 'undo' | 'redo') {
       styleValue: direction === 'undo' ? action.oldValue : action.newValue,
     })
   } else {
-    // 整页替换（AI编辑等）
-    sendMessageToIframe(slideIframe.value!, {
-      type: 'SET_HTML',
-      content: direction === 'undo' ? action.oldHtml : action.newHtml,
-    })
+    // 整页替换（AI编辑等）：用 syncIframeSrcdoc 避免 body 属性不更新的 bug
+    syncIframeSrcdoc()
   }
 }
 
@@ -541,43 +758,118 @@ function onKeyDown(e: KeyboardEvent) {
   }
 }
 
+function pushChat(role: 'user' | 'assistant', content: string) {
+  const idx = currentIndex.value
+  if (!chatHistoryMap.value[idx]) chatHistoryMap.value[idx] = []
+  chatHistoryMap.value[idx].push({ role, content })
+  nextTick(() => {
+    if (chatBodyRef.value) chatBodyRef.value.scrollTop = chatBodyRef.value.scrollHeight
+  })
+}
+
+function sendQuickAction(text: string) {
+  if (text === '重新生成该页') {
+    regeneratePage()
+  } else {
+    aiInstruction.value = text
+    sendAiEdit()
+  }
+}
+
 async function sendAiEdit() {
   if (!aiInstruction.value.trim() || !currentSlide.value?.htmlContent) return
   const instruction = aiInstruction.value.trim()
-  chatHistory.value.push({ role: 'user', content: instruction })
+  // 取本页历史（push 之前），过滤掉"重新生成"这类非编辑指令
+  const history = (chatHistoryMap.value[currentIndex.value] || [])
+    .filter(m => m.content !== '重新生成该页' && !m.content.startsWith('好的，已为您重新生成'))
+  pushChat('user', instruction)
   aiInstruction.value = ''
   aiEditing.value = true
 
   try {
-    const res = await aipptGenApi.aiEdit(currentSlide.value.htmlContent, instruction)
+    const pageType = currentSlide.value.pageType || project.value?.outline?.pages?.[currentIndex.value]?.type || 'content'
+    const res = await aipptGenApi.aiEdit(currentSlide.value.htmlContent, instruction, undefined, history, pageType)
     const newHtml = (res as any).data?.htmlContent
     if (newHtml) {
       commitHtmlEdit(slides.value, currentIndex.value, currentSlide.value!.htmlContent, newHtml)
       dirtySlideIndexes.value.add(currentIndex.value)
-      sendMessageToIframe(slideIframe.value!, { type: 'SET_HTML', content: newHtml })
-      chatHistory.value.push({ role: 'assistant', content: '已完成修改 ✓' })
-      nextTick(() => {
-        if (chatBodyRef.value) chatBodyRef.value.scrollTop = chatBodyRef.value.scrollHeight
-      })
+      syncIframeSrcdoc()
+      pushChat('assistant', '已完成修改 ✓')
     }
   } catch (err: any) {
-    chatHistory.value.push({ role: 'assistant', content: '修改失败：' + err.message })
+    pushChat('assistant', '修改失败：' + err.message)
   } finally {
     aiEditing.value = false
   }
 }
 
-async function searchImages() {
-  if (!imageKeyword.value.trim()) return
-  imageLoading.value = true
+async function regeneratePage() {
+  if (!currentSlide.value || aiEditing.value) return
+  const outline = project.value?.outline
+  const pageData = outline?.pages?.[currentIndex.value]
+  const pageType = pageData?.type || currentSlide.value.type || 'content'
+  const content = pageData ? { title: pageData.title, description: pageData.description } : {}
+
+  pushChat('user', '重新生成该页')
+  aiEditing.value = true
+
   try {
-    const res = await aipptGenApi.searchImages(imageKeyword.value)
-    imageResults.value = (res as any).data || []
+    const res = await aipptGenApi.regenerateSlide({
+      pageType,
+      content,
+      themeId: project.value?.themeId,
+      topic: project.value?.topic,
+      summary: project.value?.summary,
+      options: project.value?.options,
+    }) as any
+    const newHtml = res.data?.htmlContent
+    if (newHtml) {
+      commitHtmlEdit(slides.value, currentIndex.value, currentSlide.value!.htmlContent, newHtml)
+      dirtySlideIndexes.value.add(currentIndex.value)
+      syncIframeSrcdoc()
+      pushChat('assistant', '好的，已为您重新生成该页 ✓')
+    }
+  } catch (err: any) {
+    pushChat('assistant', '重新生成失败：' + err.message)
+  } finally {
+    aiEditing.value = false
+  }
+}
+
+async function searchImages(reset = true) {
+  if (!imageKeyword.value.trim()) return
+  if (imageLoading.value) return
+  imageLoading.value = true
+  if (reset) {
+    imagePage.value = 1
+    imageResults.value = []
+  }
+  try {
+    const params: any = { keyword: imageKeyword.value, count: 6, page: imagePage.value }
+    if (imageOrientation.value !== 'all') params.orientation = imageOrientation.value
+    const res = await api.searchImages(params)
+    const data = res?.data
+    const newImgs = (data?.images || []).map((img: any) => ({
+      id: img.id, src: img.src, width: img.width, height: img.height,
+    }))
+    imageResults.value = reset ? newImgs : [...imageResults.value, ...newImgs]
+    imageHasMore.value = data?.hasMore !== false && newImgs.length > 0
   } catch (err: any) {
     ElMessage.error('搜图失败：' + err.message)
   } finally {
     imageLoading.value = false
   }
+}
+
+async function loadMoreImages() {
+  if (!imageHasMore.value || imageLoading.value) return
+  imagePage.value++
+  await searchImages(false)
+}
+
+function setImageOrientation(val: typeof imageOrientation.value) {
+  imageOrientation.value = val
+  if (imageKeyword.value.trim()) searchImages()
 }
 
 function replaceImage(url: string) {
@@ -595,8 +887,69 @@ function replaceImage(url: string) {
   }
   commitHtmlEdit(slides.value, currentIndex.value, oldHtml, newHtml)
   dirtySlideIndexes.value.add(currentIndex.value)
-  sendMessageToIframe(slideIframe.value!, { type: 'SET_HTML', content: newHtml })
+  syncIframeSrcdoc()
   ElMessage.success('图片已替换')
+}
+
+async function generateAiImage() {
+  if (!genPrompt.value.trim()) return
+  genLoading.value = true
+  try {
+    const styleMap: Record<string, string> = {
+      '标准配图': '',
+      '写实风格': '，写实摄影风格',
+      '插画风格': '，插画风格，矢量图',
+      '扁平风格': '，扁平设计风格，简洁',
+    }
+    const fullPrompt = genPrompt.value.trim() + (styleMap[genStyle.value] || '')
+    const res = await aipptGenApi.generateImage(fullPrompt, projectId) as any
+    const urls: string[] = res.data?.urls || []
+    generatedImages.value = urls
+    if (urls.length) genHistory.value.unshift(genPrompt.value)
+  } catch (err: any) {
+    ElMessage.error('生成失败：' + err.message)
+  } finally {
+    genLoading.value = false
+  }
+}
+
+function triggerFileInput() {
+  fileInputRef.value?.click()
+}
+
+async function onFileChange(e: Event) {
+  const input = e.target as HTMLInputElement
+  const fileArray = Array.from(input.files || [])
+  input.value = ''
+  if (!fileArray.length) return
+  try {
+    const form = new FormData()
+    fileArray.forEach(f => form.append('images', f))
+    const res = await authFetch(`/aippt-gen/project/${projectId}/images`, { method: 'POST', body: form })
+    const json = await res.json()
+    if (!json.success) throw new Error(json.message)
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || ''
+    ;(json.data?.urls as string[]).forEach(url => localImages.value.unshift(`${baseUrl}${url}`))
+  } catch {
+    ElMessage.error('图片上传失败，请重试')
+  }
+}
+
+async function useAiImage(tempUrl: string) {
+  try {
+    const res = await aipptGenApi.useAiImage(tempUrl, projectId) as any
+    replaceImage(res.data?.url || tempUrl)
+  } catch {
+    replaceImage(tempUrl)
+  }
+}
+
+function openMaterial() {
+  if (!selectedIsImage.value) {
+    ElMessage.info('请先在幻灯片中点击选择一张图片')
+    return
+  }
+  rightPanel.value = rightPanel.value === 'material' ? '' : 'material'
 }
 
 async function saveChanges() {
@@ -834,93 +1187,444 @@ async function saveChanges() {
 .notes-label { font-size: 12px; color: #9ca3af; margin-bottom: 6px; }
 .notes-input { :deep(.el-textarea__inner) { font-size: 13px; resize: none; border: none; padding: 0; box-shadow: none; } }
 
-// 右侧面板
+// 右侧区域整体
+.right-sidebar {
+  display: flex;
+  flex-shrink: 0;
+  height: 100%;
+}
+
+// 常驻图标条
+.icon-strip {
+  width: 52px;
+  background: #fff;
+  border-left: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 12px;
+  gap: 4px;
+}
+
+.strip-btn {
+  width: 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 4px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #6b7280;
+  font-size: 10px;
+  transition: all 0.15s;
+  user-select: none;
+
+  svg { flex-shrink: 0; }
+
+  &:hover { background: #f3f4f6; color: #374151; }
+  &.active { background: #ede9fe; color: #6366f1; }
+}
+
+// 滑出面板
 .right-panel {
   width: 300px;
   background: #fff;
   border-left: 1px solid #e5e7eb;
   display: flex;
   flex-direction: column;
-  flex-shrink: 0;
+  overflow: hidden;
 }
+
+.slide-panel-enter-active,
+.slide-panel-leave-active { transition: width 0.25s ease, opacity 0.2s ease; }
+.slide-panel-enter-from,
+.slide-panel-leave-to { width: 0; opacity: 0; }
+.slide-panel-enter-to,
+.slide-panel-leave-from { width: 300px; opacity: 1; }
 
 .panel-header {
   height: 44px;
-  padding: 0 16px;
+  padding: 0 14px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid #e5e7eb;
+  flex-shrink: 0;
+}
+.panel-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+}
+.beta-badge {
+  font-size: 10px;
   font-weight: 500;
-  color: #374151;
-  .close-icon { cursor: pointer; color: #9ca3af; &:hover { color: #374151; } }
+  color: #6366f1;
+  background: #ede9fe;
+  padding: 1px 6px;
+  border-radius: 10px;
+}
+.close-btn {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #9ca3af;
+  &:hover { background: #f3f4f6; color: #374151; }
+}
+
+.page-tab {
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #6366f1;
+  border-bottom: 1px solid #f3f4f6;
+  flex-shrink: 0;
 }
 
 // AI 面板
 .ai-chat-body {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding: 12px;
+  padding: 14px;
   display: flex;
   flex-direction: column;
   gap: 10px;
-}
-.chat-msg {
-  &.user .msg-bubble { background: #6366f1; color: #fff; margin-left: auto; }
-  &.assistant .msg-bubble { background: #f3f4f6; color: #374151; }
-}
-.msg-bubble {
-  display: inline-block;
-  max-width: 220px;
-  padding: 8px 12px;
-  border-radius: 10px;
-  font-size: 13px;
-  line-height: 1.5;
-  &.typing { color: #9ca3af; }
-}
-.ai-chat-input {
-  padding: 10px 12px;
-  border-top: 1px solid #e5e7eb;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  :deep(.el-textarea__inner) { font-size: 13px; resize: none; }
+
+  &::-webkit-scrollbar { width: 4px; }
+  &::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 2px; }
 }
 
-// 素材面板
-.material-tabs {
-  display: flex;
+// preset 区
+.preset-chat-box { display: flex; flex-direction: column; gap: 10px; }
+.preset-actions-wrap { display: flex; flex-direction: column; gap: 6px; }
+.preset-actions-label { font-size: 12px; color: #9ca3af; }
+.preset-actions { display: flex; flex-direction: column; gap: 6px; }
+.preset-option-btn {
   padding: 8px 12px;
-  gap: 8px;
-  border-bottom: 1px solid #f3f4f6;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.15s;
+  user-select: none;
+  &:hover { border-color: #a5b4fc; background: #f5f3ff; color: #6366f1; }
+  &.disabled { opacity: 0.5; cursor: not-allowed; }
+}
+
+// 气泡样式（AI 和 用户共用基础）
+.ai-bubble-wrap { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.ai-bubble-msg {
+  background: #f3f4f6;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #374151;
+  line-height: 1.6;
+  max-width: 230px;
+  &.typing { color: #9ca3af; }
+}
+.user-bubble-wrap { display: flex; justify-content: flex-end; }
+.user-bubble-msg {
+  background: #6366f1;
+  color: #fff;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  max-width: 230px;
+}
+
+// 对话历史
+.chat-history-container { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+.chat-message-item { display: flex; flex-direction: column; gap: 6px; }
+
+
+.ai-input-wrap {
+  border-top: 1px solid #e5e7eb;
+  padding: 10px 12px 12px;
+  flex-shrink: 0;
+}
+.ai-chat-input {
+  position: relative;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  transition: border-color 0.2s;
+  &:focus-within { border-color: #a5b4fc; }
+
+  :deep(.el-textarea__inner) {
+    font-size: 13px;
+    resize: none;
+    border: none;
+    box-shadow: none;
+    border-radius: 14px;
+    padding: 12px 14px 44px;
+    background: transparent;
+    color: #374151;
+    &::placeholder { color: #c0c4cc; }
+  }
+}
+.send-btn {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #6366f1;
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  box-shadow: 0 2px 8px #6366f133;
+  &:hover:not(:disabled) { background: #4f46e5; box-shadow: 0 4px 12px #6366f14d; }
+  &:active:not(:disabled) { background: #4338ca; box-shadow: none; }
+  &:disabled { background: #c7d2fe; cursor: default; box-shadow: none; }
+  .spin { animation: spin 1s linear infinite; }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+}
+
+// 素材面板 tab 栏
+.mat-tab-bar {
+  display: flex;
+  border-bottom: 1px solid #e5e7eb;
+  flex-shrink: 0;
+  padding: 0 4px;
 }
 .mat-tab {
+  flex: 1;
+  text-align: center;
   font-size: 13px;
-  padding: 4px 12px;
-  border-radius: 16px;
+  padding: 10px 4px;
   cursor: pointer;
   color: #6b7280;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+  white-space: nowrap;
   &:hover { color: #6366f1; }
-  &.active { background: #ede9fe; color: #6366f1; }
+  &.active { color: #6366f1; border-bottom-color: #6366f1; font-weight: 500; }
 }
-.search-bar { padding: 10px 12px; }
-.image-grid {
+
+.mat-body {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding: 0 12px 12px;
+  padding: 12px;
+  &::-webkit-scrollbar { width: 4px; }
+  &::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 2px; }
+}
+
+// 图标条 dim 状态
+.strip-btn.dim { opacity: 0.45; }
+
+// 智能生图
+.gen-input-wrap { margin-bottom: 8px; }
+.gen-prompt-input :deep(.el-textarea__inner) { min-height: 150px !important; }
+.gen-controls {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+  align-items: center;
+}
+.gen-preview {
+  border: 1px dashed #e5e7eb;
+  border-radius: 8px;
+  height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+.gen-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: #9ca3af;
+  font-size: 12px;
+  padding: 20px;
+  text-align: center;
+}
+.gen-img-card {
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  overflow: hidden;
+  background: #f3f4f6;
+  img { width: 100%; height: 100%; object-fit: cover; display: block; transition: opacity 0.2s; }
+  &:hover img { opacity: 0.85; }
+}
+.gen-history-section { margin-top: 4px; }
+.gen-history-title { font-size: 12px; color: #9ca3af; margin-bottom: 8px; }
+.gen-history-empty { font-size: 12px; color: #d1d5db; text-align: center; padding: 12px 0; }
+.gen-history-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.gen-history-tag {
+  font-size: 12px;
+  padding: 3px 10px;
+  background: #f3f4f6;
+  border-radius: 12px;
+  color: #6b7280;
+  cursor: pointer;
+  &:hover { background: #ede9fe; color: #6366f1; }
+}
+
+// 图库搜图
+.search-bar {
+  padding: 10px 12px 6px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.orient-btns {
+  display: flex;
+  gap: 4px;
+}
+.orient-btn {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 10px;
+  cursor: pointer;
+  color: #6b7280;
+  border: 1px solid #e5e7eb;
+  transition: all 0.15s;
+  &:hover { color: #6366f1; border-color: #a5b4fc; }
+  &.active { background: #ede9fe; color: #6366f1; border-color: #a5b4fc; }
+}
+.mat-scroll-area {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  &::-webkit-scrollbar { width: 4px; }
+  &::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 2px; }
+}
+
+.image-grid {
+  padding: 0 12px 6px;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: 6px;
 }
 .img-card {
   cursor: pointer;
   border-radius: 6px;
   overflow: hidden;
-  aspect-ratio: 16/9;
+  aspect-ratio: 4/3;
   background: #f3f4f6;
+  position: relative;
   img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.2s; }
   &:hover img { transform: scale(1.05); }
 }
-.img-loading { grid-column: 1/-1; text-align: center; color: #9ca3af; font-size: 13px; padding: 12px; }
+.img-loading { grid-column: 1/-1; text-align: center; color: #9ca3af; font-size: 12px; padding: 10px; }
+.load-more-wrap {
+  padding: 8px 12px 12px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.load-more-btn {
+  width: 100%;
+  padding: 7px 0;
+  border: none;
+  border-radius: 6px;
+  background: #6366f1;
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 4px 12px #6366f133;
+  &:hover { background: #4f46e5; box-shadow: 0 6px 16px #6366f14d; }
+  &:active { background: #4338ca; box-shadow: none; }
+}
+.no-more-text { font-size: 12px; color: #d1d5db; }
+.search-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #9ca3af;
+  font-size: 12px;
+  padding: 40px 12px;
+}
+
+// 我的素材
+.mine-section { }
+.mine-section-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 10px;
+}
+.upload-zone {
+  border: 1.5px dashed #d1d5db;
+  border-radius: 8px;
+  padding: 28px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+  &:hover { border-color: #6366f1; background: #f5f3ff; }
+}
+.upload-text { font-size: 13px; color: #374151; }
+.upload-hint { font-size: 11px; color: #9ca3af; }
+.local-imgs-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.upload-add-btn {
+  aspect-ratio: 4/3;
+  border: 1.5px dashed #d1d5db;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  &:hover { border-color: #6366f1; background: #f5f3ff; }
+}
+.mine-empty { font-size: 12px; color: #d1d5db; text-align: center; padding: 16px 0; }
+
+// ===== 统一 primary 按钮风格 =====
+:deep(.el-button--primary) {
+  cursor: pointer;
+  transition: all 0.2s !important;
+  background: #6366f1 !important;
+  color: #fff !important;
+  border: none !important;
+  box-shadow: 0 4px 12px #6366f133 !important;
+
+  &:hover:not(.is-disabled) {
+    background: #4f46e5 !important;
+    box-shadow: 0 6px 16px #6366f14d !important;
+  }
+  &:active:not(.is-disabled) {
+    background: #4338ca !important;
+    box-shadow: none !important;
+  }
+  &.is-disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none !important; }
+  &.is-loading { opacity: 0.8; cursor: wait; }
+}
 </style>

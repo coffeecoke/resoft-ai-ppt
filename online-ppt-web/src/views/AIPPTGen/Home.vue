@@ -163,10 +163,10 @@ const options = ref({
   audience: '领导',
   scenario: '工作汇报',
   style: '专业严谨',
-  richness: 'moderate',
+  richness: 'detailed',
   imageMode: 'standard',
   referenceMode: 'adapt',
-  pageLevel: 'standard',
+  pageLevel: 'smart',
 })
 
 function triggerUpload() { fileInput.value?.click() }
