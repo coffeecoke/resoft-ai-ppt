@@ -291,7 +291,7 @@ export function getElementPropFromHtml(html: string, xpath: string, prop: string
 // 属性级变更（样式、文字、拖拽、删除）→ 撤销时用 UPDATE_ELEMENT_STYLE，无感
 export interface StyleUndoAction {
   type: 'style'
-  slideIndex: number
+  slideId: number  // slide.index 稳定 ID，不受拖动排序影响
   xpath: string
   idType: string
   prop: string | string[]
@@ -302,7 +302,7 @@ export interface StyleUndoAction {
 // 整页替换（AI编辑、图片替换）→ 撤销时用 SET_HTML
 export interface HtmlUndoAction {
   type: 'html'
-  slideIndex: number
+  slideId: number  // slide.index 稳定 ID，不受拖动排序影响
   oldHtml: string
   newHtml: string
 }
@@ -337,7 +337,7 @@ export function useSlideEditor() {
   ) {
     const slide = slides[slideIndex]
     if (!slide) return
-    undoStack.value.push({ type: 'style', slideIndex, xpath, idType, prop, oldValue, newValue })
+    undoStack.value.push({ type: 'style', slideId: slide.index, xpath, idType, prop, oldValue, newValue })
     redoStack.value = []
     slide.htmlContent = modifyHtml(slide.htmlContent, idType, xpath, prop, newValue)
     updateStackState()
@@ -347,7 +347,7 @@ export function useSlideEditor() {
   function commitHtmlEdit(slides: any[], slideIndex: number, oldHtml: string, newHtml: string) {
     const slide = slides[slideIndex]
     if (!slide) return
-    undoStack.value.push({ type: 'html', slideIndex, oldHtml, newHtml })
+    undoStack.value.push({ type: 'html', slideId: slide.index, oldHtml, newHtml })
     redoStack.value = []
     slide.htmlContent = newHtml
     updateStackState()
@@ -357,12 +357,13 @@ export function useSlideEditor() {
     const action = undoStack.value.pop()
     if (!action) return null
     redoStack.value.push(action)
-    if (action.type === 'style') {
-      slides[action.slideIndex].htmlContent = modifyHtml(
-        slides[action.slideIndex].htmlContent, action.idType, action.xpath, action.prop, action.oldValue,
-      )
-    } else {
-      slides[action.slideIndex].htmlContent = action.oldHtml
+    const slide = slides.find((s: any) => s.index === action.slideId)
+    if (slide) {
+      if (action.type === 'style') {
+        slide.htmlContent = modifyHtml(slide.htmlContent, action.idType, action.xpath, action.prop, action.oldValue)
+      } else {
+        slide.htmlContent = action.oldHtml
+      }
     }
     updateStackState()
     return action
@@ -372,12 +373,13 @@ export function useSlideEditor() {
     const action = redoStack.value.pop()
     if (!action) return null
     undoStack.value.push(action)
-    if (action.type === 'style') {
-      slides[action.slideIndex].htmlContent = modifyHtml(
-        slides[action.slideIndex].htmlContent, action.idType, action.xpath, action.prop, action.newValue,
-      )
-    } else {
-      slides[action.slideIndex].htmlContent = action.newHtml
+    const slide = slides.find((s: any) => s.index === action.slideId)
+    if (slide) {
+      if (action.type === 'style') {
+        slide.htmlContent = modifyHtml(slide.htmlContent, action.idType, action.xpath, action.prop, action.newValue)
+      } else {
+        slide.htmlContent = action.newHtml
+      }
     }
     updateStackState()
     return action

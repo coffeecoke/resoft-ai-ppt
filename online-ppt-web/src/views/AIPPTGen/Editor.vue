@@ -19,6 +19,10 @@
         </el-tooltip>
       </div>
       <div class="topbar-right">
+        <el-button size="small" @click="startPresent">
+          <svg viewBox="0 0 20 20" width="13" height="13" fill="currentColor" style="margin-right:4px"><path d="M6.3 2.84A1.5 1.5 0 004 4.11v11.78a1.5 1.5 0 002.3 1.27l9.34-5.89a1.5 1.5 0 000-2.54L6.3 2.84z"/></svg>
+          演示
+        </el-button>
         <el-button size="small" type="primary" :loading="saving" @click="saveChanges">保存</el-button>
         <el-button size="small" disabled>导出PPTX</el-button>
       </div>
@@ -26,23 +30,26 @@
 
     <div class="editor-body">
       <!-- 左侧缩略图 -->
-      <div class="thumbnail-panel">
-        <div
-          v-for="(slide, i) in slides"
-          :key="slide.index"
-          class="thumb-item"
-          :class="{ active: currentIndex === i, loading: slide.pptLoading }"
-          @click="selectSlide(i)"
-        >
-          <div class="thumb-num">{{ i + 1 }}</div>
-          <div class="thumb-img-wrap">
-            <img v-if="slide.previewUrl && !slide.pptLoading" :src="slide.previewUrl" class="thumb-img" />
-            <div v-else class="thumb-skeleton">
-              <div v-if="slide.pptLoading" class="skeleton-shimmer" />
-              <span v-else class="thumb-type">{{ slide.pageType }}</span>
+      <div class="thumbnail-panel" ref="thumbnailPanelRef">
+        <div v-show="insertIndex === 0 && draggingIndex >= 0" class="drop-indicator" />
+        <template v-for="(slide, i) in slides" :key="slide.index">
+          <div
+            class="thumb-item"
+            :class="{ active: currentIndex === i, loading: slide.pptLoading, 'thumb-dragging': draggingIndex === i }"
+            @mousedown.left.prevent="onThumbMouseDown(i, $event)"
+            @click="selectSlide(i)"
+          >
+            <div class="thumb-num">{{ i + 1 }}</div>
+            <div class="thumb-img-wrap">
+              <img v-if="slide.previewUrl && !slide.pptLoading" :src="slide.previewUrl" class="thumb-img" draggable="false" />
+              <div v-else class="thumb-skeleton">
+                <div v-if="slide.pptLoading" class="skeleton-shimmer" />
+                <span v-else class="thumb-type">{{ slide.pageType }}</span>
+              </div>
             </div>
           </div>
-        </div>
+          <div v-show="insertIndex === i + 1 && draggingIndex >= 0" class="drop-indicator" />
+        </template>
 
         <!-- 生成中还没出现的占位 -->
         <div v-if="taskStatus === 'generating'" class="thumb-generating">
@@ -345,6 +352,41 @@
       </div>
     </div>
   </div>
+
+  <!-- 演示模式全屏覆盖层 -->
+  <teleport to="body">
+    <transition name="present-fade">
+      <div v-if="presenting" class="present-overlay" @click.self="exitPresent" @mousemove="onPresentMouseMove">
+        <!-- 幻灯片画布 -->
+        <div class="present-stage" :style="presentStageStyle">
+          <iframe
+            :srcdoc="presentSrcdoc"
+            :style="presentIframeStyle"
+            sandbox="allow-scripts allow-same-origin"
+            class="present-iframe"
+          />
+        </div>
+
+        <!-- 底部控制栏（悬浮在幻灯片上，不占高度） -->
+        <div class="present-controls" @click.stop @mouseenter="showControls = true" @mouseleave="showControls = false" :class="{ visible: showControls }">
+          <button class="present-nav-btn" :disabled="presentIndex === 0" @click="presentGo(presentIndex - 1)">
+            <svg viewBox="0 0 20 20" width="18" height="18" fill="currentColor"><path fill-rule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clip-rule="evenodd"/></svg>
+          </button>
+          <span class="present-progress">{{ presentIndex + 1 }} / {{ slides.length }}</span>
+          <button class="present-nav-btn" :disabled="presentIndex === slides.length - 1" @click="presentGo(presentIndex + 1)">
+            <svg viewBox="0 0 20 20" width="18" height="18" fill="currentColor"><path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd"/></svg>
+          </button>
+          <button class="present-exit-btn" @click="exitPresent">
+            <svg viewBox="0 0 20 20" width="16" height="16" fill="currentColor"><path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/></svg>
+            退出演示
+          </button>
+        </div>
+
+        <!-- 演讲备注 -->
+        <div v-if="presentNotes && showControls" class="present-notes">{{ presentNotes }}</div>
+      </div>
+    </transition>
+  </teleport>
 </template>
 
 <script setup lang="ts">
@@ -369,6 +411,17 @@ const currentSlide = computed(() => slides.value[currentIndex.value] || null)
 
 const taskStatus = ref<'generating' | 'completed' | 'failed'>('generating')
 const genProgress = ref({ total: 0, completed: 0 })
+
+// 缩略图拖拽排序
+const thumbnailPanelRef = ref<HTMLElement>()
+const draggingIndex = ref(-1)
+const insertIndex = ref(-1)
+let _dragClone: HTMLElement | null = null
+let _dragOffsetX = 0, _dragOffsetY = 0
+let _dragFromIndex = -1
+let _dragMoved = false
+let _dragPendingClick = false
+
 
 const rightPanel = ref<'' | 'ai' | 'material'>('')
 const materialTab = ref('search')
@@ -500,10 +553,9 @@ onMounted(async () => {
 
   // 加载已上传的素材图片
   try {
-    const SERVER_URL = import.meta.env.VITE_API_BASE_URL || '/api'
     const imgRes = await aipptGenApi.listUserImages(projectId) as any
     const urls: string[] = imgRes.data?.urls || []
-    localImages.value = urls.map((url: string) => `${SERVER_URL}${url}`)
+    localImages.value = urls
   } catch {}
 
   updateScale()
@@ -535,7 +587,105 @@ onUnmounted(() => {
   if (pollTimer) clearTimeout(pollTimer)
   resizeObserver?.disconnect()
   window.removeEventListener('message', handleIframeMessage)
+  window.removeEventListener('keydown', onPresentKeyDown)
+  window.removeEventListener('resize', calcPresentScale)
+  document.removeEventListener('fullscreenchange', onFullscreenChange)
+  document.removeEventListener('mousemove', _onDragMove)
+  document.removeEventListener('mouseup', _onDragUp)
+  if (_dragClone) { document.body.removeChild(_dragClone); _dragClone = null }
 })
+
+// ===== 演示模式 =====
+const presenting = ref(false)
+const presentIndex = ref(0)
+const showControls = ref(false)
+let hideControlsTimer: ReturnType<typeof setTimeout> | null = null
+
+function onPresentMouseMove() {
+  showControls.value = true
+  if (hideControlsTimer) clearTimeout(hideControlsTimer)
+  hideControlsTimer = setTimeout(() => { showControls.value = false }, 2500)
+}
+const presentSrcdoc = ref('')
+const presentScale = ref(1)
+
+const presentStageStyle = computed(() => ({
+  width: `${1280 * presentScale.value}px`,
+  height: `${720 * presentScale.value}px`,
+  overflow: 'hidden',
+}))
+
+const presentIframeStyle = computed(() => ({
+  transform: `scale(${presentScale.value})`,
+  transformOrigin: 'top left',
+  width: '1280px',
+  height: '720px',
+}))
+
+const presentNotes = computed(() =>
+  slides.value[presentIndex.value]?.scriptContent?.trim() || ''
+)
+
+function calcPresentScale() {
+  presentScale.value = Math.min(window.innerWidth / 1280, window.innerHeight / 720)
+}
+
+function presentGo(idx: number) {
+  if (idx < 0 || idx >= slides.value.length) return
+  presentIndex.value = idx
+  const slide = slides.value[idx]
+  presentSrcdoc.value = withBaseTag(slide?.htmlContent || loadingHtml)
+}
+
+async function startPresent() {
+  if (!slides.value.length) return
+  presentIndex.value = currentIndex.value
+  presenting.value = true
+  presentSrcdoc.value = withBaseTag(slides.value[presentIndex.value]?.htmlContent || loadingHtml)
+  window.addEventListener('keydown', onPresentKeyDown)
+  window.addEventListener('resize', calcPresentScale)
+  document.addEventListener('fullscreenchange', onFullscreenChange)
+  try {
+    await document.documentElement.requestFullscreen()
+    // fullscreenchange 会触发 calcPresentScale，无需在这里调用
+  } catch {
+    // 全屏不可用时降级（窗口模式）
+    calcPresentScale()
+  }
+}
+
+function exitPresent() {
+  presenting.value = false
+  window.removeEventListener('keydown', onPresentKeyDown)
+  window.removeEventListener('resize', calcPresentScale)
+  document.removeEventListener('fullscreenchange', onFullscreenChange)
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
+}
+
+function onFullscreenChange() {
+  // 用户通过 Esc/F11 等浏览器方式退出全屏时同步退出演示模式
+  if (!document.fullscreenElement && presenting.value) {
+    presenting.value = false
+    window.removeEventListener('keydown', onPresentKeyDown)
+    window.removeEventListener('resize', calcPresentScale)
+    document.removeEventListener('fullscreenchange', onFullscreenChange)
+  }
+  // 全屏状态变化后重新计算比例
+  calcPresentScale()
+}
+
+function onPresentKeyDown(e: KeyboardEvent) {
+  if (!presenting.value) return
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') {
+    e.preventDefault()
+    presentGo(presentIndex.value + 1)
+  } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+    e.preventDefault()
+    presentGo(presentIndex.value - 1)
+  } else if (e.key === 'Escape') {
+    exitPresent()
+  }
+}
 
 function updateScale() {
   if (!slidePreviewRef.value) return
@@ -564,18 +714,23 @@ async function pollTaskStatus() {
     genProgress.value = data.progress || { total: 0, completed: 0 }
 
     // 合并新生成的 slides
+    let currentSlideUpdated = false
     for (const s of (data.slides || [])) {
       const existing = slides.value.find(x => x.index === s.index)
       if (!existing) {
         slides.value.push(s)
         slides.value.sort((a, b) => a.index - b.index)
+        if (s.index === currentIndex.value) currentSlideUpdated = true
       } else if (existing.pptLoading && !s.pptLoading) {
         Object.assign(existing, s)
+        if (existing.index === currentIndex.value) currentSlideUpdated = true
       }
     }
-    // 当前页内容更新时同步 iframe
-    if (currentSlide.value?.htmlContent && !iframeSrcdoc.value) {
-      iframeSrcdoc.value = currentSlide.value.htmlContent
+    // 当前页有新内容时同步 iframe
+    if (currentSlideUpdated && currentSlide.value?.htmlContent) {
+      syncIframeSrcdoc()
+    } else if (currentSlide.value?.htmlContent && !iframeSrcdoc.value) {
+      syncIframeSrcdoc()
     }
 
     if (data.status === 'generating') {
@@ -623,6 +778,7 @@ async function saveSlides() {
 }
 
 function selectSlide(i: number) {
+  if (_dragPendingClick) return
   currentIndex.value = i
 }
 
@@ -712,7 +868,8 @@ function deselectOnCanvasClick(e: MouseEvent) {
 }
 
 function applyActionToIframe(action: UndoAction, direction: 'undo' | 'redo') {
-  if (action.slideIndex !== currentIndex.value) return
+  const currentSlide = slides.value[currentIndex.value]
+  if (!currentSlide || currentSlide.index !== action.slideId) return
   if (action.type === 'style') {
     // 属性级更新，完全无感，不触发动画重播
     sendMessageToIframe(slideIframe.value!, {
@@ -732,7 +889,8 @@ function handleUndo() {
   if (!action) return
   selectedElementInfo.value = null
   selectedRect.value = null
-  dirtySlideIndexes.value.add(action.slideIndex)
+  const idx = slides.value.findIndex((s: any) => s.index === action.slideId)
+  if (idx >= 0) dirtySlideIndexes.value.add(idx)
   applyActionToIframe(action, 'undo')
 }
 
@@ -741,7 +899,8 @@ function handleRedo() {
   if (!action) return
   selectedElementInfo.value = null
   selectedRect.value = null
-  dirtySlideIndexes.value.add(action.slideIndex)
+  const idx = slides.value.findIndex((s: any) => s.index === action.slideId)
+  if (idx >= 0) dirtySlideIndexes.value.add(idx)
   applyActionToIframe(action, 'redo')
 }
 
@@ -788,7 +947,7 @@ async function sendAiEdit() {
 
   try {
     const pageType = currentSlide.value.pageType || project.value?.outline?.pages?.[currentIndex.value]?.type || 'content'
-    const res = await aipptGenApi.aiEdit(currentSlide.value.htmlContent, instruction, undefined, history, pageType)
+    const res = await aipptGenApi.aiEdit(currentSlide.value.htmlContent, instruction, undefined, history, pageType, projectId)
     const newHtml = (res as any).data?.htmlContent
     if (newHtml) {
       commitHtmlEdit(slides.value, currentIndex.value, currentSlide.value!.htmlContent, newHtml)
@@ -801,6 +960,95 @@ async function sendAiEdit() {
   } finally {
     aiEditing.value = false
   }
+}
+
+let _dragStartX = 0, _dragStartY = 0
+
+function onThumbMouseDown(i: number, e: MouseEvent) {
+  if (taskStatus.value === 'generating') return
+  _dragFromIndex = i
+  _dragMoved = false
+  _dragStartX = e.clientX
+  _dragStartY = e.clientY
+  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+  _dragOffsetX = e.clientX - rect.left
+  _dragOffsetY = e.clientY - rect.top
+  document.addEventListener('mousemove', _onDragMove)
+  document.addEventListener('mouseup', _onDragUp)
+}
+
+function _onDragMove(e: MouseEvent) {
+  if (_dragFromIndex < 0) return
+
+  // 超过 5px 才正式开始拖拽，避免点击误触
+  if (!_dragMoved) {
+    if (Math.abs(e.clientX - _dragStartX) < 5 && Math.abs(e.clientY - _dragStartY) < 5) return
+    const el = thumbnailPanelRef.value?.querySelectorAll<HTMLElement>('.thumb-item')[_dragFromIndex]
+    if (!el) return
+    _dragMoved = true
+    draggingIndex.value = _dragFromIndex
+    const rect = el.getBoundingClientRect()
+    _dragClone = el.cloneNode(true) as HTMLElement
+    Object.assign(_dragClone.style, {
+      position: 'fixed', zIndex: '9999',
+      width: rect.width + 'px', height: rect.height + 'px',
+      left: (e.clientX - _dragOffsetX) + 'px',
+      top: (e.clientY - _dragOffsetY) + 'px',
+      pointerEvents: 'none', opacity: '0.92',
+      boxShadow: '0 10px 28px rgba(0,0,0,0.22)',
+      borderRadius: '6px', border: '2px solid #6366f1',
+      transform: 'rotate(1.5deg)',
+    })
+    document.body.appendChild(_dragClone)
+  }
+
+  // 移动克隆
+  if (_dragClone) {
+    _dragClone.style.left = (e.clientX - _dragOffsetX) + 'px'
+    _dragClone.style.top = (e.clientY - _dragOffsetY) + 'px'
+  }
+
+  // 计算插入位置（排除 dragging 元素本身，避免自身干扰计算）
+  const panel = thumbnailPanelRef.value
+  if (!panel) return
+  const items = [...panel.querySelectorAll<HTMLElement>('.thumb-item')]
+  let newInsert = slides.value.length
+  for (let i = 0; i < items.length; i++) {
+    if (i === _dragFromIndex) continue
+    const r = items[i].getBoundingClientRect()
+    const adjustedIdx = i > _dragFromIndex ? i : i
+    if (e.clientY < r.top + r.height / 2) { newInsert = i; break }
+  }
+  insertIndex.value = newInsert
+}
+
+function _onDragUp() {
+  document.removeEventListener('mousemove', _onDragMove)
+  document.removeEventListener('mouseup', _onDragUp)
+
+  const from = _dragFromIndex
+  const to = insertIndex.value
+  const moved = _dragMoved
+
+  if (_dragClone) { document.body.removeChild(_dragClone); _dragClone = null }
+  draggingIndex.value = -1
+  insertIndex.value = -1
+  _dragFromIndex = -1
+  _dragMoved = false
+
+  if (!moved || from < 0 || to < 0 || from === to || from + 1 === to) return
+
+  // 阻止紧随的 click 事件触发 selectSlide
+  _dragPendingClick = true
+  setTimeout(() => { _dragPendingClick = false }, 0)
+
+  const selected = slides.value[currentIndex.value]
+  const arr = [...slides.value]
+  const [item] = arr.splice(from, 1)
+  arr.splice(from < to ? to - 1 : to, 0, item)
+  slides.value = arr
+  currentIndex.value = arr.indexOf(selected)
+  aipptGenApi.reorderSlides(projectId, arr.map((s: any) => s.index)).catch(() => {})
 }
 
 async function regeneratePage() {
@@ -928,8 +1176,7 @@ async function onFileChange(e: Event) {
     const res = await authFetch(`/aippt-gen/project/${projectId}/images`, { method: 'POST', body: form })
     const json = await res.json()
     if (!json.success) throw new Error(json.message)
-    const baseUrl = import.meta.env.VITE_API_BASE_URL || ''
-    ;(json.data?.urls as string[]).forEach(url => localImages.value.unshift(`${baseUrl}${url}`))
+    ;(json.data?.urls as string[]).forEach(url => localImages.value.unshift(url))
   } catch {
     ElMessage.error('图片上传失败，请重试')
   }
@@ -1051,19 +1298,22 @@ async function saveChanges() {
   overflow-y: auto;
   padding: 12px 8px;
   flex-shrink: 0;
+  position: relative; // 供绝对定位占位使用
 
   &::-webkit-scrollbar { width: 4px; }
   &::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 2px; }
 }
 
 .thumb-item {
-  cursor: pointer;
+  cursor: grab;
   margin-bottom: 10px;
   border-radius: 6px;
   border: 2px solid transparent;
   overflow: hidden;
-  transition: all 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s, opacity 0.15s;
   position: relative;
+  user-select: none;
+  -webkit-user-select: none;
 
   &:hover { border-color: #a5b4fc; }
   &.active { border-color: #6366f1; box-shadow: 0 0 0 1px rgba(99,102,241,0.3); }
@@ -1113,6 +1363,29 @@ async function saveChanges() {
   width: 5px; height: 5px; border-radius: 50%; background: #6366f1;
   animation: bounce 1s infinite;
   @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+}
+
+// 拖拽排序：原位置半透明占位
+.thumb-item.thumb-dragging { opacity: 0.35; }
+
+// 插入位置蓝色细线指示器
+.drop-indicator {
+  height: 2px;
+  background: #6366f1;
+  border-radius: 1px;
+  margin: 3px 0;
+  position: relative;
+  pointer-events: none;
+  &::before, &::after {
+    content: '';
+    position: absolute;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #6366f1;
+    top: 50%; transform: translateY(-50%);
+  }
+  &::before { left: -4px; }
+  &::after { right: -4px; }
 }
 
 // 中间画布
@@ -1627,4 +1900,113 @@ async function saveChanges() {
   &.is-disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none !important; }
   &.is-loading { opacity: 0.8; cursor: wait; }
 }
+
+// ===== 演示模式 =====
+.present-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: #000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.present-stage {
+  position: relative;
+  flex-shrink: 0;
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: 0 0 60px rgba(0,0,0,0.8);
+}
+
+.present-iframe {
+  width: 1280px;
+  height: 720px;
+  border: none;
+  display: block;
+}
+
+.present-controls {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: rgba(0,0,0,0.65);
+  backdrop-filter: blur(8px);
+  opacity: 0;
+  transition: opacity 0.25s;
+  pointer-events: none;
+  &.visible { opacity: 1; pointer-events: auto; }
+}
+
+.present-nav-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.1);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+  &:hover:not(:disabled) { background: rgba(255,255,255,0.25); }
+  &:disabled { opacity: 0.3; cursor: not-allowed; }
+}
+
+.present-progress {
+  color: rgba(255,255,255,0.8);
+  font-size: 14px;
+  min-width: 60px;
+  text-align: center;
+}
+
+.present-exit-btn {
+  position: absolute;
+  right: 24px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.2);
+  background: transparent;
+  color: rgba(255,255,255,0.7);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+  &:hover { background: rgba(255,255,255,0.1); color: #fff; }
+}
+
+.present-notes {
+  position: fixed;
+  bottom: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 800px;
+  width: 90%;
+  background: rgba(0,0,0,0.6);
+  color: rgba(255,255,255,0.75);
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 10px 16px;
+  border-radius: 8px;
+  backdrop-filter: blur(6px);
+  text-align: center;
+  pointer-events: none;
+}
+
+.present-fade-enter-active,
+.present-fade-leave-active { transition: opacity 0.2s ease; }
+.present-fade-enter-from,
+.present-fade-leave-to { opacity: 0; }
 </style>
+

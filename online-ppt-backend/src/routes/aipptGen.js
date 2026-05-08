@@ -218,15 +218,81 @@ router.get('/task/:taskId/status', (req, res) => {
   res.json({ success: true, data: status })
 })
 
+// 生成一张图并保存到项目正式目录，返回本地 URL
+async function generateImageToProject(altText, projectId) {
+  const apiKey = process.env.IMAGE_GEN_API_KEY
+  const baseUrl = process.env.IMAGE_GEN_BASE_URL
+  if (!apiKey || !baseUrl) return null
+
+  const resp = await fetch(`${baseUrl}/images/generations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({ model: 'cogview-3-flash', prompt: altText, n: 1, size: '1024x1024' }),
+  })
+  const json = await resp.json()
+  if (!resp.ok) return null
+
+  const remoteUrl = json.data?.[0]?.url
+  if (!remoteUrl) return null
+
+  const dir = path.join(AI_GEN_DIR, projectId)
+  fs.mkdirSync(dir, { recursive: true })
+  const filename = `${nanoid(12)}.jpg`
+  const imgResp = await fetch(remoteUrl)
+  if (!imgResp.ok) return null
+  fs.writeFileSync(path.join(dir, filename), Buffer.from(await imgResp.arrayBuffer()))
+  return `/aippt-gen/user-images/ai-gen/${projectId}/${filename}`
+}
+
+// 扫描 HTML 中无 src 或 placeholder src 的 img 标签，并行 AI 生图填充
+async function fillImagesInHtml(html, projectId) {
+  const imgRegex = /<img([^>]*?)>/gi
+  const tasks = []
+  let m
+  while ((m = imgRegex.exec(html)) !== null) {
+    const full = m[0]
+    const attrs = m[1]
+    const srcMatch = attrs.match(/src="([^"]*)"/)
+    const hasExternalSrc = srcMatch && /^https?:\/\//i.test(srcMatch[1])
+    const hasLocalSrc = srcMatch && !hasExternalSrc
+    const altMatch = attrs.match(/alt="([^"]+)"/)
+    // 无 src 或 src 是外部链接（AI 随手填的占位）才处理，已有本地路径的跳过
+    if (altMatch && !hasLocalSrc) {
+      tasks.push({ full, altText: altMatch[1] })
+    }
+  }
+  if (tasks.length === 0) return html
+
+  const results = await Promise.all(tasks.map(async ({ full, altText }) => {
+    try {
+      const localUrl = await generateImageToProject(altText, projectId)
+      if (!localUrl) return { full, newTag: null }
+      const newTag = full
+        .replace(/\s*src="[^"]*"/, '')
+        .replace('<img', `<img src="${localUrl}"`)
+      return { full, newTag }
+    } catch {
+      return { full, newTag: null }
+    }
+  }))
+
+  for (const { full, newTag } of results) {
+    if (newTag) html = html.replace(full, newTag)
+  }
+  return html
+}
+
 // AI编辑单页
 router.post('/ai-edit', async (req, res) => {
-  const { htmlContent, instruction, history = [], pageType = 'content', model = 'ark-doubao-seed-1.6-flash' } = req.body
+  const { htmlContent, instruction, history = [], pageType = 'content', model = 'ark-doubao-seed-1.6-flash', projectId } = req.body
   if (!htmlContent || !instruction) return res.status(400).json({ success: false, message: '参数缺失' })
 
   try {
     const messages = buildAiEditMessages(htmlContent, instruction, history, pageType)
-    const result = await aiService.chat(model, messages, { maxTokens: 8192 })
-    res.json({ success: true, data: { htmlContent: ensureTailwind(result) } })
+    let result = await aiService.chat(model, messages, { maxTokens: 8192 })
+    result = ensureTailwind(result)
+    if (projectId) result = await fillImagesInHtml(result, projectId)
+    res.json({ success: true, data: { htmlContent: result } })
   } catch (err) {
     res.status(500).json({ success: false, message: err.message })
   }
@@ -255,6 +321,23 @@ router.post('/project/:id/batch-update', async (req, res) => {
   try {
     const result = await batchUpdateProject(req.params.id, updatedSlides)
     res.json({ success: true, data: result })
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message })
+  }
+})
+
+// 拖动排序：只保存新顺序，不触发截图
+router.post('/project/:id/reorder', (req, res) => {
+  const { order } = req.body
+  if (!Array.isArray(order)) return res.status(400).json({ success: false, message: 'order 必须为数组' })
+  try {
+    const project = getProject(req.params.id)
+    if (!project) return res.status(404).json({ success: false, message: '项目不存在' })
+    const slideMap = new Map((project.slides || []).map(s => [s.index, s]))
+    project.slides = order.map(idx => slideMap.get(idx)).filter(Boolean)
+    project.updatedAt = new Date().toISOString()
+    saveProject(req.params.id, project)
+    res.json({ success: true })
   } catch (err) {
     res.status(500).json({ success: false, message: err.message })
   }

@@ -205,7 +205,8 @@ async function startGenerate() {
 
 <style scoped lang="scss">
 .template-page {
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   background: #f9fafb;
   display: flex;
   flex-direction: column;

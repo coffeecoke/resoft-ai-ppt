@@ -303,6 +303,14 @@ async function screenshotHtml(htmlContent, taskId, pageIndex) {
     .replace(/<link[^>]*href=["'][^"']*\/libs\/fontawesome[^"']*["'][^>]*\/?>/gi, '')
     .replace(/<link[^>]*href=["'][^"']*\/libs\/animate[^"']*["'][^>]*\/?>/gi, '')
 
+  // 将图片相对路径替换为 localhost 绝对 URL，让 Puppeteer 能向本地后端请求图片
+  // 兼容带 /api 前缀（前端代理路径）和不带前缀两种情况
+  const PORT = process.env.PORT || 5001
+  html = html.replace(/src="((?:\/api)?\/aippt-gen\/user-images\/[^"]+)"/g, (_, webPath) => {
+    const cleanPath = webPath.replace(/^\/api/, '')
+    return `src="http://localhost:${PORT}${cleanPath}"`
+  })
+
   const tailwindJsPath = path.join(__dirname, '..', '..', 'data', 'aippt-assets', 'tailwind.js')
   const libsDir = path.join(__dirname, '..', '..', '..', 'online-ppt-web', 'public', 'libs')
 
@@ -366,46 +374,47 @@ async function downloadToLocal(remoteUrl, taskId) {
   return `/aippt-gen/user-images/_search/${taskId}/${filename}`
 }
 
-async function batchReplaceImages(taskId) {
-  const task = tasks.get(taskId)
-  if (!task) return
-
-  for (const slide of task.slides) {
-    if (!slide.htmlContent || slide.isSkipped) continue
-
-    const imgRegex = /<img([^>]*?)alt="([^"]+)"([^>]*?)>/gi
-    let html = slide.htmlContent
-    let matched = false
-    const replacements = []
-
-    let m
-    while ((m = imgRegex.exec(html)) !== null) {
-      const [fullMatch, before, altText, after] = m
-      if (/src=/.test(before) || /src=/.test(after)) continue
-      replacements.push({ fullMatch, altText })
-    }
-
-    for (const { fullMatch, altText } of replacements) {
-      try {
-        const imgs = await imageService.searchImages(altText, { count: 1, orientation: 'landscape' })
-        if (imgs && imgs.length > 0) {
-          const remoteUrl = imgs[0].url || imgs[0].regularUrl
-          if (remoteUrl) {
-            const localUrl = await downloadToLocal(remoteUrl, taskId)
-            html = html.replace(fullMatch, fullMatch.replace(/<img/, `<img src="${localUrl}"`))
-            matched = true
-          }
-        }
-      } catch (e) {
-        // 搜图或下载失败不影响整体
-      }
-    }
-
-    if (matched) {
-      slide.htmlContent = html
-    }
+// 并发控制：最多同时跑 limit 个异步任务
+async function runWithConcurrency(items, limit, fn) {
+  const executing = new Set()
+  for (const item of items) {
+    const p = fn(item).finally(() => executing.delete(p))
+    executing.add(p)
+    if (executing.size >= limit) await Promise.race(executing)
   }
+  await Promise.all(executing)
 }
+
+// 单页搜图替换（生成完立刻调用，不再批量）
+async function replaceImagesForSlide(slide, taskId) {
+  if (!slide.htmlContent || slide.isSkipped) return
+  const imgRegex = /<img([^>]*?)alt="([^"]+)"([^>]*?)>/gi
+  let html = slide.htmlContent
+  let matched = false
+  const replacements = []
+  let m
+  while ((m = imgRegex.exec(html)) !== null) {
+    const [fullMatch, before, altText, after] = m
+    if (/src=/.test(before) || /src=/.test(after)) continue
+    replacements.push({ fullMatch, altText })
+  }
+  for (const { fullMatch, altText } of replacements) {
+    try {
+      const imgs = await imageService.searchImages(altText, { count: 1, orientation: 'landscape' })
+      if (imgs?.length > 0) {
+        const remoteUrl = imgs[0].url || imgs[0].regularUrl
+        if (remoteUrl) {
+          const localUrl = await downloadToLocal(remoteUrl, taskId)
+          html = html.replace(fullMatch, fullMatch.replace(/<img/, `<img src="${localUrl}"`))
+          matched = true
+        }
+      }
+    } catch {}
+  }
+  if (matched) slide.htmlContent = html
+}
+
+const SLIDE_CONCURRENCY = parseInt(process.env.SLIDE_CONCURRENCY || '3', 10)
 
 export async function createTask({ outline, themeId, illustrationMode = 'standard', model = 'ark-doubao-seed-1.6-flash', summary, options = {} }) {
   const taskId = nanoid(12)
@@ -445,6 +454,30 @@ export async function createTask({ outline, themeId, illustrationMode = 'standar
   return taskId
 }
 
+async function generateAndProcessSlide(taskId, slide, themeHtmlMap, topicContext, summary, options, illustrationMode, model) {
+  const task = tasks.get(taskId)
+  if (!task) return
+  const taskSlide = task.slides[slide.index]
+  try {
+    const messages = buildSlideGenMessages(
+      slide.type, slide.content, themeHtmlMap[slide.type],
+      topicContext, summary, options
+    )
+    const html = await aiService.chat(model, messages, { maxTokens: 8192, temperature: 0.7 })
+    const clean = sanitizeHtml(html)
+    taskSlide.htmlContent = clean
+    taskSlide.needRegenerate = clean.includes('生成错误')
+    if (illustrationMode !== 'none') await replaceImagesForSlide(taskSlide, taskId)
+    taskSlide.previewUrl = await screenshotHtml(taskSlide.htmlContent, taskId, slide.index)
+  } catch (err) {
+    console.error(`[aipptGen] slide ${slide.index} gen failed:`, err.message)
+    taskSlide.isSkipped = true
+  } finally {
+    taskSlide.pptLoading = false
+    persistTasksToDisk()
+  }
+}
+
 async function generateSlides(taskId, slideSequence, themeId, illustrationMode, model, summary, options) {
   const task = tasks.get(taskId)
   if (!task) return
@@ -455,38 +488,11 @@ async function generateSlides(taskId, slideSequence, themeId, illustrationMode, 
     themeHtmlMap[type] = readThemeHtml(themeId, type)
   }
 
-  for (const slide of slideSequence) {
-    const taskSlide = task.slides[slide.index]
-    try {
-      const messages = buildSlideGenMessages(
-        slide.type, slide.content, themeHtmlMap[slide.type],
-        topicContext, summary, options
-      )
-      const html = await aiService.chat(model, messages, { maxTokens: 8192, temperature: 0.7 })
-      // 校验 + 修复 HTML
-      const clean = sanitizeHtml(html)
-      taskSlide.htmlContent = clean
-      taskSlide.needRegenerate = clean.includes('生成错误')
-      taskSlide.previewUrl = await screenshotHtml(clean, taskId, slide.index)
-    } catch (err) {
-      console.error(`[aipptGen] slide ${slide.index} gen failed:`, err.message)
-      taskSlide.isSkipped = true
-    } finally {
-      taskSlide.pptLoading = false
-      persistTasksToDisk()
-    }
-  }
-
-  // 批量替换图片占位符
-  if (illustrationMode !== 'none') {
-    await batchReplaceImages(taskId)
-    // 替换图片后重新截图有图片的页面
-    for (const taskSlide of task.slides) {
-      if (taskSlide.htmlContent && !taskSlide.isSkipped) {
-        taskSlide.previewUrl = await screenshotHtml(taskSlide.htmlContent, taskId, taskSlide.index)
-      }
-    }
-  }
+  await runWithConcurrency(
+    slideSequence,
+    SLIDE_CONCURRENCY,
+    slide => generateAndProcessSlide(taskId, slide, themeHtmlMap, topicContext, summary, options, illustrationMode, model)
+  )
 
   task.status = 'completed'
   persistTasksToDisk()
@@ -530,7 +536,7 @@ export function getTaskStatus(taskId) {
   return {
     status: task.status,
     progress: { total: task.slides.length, completed },
-    slides: task.slides.filter(s => !s.pptLoading),
+    slides: task.slides,
   }
 }
 

@@ -47,8 +47,8 @@ export const aipptGenApi = {
   getTaskStatus: (taskId: string) => instance.get(`${BASE}/task/${taskId}/status`),
 
   // AI编辑单页
-  aiEdit: (htmlContent: string, instruction: string, model?: string, history?: { role: string; content: string }[], pageType?: string) =>
-    instance.post(`${BASE}/ai-edit`, { htmlContent, instruction, model, history, pageType }),
+  aiEdit: (htmlContent: string, instruction: string, model?: string, history?: { role: string; content: string }[], pageType?: string, projectId?: string) =>
+    instance.post(`${BASE}/ai-edit`, { htmlContent, instruction, model, history, pageType, projectId }),
 
   // 单页重新生成
   regenerateSlide: (params: {
@@ -96,4 +96,8 @@ export const aipptGenApi = {
   // 获取项目已上传的素材图片列表
   listUserImages: (projectId: string) =>
     instance.get(`${BASE}/project/${projectId}/images`),
+
+  // 拖动排序：保存新的 slide 顺序（order 为 slide.index 稳定 ID 的新顺序数组）
+  reorderSlides: (projectId: string, order: number[]) =>
+    instance.post(`${BASE}/project/${projectId}/reorder`, { order }),
 }
