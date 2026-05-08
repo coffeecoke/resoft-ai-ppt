@@ -76,6 +76,26 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }))
 // 静态文件服务（管理后台 HTML/JS/CSS：可配置挂在 /ai_backend 等子路径下）
 const frontendDir = path.join(__dirname, '../frontend')
 const adminStaticPrefix = getAiBackendStaticPathPrefix()
+
+/**
+ * 第三方静态库（jszip / docx-preview / markdown-it / codemirror）
+ * - 须先于下方 adminStaticPrefix 的 express.static(frontendDir)，避免前台目录里同名路径抢占。
+ * - 始终挂载 /ai_backend/lib：生产常见 Nginx「只转发 /ai_backend」，且容器内漏配 AI_BACKEND_BASE_PATH 时仍能对齐前缀。
+ * - 若 AI_BACKEND_BASE_PATH 为其它前缀，再额外挂载一份。
+ */
+function mountVendorLibStatics(urlPrefix) {
+  const base = urlPrefix || ''
+  app.use(`${base}/lib/jszip`, express.static(path.join(__dirname, '../node_modules/jszip/dist')))
+  app.use(`${base}/lib/docx-preview`, express.static(path.join(__dirname, '../node_modules/docx-preview/dist')))
+  app.use(`${base}/lib/markdown-it`, express.static(path.join(__dirname, '../node_modules/markdown-it/dist')))
+  app.use(`${base}/lib/codemirror`, express.static(path.join(__dirname, '../node_modules/codemirror')))
+}
+mountVendorLibStatics('')
+mountVendorLibStatics('/ai_backend')
+if (adminStaticPrefix && adminStaticPrefix !== '/ai_backend') {
+  mountVendorLibStatics(adminStaticPrefix)
+}
+
 if (adminStaticPrefix) {
   app.use(adminStaticPrefix, express.static(frontendDir))
   app.get(adminStaticPrefix, (req, res) => {
@@ -92,18 +112,6 @@ if (adminStaticPrefix) {
 }
 app.use('/output', express.static(path.join(__dirname, '../output')))
 app.use('/scraper_output', express.static(path.join(__dirname, '../scraper_output')))
-/** 第三方静态库：根路径 +（可选）AI_BACKEND_BASE_PATH 下各挂一份，便于网关只转发前缀时不丢 /lib */
-function mountVendorLibStatics(urlPrefix) {
-  const base = urlPrefix || ''
-  app.use(`${base}/lib/jszip`, express.static(path.join(__dirname, '../node_modules/jszip/dist')))
-  app.use(`${base}/lib/docx-preview`, express.static(path.join(__dirname, '../node_modules/docx-preview/dist')))
-  app.use(`${base}/lib/markdown-it`, express.static(path.join(__dirname, '../node_modules/markdown-it/dist')))
-  app.use(`${base}/lib/codemirror`, express.static(path.join(__dirname, '../node_modules/codemirror')))
-}
-mountVendorLibStatics('')
-if (adminStaticPrefix) {
-  mountVendorLibStatics(adminStaticPrefix)
-}
 
 // ==================== AI管理后台路由（新架构） ====================
 const adminRoutes = require('./routes')

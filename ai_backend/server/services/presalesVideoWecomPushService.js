@@ -2,6 +2,7 @@
  * 售前视频：企微应用群发会话推送「交流报备摘要 + 售前视频文本卡片」
  * 卡片 URL：优先 PRESALES_VIDEO_WECOM_CARD_URL_TEMPLATE（{id}、{chatId}、{timestape}/{timestamp}=推送时刻 Unix 毫秒时间戳）；否则「基址+playlist/path」拼接
  */
+const crypto = require('crypto')
 const wecomAppChatApi = require('./wecomAppChatApi')
 const presalesVideoTaskService = require('./presalesVideoTaskService')
 const presalesVideoGroupSettingsService = require('./presalesVideoGroupSettingsService')
@@ -123,14 +124,15 @@ async function resolvePushVideoUserIds(ctx) {
   let source = 'auto'
   if (fromInput.length > 0) {
     source = 'manual'
-    beforeExclude = [...new Set([...fromInput, ...fixedMembers, 'rxkf01'].filter(Boolean))]
+    // 手动名单为准：仅采用文本框内的 userid，不再并入固定成员 / rxkf01（固定成员也可删掉）
+    beforeExclude = [...new Set(fromInput.filter(Boolean))]
   } else {
     beforeExclude = await buildAutoUserIds(prisma, tr, fixedMembers)
   }
 
   let userIds = applyExcludedUsers(beforeExclude)
-  // 管理员/必选人员不允许被排除
-  if (!userIds.includes('rxkf01')) userIds.push('rxkf01')
+  // 自动规则仍保证 rxkf01；手动模式完全尊重用户输入（若未包含 rxkf01 则不加）
+  if (source !== 'manual' && !userIds.includes('rxkf01')) userIds.push('rxkf01')
   userIds = [...new Set(userIds.filter(Boolean))]
 
   return {
@@ -653,6 +655,12 @@ function extractWecomAppChatIdFromReserve4(reserve4) {
   return (at === -1 ? s : s.slice(0, at)).trim()
 }
 
+/** 「发送给小R」专用：伪 chatId，前缀 old + 8 位随机数字，供卡片模板 {chatId} 与 reserve_4 解析 */
+function generateRxkfPseudoAppChatId() {
+  const n = crypto.randomInt(0, 100_000_000)
+  return `old${String(n).padStart(8, '0')}`
+}
+
 /**
  * 卡片 H5 地址模板：{id} = psv_video_info.id（与 presales_video_tasks.execute_id 一致）；{chatId}；{timestape} 或 {timestamp} = 推送时刻 Unix 毫秒（如 1776061188343，非库读）
  * 优先 PRESALES_VIDEO_WECOM_CARD_URL_TEMPLATE；否则若 PRESALES_VIDEO_WECOM_PUSH_PUBLIC_BASE_URL 含 {id} 也视为模板（兼容旧键名）
@@ -723,10 +731,16 @@ function defaultCardBtntxt() {
  * @param {import('@prisma/client').PrismaClient} ctx.prisma
  * @param {string} ctx.transcriptionId
  * @param {string|string[]} ctx.userIdsRaw 逗号分隔或数组
+ * @param {string} [ctx.cardTitle] 可选，企微 textcard 的 title；不传则用转录音频文件名（去后缀）或「售前视频」
+ * @param {string} [ctx.chatName] 可选，新建应用群发会话的名称；不传则「线索/客户名或文件名」截断 + 「-售前分析」
  * @returns {Promise<{ chatid: string, reportMatched: boolean, userCount: number, videoPushedAsMedia?: boolean, videoPushedAsCard?: boolean }>}
  */
 async function pushPresalesVideoToWecomAppChat(ctx) {
-  const { prisma, transcriptionId, userIdsRaw } = ctx
+  const { prisma, transcriptionId, userIdsRaw, cardTitle: cardTitleRaw, chatName: chatNameRaw } = ctx
+  const cardTitleOverride =
+    cardTitleRaw != null && String(cardTitleRaw).trim() !== ''
+      ? String(cardTitleRaw).trim()
+      : null
   if (!wecomAppChatApi.isAppChatConfigured()) {
     throw new Error(
       '未配置企业微信应用群发会话：请在环境变量中设置 WECOM_CORP_ID、WECOM_APPCHAT_SECRET（自建应用 Secret，非智能机器人 Secret）'
@@ -765,7 +779,12 @@ async function pushPresalesVideoToWecomAppChat(ctx) {
     (report && report.lead_name && String(report.lead_name).trim()) ||
     (report && report.customer_name && String(report.customer_name).trim()) ||
     escapeMdLine(tr.original_file_name || tr.name || transcriptionId)
-  const chatName = `${trimToLength(preferredLeadName, 36)}-售前分析`
+  const defaultChatName = `${trimToLength(preferredLeadName, 36)}-售前分析`
+  const chatNameOverride =
+    chatNameRaw != null && String(chatNameRaw).trim() !== ''
+      ? String(chatNameRaw).trim()
+      : null
+  const chatName = chatNameOverride || defaultChatName
   const ownerUserId = 'rxkf01'
   let chatid = mappedChat && mappedChat.chatid ? String(mappedChat.chatid).trim() : ''
   let reusedExistingChat = false
@@ -800,6 +819,21 @@ async function pushPresalesVideoToWecomAppChat(ctx) {
     }
   } else {
     reusedExistingChat = true
+    /** 复用线索已有群时，必须把本次推送名单同步进会话，否则新 userid 收不到群内消息 */
+    try {
+      const sync = await wecomAppChatApi.updateAppChatAddMembers(chatid, userIds)
+      const skip = sync.skipped60111 || []
+      logger.info(
+        `[presales-video] 复用群成员已同步 chatid=${chatid} 列表=${userIds.length}人 企微确认追加=${sync.addedCount} 跳过60111=${skip.length}` +
+          (skip.length ? ` (${skip.join(',')})` : '')
+      )
+    } catch (e) {
+      logger.error(
+        `[presales-video] 复用群追加成员失败 chatid=${chatid}:`,
+        e && e.message
+      )
+      throw e
+    }
   }
 
   const pushMoment = new Date()
@@ -833,7 +867,9 @@ async function pushPresalesVideoToWecomAppChat(ctx) {
   let videoPushedAsCard = false
 
   async function sendCardWithUrl(cardUrl) {
-    const titleBase = stripFileSuffix(tr.original_file_name || tr.name || '售前视频')
+    const titleBase =
+      cardTitleOverride ||
+      stripFileSuffix(tr.original_file_name || tr.name || '售前视频')
     const title = titleBase || '售前视频'
     logger.info(
       `[presales-video] 推送视频卡片链接 transcription=${transcriptionId} chatid=${chatid} url=${cardUrl}`
@@ -909,6 +945,119 @@ async function pushPresalesVideoToWecomAppChat(ctx) {
   }
 }
 
+/** 接收「小R」售前视频卡片的企微 userid，默认 rxkf01 */
+const PRESALES_VIDEO_RXKF_USERID =
+  String(process.env.PRESALES_VIDEO_RXKF_USERID || 'rxkf01').trim() || 'rxkf01'
+
+/**
+ * 不建群、不调外部报备/线索接口：仅向指定成员（默认 rxkf01）发送与群内推送相同的可点击文本卡片（同一套 URL 解析逻辑）。
+ * 会写入 reserve_4：伪 chatId（前缀 old + 8 位随机数），供卡片模板 {chatId} 从 reserve_4 解析。
+ * 依赖自建应用 message/send，需 WECOM_AGENT_ID。
+ */
+async function sendPresalesVideoCardToRxkfOnly(ctx) {
+  const { prisma, transcriptionId, cardTitle: cardTitleRaw } = ctx
+
+  if (!wecomAppChatApi.isAppChatConfigured()) {
+    throw new Error(
+      '未配置企业微信自建应用：请在环境变量中设置 WECOM_CORP_ID、WECOM_APPCHAT_SECRET'
+    )
+  }
+  if (!wecomAppChatApi.isApplicationMessageConfigured()) {
+    throw new Error('未配置 WECOM_AGENT_ID，无法向成员单发应用消息 textcard')
+  }
+
+  const tr = await prisma.transcriptions.findUnique({ where: { id: transcriptionId } })
+  if (!tr) throw new Error('转录不存在')
+
+  let videoTask = null
+  try {
+    videoTask = await prisma.presales_video_tasks.findUnique({
+      where: { transcription_id: transcriptionId }
+    })
+  } catch (_) {
+    /* optional table */
+  }
+
+  const cardTitleOverride =
+    cardTitleRaw != null && String(cardTitleRaw).trim() !== ''
+      ? String(cardTitleRaw).trim()
+      : null
+
+  const rawLink = pickRawVideoLinkForWecomCard(videoTask)
+  const execId =
+    videoTask && videoTask.execute_id != null ? String(videoTask.execute_id).trim() : ''
+  const cardTpl = resolveWecomCardUrlTemplate()
+  const pushMoment = new Date()
+
+  const pseudoChatId = generateRxkfPseudoAppChatId()
+  const reserve4Stamp = `wecom_appchat:${pseudoChatId}@${pushMoment.toISOString()}`.slice(0, 500)
+  try {
+    await prisma.presales_video_tasks.updateMany({
+      where: { transcription_id: transcriptionId },
+      data: { reserve_4: reserve4Stamp }
+    })
+  } catch (e) {
+    logger.warn('[presales-video] 单发小R：回写 reserve_4 失败:', e && e.message)
+  }
+
+  let cardUrl = ''
+  if (cardTpl) {
+    if (!execId) {
+      throw new Error(
+        '卡片链接模板需要 execute_id（请先提交工作流并等待 video_create 回调写入 presales_video_tasks）。'
+      )
+    }
+    const idForCard = presalesVideoTaskService.clipExecuteIdForPsvVideoInfo(execId)
+    cardUrl = fillWecomCardUrlTemplate(cardTpl, idForCard, {
+      reserve4: reserve4Stamp,
+      pushAt: pushMoment
+    })
+    if (!/^https?:\/\//i.test(cardUrl)) {
+      throw new Error('卡片 URL 模板展开后不是合法 http(s) 链接，请检查环境变量')
+    }
+  } else if (rawLink) {
+    if (isWindowsStyleFilePath(rawLink) && !/^https?:\/\//i.test(rawLink)) {
+      throw new Error(
+        '当前视频地址为本地路径，无法作为卡片链接。请改为 http(s)，或配置 PRESALES_VIDEO_WECOM_CARD_URL_TEMPLATE / 公共基址。'
+      )
+    }
+    const originOv = wecomCardPublicOriginOverride()
+    cardUrl = presalesVideoTaskService.buildPresalesVideoPublicPlayUrl(rawLink, originOv)
+    if (!/^https?:\/\//i.test(cardUrl)) {
+      throw new Error(
+        '无法生成 http(s) 卡片链接。请配置 PRESALES_VIDEO_PSV_INFO_BASE_URL 或 PRESALES_VIDEO_WECOM_PUSH_PUBLIC_BASE_URL 等。'
+      )
+    }
+  } else {
+    throw new Error(
+      '无可用卡片链接：请确认已有 execute_id / video_address，或配置 PRESALES_VIDEO_WECOM_CARD_URL_TEMPLATE。'
+    )
+  }
+
+  const titleBase =
+    cardTitleOverride ||
+    stripFileSuffix(tr.original_file_name || tr.name || '售前视频')
+  const title = titleBase || '售前视频'
+
+  await wecomAppChatApi.sendApplicationTextCardToUser(PRESALES_VIDEO_RXKF_USERID, {
+    title,
+    description: defaultCardDescription(),
+    url: cardUrl,
+    btntxt: defaultCardBtntxt()
+  })
+
+  logger.info(
+    `[presales-video] 已向 ${PRESALES_VIDEO_RXKF_USERID} 单发售前视频卡片 transcription=${transcriptionId} pseudoChatId=${pseudoChatId}`
+  )
+
+  return {
+    touser: PRESALES_VIDEO_RXKF_USERID,
+    videoPushedAsCard: true,
+    chatId: pseudoChatId,
+    reserve_4: reserve4Stamp
+  }
+}
+
 module.exports = {
   parseUserIds,
   resolvePushVideoUserIds,
@@ -917,5 +1066,6 @@ module.exports = {
   formatVideoMarkdown,
   extractWecomAppChatIdFromReserve4,
   fillWecomCardUrlTemplate,
-  pushPresalesVideoToWecomAppChat
+  pushPresalesVideoToWecomAppChat,
+  sendPresalesVideoCardToRxkfOnly
 }

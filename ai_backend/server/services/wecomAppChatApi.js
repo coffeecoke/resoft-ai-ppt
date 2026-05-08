@@ -11,6 +11,7 @@ const path = require('path')
 const https = require('https')
 const { URL } = require('url')
 const FormData = require('form-data')
+const logger = require('../utils/logger')
 
 let tokenCache = { token: null, expireAtMs: 0 }
 
@@ -157,6 +158,56 @@ async function createAppChat(opts) {
     throw new Error('appchat/create 未返回 chatid')
   }
   return { chatid: j.chatid }
+}
+
+/**
+ * 修改群发会话成员（向已有群追加成员）。
+ * 企微对整条 `add_user_list` 校验：任一 userid 无效（60111）则整批失败，故改为逐个添加；
+ * 60111 仅记录警告并跳过（userid 不存在、已离职、不在自建应用可见范围等）。
+ * @see https://developer.work.weixin.qq.com/document/path/90246
+ * @param {string} chatid
+ * @param {string[]} userIds 本次推送完整成员列表
+ * @returns {Promise<{ ok: true, addedCount: number, skipped60111: string[] }>}
+ */
+async function updateAppChatAddMembers(chatid, userIds) {
+  const ids = [...new Set((userIds || []).map((u) => String(u).trim()).filter(Boolean))]
+  if (ids.length === 0) {
+    throw new Error('appchat/update：成员列表为空')
+  }
+  const chatidStr = String(chatid).trim()
+  const skipped60111 = []
+  let addedCount = 0
+  for (const uid of ids) {
+    const token = await getAccessToken()
+    const url = `https://qyapi.weixin.qq.com/cgi-bin/appchat/update?access_token=${encodeURIComponent(token)}`
+    const body = {
+      chatid: chatidStr,
+      add_user_list: uid
+    }
+    const j = await httpsPostJson(url, body)
+    if (j.errcode == null || j.errcode === 0) {
+      addedCount += 1
+      continue
+    }
+    const code = Number(j.errcode)
+    /** userid 不存在或不在应用可见范围内等，跳过此人其余人仍可进群 */
+    if (code === 60111) {
+      skipped60111.push(uid)
+      logger.warn(
+        `[wecom-appchat] appchat/update 跳过无效 userid=${uid} chatid=${chatidStr}: ${j.errmsg || code}`
+      )
+      continue
+    }
+    throw new Error(formatQyApiError(`appchat/update 添加成员失败 userid=${uid}`, j))
+  }
+  if (skipped60111.length > 0) {
+    logger.warn(
+      `[wecom-appchat] 本次复用群追加成员：成功 ${addedCount} 人，跳过 ${skipped60111.length} 人（60111）：${skipped60111.join(', ')}`
+    )
+  } else {
+    logger.info(`[wecom-appchat] appchat/update 追加成员完成 chatid=${chatidStr} count=${addedCount}`)
+  }
+  return { ok: true, addedCount, skipped60111 }
 }
 
 /**
@@ -473,6 +524,7 @@ module.exports = {
   getApplicationAgentId,
   getAccessToken,
   createAppChat,
+  updateAppChatAddMembers,
   sendAppChatMarkdown,
   sendAppChatTextCard,
   sendApplicationTextCardToUser,

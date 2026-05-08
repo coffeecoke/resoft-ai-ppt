@@ -4,13 +4,24 @@
 const PV_API = (window.location.origin || 'http://localhost:3000') + '/api'
 
 /**
- * 与 AI_BACKEND_BASE_PATH 一致：页面在 /{prefix}/pages/... 时，lib 走 /{prefix}/lib（网关常只转发前缀，根路径 /lib 会 404）
+ * 与 AI_BACKEND_BASE_PATH 一致：lib 须走 /{prefix}/lib（网关只转发 /ai_backend 时根路径 /lib 会 404）。
+ * - 独立页：/{prefix}/pages/presales-video.html
+ * - 嵌入 admin 壳：/{prefix}/admin.html#presales-video（pathname 无 /pages/，须按 admin.html 解析前缀）
  */
 function pvLibRoot() {
   const pathname = window.location.pathname || ''
-  const i = pathname.indexOf('/pages/')
-  const prefix = i > 0 ? pathname.slice(0, i) : ''
-  return prefix ? `${prefix}/lib` : '/lib'
+  const pagesIdx = pathname.indexOf('/pages/')
+  if (pagesIdx > 0) {
+    return `${pathname.slice(0, pagesIdx)}/lib`
+  }
+  const adminTail = '/admin.html'
+  if (pathname.endsWith(adminTail)) {
+    const adminIdx = pathname.length - adminTail.length
+    if (adminIdx > 0) {
+      return `${pathname.slice(0, adminIdx)}/lib`
+    }
+  }
+  return '/lib'
 }
 
 /** 推送对话 / 提交工作流 返回信息较长，Toast 多停留一会（毫秒） */
@@ -317,7 +328,7 @@ function pvRenderTable() {
           <div class="pv-actions">
             <button type="button" class="btn btn-sm btn-outline pv-act-info" title="新标签页打开与企微角色确认相同的页面：查看/修改对话与说话人角色并保存" onclick="pvOpenCommunicationInfo('${row.id}')">查看信息</button>
             <button type="button" class="btn btn-sm btn-outline" style="border:1px solid var(--primary-color,#1890ff);color:var(--primary-color,#1890ff);background:transparent;" title="选择企微接收人并推送角色确认卡片（默认创建人 userid）" onclick="pvOpenRoleConfirmDialog('${row.id}')">角色确认</button>
-            <button type="button" class="btn btn-sm btn-primary" title="仅 Coze 文件上传（字段 file），返回 file_id/file_name；会议分析请点右侧「提交工作流」" onclick="pvPushDialogue('${row.id}')">推送对话</button>
+            <button type="button" class="btn btn-sm btn-primary" title="打开弹窗：预览并下载合并 txt，再保存并尝试 Coze 上传（字段 file）；会议分析请点右侧「提交工作流」" onclick="pvPushDialogue('${row.id}')">推送对话</button>
             <button type="button" class="btn btn-sm pv-act-workflow" title="Coze：用「推送对话」缓存的 fileId/fileName 调 meeting-analysis 取 execute_id；或通用工作流 URL" onclick="pvSubmitWorkflow('${row.id}')">提交工作流</button>
             <button type="button" class="btn btn-sm pv-act-secondary" title="先打开可编辑报告正文，保存后再调用推送接口（异步 md 或旧版 JSON）" onclick="pvPushReport('${row.id}')">推送报告</button>
             <button type="button" class="btn btn-sm pv-act-secondary" title="填写企微 userid 建应用群发会话，推送报备摘要与视频" onclick="pvOpenPushVideoDialog('${row.id}')">推送视频</button>
@@ -521,21 +532,98 @@ window.pvSubmitRoleConfirm = async function () {
   }
 }
 
+/** 推送对话弹窗：预览/下载用缓存（与 GET push-dialogue-preview 一致） */
+let pvPushDialogueTranscriptionId = null
+let pvPushDialoguePreview = { txt: '', fileName: '' }
+
 window.pvPushDialogue = async function (id) {
-  if (
-    !confirm(
-      '将先生成合并对话 txt 并保存到服务器目录，再尝试 Coze 上传（未配置或连不上 URL 时仍会保留本地 txt）。\n上传成功后请再点「提交工作流」。确定执行？'
+  pvPushDialogueTranscriptionId = id
+  pvPushDialoguePreview = { txt: '', fileName: '' }
+  const ta = document.getElementById('pv-push-dialogue-preview')
+  const st = document.getElementById('pv-push-dialogue-status')
+  const dl = document.getElementById('pv-push-dialogue-download')
+  const sub = document.getElementById('pv-push-dialogue-submit')
+  if (ta) {
+    ta.value = ''
+    ta.placeholder = '加载中…'
+  }
+  if (st) st.textContent = '正在加载合并对话…'
+  if (dl) dl.disabled = true
+  if (sub) sub.disabled = true
+  document.getElementById('pv-push-dialogue-dialog')?.showModal()
+
+  try {
+    const res = await fetch(
+      `${PV_API}/presales-video/transcriptions/${encodeURIComponent(id)}/push-dialogue-preview`
     )
-  ) {
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || !data.success) {
+      const err = data.error || '无法加载合并对话'
+      if (st) st.textContent = err
+      pvToast(err, 'error')
+      return
+    }
+    const d = data.data || {}
+    pvPushDialoguePreview = {
+      txt: d.txt != null ? String(d.txt) : '',
+      fileName: d.txtFileName ? String(d.txtFileName) : 'dialogue.txt'
+    }
+    if (ta) {
+      ta.value = pvPushDialoguePreview.txt
+      ta.placeholder = '加载完成后显示全文'
+    }
+    if (st) {
+      let msg = '已就绪'
+      if (d.dialogueSource) msg += `。来源：${d.dialogueSource}`
+      if (Array.isArray(d.speakers) && d.speakers.length) msg += `；说话人 ${d.speakers.length} 个`
+      st.textContent = msg
+    }
+    if (dl) dl.disabled = !pvPushDialoguePreview.txt
+    if (sub) sub.disabled = false
+  } catch (e) {
+    if (st) st.textContent = e.message || String(e)
+    pvToast('加载预览失败: ' + e.message, 'error')
+  }
+}
+
+window.pvClosePushDialogueDialog = function () {
+  document.getElementById('pv-push-dialogue-dialog')?.close()
+  pvPushDialogueTranscriptionId = null
+  pvPushDialoguePreview = { txt: '', fileName: '' }
+}
+
+window.pvDownloadPushDialogueTxt = function () {
+  const txt = pvPushDialoguePreview.txt
+  const name = pvPushDialoguePreview.fileName || 'dialogue.txt'
+  if (!txt) {
+    pvToast('暂无可下载内容，请先等待预览加载成功', 'error')
     return
   }
+  const blob = new Blob([txt], { type: 'text/plain;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  a.rel = 'noopener'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
+
+window.pvSubmitPushDialogue = async function () {
+  const id = pvPushDialogueTranscriptionId
+  if (!id) return
   pvShowOverlay(true, '正在生成 txt 并尝试上传…')
   try {
-    const res = await fetch(`${PV_API}/presales-video/transcriptions/${id}/push-dialogue`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: '{}'
-    })
+    const res = await fetch(
+      `${PV_API}/presales-video/transcriptions/${encodeURIComponent(id)}/push-dialogue`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}'
+      }
+    )
     const data = await res.json().catch(() => ({}))
     const d = data.data || {}
 
@@ -567,6 +655,7 @@ window.pvPushDialogue = async function (id) {
         PV_PUSH_WORKFLOW_TOAST_MS
       )
       console.log('[presales-video] push-dialogue', d)
+      pvClosePushDialogueDialog()
       return
     }
 
@@ -590,6 +679,7 @@ window.pvPushDialogue = async function (id) {
       PV_PUSH_WORKFLOW_TOAST_MS
     )
     console.log('[presales-video] push-dialogue', d)
+    pvClosePushDialogueDialog()
   } catch (e) {
     pvToast('推送失败: ' + e.message, 'error', PV_PUSH_WORKFLOW_TOAST_MS)
   } finally {
@@ -908,6 +998,40 @@ window.pvCopyReport = async function () {
   }
 }
 
+/** 将当前报告 Markdown 另存为 .md（与「仅保存」内容来源一致，下载为本地文件） */
+window.pvDownloadReport = function () {
+  const t = pvGetReportEditorValue()
+  if (!String(t).trim()) {
+    pvToast('暂无内容可下载', 'error')
+    return
+  }
+  const id = pvState.pushReportTranscriptionId
+  let base = 'presales_report'
+  if (id) {
+    const row = pvState.list.find((r) => r.id === id)
+    const raw = row && (row.originalFileName || row.name) ? String(row.originalFileName || row.name) : ''
+    if (raw) {
+      base = raw.replace(/[\\/:*?"<>|]/g, '_').trim().slice(0, 120)
+    } else {
+      base = `presales_report_${id}`
+    }
+  }
+  if (!/\.md$/i.test(base)) {
+    base += '.md'
+  }
+  const blob = new Blob([t], { type: 'text/markdown;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = base
+  a.rel = 'noopener'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+  pvToast('已开始下载', 'success')
+}
+
 /** 调用服务端推送报告（不在此弹窗内保存正文） */
 async function pvDoPushReport(id) {
   pvShowOverlay(true, '正在推送报告...')
@@ -1144,6 +1268,71 @@ window.pvSubmitWorkflow = async function (id) {
 }
 
 let pvPushVideoTranscriptionId = null
+/** 推送视频弹窗：psv_video_info.url，供「新窗口播放」 */
+let pvPushVideoPsvUrl = null
+
+/** 与后端 stripFileSuffix 一致：去掉末尾扩展名，作卡片标题默认值 */
+function pvStripFileSuffix(name) {
+  const s = String(name || '').trim()
+  if (!s) return ''
+  return s.replace(/\.[^./\\]{1,10}$/g, '').trim()
+}
+
+async function pvLoadPushVideoPlayUrl(id) {
+  const statusEl = document.getElementById('pv-push-video-url-status')
+  const btn = document.getElementById('pv-push-video-play-btn')
+  pvPushVideoPsvUrl = null
+  if (!statusEl || !btn) return
+  btn.style.display = 'none'
+  btn.textContent = ''
+  btn.removeAttribute('title')
+  statusEl.textContent = '正在加载视频地址…'
+  try {
+    const res = await fetch(
+      `${PV_API}/presales-video/transcriptions/${encodeURIComponent(id)}/psv-video-info`
+    )
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || !data.success) {
+      statusEl.textContent = data.error || '加载失败'
+      return
+    }
+    const d = data.data || {}
+    const url = d.url != null && String(d.url).trim() ? String(d.url).trim() : ''
+    if (!url) {
+      statusEl.textContent = d.message || '暂无播放地址'
+      return
+    }
+    pvPushVideoPsvUrl = url
+    const title = d.title ? String(d.title) : ''
+    statusEl.textContent = title ? `标题：${title}` : '点击下方链接在新窗口打开播放'
+    const short = url.length > 96 ? url.slice(0, 94) + '…' : url
+    btn.textContent = short
+    btn.title = url
+    btn.style.display = 'inline-block'
+  } catch (e) {
+    statusEl.textContent = e.message || String(e)
+  }
+}
+
+window.pvOpenPsvVideoPlayWindow = function () {
+  const u = pvPushVideoPsvUrl
+  if (!u) {
+    pvToast('无可播放地址', 'error')
+    return
+  }
+  const w = window.open(
+    u,
+    'pvPsvVideoPlay',
+    'noopener,noreferrer,width=1150,height=720,scrollbars=yes,resizable=yes'
+  )
+  if (w) {
+    try {
+      w.focus()
+    } catch (_) {}
+  } else {
+    pvToast('无法打开新窗口，请检查浏览器是否拦截弹窗', 'warning', 6000)
+  }
+}
 
 async function pvLoadPipelinePushUsersPreview(id) {
   const ta = document.getElementById('pv-pipeline-push-users')
@@ -1197,19 +1386,93 @@ async function pvLoadPushVideoUsersPreview(id) {
   }
 }
 
+function pvDefaultPushVideoChatName(row, transcriptionId) {
+  const cust = row && row.customerName && String(row.customerName).trim()
+  const raw =
+    row && (row.originalFileName || row.name) ? String(row.originalFileName || row.name) : ''
+  const base = cust || pvStripFileSuffix(raw) || String(transcriptionId || '')
+  const arr = Array.from(String(base).trim())
+  const trimmed =
+    arr.length <= 36 ? arr.join('') : `${arr.slice(0, 35).join('')}…`
+  return `${trimmed}-售前分析`
+}
+
 window.pvOpenPushVideoDialog = function (id) {
   pvPushVideoTranscriptionId = id
   const ta = document.getElementById('pv-push-video-users')
   const hint = document.getElementById('pv-push-video-preview')
+  const cardTitleEl = document.getElementById('pv-push-video-card-title')
+  const chatNameEl = document.getElementById('pv-push-video-chat-name')
   if (ta) ta.value = ''
   if (hint) hint.textContent = '正在加载自动推送人员...'
+  const row = pvState.list.find((r) => r.id === id)
+  if (cardTitleEl) {
+    const raw = row && (row.originalFileName || row.name) ? String(row.originalFileName || row.name) : ''
+    const defTitle = pvStripFileSuffix(raw) || '售前视频'
+    cardTitleEl.value = defTitle
+  }
+  if (chatNameEl) {
+    chatNameEl.value = pvDefaultPushVideoChatName(row, id)
+  }
   document.getElementById('pv-push-video-dialog')?.showModal()
   pvLoadPushVideoUsersPreview(id)
+  pvLoadPushVideoPlayUrl(id)
 }
 
 window.pvClosePushVideoDialog = function () {
   document.getElementById('pv-push-video-dialog')?.close()
   pvPushVideoTranscriptionId = null
+  pvPushVideoPsvUrl = null
+  const st = document.getElementById('pv-push-video-url-status')
+  const btn = document.getElementById('pv-push-video-play-btn')
+  if (st) st.textContent = '—'
+  if (btn) {
+    btn.style.display = 'none'
+    btn.textContent = ''
+    btn.removeAttribute('title')
+  }
+}
+
+/** 不建群：仅向 rxkf01（或后端配置的「小R」）单发售前视频文本卡片 */
+window.pvSubmitPushVideoCardToRxkf = async function () {
+  const id = pvPushVideoTranscriptionId
+  if (!id) return
+  const cardTitleRaw =
+    (document.getElementById('pv-push-video-card-title') &&
+      document.getElementById('pv-push-video-card-title').value) ||
+    ''
+  const cardTitleTrim = String(cardTitleRaw).trim()
+  pvShowOverlay(true, '正在向小R发送卡片…')
+  try {
+    const res = await fetch(
+      `${PV_API}/presales-video/transcriptions/${encodeURIComponent(id)}/push-video-card-to-rxkf`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...(cardTitleTrim ? { cardTitle: cardTitleTrim } : {})
+        })
+      }
+    )
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || !data.success) {
+      pvToast(data.error || '发送失败', 'error', PV_PUSH_WORKFLOW_TOAST_MS)
+      return
+    }
+    const d = data.data || {}
+    const cid = d.chatId != null && String(d.chatId).trim() ? String(d.chatId).trim() : ''
+    pvToast(
+      cid
+        ? `已向 ${d.touser || 'rxkf01'} 发送售前视频卡片（未建群）；伪 chatId=${cid}（已写入 reserve_4）。`
+        : `已向 ${d.touser || 'rxkf01'} 发送售前视频卡片（未建群）。`,
+      'success',
+      PV_PUSH_WORKFLOW_TOAST_MS
+    )
+  } catch (e) {
+    pvToast('发送失败: ' + e.message, 'error')
+  } finally {
+    pvShowOverlay(false)
+  }
 }
 
 window.pvSubmitPushVideo = async function () {
@@ -1220,13 +1483,30 @@ window.pvSubmitPushVideo = async function () {
     pvToast('请填写推送人员名单（企微 userid，逗号分隔）', 'error')
     return
   }
+  const cardTitleRaw =
+    (document.getElementById('pv-push-video-card-title') &&
+      document.getElementById('pv-push-video-card-title').value) ||
+    ''
+  const cardTitleTrim = String(cardTitleRaw).trim()
+  const chatNameRaw =
+    (document.getElementById('pv-push-video-chat-name') &&
+      document.getElementById('pv-push-video-chat-name').value) ||
+    ''
+  const chatNameTrim = String(chatNameRaw).trim()
   pvShowOverlay(true, '正在创建企微群发会话并推送…')
   try {
-    const res = await fetch(`${PV_API}/presales-video/transcriptions/${id}/push-video`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userIds: raw.trim() })
-    })
+    const res = await fetch(
+      `${PV_API}/presales-video/transcriptions/${encodeURIComponent(id)}/push-video`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userIds: raw.trim(),
+          ...(cardTitleTrim ? { cardTitle: cardTitleTrim } : {}),
+          ...(chatNameTrim ? { chatName: chatNameTrim } : {})
+        })
+      }
+    )
     const data = await res.json().catch(() => ({}))
     if (!res.ok || !data.success) {
       pvToast(data.error || '推送失败', 'error', PV_PUSH_WORKFLOW_TOAST_MS)

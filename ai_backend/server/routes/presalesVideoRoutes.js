@@ -69,6 +69,26 @@ function getReportDurationSplitSec() {
   return n
 }
 
+/**
+ * 管理端「推送视频」弹窗：播放地址不再用 psv_video_info.url，而用语义固定页 + query id = 库表主键 id。
+ * 环境变量 PRESALES_VIDEO_WECOM_ADMIN_PLAY_URL_TEMPLATE 须含字面量 {id}（可配 &is_debug=true 等）。
+ */
+function buildPsvWecomAdminPlayUrl(psvId) {
+  const raw = psvId != null ? String(psvId).trim() : ''
+  if (!raw) return null
+  const idEnc = encodeURIComponent(raw)
+  const fromEnv = process.env.PRESALES_VIDEO_WECOM_ADMIN_PLAY_URL_TEMPLATE
+  const template =
+    fromEnv != null && String(fromEnv).trim() !== ''
+      ? String(fromEnv).trim()
+      : 'http://smartsale.resoftcss.com.cn:8899/presales/wecom/play?id={id}&is_debug=true'
+  if (template.includes('{id}')) {
+    return template.replace(/\{id\}/g, idEnc)
+  }
+  const joiner = template.includes('?') ? '&' : '?'
+  return `${template}${joiner}id=${idEnc}&is_debug=true`
+}
+
 /** 列表查询：YYYY-MM-DD → 服务器本地时区当日 00:00:00.000 */
 function parseListDateFrom(s) {
   if (s == null || String(s).trim() === '') return null
@@ -779,18 +799,53 @@ router.get('/transcriptions', async (req, res) => {
       logger.warn('[presales-video] 列表关联主任务失败（表是否已建？）:', e.message)
     }
 
-    const listOut = list.map((t) => ({
-      id: t.id,
-      name: t.name,
-      originalFileName: t.original_file_name,
-      customerName: t.customer_name,
-      /** 音频时长（秒），库字段 audio_duration */
-      audioDuration: t.audio_duration != null ? Number(t.audio_duration) : null,
-      createdBy: t.created_by != null && String(t.created_by).trim() ? String(t.created_by).trim() : null,
-      createdAt: t.created_at,
-      hasPresalesReport: (t.presales_analysis_results && t.presales_analysis_results.length > 0) || false,
-      videoTask: presalesVideoTaskService.toApiShape(taskByTid.get(t.id))
-    }))
+    /** psv_video_info.id 与 presales_video_tasks.execute_id 对应 */
+    let psvByExecuteId = new Map()
+    try {
+      const execIds = [...taskByTid.values()]
+        .map((tk) => (tk && tk.execute_id ? String(tk.execute_id).trim() : ''))
+        .filter(Boolean)
+      const uniqueExec = [...new Set(execIds)]
+      if (uniqueExec.length) {
+        const psvRows = await prisma.psv_video_info.findMany({
+          where: { id: { in: uniqueExec } }
+        })
+        psvByExecuteId = new Map(psvRows.map((r) => [r.id, r]))
+      }
+    } catch (e) {
+      logger.warn('[presales-video] 列表关联 psv_video_info 失败:', e.message)
+    }
+
+    const listOut = list.map((t) => {
+      const taskRow = taskByTid.get(t.id)
+      const baseVt = presalesVideoTaskService.toApiShape(taskRow)
+      let videoTask = baseVt
+      if (baseVt && baseVt.executeId) {
+        const psv = psvByExecuteId.get(String(baseVt.executeId).trim())
+        if (psv && psv.id) {
+          const playUrl = buildPsvWecomAdminPlayUrl(psv.id)
+          if (playUrl) {
+            videoTask = {
+              ...baseVt,
+              psvVideoInfoUrl: playUrl,
+              psvVideoInfoTitle: psv.title != null ? String(psv.title) : null
+            }
+          }
+        }
+      }
+      return {
+        id: t.id,
+        name: t.name,
+        originalFileName: t.original_file_name,
+        customerName: t.customer_name,
+        /** 音频时长（秒），库字段 audio_duration */
+        audioDuration: t.audio_duration != null ? Number(t.audio_duration) : null,
+        createdBy: t.created_by != null && String(t.created_by).trim() ? String(t.created_by).trim() : null,
+        createdAt: t.created_at,
+        hasPresalesReport: (t.presales_analysis_results && t.presales_analysis_results.length > 0) || false,
+        videoTask
+      }
+    })
 
     res.json({
       success: true,
@@ -809,6 +864,93 @@ router.get('/transcriptions', async (req, res) => {
   } catch (error) {
     logger.error('[presales-video] 列表失败:', error)
     res.status(500).json({ success: false, error: error.message || '获取列表失败' })
+  }
+})
+
+/**
+ * GET /api/presales-video/transcriptions/:id/psv-video-info
+ * 读取 psv_video_info（主键 id = presales_video_tasks.execute_id），供推送视频弹窗展示播放 URL。
+ * 返回的 url 为企微 H5 播放页（buildPsvWecomAdminPlayUrl），不再使用库字段 psv_video_info.url。
+ */
+router.get('/transcriptions/:id/psv-video-info', async (req, res) => {
+  try {
+    const { id } = req.params
+    const task = await presalesVideoTaskService.getByTranscriptionId(id)
+    if (!task || !task.execute_id || !String(task.execute_id).trim()) {
+      return res.json({
+        success: true,
+        data: {
+          url: null,
+          title: null,
+          psvId: null,
+          executeId: null,
+          message: '无主任务记录或尚无 execute_id（请先提交工作流并等待回调）'
+        }
+      })
+    }
+    const execId = String(task.execute_id).trim()
+    const row = await prisma.psv_video_info.findUnique({ where: { id: execId } })
+    if (!row) {
+      return res.json({
+        success: true,
+        data: {
+          url: null,
+          title: null,
+          psvId: null,
+          executeId: execId,
+          message: '未找到 psv_video_info（可能尚未 video_create 回调写入）'
+        }
+      })
+    }
+    const psvPk = row.id != null ? String(row.id).trim() : ''
+    const playUrl = psvPk ? buildPsvWecomAdminPlayUrl(psvPk) : null
+    res.json({
+      success: true,
+      data: {
+        url: playUrl,
+        title: row.title != null ? String(row.title) : null,
+        psvId: psvPk || null,
+        executeId: execId
+      }
+    })
+  } catch (error) {
+    logger.error('[presales-video] psv-video-info 失败:', error)
+    res.status(500).json({ success: false, error: error.message || '读取失败' })
+  }
+})
+
+/**
+ * GET /api/presales-video/transcriptions/:id/push-dialogue-preview
+ * 仅生成与「推送对话」相同的合并 txt 内容供前端预览/下载，不落盘、不上传。
+ */
+router.get('/transcriptions/:id/push-dialogue-preview', async (req, res) => {
+  try {
+    const { id } = req.params
+    const resolved = await mergedDialogueService.resolveMergedDialoguesForTranscription(id)
+    if (!resolved || !resolved.dialogues.length) {
+      return res.status(404).json({
+        success: false,
+        error: '未找到可用的合并/转写对话内容'
+      })
+    }
+    const { transcription, dialogues, source } = resolved
+    const displayName =
+      transcription.original_file_name || transcription.name || `transcription_${id}`
+    const fileName = mergedDialogueService.buildSafeTxtFilename(displayName)
+    const txt = mergedDialogueService.buildMergedDialogueTxt(transcription, dialogues)
+    const speakers = mergedDialogueService.uniqueSpeakers(dialogues)
+    res.json({
+      success: true,
+      data: {
+        txt,
+        txtFileName: fileName,
+        dialogueSource: source,
+        speakers
+      }
+    })
+  } catch (error) {
+    logger.error('[presales-video] 推送对话预览失败:', error)
+    res.status(500).json({ success: false, error: error.message || '获取预览失败' })
   }
 })
 
@@ -1682,7 +1824,10 @@ router.get('/transcriptions/:id/push-video-users', async (req, res) => {
 /**
  * POST /api/presales-video/transcriptions/:id/push-video
  * Body: { userIds: "userid1,userid2" } 或 { members: ["id1","id2"] }（可选）
- * 未传 userIds 时，自动按 transcriptions.created_by 向上找上级链并加固定成员（含 rxkf01）。
+ *       cardTitle | card_title：可选，企微文本卡片 title；不传则沿用转录音频文件名（去后缀）或「售前视频」。
+ * 未传 userIds 时：自动按 created_by 向上找上级链并加固定成员（含 rxkf01）。
+ * 传入 userIds 时：以 Body 名单为准，不再并入固定成员/rxkf01（你可从预览里删掉固定成员）；仍应用 env PRESALES_VIDEO_GROUP_EXCLUDE_USERIDS。
+ * chatName | group_name | groupName：可选，仅在新创建群发会话时使用该名称；不传则自动「线索/客户名或文件名-售前分析」。
  * 使用企业微信应用 API 创建/复用 appchat，向群内推送：报备 main_content + 售前视频文本卡片。
  */
 router.post('/transcriptions/:id/push-video', async (req, res) => {
@@ -1697,10 +1842,26 @@ router.post('/transcriptions/:id/push-video', async (req, res) => {
           : body.userList != null
             ? body.userList
             : null
+    const cardTitle =
+      body.cardTitle != null && String(body.cardTitle).trim()
+        ? String(body.cardTitle).trim()
+        : body.card_title != null && String(body.card_title).trim()
+          ? String(body.card_title).trim()
+          : null
+    const chatName =
+      body.chatName != null && String(body.chatName).trim()
+        ? String(body.chatName).trim()
+        : body.groupName != null && String(body.groupName).trim()
+          ? String(body.groupName).trim()
+          : body.group_name != null && String(body.group_name).trim()
+            ? String(body.group_name).trim()
+            : null
     const result = await presalesVideoWecomPushService.pushPresalesVideoToWecomAppChat({
       prisma,
       transcriptionId: id,
-      userIdsRaw: userIds == null ? null : userIds
+      userIdsRaw: userIds == null ? null : userIds,
+      cardTitle,
+      chatName
     })
     // reserve_4（wecom_appchat:{chatid}@时间）已在 push 服务内、发卡片前写入，供模板 {chatId} 解析
     logger.info(
@@ -1716,6 +1877,45 @@ router.post('/transcriptions/:id/push-video', async (req, res) => {
       msg.includes('群主') ||
       msg.includes('userid') ||
       msg.includes('不存在')
+    res.status(clientErr ? 400 : 500).json({ success: false, error: msg })
+  }
+})
+
+/**
+ * POST /api/presales-video/transcriptions/:id/push-video-card-to-rxkf
+ * Body 可选：cardTitle | card_title（与 push-video 一致）。
+ * 不建群、不调报备/线索外部接口：写入 reserve_4（伪 chatId：前缀 old + 8 位随机数字），卡片模板 {chatId} 从此解析；仅向 rxkf01（或 PRESALES_VIDEO_RXKF_USERID）单发文本卡片（自建应用 message/send）。
+ */
+router.post('/transcriptions/:id/push-video-card-to-rxkf', async (req, res) => {
+  const { id } = req.params
+  try {
+    const body = req.body || {}
+    const cardTitle =
+      body.cardTitle != null && String(body.cardTitle).trim()
+        ? String(body.cardTitle).trim()
+        : body.card_title != null && String(body.card_title).trim()
+          ? String(body.card_title).trim()
+          : null
+    const result = await presalesVideoWecomPushService.sendPresalesVideoCardToRxkfOnly({
+      prisma,
+      transcriptionId: id,
+      cardTitle
+    })
+    logger.info(
+      `[presales-video] push-video-card-to-rxkf 成功 transcription=${id} touser=${result.touser}`
+    )
+    res.json({ success: true, data: result })
+  } catch (error) {
+    logger.error('[presales-video] push-video-card-to-rxkf 失败:', error)
+    const msg = error.message || '发送失败'
+    const clientErr =
+      msg.includes('未配置') ||
+      msg.includes('不存在') ||
+      msg.includes('无可用') ||
+      msg.includes('不是合法') ||
+      msg.includes('本地路径') ||
+      msg.includes('execute_id') ||
+      msg.includes('无法生成')
     res.status(clientErr ? 400 : 500).json({ success: false, error: msg })
   }
 })

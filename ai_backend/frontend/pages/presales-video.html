@@ -642,6 +642,30 @@
       background: var(--card-bg, #fff);
       color: var(--text-primary, #262626);
     }
+    #pv-push-video-dialog .pv-push-video-field label {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 6px;
+      color: var(--text-primary, #262626);
+      font-weight: 500;
+    }
+    #pv-push-video-dialog #pv-push-video-card-title,
+    #pv-push-video-dialog #pv-push-video-chat-name {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 10px 12px;
+      font-size: 14px;
+      border: 1px solid var(--border-color, #d9d9d9);
+      border-radius: 6px;
+      background: var(--card-bg, #fff);
+      color: var(--text-primary, #262626);
+    }
+    #pv-push-video-dialog #pv-push-video-card-title:focus,
+    #pv-push-video-dialog #pv-push-video-chat-name:focus {
+      outline: none;
+      border-color: var(--primary-color, #1890ff);
+      box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.15);
+    }
     #pv-push-video-dialog textarea {
       width: 100%;
       min-height: 100px;
@@ -657,6 +681,53 @@
       color: var(--text-secondary, #8c8c8c);
       margin: 0 0 10px 0;
       line-height: 1.5;
+    }
+    #pv-push-video-dialog .pv-push-video-play-section {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border-color, #e8e8e8);
+    }
+    #pv-push-video-dialog .pv-push-video-play-link {
+      display: inline-block;
+      max-width: 100%;
+      word-break: break-all;
+      font-size: 13px;
+      color: var(--primary-color, #1890ff);
+      cursor: pointer;
+      text-decoration: underline;
+      background: none;
+      border: none;
+      padding: 0;
+      font-family: inherit;
+      text-align: left;
+    }
+    #pv-push-video-dialog .pv-push-video-play-link:hover {
+      opacity: 0.85;
+    }
+    #pv-push-dialogue-dialog .pv-push-dialogue-hint {
+      font-size: 12px;
+      color: var(--text-secondary, #8c8c8c);
+      margin: 0 0 10px 0;
+      line-height: 1.5;
+    }
+    #pv-push-dialogue-dialog #pv-push-dialogue-preview {
+      width: 100%;
+      min-height: 120px;
+      max-height: min(40vh, 320px);
+      box-sizing: border-box;
+      padding: 10px 12px;
+      font-size: 13px;
+      font-family: ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+      line-height: 1.45;
+      border: 1px solid var(--border-color, #d9d9d9);
+      border-radius: 6px;
+      resize: vertical;
+      background: var(--card-bg, #fff);
+      color: var(--text-primary, #262626);
+    }
+    #pv-push-dialogue-dialog .dialog-actions {
+      flex-wrap: wrap;
+      gap: 8px;
     }
     #pv-role-confirm-dialog input#pv-role-confirm-userid {
       width: 100%;
@@ -813,6 +884,34 @@
         <p class="pv-push-video-hint">
           填写企业微信成员 <strong>userid</strong>（与通讯录一致），英文逗号分隔，<strong>至少 2 人</strong>（含群主）。系统将创建「应用群发会话」、推送与转录客户名匹配的<strong>最近一条交流报备</strong>摘要，以及库中的<strong>视频链接/路径</strong>（<code>video_address</code>）。
         </p>
+        <div class="pv-push-video-field" style="margin-bottom: 12px;">
+          <label for="pv-push-video-card-title">卡片名称（企微文本卡片标题）</label>
+          <input
+            type="text"
+            id="pv-push-video-card-title"
+            maxlength="128"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="留空则使用转录音频文件名（去后缀），与改版前一致"
+          />
+          <p class="pv-push-video-hint" style="margin-top: 6px; margin-bottom: 0;">
+            群内<strong>可点击的视频卡片</strong>标题默认原为：转录的 <code style="font-size:11px;">original_file_name</code> 或 <code style="font-size:11px;">name</code>（去掉扩展名），否则为「售前视频」。此处填写后将<strong>覆盖</strong>默认值。
+          </p>
+        </div>
+        <div class="pv-push-video-field" style="margin-bottom: 12px;">
+          <label for="pv-push-video-chat-name">群名称（新建群发会话）</label>
+          <input
+            type="text"
+            id="pv-push-video-chat-name"
+            maxlength="50"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="留空则自动：客户/线索名或文件名（截断）-售前分析"
+          />
+          <p class="pv-push-video-hint" style="margin-top: 6px; margin-bottom: 0;">
+            仅<strong>首次为该线索创建</strong>群发会话时使用；名称最长约 50 字（超长由服务端截断）。复用已有群时<strong>不会改名</strong>。
+          </p>
+        </div>
         <label for="pv-push-video-users" class="sr-only">推送人员名单</label>
         <textarea
           id="pv-push-video-users"
@@ -822,10 +921,58 @@
         <p id="pv-push-video-preview" class="pv-push-video-hint" style="margin-top:8px; margin-bottom:0;">
           正在加载自动推送人员...
         </p>
+        <div id="pv-push-video-play-section" class="pv-push-video-play-section">
+          <p class="pv-push-video-hint" style="margin:0 0 6px 0;">
+            <strong>视频播放</strong>（企微 H5，query <code style="font-size:11px;">id</code> = <code style="font-size:11px;">psv_video_info.id</code>）
+          </p>
+          <p id="pv-push-video-url-status" class="pv-push-video-hint" style="margin-top:0; margin-bottom:6px;">
+            正在加载…
+          </p>
+          <button
+            type="button"
+            id="pv-push-video-play-btn"
+            class="pv-push-video-play-link"
+            style="display:none;"
+            onclick="pvOpenPsvVideoPlayWindow()"
+          >
+          </button>
+        </div>
       </div>
       <div class="dialog-actions">
         <button type="button" class="btn btn-secondary" onclick="pvClosePushVideoDialog()">取消</button>
+        <button type="button" class="btn btn-secondary" onclick="pvSubmitPushVideoCardToRxkf()" title="不建群，仅向小R（默认企微 userid：rxkf01）单发与群内相同的视频卡片">
+          发送给小R
+        </button>
         <button type="button" class="btn btn-primary" onclick="pvSubmitPushVideo()">保存推送</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="pv-push-dialogue-dialog" class="pv-modal-dialog">
+    <div class="dialog-content" style="min-width: min(420px, 92vw); max-width: min(720px, 96vw);">
+      <div class="dialog-header">
+        <h2>推送对话</h2>
+        <button type="button" class="icon-btn" onclick="pvClosePushDialogueDialog()" aria-label="关闭">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="dialog-body">
+        <p class="pv-push-dialogue-hint">
+          下方为即将写入服务器并尝试 Coze 上传的<strong>合并对话 txt</strong>（与实际上传内容一致）。可先<strong>下载 txt</strong>核对，再点「确定推送」。上传成功后请再点「提交工作流」。
+        </p>
+        <p id="pv-push-dialogue-status" class="pv-push-dialogue-hint" style="margin-top:0;">正在加载…</p>
+        <label for="pv-push-dialogue-preview" class="sr-only">合并对话预览</label>
+        <textarea id="pv-push-dialogue-preview" readonly placeholder="加载完成后显示全文"></textarea>
+      </div>
+      <div class="dialog-actions">
+        <button type="button" class="btn btn-secondary" onclick="pvClosePushDialogueDialog()">取消</button>
+        <button type="button" class="btn btn-secondary" id="pv-push-dialogue-download" onclick="pvDownloadPushDialogueTxt()" disabled title="下载与推送相同的 txt 文件">
+          下载 txt
+        </button>
+        <button type="button" class="btn btn-primary" id="pv-push-dialogue-submit" onclick="pvSubmitPushDialogue()" disabled>确定推送</button>
       </div>
     </div>
   </dialog>
@@ -968,6 +1115,9 @@
         <button type="button" class="btn btn-secondary btn-sm" onclick="pvCloseReportDialog()">取消</button>
         <div class="pv-report-footer-right">
           <button type="button" class="btn btn-secondary btn-sm" onclick="pvCopyReport()">复制源文</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="pvDownloadReport()" title="下载当前编辑器中的 Markdown 文本">
+            下载 md
+          </button>
           <button type="button" class="btn btn-secondary btn-sm" onclick="pvSavePushReportOnly()">仅保存</button>
           <button type="button" class="btn btn-primary btn-sm" onclick="pvSavePushReportAndPush()">保存并推送</button>
         </div>
