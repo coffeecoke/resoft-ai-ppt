@@ -11,7 +11,7 @@
       </el-button>
     </div>
 
-    <div class="template-body">
+    <div class="template-body" :style="bgStyle">
       <!-- 左侧大预览 -->
       <div class="preview-area">
         <div v-if="selectedTheme" class="preview-wrap">
@@ -56,8 +56,9 @@
             @click="selectTheme(theme)"
           >
             <div class="theme-preview">
-              <div class="theme-name-badge">{{ theme.category }}</div>
-              <div class="theme-cover-placeholder">
+              <img v-if="theme.coverUrl" :src="theme.coverUrl" class="theme-cover-img" :alt="theme.name" />
+              <div v-else class="theme-cover-placeholder">
+                <div class="theme-name-badge">{{ theme.category }}</div>
                 <span>{{ theme.name }}</span>
               </div>
             </div>
@@ -127,14 +128,21 @@ const illustOptions = [
 
 const previewScaleStyle = computed(() => {
   const w = 700
-  const scale = w / 1280
   return { width: `${w}px`, height: `${w * 720 / 1280}px`, position: 'relative' as const }
 })
 
+const bgStyle = computed(() => {
+  const url = selectedTheme.value?.coverUrl
+  if (!url) return {}
+  return {
+    '--bg-url': `url(${url})`,
+  }
+})
+
 onMounted(async () => {
-  if (!outline.value) { router.push({ name: 'AIPPTHome' }); return }
   const res = await aipptGenApi.getThemes()
   themes.value = (res as any).data || []
+  if (themes.value.length > 0) await selectTheme(themes.value[0])
 })
 
 async function selectTheme(theme: any) {
@@ -234,6 +242,25 @@ async function startGenerate() {
   overflow: hidden;
   padding: 24px;
   gap: 24px;
+  position: relative;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: var(--bg-url);
+    background-size: cover;
+    background-position: center;
+    filter: blur(24px) brightness(0.6);
+    transform: scale(1.05);
+    transition: background-image 0.4s ease;
+    z-index: 0;
+  }
+
+  > * {
+    position: relative;
+    z-index: 1;
+  }
 }
 
 .preview-area {
@@ -342,7 +369,8 @@ async function startGenerate() {
   padding: 1px 6px;
   border-radius: 4px;
 }
-.theme-cover-placeholder { color: rgba(255,255,255,0.7); font-size: 10px; text-align: center; padding: 0 4px; }
+.theme-cover-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.theme-cover-placeholder { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: rgba(255,255,255,0.8); font-size: 10px; text-align: center; padding: 0 4px; background: linear-gradient(135deg, #6366f1, #8b5cf6); }
 .theme-label { font-size: 11px; color: #374151; padding: 5px 6px; text-align: center; background: #f9fafb; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .illust-options { display: flex; flex-direction: column; gap: 12px; }

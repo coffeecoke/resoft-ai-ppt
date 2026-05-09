@@ -10,6 +10,7 @@ import { buildSlideGenMessages } from '../prompts/aipptGenPrompt.js'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', '..', 'data')
 const TEMPLATES_DIR = path.join(DATA_DIR, 'aippt-templates')
+const SKELETONS_DIR = path.join(DATA_DIR, 'aippt-skeletons')
 const PREVIEWS_DIR = path.join(DATA_DIR, 'aippt-previews')
 const PROJECTS_DIR = path.join(DATA_DIR, 'aippt-projects')
 
@@ -22,6 +23,60 @@ for (const dir of [PREVIEWS_DIR, PROJECTS_DIR]) {
 const tasks = new Map()
 
 const TASKS_CACHE = path.join(DATA_DIR, 'aippt-tasks-cache.json')
+const META_FILE = path.join(DATA_DIR, 'aippt-projects-meta.json')
+
+// ── 元数据表（读/写/同步） ─────────────────────────────────────────
+function readMeta() {
+  try {
+    if (fs.existsSync(META_FILE)) return JSON.parse(fs.readFileSync(META_FILE, 'utf-8'))
+  } catch {}
+  return []
+}
+
+function writeMeta(rows) {
+  fs.writeFileSync(META_FILE, JSON.stringify(rows, null, 2), 'utf-8')
+}
+
+function upsertMeta(entry) {
+  const rows = readMeta()
+  const idx = rows.findIndex(r => r.id === entry.id)
+  if (idx >= 0) rows[idx] = { ...rows[idx], ...entry }
+  else rows.unshift(entry)
+  writeMeta(rows)
+}
+
+function removeMeta(id) {
+  writeMeta(readMeta().filter(r => r.id !== id))
+}
+
+// 启动时：如果 meta 不存在，从磁盘 JSON 文件 bootstrap
+function initMeta() {
+  if (fs.existsSync(META_FILE)) {
+    console.log(`[aipptGen] meta loaded: ${readMeta().length} projects`)
+    return
+  }
+  if (!fs.existsSync(PROJECTS_DIR)) { writeMeta([]); return }
+  const rows = fs.readdirSync(PROJECTS_DIR)
+    .filter(f => f.endsWith('.json'))
+    .map(f => {
+      try {
+        const p = JSON.parse(fs.readFileSync(path.join(PROJECTS_DIR, f), 'utf-8'))
+        return {
+          id: p.id,
+          topic: p.topic,
+          themeId: p.themeId,
+          slideCount: p.slides?.length ?? 0,
+          updatedAt: p.updatedAt || new Date().toISOString(),
+          thumbnailUrl: p.slides?.[0]?.previewUrl || null,
+        }
+      } catch { return null }
+    })
+    .filter(Boolean)
+    .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+  writeMeta(rows)
+  console.log(`[aipptGen] meta bootstrapped from disk: ${rows.length} projects`)
+}
+initMeta()
 
 // 启动时从磁盘恢复未完成任务
 function loadTasksFromDisk() {
@@ -51,6 +106,42 @@ function persistTasksToDisk() {
 }
 
 loadTasksFromDisk()
+
+// 骨架池 & 组件库（启动时加载，内存常驻）
+let skeletonPool = []
+let componentPool = []
+
+function loadSkeletonPool() {
+  try {
+    const configPath = path.join(SKELETONS_DIR, 'config.json')
+    if (!fs.existsSync(configPath)) return
+    const configs = JSON.parse(fs.readFileSync(configPath, 'utf-8'))
+    skeletonPool = configs.map(c => ({
+      ...c,
+      html: fs.existsSync(path.join(SKELETONS_DIR, c.file))
+        ? fs.readFileSync(path.join(SKELETONS_DIR, c.file), 'utf-8')
+        : null
+    })).filter(s => s.html)
+    console.log(`[aipptGen] loaded ${skeletonPool.length} skeletons`)
+  } catch (err) {
+    console.error('[aipptGen] failed to load skeleton pool:', err.message)
+  }
+}
+
+function loadComponentPool() {
+  try {
+    const configPath = path.join(SKELETONS_DIR, 'components.json')
+    if (!fs.existsSync(configPath)) return
+    componentPool = JSON.parse(fs.readFileSync(configPath, 'utf-8'))
+    console.log(`[aipptGen] loaded ${componentPool.length} components`)
+  } catch (err) {
+    console.error('[aipptGen] failed to load component pool:', err.message)
+  }
+}
+
+loadSkeletonPool()
+loadComponentPool()
+
 
 // 清理超过1小时的已完成任务（节省内存和磁盘）
 function cleanupOldTasks() {
@@ -281,15 +372,15 @@ function buildSlideSequence(outline) {
   // 旧格式兼容（chapters tree）
   const slides = []
   let index = 0
-  slides.push({ index: index++, type: 'cover', content: { title: outline.title, subtitle: outline.subtitle } })
-  slides.push({ index: index++, type: 'catalog', content: { chapters: outline.chapters.map(c => c.title) } })
+  slides.push({ slideId: nanoid(10), index: index++, type: 'cover', content: { title: outline.title, subtitle: outline.subtitle } })
+  slides.push({ slideId: nanoid(10), index: index++, type: 'catalog', content: { chapters: outline.chapters.map(c => c.title) } })
   for (const chapter of outline.chapters) {
-    slides.push({ index: index++, type: 'chapter', content: { title: chapter.title } })
+    slides.push({ slideId: nanoid(10), index: index++, type: 'chapter', content: { title: chapter.title } })
     for (const slide of chapter.slides) {
-      slides.push({ index: index++, type: 'content', content: { title: slide.title } })
+      slides.push({ slideId: nanoid(10), index: index++, type: 'content', content: { title: slide.title } })
     }
   }
-  slides.push({ index: index++, type: 'end', content: { title: '感谢聆听', subtitle: outline.title } })
+  slides.push({ slideId: nanoid(10), index: index++, type: 'end', content: { title: '感谢聆听', subtitle: outline.title } })
   return slides
 }
 
@@ -461,7 +552,8 @@ async function generateAndProcessSlide(taskId, slide, themeHtmlMap, topicContext
   try {
     const messages = buildSlideGenMessages(
       slide.type, slide.content, themeHtmlMap[slide.type],
-      topicContext, summary, options
+      topicContext, summary, options,
+      skeletonPool, componentPool
     )
     const html = await aiService.chat(model, messages, { maxTokens: 8192, temperature: 0.7 })
     const clean = sanitizeHtml(html)
@@ -594,6 +686,14 @@ export async function batchUpdateProject(projectId, updatedSlides) {
   project.updatedAt = new Date().toISOString()
   fs.writeFileSync(projectFile, JSON.stringify(project, null, 2), 'utf-8')
 
+  // 同步元数据
+  upsertMeta({
+    id: projectId,
+    slideCount: project.slides?.length ?? 0,
+    thumbnailUrl: project.slides?.[0]?.previewUrl || null,
+    updatedAt: project.updatedAt,
+  })
+
   return { screenshots_updated: updatedPages.length, updated_pages: updatedPages }
 }
 
@@ -602,6 +702,19 @@ export function saveProject(projectId, data) {
   const projectFile = path.join(PROJECTS_DIR, `${id}.json`)
   const project = { id, ...data, createdAt: data.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() }
   fs.writeFileSync(projectFile, JSON.stringify(project, null, 2), 'utf-8')
+
+  // 同步元数据（creatorId/creatorName 仅在首次创建时写入，upsertMeta 的 merge 策略会保留已有值）
+  upsertMeta({
+    id,
+    topic: project.topic,
+    themeId: project.themeId,
+    slideCount: project.slides?.length ?? 0,
+    updatedAt: project.updatedAt,
+    thumbnailUrl: project.slides?.[0]?.previewUrl || null,
+    ...(project.creatorId != null ? { creatorId: project.creatorId } : {}),
+    ...(project.creatorName != null ? { creatorName: project.creatorName } : {}),
+  })
+
   return id
 }
 
@@ -612,17 +725,19 @@ export function getProject(projectId) {
 }
 
 export function listProjects() {
-  if (!fs.existsSync(PROJECTS_DIR)) return []
-  return fs.readdirSync(PROJECTS_DIR)
-    .filter(f => f.endsWith('.json'))
-    .map(f => {
-      try {
-        const p = JSON.parse(fs.readFileSync(path.join(PROJECTS_DIR, f), 'utf-8'))
-        return { id: p.id, topic: p.topic, themeId: p.themeId, slideCount: p.slides?.length, updatedAt: p.updatedAt }
-      } catch { return null }
-    })
-    .filter(Boolean)
-    .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+  return readMeta().sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+}
+
+export function deleteProject(projectId) {
+  // 先从元数据移除（无论文件是否存在都要清掉）
+  const before = readMeta().length
+  removeMeta(projectId)
+  const after = readMeta().length
+  if (before === after) throw new Error('项目不存在')
+
+  // 再删文件（文件不存在不报错，元数据已是权威）
+  const projectFile = path.join(PROJECTS_DIR, `${projectId}.json`)
+  if (fs.existsSync(projectFile)) fs.unlinkSync(projectFile)
 }
 
 export function listThemes() {
@@ -634,6 +749,12 @@ export function listThemes() {
     })
     .map(name => {
       const parts = name.split('_')
-      return { id: name, name: name.replace(/_/g, '·'), category: parts[0] || '其他' }
+      const hasCover = fs.existsSync(path.join(TEMPLATES_DIR, name, 'cover.jpg'))
+      return {
+        id: name,
+        name: name.replace(/_/g, '·'),
+        category: parts[0] || '其他',
+        coverUrl: hasCover ? `/aippt-gen/themes/${encodeURIComponent(name)}/cover` : null,
+      }
     })
 }

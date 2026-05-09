@@ -46,6 +46,17 @@ export default defineConfig({
       '/covers': {
         target: 'http://localhost:5001',
         changeOrigin: true,
+      },
+      // AI PPT 生成模块
+      '/aippt-gen': {
+        target: 'http://localhost:5001',
+        changeOrigin: true,
+      },
+      // 🆕 代理 WebSocket：缩略图生成进度推送
+      '/ws': {
+        target: 'ws://localhost:5001',
+        ws: true,
+        changeOrigin: true,
       }
     }
   },

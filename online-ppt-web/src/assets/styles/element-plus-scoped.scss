@@ -2,3 +2,14 @@
 // Element Plus 组件只在售前平台页面中使用，样式冲突风险较低
 @import 'element-plus/dist/index.css';
 
+// AI-PPT 模块：统一使用紫色主题（#6366f1）
+.aippt-module {
+  --el-color-primary:         #6366f1;
+  --el-color-primary-dark-2:  #4f52c1;
+  --el-color-primary-light-3: #9294f5;
+  --el-color-primary-light-5: #b1b3f8;
+  --el-color-primary-light-7: #d0d1fb;
+  --el-color-primary-light-8: #dfe0fc;
+  --el-color-primary-light-9: #efeffd;
+}
+

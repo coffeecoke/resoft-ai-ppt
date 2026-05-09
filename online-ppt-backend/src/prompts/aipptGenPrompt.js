@@ -180,7 +180,7 @@ ${lines.join('\n')}
 }
 
 // ========== 幻灯片生成 Prompt（内容页 + 非内容页统一入口）==========
-export function buildSlideGenMessages(pageType, content, themeStyleHtml, topicContext, summary, options = {}) {
+export function buildSlideGenMessages(pageType, content, themeStyleHtml, topicContext, summary, options = {}, skeletonPool = [], componentPool = []) {
   // 非内容页：精确复现模板视觉，结构可微调
   if (pageType !== 'content') {
     return buildStructuredPageMessages(pageType, content, themeStyleHtml, topicContext)
@@ -188,6 +188,22 @@ export function buildSlideGenMessages(pageType, content, themeStyleHtml, topicCo
 
   // 内容页：提取 token 作为色值硬约束，布局自由发挥
   const { richness = 'moderate', imageMode = 'standard' } = options
+
+  const skeletonRef = skeletonPool.length > 0 ? `
+
+## 布局版式参考
+以下是可选的版式骨架（仅展示分区结构，配色按主题风格自行设计）：
+
+${skeletonPool.map(s => `**${s.name}**：${s.description}\n${s.html}`).join('\n\n')}
+
+根据本页内容选择最合适的版式，或自由创作。同一 PPT 中尽量每页使用不同版式。` : ''
+
+  const componentRef = componentPool.length > 0 ? `
+
+## 可用UI组件
+以下是预置的可复用组件片段，可在页面中自由组合（配色按主题调整）：
+
+${componentPool.map(c => `**${c.name}**：${c.description}\n${c.html}`).join('\n\n')}` : ''
 
   const tokens = extractThemeTokens(themeStyleHtml)
   const tokenConstraint = tokens.length > 0
@@ -233,7 +249,7 @@ export function buildSlideGenMessages(pageType, content, themeStyleHtml, topicCo
   return [
     {
       role: 'system',
-      content: `你是专业的PPT幻灯片HTML生成专家。${tokenConstraint}
+      content: `你是专业的PPT幻灯片HTML生成专家。${skeletonRef}${componentRef}${tokenConstraint}
 
 ## 工作方式
 你会收到：
@@ -266,18 +282,6 @@ export function buildSlideGenMessages(pageType, content, themeStyleHtml, topicCo
 - 内容多→多列小卡片紧凑排版、缩小字体；内容少→大字居中更多留白
 - **每一页布局必须不同**，严禁连续两页使用相同的布局模式
 
-## 布局参考（每页从中选一种，循环使用不同的）
-- **左图右文**：左侧配图占位符，右侧文字要点
-- **右图左文**：文字在左，配图在右
-- **2×2卡片网格**：4个要点，grid-cols-2，每卡片 icon+标题+1句
-- **3列卡片**：5-6个并列要点，紧凑排列
-- **双栏对比**：左右两栏对比
-- **居中聚焦**：核心数据/金句居中大字
-- **时间线**：横向时间轴
-- **引言式**：大引号+引文
-- **数据看板**：核心指标大数字+说明文字
-- **步骤流程**：横向或纵向步骤条
-
 ## 视觉技巧
 1. **装饰图标**：卡片背景 text-7xl~9xl opacity-50~60 的图标底层装饰
 2. **关键词高亮**：核心数据用 <strong class="font-bold">高亮</strong>
@@ -307,7 +311,6 @@ export function buildSlideGenMessages(pageType, content, themeStyleHtml, topicCo
       role: 'user',
       content: `【主题风格参考HTML】（只读取视觉风格，禁止复制布局结构和动画方式）：
 ${themeStyleHtml}
-
 【PPT主题】：${topicContext || ''}
 ${content.chapterTitle ? `【所属章节】：${content.chapterTitle}` : ''}
 【本页标题】：${content.title || ''}

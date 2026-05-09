@@ -76,6 +76,10 @@ app.use('/covers', express.static(coversDir))
 const snapshotsDir = path.join(DATA_DIR, 'snapshots')
 app.use('/snapshots', express.static(snapshotsDir))
 
+// 静态资源：PPT 布局骨架（index.html 预览 + 骨架文件）
+const aipptSkeletonsDir = path.join(DATA_DIR, 'aippt-skeletons')
+app.use('/aippt-gen/skeletons', express.static(aipptSkeletonsDir))
+
 // 静态资源：AI PPT 幻灯片截图预览
 const aipptPreviewsDir = path.join(DATA_DIR, 'aippt-previews')
 if (!fs.existsSync(aipptPreviewsDir)) fs.mkdirSync(aipptPreviewsDir, { recursive: true })

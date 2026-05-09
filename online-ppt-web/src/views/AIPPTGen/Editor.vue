@@ -1048,7 +1048,8 @@ function _onDragUp() {
   arr.splice(from < to ? to - 1 : to, 0, item)
   slides.value = arr
   currentIndex.value = arr.indexOf(selected)
-  aipptGenApi.reorderSlides(projectId, arr.map((s: any) => s.index)).catch(() => {})
+  // 优先用 slideId，旧数据没有时 fallback 到 String(index)
+  aipptGenApi.reorderSlides(projectId, arr.map((s: any) => s.slideId ?? String(s.index))).catch(() => {})
 }
 
 async function regeneratePage() {

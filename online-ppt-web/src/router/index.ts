@@ -9,9 +9,18 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '登录', public: true },
   },
   {
+    path: '/ppt-login',
+    name: 'PptLogin',
+    component: () => import('@/views/AIPPTGen/PptLogin.vue'),
+    meta: { title: 'AI PPT 登录', public: true },
+  },
+  {
     path: '/ai-ppt',
+    component: () => import('@/views/AIPPTGen/Layout.vue'),
     children: [
-      { path: '', name: 'AIPPTHome', component: () => import('@/views/AIPPTGen/Home.vue'), meta: { title: 'AI PPT 生成' } },
+      { path: '', redirect: '/ai-ppt/home' },
+      { path: 'home', name: 'AIPPTWorkspace', component: () => import('@/views/AIPPTGen/Workspace.vue'), meta: { title: 'AI PPT 工作台' } },
+      { path: 'genPPT', name: 'AIPPTHome', component: () => import('@/views/AIPPTGen/Home.vue'), meta: { title: 'AI PPT 生成' } },
       { path: 'outline', name: 'AIPPTOutline', component: () => import('@/views/AIPPTGen/OutlineEditor.vue'), meta: { title: '编辑大纲' } },
       { path: 'template', name: 'AIPPTTemplate', component: () => import('@/views/AIPPTGen/TemplatePicker.vue'), meta: { title: '选择模板' } },
       { path: 'editor/:projectId', name: 'AIPPTEditor', component: () => import('@/views/AIPPTGen/Editor.vue'), meta: { title: '编辑PPT' } },

@@ -74,6 +74,9 @@ export const aipptGenApi = {
   // 项目列表
   listProjects: () => instance.get(`${BASE}/projects`),
 
+  // 删除项目
+  deleteProject: (id: string) => instance.delete(`${BASE}/project/${id}`),
+
   // 图片搜索
   searchImages: (keyword: string, page = 1) =>
     instance.get(`${BASE}/images/search`, { params: { keyword, page } }),
@@ -98,6 +101,6 @@ export const aipptGenApi = {
     instance.get(`${BASE}/project/${projectId}/images`),
 
   // 拖动排序：保存新的 slide 顺序（order 为 slide.index 稳定 ID 的新顺序数组）
-  reorderSlides: (projectId: string, order: number[]) =>
+  reorderSlides: (projectId: string, order: string[]) =>
     instance.post(`${BASE}/project/${projectId}/reorder`, { order }),
 }

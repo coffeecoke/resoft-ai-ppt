@@ -12,7 +12,7 @@ import aiService from '../services/aiService.js'
 import { imageService } from '../services/imageService.js'
 import {
   createTask, getTaskStatus, batchUpdateProject,
-  saveProject, getProject, listProjects, listThemes,
+  saveProject, getProject, listProjects, deleteProject, listThemes,
   readThemeHtml, ensureTailwind,
 } from '../services/aipptGenService.js'
 import { analyzeSystemPrompt, buildOutlinePrompt, buildAiEditMessages, buildSlideGenMessages } from '../prompts/aipptGenPrompt.js'
@@ -59,6 +59,13 @@ setInterval(cleanupTempImages, 6 * 60 * 60 * 1000)
 // 获取主题列表
 router.get('/themes', (req, res) => {
   res.json({ success: true, data: listThemes() })
+})
+
+// 获取模版封面图
+router.get('/themes/:themeId/cover', (req, res) => {
+  const coverPath = path.join(DATA_DIR, 'aippt-templates', req.params.themeId, 'cover.jpg')
+  if (!fs.existsSync(coverPath)) return res.status(404).end()
+  res.sendFile(coverPath)
 })
 
 // 获取主题模板HTML
@@ -333,8 +340,12 @@ router.post('/project/:id/reorder', (req, res) => {
   try {
     const project = getProject(req.params.id)
     if (!project) return res.status(404).json({ success: false, message: '项目不存在' })
-    const slideMap = new Map((project.slides || []).map(s => [s.index, s]))
-    project.slides = order.map(idx => slideMap.get(idx)).filter(Boolean)
+    // 优先用 slideId，旧数据没有 slideId 时 fallback 到 index
+    const hasSlideId = (project.slides || []).some(s => s.slideId)
+    const slideMap = hasSlideId
+      ? new Map((project.slides || []).map(s => [s.slideId, s]))
+      : new Map((project.slides || []).map(s => [String(s.index), s]))
+    project.slides = order.map(id => slideMap.get(id)).filter(Boolean)
     project.updatedAt = new Date().toISOString()
     saveProject(req.params.id, project)
     res.json({ success: true })
@@ -351,7 +362,12 @@ router.post('/project', (req, res) => {
       saveProject(req.body.id, req.body)
       res.json({ success: true, data: { id: req.body.id } })
     } else {
-      const id = saveProject(null, req.body)
+      const data = {
+        ...req.body,
+        creatorId: req.user?.userId || null,
+        creatorName: req.user?.name || req.user?.username || null,
+      }
+      const id = saveProject(null, data)
       res.json({ success: true, data: { id } })
     }
   } catch (err) {
@@ -376,6 +392,16 @@ router.get('/project/:id', (req, res) => {
 // 项目列表
 router.get('/projects', (req, res) => {
   res.json({ success: true, data: listProjects() })
+})
+
+// 删除项目
+router.delete('/project/:id', (req, res) => {
+  try {
+    deleteProject(req.params.id)
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message })
+  }
 })
 
 // 图片搜索（供素材面板使用）
