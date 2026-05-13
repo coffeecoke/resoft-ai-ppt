@@ -539,6 +539,7 @@ function workflowCallbackFullSnapshot(req, reqMeta) {
  *   success: 文本/路径 content|text|url|path|...
  *   fail: 建议 error|message|msg|reason|...，或与 success 相同字段携带说明
  *   video_create 成功时可选: playlist_url 或 playlistUrl → 落库 reserve_5（播放列表 / 切片地址）
+ *   video_create 成功时可选: duration 或 video_duration（秒，数值）→ 落库 psv_video_info.duration
  * }
  */
 router.post('/workflow-callback', async (req, res) => {
@@ -600,6 +601,10 @@ router.post('/workflow-callback', async (req, res) => {
         ? String(playlistUrlRaw).trim()
         : null
 
+    const durationRaw = body.duration ?? body.video_duration
+    const durationForPsv =
+      durationRaw != null && String(durationRaw).trim() !== '' ? durationRaw : null
+
     if (typeRaw == null || String(typeRaw).trim() === '') {
       logger.warn(
         `[presales-video] workflow-callback 参数错误 缺少 type ip=${reqMeta.ip} outcome=${outcomeNorm} execute_id=${executeId != null ? String(executeId).slice(0, 80) : '(空)'}`
@@ -618,7 +623,7 @@ router.post('/workflow-callback', async (req, res) => {
     const paySum = workflowCallbackPayloadLogSummary(payloadText)
     const playlistSum = workflowCallbackPayloadLogSummary(playlistUrl, 120)
     logger.info(
-      `[presales-video] workflow-callback 收到 ip=${reqMeta.ip} ua=${JSON.stringify((reqMeta.userAgent || '').slice(0, 120))} type=${typeNorm} outcome=${outcomeNorm} execute_id_len=${execStr.length} execute_id_head=${JSON.stringify(execStr.slice(0, 64))} payload_len=${paySum.len} payload_empty=${paySum.empty} payload_preview=${paySum.preview != null ? JSON.stringify(paySum.preview) : 'null'} playlist_url_present=${Boolean(playlistUrl)} playlist_url_len=${playlistSum.len}`
+      `[presales-video] workflow-callback 收到 ip=${reqMeta.ip} ua=${JSON.stringify((reqMeta.userAgent || '').slice(0, 120))} type=${typeNorm} outcome=${outcomeNorm} execute_id_len=${execStr.length} execute_id_head=${JSON.stringify(execStr.slice(0, 64))} payload_len=${paySum.len} payload_empty=${paySum.empty} payload_preview=${paySum.preview != null ? JSON.stringify(paySum.preview) : 'null'} playlist_url_present=${Boolean(playlistUrl)} playlist_url_len=${playlistSum.len} duration_present=${durationForPsv != null}`
     )
 
     const result = await presalesVideoTaskService.applyWorkflowCallback(
@@ -626,7 +631,7 @@ router.post('/workflow-callback', async (req, res) => {
       executeId,
       payloadText,
       outcomeNorm,
-      { playlistUrl }
+      { playlistUrl, duration: durationForPsv }
     )
 
     if (!result.ok) {
@@ -1793,7 +1798,7 @@ router.post('/transcriptions/:id/push-report', async (req, res) => {
 
 /**
  * GET /api/presales-video/transcriptions/:id/push-video-users
- * 预览推送视频成员（自动规则：from_user/created_by + 上级链 + 固定成员 + rxkf01，再应用 env 排除）
+ * 预览推送视频成员（自动规则：created_by 上级链 + 固定成员 + 报备 our_participants（中文名经 org_user.user_name→userid）+ rxkf01，再应用 env 排除）
  */
 router.get('/transcriptions/:id/push-video-users', async (req, res) => {
   const { id } = req.params
@@ -1822,12 +1827,65 @@ router.get('/transcriptions/:id/push-video-users', async (req, res) => {
 })
 
 /**
+ * GET /api/presales-video/transcriptions/:id/push-content-preview
+ * 返回即将发往群内的两段 Markdown（线索首条 + 报备摘要），供弹窗编辑；不含视频文本卡片。
+ * 另返回 splitSec / audioDurationSec / isShortAudio；短音频时尝试附带 reportAnalysisMarkdown（与「推送报告」编辑同源）。
+ */
+router.get('/transcriptions/:id/push-content-preview', async (req, res) => {
+  const { id } = req.params
+  try {
+    const data = await presalesVideoWecomPushService.getPresalesVideoPushMarkdownPreview({
+      prisma,
+      transcriptionId: id
+    })
+    const tr = await prisma.transcriptions.findUnique({
+      where: { id },
+      select: { audio_duration: true }
+    })
+    const splitSec = getReportDurationSplitSec()
+    const durationSec = tr?.audio_duration != null ? Number(tr.audio_duration) : NaN
+    const durationOk = !Number.isNaN(durationSec) && durationSec >= 0
+    const isShortAudio = durationOk && durationSec < splitSec
+
+    let reportAnalysisMarkdown = null
+    let reportAnalysisLoadError = null
+    if (isShortAudio) {
+      const ar = await presalesVideoTaskService.readAnalysisForPushEdit(id)
+      if (ar.ok) {
+        reportAnalysisMarkdown = ar.content != null ? String(ar.content) : ''
+      } else {
+        reportAnalysisLoadError = ar.message || '无法加载分析报告'
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        ...data,
+        splitSec,
+        audioDurationSec: durationOk ? durationSec : null,
+        isShortAudio,
+        reportAnalysisMarkdown,
+        reportAnalysisLoadError
+      }
+    })
+  } catch (error) {
+    logger.error('[presales-video] push-content-preview 失败:', error)
+    const msg = error.message || '获取预览失败'
+    const clientErr = msg.includes('不存在')
+    res.status(clientErr ? 400 : 500).json({ success: false, error: msg })
+  }
+})
+
+/**
  * POST /api/presales-video/transcriptions/:id/push-video
  * Body: { userIds: "userid1,userid2" } 或 { members: ["id1","id2"] }（可选）
  *       cardTitle | card_title：可选，企微文本卡片 title；不传则沿用转录音频文件名（去后缀）或「售前视频」。
- * 未传 userIds 时：自动按 created_by 向上找上级链并加固定成员（含 rxkf01）。
+ * 未传 userIds 时：自动按 created_by 上级链 + 固定成员 + 匹配到的报备 our_participants（姓名→org_user.user_id）+ rxkf01。
  * 传入 userIds 时：以 Body 名单为准，不再并入固定成员/rxkf01（你可从预览里删掉固定成员）；仍应用 env PRESALES_VIDEO_GROUP_EXCLUDE_USERIDS。
  * chatName | group_name | groupName：可选，仅在新创建群发会话时使用该名称；不传则自动「线索/客户名或文件名-售前分析」。
+ * clueMarkdown / reportMarkdown：可选；若传入则以传入为准（与弹窗预览编辑一致）；不传则服务端按报备自动生成。
+ * reportAnalysisMarkdown：可选；音频时长 < PRESALES_VIDEO_REPORT_DURATION_SPLIT_SEC（默认 600s）时，在报备摘要之后<strong>再单独发一条或多条</strong>企微 Markdown（与「推送报告」正文同源）；未传时服务端短音频仍会尝试从 md/库读取。
  * 使用企业微信应用 API 创建/复用 appchat，向群内推送：报备 main_content + 售前视频文本卡片。
  */
 router.post('/transcriptions/:id/push-video', async (req, res) => {
@@ -1856,13 +1914,23 @@ router.post('/transcriptions/:id/push-video', async (req, res) => {
           : body.group_name != null && String(body.group_name).trim()
             ? String(body.group_name).trim()
             : null
-    const result = await presalesVideoWecomPushService.pushPresalesVideoToWecomAppChat({
+    const pushCtx = {
       prisma,
       transcriptionId: id,
       userIdsRaw: userIds == null ? null : userIds,
       cardTitle,
       chatName
-    })
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'clueMarkdown')) {
+      pushCtx.clueMarkdown = body.clueMarkdown
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'reportMarkdown')) {
+      pushCtx.reportMarkdown = body.reportMarkdown
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'reportAnalysisMarkdown')) {
+      pushCtx.reportAnalysisMarkdown = body.reportAnalysisMarkdown
+    }
+    const result = await presalesVideoWecomPushService.pushPresalesVideoToWecomAppChat(pushCtx)
     // reserve_4（wecom_appchat:{chatid}@时间）已在 push 服务内、发卡片前写入，供模板 {chatId} 解析
     logger.info(
       `[presales-video] push-video 成功 transcription=${id} chatid=${result.chatid} users=${result.userCount}`

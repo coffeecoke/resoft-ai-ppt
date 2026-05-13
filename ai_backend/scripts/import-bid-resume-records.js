@@ -6,6 +6,11 @@
  * 用法：
  *   node scripts/import-bid-resume-records.js <manifest.json>
  *   node scripts/import-bid-resume-records.js --latest
+ *
+ * 覆盖入库（默认）：按 source_docx_basename（文件名）删除该文档在本库中的全部旧 records，
+ *   避免「路径写法不同」（如 F:\ 与 E:\、斜杠差异）导致旧数据删不掉、新旧批次并存。
+ * 保守策略：加 --strict-replace，仅当 source_docx_path 完全一致或 basename+mtime 命中时才删。
+ * 追加入库而不删旧数据：加 --no-replace
  */
 
 const fs = require('fs')
@@ -219,10 +224,40 @@ async function main () {
     return
   }
 
+  const noReplace = process.argv.includes('--no-replace')
+  const strictReplace = process.argv.includes('--strict-replace')
+
   let sectionCount = 0
   let personCount = 0
+  let deletedRecords = 0
 
   await prisma.$transaction(async (tx) => {
+    if (!noReplace) {
+      const sp = sourcePath.slice(0, 800)
+      const bn = base.slice(0, 255)
+
+      if (!strictReplace) {
+        const del = await tx.bid_resume_records.deleteMany({
+          where: { source_docx_basename: bn },
+        })
+        deletedRecords = del.count
+      } else {
+        const orConds = [{ source_docx_path: sp }]
+        if (docMtime) {
+          orConds.push({
+            source_docx_basename: bn,
+            source_docx_modified_at: docMtime,
+          })
+        }
+        const del = await tx.bid_resume_records.deleteMany({ where: { OR: orConds } })
+        deletedRecords = del.count
+      }
+
+      if (deletedRecords > 0) {
+        console.log(`已删除同源旧简历记录 ${deletedRecords} 条（persons 随外键级联删除）${strictReplace ? '（strict-replace：仅路径/mtime）' : '（按文件名）'}`)
+      }
+    }
+
     for (const rec of records) {
       const ex = rec.extracted || {}
       const parentId = newId('bidres')
@@ -263,7 +298,7 @@ async function main () {
     }
   })
 
-  console.log(`已写入 bid_resume_records: ${sectionCount} 条，bid_resume_persons: ${personCount} 条，批次 ${batchId}`)
+  console.log(`已写入 bid_resume_records: ${sectionCount} 条，bid_resume_persons: ${personCount} 条，批次 ${batchId}${noReplace ? '（未执行覆盖删除）' : ''}`)
   console.log(`输出目录: ${outDir}`)
   await prisma.$disconnect()
 }

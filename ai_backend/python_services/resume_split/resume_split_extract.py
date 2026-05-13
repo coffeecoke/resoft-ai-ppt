@@ -190,6 +190,9 @@ def extract_fields_from_text(text: str, fallback_title: str = "") -> dict:
     name = _m(r"姓\s*名\s*[:：]\s*([^\s\n，,；;]{1,20})")
     if not name:
         name = _m(r"姓名\s*[:：]\s*([^\s\n，,；;]{1,20})")
+    name = _sanitize_person_name_string(name)
+    if not name:
+        name = _extract_name_near_xingming(t)
     out["person_name"] = name
 
     role = _m(r"(?:拟任职务|职务|岗位|职位)\s*[:：]\s*([^\n]{1,80})")
@@ -210,12 +213,116 @@ def extract_fields_from_text(text: str, fallback_title: str = "") -> dict:
 
     if not out["person_name"] and fallback_title:
         ft = fallback_title.strip()
-        if re.match(r"^（\d+）", ft) or re.match(r"^\d+\.\d+", ft):
+        sub_role, sub_name = _parse_title_colon_trailing_name(ft)
+        if sub_name:
+            out["person_name"] = sub_name
+            if sub_role and not out["role_title"]:
+                out["role_title"] = sub_role
+        elif re.match(r"^（\d+）", ft) or re.match(r"^\d+\.\d+", ft):
             pass
-        elif 1 < len(ft) <= 20 and not any(x in ft for x in ("章", "节", "部分", "附件", "证书", "证明")):
+        elif (
+            1 < len(ft) <= 20
+            and not any(x in ft for x in ("章", "节", "部分", "附件", "证书", "证明"))
+            and _is_plausible_cn_person_name(ft)
+        ):
             out["person_name"] = ft
 
     return out
+
+
+# 绝不能当作自然人姓名的字段标签（表格串行、合并单元格导出时常夹在「姓名」与「性别」之间）
+_INVALID_EXACT_PERSON_NAME = frozenset(
+    {
+        "身份证",
+        "身份证号",
+        "性别",
+        "姓名",
+        "民族",
+        "籍贯",
+        "学历",
+        "专业",
+        "年龄",
+        "电话",
+        "手机",
+        "邮箱",
+        "职务",
+        "岗位",
+        "职位",
+        "人员级别",
+        "出生年月",
+        "出生日期",
+        "毕业院校",
+        "毕业学校",
+        "公司岗位",
+        "拟在本项目担任中职务",
+        "职称",
+    }
+)
+
+
+def _looks_like_cn_id_card(s: str) -> bool:
+    x = re.sub(r"\s+", "", (s or "").strip())
+    if not x:
+        return False
+    return bool(re.fullmatch(r"[0-9Xx\*]{15,22}", x))
+
+
+def _sanitize_person_name_string(name: str | None) -> str | None:
+    """姓名候选：去掉标签词、身份证号误当姓名。"""
+    if not name:
+        return None
+    n = (name or "").strip()
+    if not n:
+        return None
+    n_plain = re.sub(r"[\s\u3000]+", "", n)
+    if n_plain in _INVALID_EXACT_PERSON_NAME:
+        return None
+    if _looks_like_cn_id_card(n_plain):
+        return None
+    if len(n_plain) >= 15 and re.fullmatch(r"[0-9Xx\*]+", n_plain):
+        return None
+    return n
+
+
+def _extract_name_near_xingming(t: str) -> str | None:
+    """
+    表格导出错位时，优先用「姓名…性别」夹逼的真实姓名；
+    其次「姓名\\t真实名\\t」制表行。
+    """
+    if not t:
+        return None
+    m = re.search(
+        r"姓名\s*[：:\t]\s*([\u4e00-\u9fa5·]{2,10})\s*(?:[：:\t]?\s*性别|[\t\n\r]|(?=[\u4e00-\u9fa5]{2,4}\s*[：:\t]))",
+        t,
+    )
+    if m:
+        cand = m.group(1).strip()
+        if _is_plausible_cn_person_name(cand):
+            return cand[:40]
+    m2 = re.search(r"姓名\s*[：:\t]\s*([\u4e00-\u9fa5·]{2,10})\t", t)
+    if m2:
+        cand = m2.group(1).strip()
+        if _is_plausible_cn_person_name(cand):
+            return cand[:40]
+    return None
+
+
+def _parse_title_colon_trailing_name(title: str) -> tuple[str | None, str | None]:
+    """「（一）项目总监：贾永超」「基础人员：张雅茹」→ (职务片段, 姓名)。"""
+    s = (title or "").strip()
+    if not s:
+        return None, None
+    m = re.search(
+        r"(?:[（(][一二三四五六七八九十百千]+[）)]\s*)?([^：:\n]{1,40})\s*[：:]\s*([\u4e00-\u9fa5·]{2,10})\s*$",
+        s,
+    )
+    if not m:
+        return None, None
+    role = re.sub(r"^[（(][一二三四五六七八九十百千]+[）)]\s*", "", m.group(1).strip())
+    name = m.group(2).strip()
+    if _is_plausible_cn_person_name(name):
+        return (role[:120] if role else None, name[:40])
+    return None, None
 
 
 # 常见「角色-姓名」独立成行，或「3.2.1. 项目经理-崔学佳」编号+职务+姓名（职务段放宽防截断）
@@ -252,6 +359,15 @@ _PERSON_HEADER_NUMBERED = re.compile(
 _PERSON_HEADER_LEADING_NAME = re.compile(
     r"^(?P<name>[\u4e00-\u9fa5·]{2,10})\s*\n"
     r"(?=[\s\S]{0,600}(?:姓名\s*[：:\t]|性别\s*[：:\t]))"
+)
+
+# 「（一）项目总监：贾永超」「基础人员：张雅茹」——中文投标简历常见小节标题（非连字符）
+_PERSON_HEADER_ENUM_COLON = re.compile(
+    r"(?:^|\n)"
+    r"\s*(?:[（(][一二三四五六七八九十百千]+[）)]\s*)?"
+    r"(?P<role>[^\n\r：:]{2,48})"
+    r"[：:]\s*"
+    r"(?P<name>[\u4e00-\u9fa5·]{2,10})",
 )
 
 # 单行「角色-姓名」（与 _PERSON_HEADER 一致，用于按段落实体顺序累计当前人）
@@ -375,6 +491,10 @@ def _is_plausible_cn_person_name(name: str) -> bool:
     n = (name or "").strip().replace("\u3000", "").replace(" ", "")
     if len(n) < 2 or len(n) > 10:
         return False
+    if n in _INVALID_EXACT_PERSON_NAME:
+        return False
+    if _looks_like_cn_id_card(n):
+        return False
     if _name_touches_denylist(n):
         return False
     if _looks_like_job_title_phrase(n):
@@ -382,6 +502,48 @@ def _is_plausible_cn_person_name(name: str) -> bool:
     if not re.fullmatch(r"[\u4e00-\u9fa5·]{2,10}", n):
         return False
     return True
+
+
+# 切片 docx 内嵌图归属：按行识别「新人简历块起点」，须与 split_resume_into_persons / _person_header_match_items
+# 支持的标题类型一致。若仅认「职务-姓名」连字符行，则「（一）项目总监：贾永超」无法推进 current_pi，
+# current_pi 恒为 -1，学历/工作证明截图全部被丢弃。
+_PERSON_LINE_ENUM_COLON_STRICT = re.compile(
+    r"^\s*(?:[（(][一二三四五六七八九十百千]+[）)]\s*)?"
+    r"(?P<role>[^\n\r：:]{2,48})"
+    r"[：:]\s*"
+    r"(?P<name>[\u4e00-\u9fa5·]{2,10})\s*$"
+)
+
+_PERSON_LINE_NUMBERED_NAME_ONLY = re.compile(
+    r"^\s*\d+(?:\.\d+)+\.?\s+(?P<name>[\u4e00-\u9fa5·]{2,10})\s*$"
+)
+
+_PERSON_LINE_INLINE_HYPHEN = re.compile(
+    r"^\s*(?P<role>\d{1,2}(?:\.\d{1,3})+\.?\s+[\u4e00-\u9fa5A-Za-z0-9（）()]{2,40})"
+    r"[-－]"
+    r"(?P<name>[\u4e00-\u9fa5·]{2,10})\s*$"
+)
+
+
+def _slice_img_person_boundary_line(s: str) -> bool:
+    if not s or not s.strip():
+        return False
+    s = s.strip()
+    if _PERSON_LINE_HEADER.match(s):
+        return True
+    m = _PERSON_LINE_ENUM_COLON_STRICT.match(s)
+    if m:
+        name_h = (m.group("name") or "").strip()
+        return bool(name_h and _is_plausible_cn_person_name(name_h))
+    m = _PERSON_LINE_INLINE_HYPHEN.match(s)
+    if m:
+        name_h = (m.group("name") or "").strip()
+        return bool(name_h and _is_plausible_cn_person_name(name_h))
+    m = _PERSON_LINE_NUMBERED_NAME_ONLY.match(s)
+    if m:
+        name_h = (m.group("name") or "").strip()
+        return bool(name_h and _is_plausible_cn_person_name(name_h))
+    return False
 
 
 def _resolve_hyphen_role_and_name(raw_left: str, raw_right: str) -> tuple[str, str]:
@@ -654,7 +816,7 @@ def extract_resume_slice_images(
         if txt:
             for line in txt.split("\n"):
                 s = line.strip()
-                if s and _PERSON_LINE_HEADER.match(s):
+                if s and _slice_img_person_boundary_line(s):
                     current_pi += 1
             if current_pi >= n:
                 current_pi = n - 1
@@ -720,6 +882,7 @@ _PERSON_NAME_STOP_KWS: tuple[str, ...] = (
     "工作年限",
     "拟任职务",
     "身份证号",
+    "身份证",
 )
 _FIELD_PERSON_NAME_RE = re.compile(
     r"姓名\s*[：:\t]\s*(?P<n>.+?)(?=(?:\t|\s|\u3000)*(?:"
@@ -765,18 +928,23 @@ def _field_person_name(t: str) -> str | None:
     """
     m = _FIELD_PERSON_NAME_RE.search(t)
     if not m:
-        return None
+        return _extract_name_near_xingming(t)
     raw = m.group("n")
     s = re.sub(r"[\t \u3000]+", "", raw).strip()
     s = _strip_person_name_doc_noise(s)
     if not s:
-        return None
+        return _extract_name_near_xingming(t)
     if len(s) > 10:
-        return None
+        return _extract_name_near_xingming(t)
+    if not _sanitize_person_name_string(s):
+        return _extract_name_near_xingming(t)
     if re.fullmatch(r"[\u4e00-\u9fa5·•.\-A-Za-z]{1,40}", s):
         return s[:40]
     m2 = re.match(r"([\u4e00-\u9fa5·•.\-A-Za-z]{1,40})", s)
-    return m2.group(1).strip()[:40] if m2 else None
+    cand = m2.group(1).strip()[:40] if m2 else None
+    if cand and not _sanitize_person_name_string(cand):
+        return _extract_name_near_xingming(t)
+    return cand
 
 
 def _sanitize_header_role(role: str) -> str:
@@ -924,9 +1092,10 @@ def extract_person_structured(
         name = _field(r"人员姓名\s*[：:\t]\s*([^\n]+)", t)
         if name:
             name = re.sub(r"[\t\n ]+", "", name).split("，")[0].strip()[:40] or None
-    if not name and name_hint:
-        name = re.sub(r"\s+", "", name_hint).strip()[:24] or None
-    nh_compact = re.sub(r"\s+", "", (name_hint or "").strip())
+    nh_raw = (name_hint or "").strip()
+    nh_compact = re.sub(r"\s+", "", nh_raw)
+    if not name and nh_compact and _is_plausible_cn_person_name(nh_compact[:24]):
+        name = nh_compact[:40]
     # 仅「表内姓名单格只取到一字」时用「角色-姓名」行补全（如 张 + 张辰），避免把整段标题并进来
     if (
         name
@@ -938,6 +1107,9 @@ def extract_person_structured(
         name = nh_compact[:40]
     if name:
         name = _strip_person_name_doc_noise(name)[:40] or None
+    name = _sanitize_person_name_string(name)
+    if not name:
+        name = _extract_name_near_xingming(t)
 
     gender = _field(r"性\s*别\s*[：:\t]\s*([^\t\n]{1,12})", t)
     birth_date = _field(
@@ -967,11 +1139,11 @@ def extract_person_structured(
     )
     degree = _field(r"学位\s*[：:\t]\s*([^\t\n]{1,24})", t)
     employer = _field(
-        r"(?:现所在单位|工作单位|所在单位|单位名称|任职单位|服务单位)\s*[：:\t]\s*([^\t\n]{1,160})",
+        r"(?:现所在单位|现所在机构或部门|工作单位|所在单位|单位名称|任职单位|服务单位)\s*[：:\t]\s*([^\t\n]{1,160})",
         t,
     )
     proposed_project_role = _field(
-        r"(?:拟在本项目担任职务|拟任本项目职务|在本项目拟任职务)\s*[：:\t]\s*([^\t\n]{1,80})",
+        r"(?:拟在本项目担任职务|拟在本项目担任中职务|拟任本项目职务|在本项目拟任职务)\s*[：:\t]\s*([^\t\n]{1,80})",
         t,
     )
     similar_project_exp = _field(
@@ -1121,12 +1293,17 @@ def extract_person_structured(
 
 def _person_header_match_items(block: str) -> list[tuple[re.Match, str]]:
     """
-    合并「职务-姓名」「编号+职务-姓名（行内）」「多级编号 + 姓名」「块首单独姓名行」等匹配，按出现顺序去重（同起点优先 hyphen）。
-    返回 [(match, kind), ...]，kind 为 'hyphen' | 'inline' | 'num' | 'lead'。
+    合并「职务-姓名」「（一）总监：姓名」「编号+职务-姓名（行内）」「多级编号 + 姓名」「块首单独姓名行」等匹配。
+    返回 [(match, kind), ...]，kind 含 hyphen | enum | inline | num | lead。
     """
     items: list[tuple[int, str, re.Match]] = []
     for m in _PERSON_HEADER.finditer(block):
         items.append((m.start(), "hyphen", m))
+    for m in _PERSON_HEADER_ENUM_COLON.finditer(block):
+        name_h = m.group("name").strip()
+        if not name_h or not _is_plausible_cn_person_name(name_h):
+            continue
+        items.append((m.start(), "enum", m))
     for m in _PERSON_HEADER_INLINE.finditer(block):
         items.append((m.start(), "inline", m))
     for m in _PERSON_HEADER_NUMBERED.finditer(block):
@@ -1140,7 +1317,7 @@ def _person_header_match_items(block: str) -> list[tuple[re.Match, str]]:
         if nh and _is_plausible_cn_person_name(nh):
             items.append((m_lead.start(), "lead", m_lead))
     def _prio(k: str) -> int:
-        return {"hyphen": 0, "inline": 1, "num": 2, "lead": 3}.get(k, 9)
+        return {"hyphen": 0, "enum": 0, "inline": 1, "num": 2, "lead": 3}.get(k, 9)
 
     by_start: dict[int, tuple[str, re.Match]] = {}
     for start, kind, m in sorted(items, key=lambda x: (x[0], _prio(x[1]))):
@@ -1174,6 +1351,14 @@ def split_resume_into_persons(block: str) -> list[dict]:
                 continue
             role = ""
             name_h = m.group("name").strip()
+        elif kind == "enum":
+            raw_role = (m.group("role") or "").strip()
+            role = re.sub(
+                r"^[（(][一二三四五六七八九十百千]+[）)]\s*", "", raw_role
+            ).strip()
+            sr = _sanitize_header_role(role)
+            role = ((sr or role) or "")[:120]
+            name_h = (m.group("name") or "").strip()
         else:
             rs = (m.group("role") or "").strip()
             if (

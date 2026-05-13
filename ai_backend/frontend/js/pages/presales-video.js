@@ -1270,6 +1270,8 @@ window.pvSubmitWorkflow = async function (id) {
 let pvPushVideoTranscriptionId = null
 /** 推送视频弹窗：psv_video_info.url，供「新窗口播放」 */
 let pvPushVideoPsvUrl = null
+/** 当前转录是否短于「推送报告」分界时长（与 PRESALES_VIDEO_REPORT_DURATION_SPLIT_SEC 一致） */
+let pvPushVideoIsShort = false
 
 /** 与后端 stripFileSuffix 一致：去掉末尾扩展名，作卡片标题默认值 */
 function pvStripFileSuffix(name) {
@@ -1386,6 +1388,59 @@ async function pvLoadPushVideoUsersPreview(id) {
   }
 }
 
+async function pvLoadPushMarkdownPreview(id) {
+  const clueTa = document.getElementById('pv-push-md-clue')
+  const reportTa = document.getElementById('pv-push-md-report')
+  const st = document.getElementById('pv-push-md-preview-status')
+  if (!clueTa || !reportTa) return
+  clueTa.value = ''
+  reportTa.value = ''
+  if (st) st.textContent = '正在加载群内 Markdown 预览…'
+  try {
+    const res = await fetch(
+      `${PV_API}/presales-video/transcriptions/${encodeURIComponent(id)}/push-content-preview`
+    )
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || '加载预览失败')
+    }
+    const d = data.data || {}
+    clueTa.value = d.clueMarkdown != null ? String(d.clueMarkdown) : ''
+    reportTa.value = d.reportMarkdown != null ? String(d.reportMarkdown) : ''
+    const splitSec = d.splitSec != null && !Number.isNaN(Number(d.splitSec)) ? Number(d.splitSec) : 600
+    const dur = d.audioDurationSec != null && !Number.isNaN(Number(d.audioDurationSec)) ? Number(d.audioDurationSec) : null
+    pvPushVideoIsShort = Boolean(d.isShortAudio)
+    const block = document.getElementById('pv-push-report-analysis-block')
+    const taAnalysis = document.getElementById('pv-push-md-report-analysis')
+    const hintAnalysis = document.getElementById('pv-push-report-analysis-hint')
+    if (block && taAnalysis) {
+      if (d.isShortAudio) {
+        block.style.display = 'block'
+        taAnalysis.value = d.reportAnalysisMarkdown != null ? String(d.reportAnalysisMarkdown) : ''
+        if (hintAnalysis) {
+          const durTxt =
+            dur != null && !Number.isNaN(dur) ? `当前录音约 ${Math.round(dur)} 秒` : '未获取到录音时长'
+          const err = d.reportAnalysisLoadError ? ` 加载正文：${String(d.reportAnalysisLoadError)}` : ''
+          hintAnalysis.textContent = `${durTxt}；短于分界 ${splitSec} 秒时，本节将单独发入群（在报备摘要之后）。${err}`
+        }
+      } else {
+        block.style.display = 'none'
+        taAnalysis.value = ''
+        if (hintAnalysis) hintAnalysis.textContent = ''
+      }
+    }
+    const reuse = d.willReuseChat
+      ? '本次将复用已有群：首段「线索说明」不会发送。'
+      : '本次若为新建群：先发①（若非空），再发②。'
+    const miss = d.reportMatched === false ? ' 未匹配到报备时② 为系统提示文案，请核对。' : ''
+    if (st) st.textContent = reuse + miss
+  } catch (e) {
+    if (st) {
+      st.textContent = `预览加载失败：${e.message || e}；保存时将改用服务端自动生成正文（若不刷新预览）。`
+    }
+  }
+}
+
 function pvDefaultPushVideoChatName(row, transcriptionId) {
   const cust = row && row.customerName && String(row.customerName).trim()
   const raw =
@@ -1399,6 +1454,13 @@ function pvDefaultPushVideoChatName(row, transcriptionId) {
 
 window.pvOpenPushVideoDialog = function (id) {
   pvPushVideoTranscriptionId = id
+  pvPushVideoIsShort = false
+  const block = document.getElementById('pv-push-report-analysis-block')
+  const taAnalysis = document.getElementById('pv-push-md-report-analysis')
+  const hintAnalysis = document.getElementById('pv-push-report-analysis-hint')
+  if (block) block.style.display = 'none'
+  if (taAnalysis) taAnalysis.value = ''
+  if (hintAnalysis) hintAnalysis.textContent = ''
   const ta = document.getElementById('pv-push-video-users')
   const hint = document.getElementById('pv-push-video-preview')
   const cardTitleEl = document.getElementById('pv-push-video-card-title')
@@ -1416,6 +1478,7 @@ window.pvOpenPushVideoDialog = function (id) {
   }
   document.getElementById('pv-push-video-dialog')?.showModal()
   pvLoadPushVideoUsersPreview(id)
+  pvLoadPushMarkdownPreview(id)
   pvLoadPushVideoPlayUrl(id)
 }
 
@@ -1423,6 +1486,13 @@ window.pvClosePushVideoDialog = function () {
   document.getElementById('pv-push-video-dialog')?.close()
   pvPushVideoTranscriptionId = null
   pvPushVideoPsvUrl = null
+  pvPushVideoIsShort = false
+  const block = document.getElementById('pv-push-report-analysis-block')
+  const taAnalysis = document.getElementById('pv-push-md-report-analysis')
+  const hintAnalysis = document.getElementById('pv-push-report-analysis-hint')
+  if (block) block.style.display = 'none'
+  if (taAnalysis) taAnalysis.value = ''
+  if (hintAnalysis) hintAnalysis.textContent = ''
   const st = document.getElementById('pv-push-video-url-status')
   const btn = document.getElementById('pv-push-video-play-btn')
   if (st) st.textContent = '—'
@@ -1493,18 +1563,37 @@ window.pvSubmitPushVideo = async function () {
       document.getElementById('pv-push-video-chat-name').value) ||
     ''
   const chatNameTrim = String(chatNameRaw).trim()
+  const clueMd =
+    (document.getElementById('pv-push-md-clue') && document.getElementById('pv-push-md-clue').value) != null
+      ? String(document.getElementById('pv-push-md-clue').value)
+      : ''
+  const reportMd =
+    (document.getElementById('pv-push-md-report') && document.getElementById('pv-push-md-report').value) != null
+      ? String(document.getElementById('pv-push-md-report').value)
+      : ''
+  if (!String(reportMd).trim()) {
+    pvToast('「交流报备摘要」不能为空，请在下方②中填写或等待预览加载完成', 'error')
+    return
+  }
   pvShowOverlay(true, '正在创建企微群发会话并推送…')
   try {
+    const bodyObj = {
+      userIds: raw.trim(),
+      ...(cardTitleTrim ? { cardTitle: cardTitleTrim } : {}),
+      ...(chatNameTrim ? { chatName: chatNameTrim } : {}),
+      clueMarkdown: clueMd,
+      reportMarkdown: reportMd
+    }
+    if (pvPushVideoIsShort) {
+      const ra = document.getElementById('pv-push-md-report-analysis')
+      bodyObj.reportAnalysisMarkdown = ra ? String(ra.value || '') : ''
+    }
     const res = await fetch(
       `${PV_API}/presales-video/transcriptions/${encodeURIComponent(id)}/push-video`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userIds: raw.trim(),
-          ...(cardTitleTrim ? { cardTitle: cardTitleTrim } : {}),
-          ...(chatNameTrim ? { chatName: chatNameTrim } : {})
-        })
+        body: JSON.stringify(bodyObj)
       }
     )
     const data = await res.json().catch(() => ({}))

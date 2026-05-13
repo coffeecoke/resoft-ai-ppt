@@ -119,6 +119,8 @@ model communication_reports {
   lead_code            String?   @db.VarChar(100) /// 线索编号
   lead_id              String?   @db.VarChar(50) /// 关联线索ID（可选，关联 leads.id）
   report_date          DateTime /// 交流日期
+  /// 交流发生日期（业务口径；频次「本次/首次交流时间」优先取此字段，空则再从 main_content 解析）
+  com_date             DateTime? @db.DateTime(3)
   start_at             DateTime? /// 开始时间（可与 report_date 组合表示具体时段）
   end_at               DateTime? /// 结束时间
   record_method        String?   @db.VarChar(50) /// 记录方式（如 录屏、录音、笔记）

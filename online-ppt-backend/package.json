@@ -10,7 +10,8 @@
     "sync:comments": "node scripts/sync-table-comments.js",
     "schema:build": "node scripts/build-schema.js",
     "schema:watch": "node scripts/build-schema.js --watch",
-    "prisma:generate": "node scripts/build-schema.js && prisma generate"
+    "prisma:generate": "node scripts/build-schema.js && prisma generate",
+    "pack:prisma-offline": "node scripts/build-schema.js && node scripts/package-prisma-offline.cjs"
   },
   "dependencies": {
     "@prisma/client": "6.19.1",

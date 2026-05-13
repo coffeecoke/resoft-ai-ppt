@@ -2,7 +2,7 @@
  * 售前视频生成主任务：Coze 上传与工作流信息落库
  *
  * analysis_content 回调成功时，内容除入库外会写入本地 .md（目录见 PRESALES_VIDEO_ANALYSIS_MD_DIR），文件名为录音显示名安全化 + .md（original_file_name / name），成功落盘路径写入 reserve_3（最长 500 字符，超出截断）
- * video_create 成功回调可选 body.playlist_url / playlistUrl：播放列表（如 m3u8）等写入 reserve_5（最长 500，超出截断）；同时 upsert psv_video_info：id=execute_id；title=转录名去路径与常见后缀；url 与 reserve_5 同值（有 playlist 时）；cover 与 url 同源路径但最后一档改为 cover.jpg（如 …/index.m3u8 → …/cover.jpg，由完整 playlist 串计算）。无 playlist 时 url 仍走 buildPresalesVideoPublicPlayUrl(主视频)，cover 同规则由主视频 URL 推导。
+ * video_create 成功回调可选 body.playlist_url / playlistUrl：播放列表（如 m3u8）等写入 reserve_5（最长 500，超出截断）；可选 body.duration（或 video_duration）：写入 psv_video_info.duration（秒，Decimal）；同时 upsert psv_video_info：id=execute_id；title=转录名去路径与常见后缀；url 与 reserve_5 同值（有 playlist 时）；cover 与 url 同源路径但最后一档改为 cover.jpg（如 …/index.m3u8 → …/cover.jpg，由完整 playlist 串计算）。无 playlist 时 url 仍走 buildPresalesVideoPublicPlayUrl(主视频)，cover 同规则由主视频 URL 推导。
  */
 
 const fs = require('fs/promises')
@@ -252,12 +252,22 @@ function buildPresalesVideoPublicPlayUrl(urlRaw, originOverride) {
   return `${origin}${pathPart}`
 }
 
+/** psv_video_info.duration：Decimal(10,2)，单位秒；非法或缺省返回 null（不写库） */
+function parsePsvDurationSeconds(raw) {
+  if (raw == null) return null
+  const n = typeof raw === 'number' ? raw : Number(String(raw).trim())
+  if (!Number.isFinite(n) || n < 0) return null
+  const capped = Math.min(n, 99999999.99)
+  return Math.round(capped * 100) / 100
+}
+
 /**
  * video_create 成功：同步售前视频元数据表（供播放端等查询）
  * 有 playlist：url 与 reserve_5 一致（clipReserve5）；cover 由完整 playlist 将末段换为 cover.jpg
  * 无 playlist：url 仍用对外基址 + 主视频；cover 由主视频 URL 同规则推导（可能为 …/cover.jpg）
+ * @param {number|string|null|undefined} durationSeconds 回调可选时长（秒），写入 psv_video_info.duration
  */
-async function upsertPsvVideoInfoOnVideoCreate(executeId, transcriptionId, mainVideoUrl, playlistUrl) {
+async function upsertPsvVideoInfoOnVideoCreate(executeId, transcriptionId, mainVideoUrl, playlistUrl, durationSeconds) {
   const id = clipPsvVideoInfoId(executeId)
   const pl = playlistUrl != null && String(playlistUrl).trim() !== '' ? String(playlistUrl).trim() : ''
   const main = mainVideoUrl != null && String(mainVideoUrl).trim() !== '' ? String(mainVideoUrl).trim() : ''
@@ -287,20 +297,28 @@ async function upsertPsvVideoInfoOnVideoCreate(executeId, transcriptionId, mainV
   const coverRaw = coverSource ? coverUrlByReplacingLastPathSegmentWithCoverJpg(coverSource) : null
   const cover = coverRaw ? clipPsvVideoInfoUrl(coverRaw) : null
 
+  const durationVal = parsePsvDurationSeconds(durationSeconds)
+
+  const createData = {
+    id,
+    title: titleDb,
+    url,
+    cover: cover || null
+  }
+  if (durationVal != null) createData.duration = durationVal
+
+  const updateData = {
+    title: titleDb,
+    url,
+    cover: cover || null,
+    updated_at: new Date()
+  }
+  if (durationVal != null) updateData.duration = durationVal
+
   await prisma.psv_video_info.upsert({
     where: { id },
-    create: {
-      id,
-      title: titleDb,
-      url,
-      cover: cover || null
-    },
-    update: {
-      title: titleDb,
-      url,
-      cover: cover || null,
-      updated_at: new Date()
-    }
+    create: createData,
+    update: updateData
   })
 }
 
@@ -441,7 +459,7 @@ async function getByExecuteId(executeId) {
  */
 /**
  * 按 lead_code/lead_id/lead_name/customer_name 统计 communication_reports 次数，
- * 并取 最早一条 与 最新一条（按 created_at asc）的 report_date/main_content
+ * 并取 最早一条 与 最新一条（按 created_at asc）的 com_date/main_content（本次/首次交流时间）
  */
 async function buildFrequencySection(transcriptionId) {
   try {
@@ -514,7 +532,7 @@ async function buildFrequencySection(transcriptionId) {
     const allReports = await prisma.communication_reports.findMany({
       where: keyWhere,
       orderBy: { created_at: 'asc' },
-      select: { id: true, report_date: true, main_content: true, created_at: true }
+      select: { id: true, com_date: true, report_date: true, main_content: true, created_at: true }
     })
 
     const total = allReports.length
@@ -522,12 +540,11 @@ async function buildFrequencySection(transcriptionId) {
 
     function pickDateFromReport(r) {
       if (!r) return null
-      // 优先 report_date
-      if (r.report_date) {
-        const d = new Date(r.report_date)
+      // 优先 com_date（业务交流日期）；无则从 main_content 正则解析
+      if (r.com_date) {
+        const d = new Date(r.com_date)
         if (!Number.isNaN(d.getTime())) return d
       }
-      // 从 main_content 里尝试提取日期（简单正则）
       if (r.main_content) {
         const m = String(r.main_content).match(/(\d{4})[年\-\/](\d{1,2})[月\-\/](\d{1,2})/)
         if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
@@ -582,6 +599,12 @@ function injectFrequencySectionAfterSummary(content, frequencyMd) {
   return s.slice(0, insertAt).trimEnd() + '\n' + frequencyMd + '\n' + s.slice(insertAt)
 }
 
+/**
+ * @param {'analysis_content'|'video_create'} callbackType
+ * @param {object} [options]
+ * @param {string} [options.playlistUrl]
+ * @param {number|string|null|undefined} [options.duration] 时长（秒），仅 video_create 成功时写入 psv_video_info.duration
+ */
 async function applyWorkflowCallback(callbackType, executeId, payloadText, outcome = 'success', options = {}) {
   const task = await getByExecuteId(executeId)
   if (!task) {
@@ -677,7 +700,8 @@ async function applyWorkflowCallback(callbackType, executeId, payloadText, outco
         executeId,
         task.transcription_id,
         text,
-        options.playlistUrl
+        options.playlistUrl,
+        options.duration
       )
     } catch (e) {
       logger.warn(

@@ -676,6 +676,26 @@
       border-radius: 6px;
       resize: vertical;
     }
+    #pv-push-video-dialog textarea.pv-push-md-body {
+      font-size: 13px;
+      font-family: ui-monospace, 'Cascadia Code', 'Consolas', 'SF Mono', monospace;
+      line-height: 1.45;
+      min-height: 96px;
+    }
+    #pv-push-video-dialog textarea#pv-push-md-report.pv-push-md-body {
+      min-height: 160px;
+    }
+    #pv-push-video-dialog textarea#pv-push-md-report-analysis.pv-push-md-body {
+      min-height: 180px;
+    }
+    #pv-push-report-analysis-block {
+      margin-top: 12px;
+    }
+    #pv-push-video-dialog .pv-push-md-preview-wrap {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border-color, #e8e8e8);
+    }
     #pv-push-video-dialog .pv-push-video-hint {
       font-size: 12px;
       color: var(--text-secondary, #8c8c8c);
@@ -870,7 +890,7 @@
   </div>
 
   <dialog id="pv-push-video-dialog" class="pv-modal-dialog">
-    <div class="dialog-content" style="min-width: min(420px, 92vw); max-width: 520px;">
+    <div class="dialog-content" style="min-width: min(420px, 92vw); max-width: min(640px, 96vw);">
       <div class="dialog-header">
         <h2>推送视频到企业微信</h2>
         <button type="button" class="icon-btn" onclick="pvClosePushVideoDialog()" aria-label="关闭">
@@ -921,6 +941,41 @@
         <p id="pv-push-video-preview" class="pv-push-video-hint" style="margin-top:8px; margin-bottom:0;">
           正在加载自动推送人员...
         </p>
+        <div class="pv-push-video-field pv-push-md-preview-wrap">
+          <p class="pv-push-video-hint" style="margin-bottom: 8px;">
+            <strong>群内推送正文（企微 Markdown）</strong>以下为送入群会话的文本预览，可直接修改；点击「保存推送」以<strong>此处编辑后的内容</strong>为准。（末尾仍会发送可点击的<strong>售前视频卡片</strong>，卡片标题见上文。）
+          </p>
+          <p id="pv-push-md-preview-status" class="pv-push-video-hint" style="margin-top: 0;">正在加载正文预览…</p>
+          <label for="pv-push-md-clue">① 线索说明（仅<strong>新建</strong>群发会话时作为<strong>第一条</strong>发出；复用已有群不会发本段）</label>
+          <textarea
+            id="pv-push-md-clue"
+            class="pv-push-md-body"
+            rows="5"
+            spellcheck="false"
+            placeholder="加载后显示；若清空则在新建群时不发首条线索说明"
+          ></textarea>
+          <label for="pv-push-md-report" style="display: block; margin-top: 12px;">② 交流报备摘要（每次推送都会发送）</label>
+          <textarea
+            id="pv-push-md-report"
+            class="pv-push-md-body"
+            rows="10"
+            spellcheck="false"
+            placeholder="加载后显示；请勿留空"
+          ></textarea>
+          <div id="pv-push-report-analysis-block" style="display: none;">
+            <label for="pv-push-md-report-analysis" style="display: block; margin-top: 12px;">
+              ③ 售前分析报告全文（与「推送报告」一致；仅录音时长短于系统分界时显示；将<strong>单独一条或多条</strong>消息发入同一群，在②之后、视频卡片之前）
+            </label>
+            <p id="pv-push-report-analysis-hint" class="pv-push-video-hint" style="margin-top: 0; margin-bottom: 8px;"></p>
+            <textarea
+              id="pv-push-md-report-analysis"
+              class="pv-push-md-body"
+              rows="12"
+              spellcheck="false"
+              placeholder="短音频时自动加载；可编辑后随「保存推送」一并发送"
+            ></textarea>
+          </div>
+        </div>
         <div id="pv-push-video-play-section" class="pv-push-video-play-section">
           <p class="pv-push-video-hint" style="margin:0 0 6px 0;">
             <strong>视频播放</strong>（企微 H5，query <code style="font-size:11px;">id</code> = <code style="font-size:11px;">psv_video_info.id</code>）

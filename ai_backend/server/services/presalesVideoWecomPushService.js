@@ -8,6 +8,36 @@ const presalesVideoTaskService = require('./presalesVideoTaskService')
 const presalesVideoGroupSettingsService = require('./presalesVideoGroupSettingsService')
 const logger = require('../utils/logger')
 
+/** 与 push-report 一致：短音频为 duration < 返回值（默认 600s=10 分钟） */
+const REPORT_DURATION_SPLIT_DEFAULT_SEC = 10 * 60
+const REPORT_DURATION_SPLIT_MAX_SEC = 86400
+
+function getPushVideoReportSplitSec() {
+  const raw = process.env.PRESALES_VIDEO_REPORT_DURATION_SPLIT_SEC
+  if (raw == null || String(raw).trim() === '') {
+    return REPORT_DURATION_SPLIT_DEFAULT_SEC
+  }
+  const n = parseInt(String(raw).trim(), 10)
+  if (Number.isNaN(n) || n < 1) {
+    return REPORT_DURATION_SPLIT_DEFAULT_SEC
+  }
+  if (n > REPORT_DURATION_SPLIT_MAX_SEC) {
+    return REPORT_DURATION_SPLIT_MAX_SEC
+  }
+  return n
+}
+
+/** 企微 appchat markdown 单条约 4000 字，长文拆多条 */
+const APPCHAT_MARKDOWN_CHUNK = 3500
+
+async function sendAppChatMarkdownChunked(chatid, fullMarkdown) {
+  const s = String(fullMarkdown || '')
+  if (!String(s).trim()) return
+  for (let i = 0; i < s.length; i += APPCHAT_MARKDOWN_CHUNK) {
+    await wecomAppChatApi.sendAppChatMarkdown(chatid, s.slice(i, i + APPCHAT_MARKDOWN_CHUNK))
+  }
+}
+
 function escapeMdLine(s) {
   return String(s || '')
     .replace(/\r?\n/g, ' ')
@@ -108,7 +138,17 @@ async function buildAutoUserIds(prisma, transcription, fixedMembers) {
   const fromUser = transcription && transcription.created_by ? String(transcription.created_by).trim() : ''
   const chain = await collectLeaderChainUserIds(prisma, fromUser)
   const fixed = presalesVideoGroupSettingsService.normalizeUserIds(fixedMembers)
-  return [...new Set([...chain, ...fixed, 'rxkf01'].filter(Boolean))]
+  let reportParticipants = []
+  try {
+    const report = await resolveCommunicationReportForTranscription(prisma, transcription)
+    if (report && report.our_participants) {
+      const names = splitParticipantNames(report.our_participants)
+      reportParticipants = await resolveParticipantNamesToUserIds(prisma, names)
+    }
+  } catch (e) {
+    logger.warn(`[presales-video] 报备 our_participants 转 userid 失败: ${e && e.message}`)
+  }
+  return [...new Set([...chain, ...fixed, ...reportParticipants, 'rxkf01'].filter(Boolean))]
 }
 
 async function resolvePushVideoUserIds(ctx) {
@@ -253,6 +293,40 @@ async function findReportBySyncLog(prisma, transcriptionId) {
     return null
   }
   return null
+}
+
+/**
+ * 与推送视频、报备摘要一致：优先转录 report_id / session_id，再 CRM 跑批 sync 日志，再关键词匹配最近报备
+ */
+async function resolveCommunicationReportForTranscription(prisma, tr) {
+  let report = await findReportByKnownIds(prisma, tr)
+  if (!report) report = await findReportBySyncLog(prisma, tr.id)
+  if (!report) report = await findLatestMatchingReport(prisma, tr)
+  return report
+}
+
+/**
+ * communication_reports.our_participants 中的中文姓名 → org_user.user_id（按 user_name 精确匹配、未删除）
+ */
+async function resolveParticipantNamesToUserIds(prisma, names) {
+  const unique = [...new Set((names || []).map((n) => String(n).trim()).filter(Boolean))]
+  if (unique.length === 0) return []
+  const rows = await prisma.org_user.findMany({
+    where: {
+      user_name: { in: unique },
+      is_deleted: false
+    },
+    select: { user_id: true, user_name: true }
+  })
+  const seen = new Set()
+  const out = []
+  for (const row of rows) {
+    const uid = row.user_id && String(row.user_id).trim()
+    if (!uid || seen.has(uid)) continue
+    seen.add(uid)
+    out.push(uid)
+  }
+  return out
 }
 
 function splitParticipantNames(raw) {
@@ -727,16 +801,62 @@ function defaultCardBtntxt() {
 }
 
 /**
+ * 与即将发往群内的两段 Markdown 一致（不含视频文本卡片，卡片仍由服务端生成）。
+ * @returns {Promise<{ willReuseChat: boolean, reportMatched: boolean, clueMarkdown: string, reportMarkdown: string, sendsClueBlockFirst: boolean }>}
+ */
+async function getPresalesVideoPushMarkdownPreview({ prisma, transcriptionId }) {
+  const tr = await prisma.transcriptions.findUnique({ where: { id: transcriptionId } })
+  if (!tr) throw new Error('转录不存在')
+
+  let report = await findReportByKnownIds(prisma, tr)
+  if (!report) report = await findReportBySyncLog(prisma, transcriptionId)
+  if (!report) report = await findLatestMatchingReport(prisma, tr)
+
+  const leadKey = presalesVideoGroupSettingsService.makeLeadKey(report)
+  const mappedChat = leadKey
+    ? await presalesVideoGroupSettingsService.getLeadChatByKey(leadKey)
+    : null
+  const chatid = mappedChat && mappedChat.chatid ? String(mappedChat.chatid).trim() : ''
+  const willReuseChat = Boolean(chatid)
+
+  const nth = await calcLeadReportNth(prisma, report)
+  const clueSummary = await resolveClueSummary(report)
+  const reportWithSummary =
+    report && clueSummary ? { ...report, __clueSummary: clueSummary } : report
+  const clueMarkdown = (await buildClueSummaryMarkdown(reportWithSummary)) || ''
+  const reportMarkdown = willReuseChat
+    ? formatReportMarkdownForExistingChat(report, nth, clueSummary)
+    : formatReportMarkdown(report, nth)
+
+  return {
+    willReuseChat,
+    reportMatched: Boolean(report),
+    clueMarkdown,
+    reportMarkdown,
+    sendsClueBlockFirst: !willReuseChat && Boolean(clueMarkdown.trim())
+  }
+}
+
+/**
  * @param {object} ctx
  * @param {import('@prisma/client').PrismaClient} ctx.prisma
  * @param {string} ctx.transcriptionId
  * @param {string|string[]} ctx.userIdsRaw 逗号分隔或数组
  * @param {string} [ctx.cardTitle] 可选，企微 textcard 的 title；不传则用转录音频文件名（去后缀）或「售前视频」
  * @param {string} [ctx.chatName] 可选，新建应用群发会话的名称；不传则「线索/客户名或文件名」截断 + 「-售前分析」
+ * @param {string} [ctx.clueMarkdown] 若调用方传入该键，则以传入文本作为首段线索 Markdown（新建群时先发）；空字符串表示跳过首段
+ * @param {string} [ctx.reportMarkdown] 若调用方传入该键，则以传入文本作为报备摘要 Markdown（必发第二条）
+ * @param {string} [ctx.reportAnalysisMarkdown] 可选；音频时长 < splitSec（默认 10 分钟）时作为「推送报告」正文单独发群（可多条）；若未传且为短音频则服务端尝试 readAnalysisForPushEdit
  * @returns {Promise<{ chatid: string, reportMatched: boolean, userCount: number, videoPushedAsMedia?: boolean, videoPushedAsCard?: boolean }>}
  */
 async function pushPresalesVideoToWecomAppChat(ctx) {
-  const { prisma, transcriptionId, userIdsRaw, cardTitle: cardTitleRaw, chatName: chatNameRaw } = ctx
+  const {
+    prisma,
+    transcriptionId,
+    userIdsRaw,
+    cardTitle: cardTitleRaw,
+    chatName: chatNameRaw
+  } = ctx
   const cardTitleOverride =
     cardTitleRaw != null && String(cardTitleRaw).trim() !== ''
       ? String(cardTitleRaw).trim()
@@ -851,14 +971,44 @@ async function pushPresalesVideoToWecomAppChat(ctx) {
   const clueSummary = await resolveClueSummary(report)
   const reportWithSummary =
     report && clueSummary ? { ...report, __clueSummary: clueSummary } : report
-  const clueMd = await buildClueSummaryMarkdown(reportWithSummary)
-  const md1 = reusedExistingChat
+  let clueMd = await buildClueSummaryMarkdown(reportWithSummary)
+  let md1 = reusedExistingChat
     ? formatReportMarkdownForExistingChat(report, nth, clueSummary)
     : formatReportMarkdown(report, nth)
-  if (!reusedExistingChat && clueMd) {
+
+  if (Object.prototype.hasOwnProperty.call(ctx, 'clueMarkdown')) {
+    clueMd = ctx.clueMarkdown == null ? '' : String(ctx.clueMarkdown)
+  }
+  if (Object.prototype.hasOwnProperty.call(ctx, 'reportMarkdown')) {
+    md1 = ctx.reportMarkdown == null ? '' : String(ctx.reportMarkdown)
+  }
+
+  if (!reusedExistingChat && clueMd && String(clueMd).trim()) {
     await wecomAppChatApi.sendAppChatMarkdown(chatid, clueMd)
   }
   await wecomAppChatApi.sendAppChatMarkdown(chatid, md1)
+
+  const splitSec = getPushVideoReportSplitSec()
+  const durSec = tr.audio_duration != null ? Number(tr.audio_duration) : NaN
+  const durationOk = !Number.isNaN(durSec) && durSec >= 0
+  const isShortAudio = durationOk && durSec < splitSec
+
+  let analysisExtra = ''
+  const hasExplicitAnalysis = Object.prototype.hasOwnProperty.call(ctx, 'reportAnalysisMarkdown')
+  if (hasExplicitAnalysis) {
+    const v = ctx.reportAnalysisMarkdown
+    analysisExtra = v == null ? '' : String(v).trim()
+  } else if (isShortAudio) {
+    const ar = await presalesVideoTaskService.readAnalysisForPushEdit(transcriptionId)
+    if (ar.ok && ar.content) analysisExtra = String(ar.content).trim()
+  }
+  if (isShortAudio && analysisExtra) {
+    const head = '## 售前分析报告（与「推送报告」正文一致）\n\n'
+    await sendAppChatMarkdownChunked(chatid, head + analysisExtra)
+    logger.info(
+      `[presales-video] 短音频(<${splitSec}s)已追加分析报告 Markdown 入群 transcription=${transcriptionId} chatid=${chatid} len=${analysisExtra.length}`
+    )
+  }
 
   const rawLink = pickRawVideoLinkForWecomCard(videoTask)
   const execId =
@@ -1066,6 +1216,7 @@ module.exports = {
   formatVideoMarkdown,
   extractWecomAppChatIdFromReserve4,
   fillWecomCardUrlTemplate,
+  getPresalesVideoPushMarkdownPreview,
   pushPresalesVideoToWecomAppChat,
   sendPresalesVideoCardToRxkfOnly
 }

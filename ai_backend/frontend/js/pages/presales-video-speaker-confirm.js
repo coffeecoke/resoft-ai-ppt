@@ -33,6 +33,8 @@
   var lastHighlightedRow = null
   /** 当前角色映射：speaker -> customer | our_side */
   var speakerRolesMap = {}
+  /** 「统一改为」输入框草稿：重渲染时保留用户已输入（默认初次为空，不反显 ASR 标签） */
+  var speakerMapDraft = {}
 
   function showErr(msg) {
     elErr.textContent = msg
@@ -225,6 +227,18 @@
     return keys
   }
 
+  /**
+   * 默认识别占位标签（如 SPEAKER_0）：首次进入「统一改为」留空，须用户填写展示名。
+   * 已落库的真实姓名等不在此列，再次打开页面时应反显。
+   */
+  function isDefaultAsrSpeakerLabel(key) {
+    var s = (key != null ? String(key) : '').trim()
+    if (!s) return false
+    if (/^SPEAKER_\d+$/i.test(s)) return true
+    if (/^SPEAKER\d+$/i.test(s)) return true
+    return false
+  }
+
   /** 左侧 speaker 标签、右侧角色名；右侧失焦后批量替换同标签段落，需用户点击「保存确认结果」落库 */
   function renderSpeakerMap() {
     if (!elSpeakerMap) return
@@ -260,9 +274,18 @@
       inp.type = 'text'
       inp.className = 'speaker-map-in'
       inp.setAttribute('data-map-from', fromKey)
-      inp.value = fromKey
-      inp.placeholder = '如 客户方'
-      inp.setAttribute('aria-label', '将「' + fromKey + '」统一改为')
+      var mapVal = ''
+      if (Object.prototype.hasOwnProperty.call(speakerMapDraft, fromKey)) {
+        mapVal = speakerMapDraft[fromKey]
+      } else if (isDefaultAsrSpeakerLabel(fromKey)) {
+        mapVal = ''
+      } else {
+        mapVal = fromKey
+      }
+      inp.value = mapVal
+      inp.placeholder = '必填：真实姓名或称呼'
+      inp.setAttribute('aria-required', 'true')
+      inp.setAttribute('aria-label', '将「' + fromKey + '」统一改为（必填）')
       inp.autocomplete = 'off'
       var roleWrap = document.createElement('div')
       roleWrap.className = 'speaker-role-group'
@@ -302,11 +325,19 @@
     }
   }
 
-  function applySpeakerMapOne(fromKey, to) {
+  /**
+   * @param {string} fromKey
+   * @param {string} to
+   * @param {{ skipSync?: boolean, skipRender?: boolean }} [opts]
+   */
+  function applySpeakerMapOne(fromKey, to, opts) {
+    opts = opts || {}
+    if (!opts.skipSync) {
+      syncAllSpeakersFromDom()
+    }
     var t = (to != null ? String(to) : '').trim()
     if (!t) t = fromKey
     if (t === fromKey) return 0
-    syncAllSpeakersFromDom()
     var n = 0
     var next = []
     for (var i = 0; i < dialogues.length; i++) {
@@ -327,6 +358,19 @@
     }
     dialogues = next
     syncRoleMapWithDialogues()
+    if (n > 0) {
+      delete speakerMapDraft[fromKey]
+      speakerMapDraft[t] = t
+    }
+    if (!opts.skipRender && n > 0) {
+      dataDirty = true
+      hideMsgs()
+      render(null)
+      showOk('已将 ' + n + ' 条中的「' + fromKey + '」改为「' + t + '」')
+      setTimeout(function () {
+        elOk.style.display = 'none'
+      }, 3000)
+    }
     return n
   }
 
@@ -614,6 +658,7 @@
         }
         hideMsgs()
         var d = r.data.data || {}
+        speakerMapDraft = {}
         speakerRolesMap = normalizeSpeakerRolesMap(d.speakerRoles)
         loadedName = d.name || d.originalFileName || ''
         dialogues = []
@@ -648,23 +693,23 @@
   }
 
   if (elSpeakerMap) {
+    elSpeakerMap.addEventListener('input', function (e) {
+      var tin = e.target
+      if (!tin || !tin.classList || !tin.classList.contains('speaker-map-in')) return
+      var dfk = tin.getAttribute('data-map-from')
+      if (dfk == null || dfk === '') return
+      speakerMapDraft[dfk] = tin.value
+    })
     elSpeakerMap.addEventListener('change', function (e) {
       var t = e.target
       if (!t || !t.classList) return
       if (t.classList.contains('speaker-map-in')) {
         var fromKey = t.getAttribute('data-map-from')
         if (fromKey == null || fromKey === '') return
+        speakerMapDraft[fromKey] = t.value
         var toRaw = t.value
         var n = applySpeakerMapOne(fromKey, toRaw)
         if (n <= 0) return
-        dataDirty = true
-        hideMsgs()
-        render(null)
-        var toShow = (toRaw != null ? String(toRaw) : '').trim() || fromKey
-        showOk('已将 ' + n + ' 条中的「' + fromKey + '」改为「' + toShow + '」')
-        setTimeout(function () {
-          elOk.style.display = 'none'
-        }, 3000)
         return
       }
       if (t.classList.contains('speaker-role-radio')) {
@@ -705,6 +750,47 @@
 
   elSave.addEventListener('click', function () {
     syncAllSpeakersFromDom()
+    var mapInputs = elSpeakerMap ? elSpeakerMap.querySelectorAll('.speaker-map-in') : []
+    var missingNames = []
+    var pairs = []
+    for (var mi = 0; mi < mapInputs.length; mi++) {
+      var minp = mapInputs[mi]
+      var fk = minp.getAttribute('data-map-from')
+      if (fk == null || fk === '') continue
+      var toV = (minp.value || '').trim()
+      if (!toV) missingNames.push(fk)
+      else pairs.push({ fk: fk, to: toV })
+    }
+    if (missingNames.length > 0) {
+      window.alert(
+        '请为每个说话人填写「统一改为」（必填），展示名未填写：' + missingNames.join('、')
+      )
+      if (elSpeakerMap && elSpeakerMap.scrollIntoView) {
+        elSpeakerMap.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+      for (var fi = 0; fi < mapInputs.length; fi++) {
+        var fx = mapInputs[fi]
+        if (fx.getAttribute('data-map-from') && !(fx.value || '').trim()) {
+          if (fx.focus) fx.focus()
+          break
+        }
+      }
+      return
+    }
+    for (var pi = 0; pi < pairs.length; pi++) {
+      var pr = pairs[pi]
+      if (pr.to !== pr.fk) {
+        applySpeakerMapOne(pr.fk, pr.to, { skipSync: true, skipRender: true })
+      }
+    }
+    var uksPost = uniqueSpeakerKeys()
+    speakerMapDraft = {}
+    for (var ui = 0; ui < uksPost.length; ui++) {
+      speakerMapDraft[uksPost[ui]] = uksPost[ui]
+    }
+    dataDirty = true
+    render(null)
+
     var missingSpeakers = findMissingRoleSpeakers()
     if (missingSpeakers.length > 0) {
       var first = missingSpeakers[0]
