@@ -175,15 +175,53 @@ def _read_env_int(name, default_value, min_value=None, max_value=None):
         return max_value
     return value
 
-# 讯飞API凭证
-APP_ID = "30fb0f0d"
-API_KEY = "8a96101efefbab3880e7e491b78139de"
-API_SECRET = "704fdea92fb9c8cec33d9f5705a06b69"
-
 
 def _ai_backend_root():
     """本文件位于 python_services/transcription/，向上三级为 ai_backend。"""
     return Path(__file__).resolve().parent.parent.parent
+
+
+def _load_ai_backend_env():
+    """从 ai_backend/.env 加载变量；不覆盖进程已有环境变量（Node spawn 时已注入）。"""
+    env_path = _ai_backend_root() / ".env"
+    if not env_path.is_file():
+        return
+    try:
+        text = env_path.read_text(encoding="utf-8")
+    except OSError:
+        return
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+        key, _, val = line.partition("=")
+        key = key.strip()
+        if not key or key in os.environ:
+            continue
+        val = val.strip()
+        if len(val) >= 2 and val[0] == val[-1] and val[0] in ('"', "'"):
+            val = val[1:-1]
+        os.environ[key] = val
+
+
+def _read_env_str(name, required=False):
+    _load_ai_backend_env()
+    value = (os.environ.get(name) or "").strip()
+    if required and not value:
+        raise RuntimeError(
+            f"缺少环境变量 {name}，请在 ai_backend/.env 中配置讯飞录音文件转写（LFasr）凭证"
+        )
+    return value
+
+
+def get_xunfei_credentials():
+    """返回 (app_id, api_secret, api_key)。api_key 当前未参与 LFasr 鉴权，仅作预留。"""
+    app_id = _read_env_str("XUNFEI_APP_ID", required=True)
+    api_secret = _read_env_str("XUNFEI_API_SECRET", required=True)
+    api_key = _read_env_str("XUNFEI_API_KEY", required=False)
+    return app_id, api_secret, api_key
 
 
 def get_xunfei_output_dir():
@@ -254,11 +292,13 @@ def transcribe_audio(audio_file):
         )
         timeout_param = timeout_seconds
     
+    app_id, api_secret, _api_key = get_xunfei_credentials()
+
     # ⭐ 初始化客户端，传入超时参数
     # monkey patch会将数字timeout转换为httpx.Timeout对象
     client = LFasrClient(
-        app_id=APP_ID,
-        secret_key=API_SECRET,  # 使用 APISecret 作为 secret_key（不是 APIKey）
+        app_id=app_id,
+        secret_key=api_secret,  # 使用 APISecret 作为 secret_key（不是 APIKey）
         timeout=timeout_param,  # 传入秒数，monkey patch会转换为httpx.Timeout
     )
     

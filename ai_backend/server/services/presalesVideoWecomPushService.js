@@ -1,5 +1,5 @@
 /**
- * 售前视频：企微应用群发会话推送「交流报备摘要 + 售前视频文本卡片」
+ * 售前视频：企微应用群发会话推送「交流报备等纯文本(text) + 售前视频文本卡片(textcard)」
  * 卡片 URL：优先 PRESALES_VIDEO_WECOM_CARD_URL_TEMPLATE（{id}、{chatId}、{timestape}/{timestamp}=推送时刻 Unix 毫秒时间戳）；否则「基址+playlist/path」拼接
  */
 const crypto = require('crypto')
@@ -27,14 +27,50 @@ function getPushVideoReportSplitSec() {
   return n
 }
 
-/** 企微 appchat markdown 单条约 4000 字，长文拆多条 */
-const APPCHAT_MARKDOWN_CHUNK = 3500
+/** 企微 appchat text 单条约 2048 字节，长文按字符分条（留余量） */
+const APPCHAT_TEXT_CHUNK = 1800
 
-async function sendAppChatMarkdownChunked(chatid, fullMarkdown) {
-  const s = String(fullMarkdown || '')
-  if (!String(s).trim()) return
-  for (let i = 0; i < s.length; i += APPCHAT_MARKDOWN_CHUNK) {
-    await wecomAppChatApi.sendAppChatMarkdown(chatid, s.slice(i, i + APPCHAT_MARKDOWN_CHUNK))
+/**
+ * 短音频分析报告：去掉行首 ATX 标题的 #（最多 6 个），保留行内 #（如 URL 锚点）。
+ * @param {string|null|undefined} text
+ * @returns {string}
+ */
+function stripMarkdownHashForWecomAnalysisBody(text) {
+  const raw = String(text == null ? '' : text)
+  const lines = raw.split(/\r?\n/)
+  const out = lines.map((line) =>
+    line.replace(/^(\s{0,3})(#{1,6})(?:\s+(.*)|$)/, (_, indent, _h, rest) => indent + (rest || ''))
+  )
+  return out.join('\n').trim()
+}
+
+/** 推送入群前：将编辑区/报备中的 Markdown 语法转为纯文本 */
+function markdownLikeToPlainText(text) {
+  let s = stripMarkdownHashForWecomAnalysisBody(text)
+  s = s.replace(/\[([^\]]*)\]\(([^)]+)\)/g, (_, label, url) => {
+    const lb = String(label || '').trim()
+    const u = String(url || '').trim()
+    if (lb && u) return `${lb} ${u}`
+    return lb || u
+  })
+  s = s.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/__([^_]+)__/g, '$1')
+  s = s.replace(/`([^`]+)`/g, '$1')
+  s = s
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^>\s?/, ''))
+    .join('\n')
+  return s.trim()
+}
+
+function normalizePushBodyForText(text) {
+  return markdownLikeToPlainText(String(text == null ? '' : text))
+}
+
+async function sendAppChatTextChunked(chatid, fullText) {
+  const s = normalizePushBodyForText(fullText)
+  if (!s) return
+  for (let i = 0; i < s.length; i += APPCHAT_TEXT_CHUNK) {
+    await wecomAppChatApi.sendAppChatText(chatid, s.slice(i, i + APPCHAT_TEXT_CHUNK))
   }
 }
 
@@ -90,6 +126,107 @@ function stripFileSuffix(name) {
   const s = String(name || '').trim()
   if (!s) return ''
   return s.replace(/\.[^./\\]{1,10}$/g, '').trim()
+}
+
+/** 去掉名称前导日期/时间（如 20260401_、2026-04-01、2026年4月1日 等） */
+function stripLeadingTimeFromLabel(name) {
+  let s = String(name || '').trim()
+  if (!s) return ''
+  const patterns = [
+    /^(\d{4})[-/年](\d{1,2})[-/月](\d{1,2})日?\s*[_\-—．.\s]*/,
+    /^(\d{4})(\d{2})(\d{2})\s*[_\-—．.\s]*/,
+    /^(\d{4}-\d{2}-\d{2})(?:\s+\d{1,2}[:：]\d{2}(?::\d{2})?)?\s*[_\-—．.\s]*/
+  ]
+  for (const re of patterns) {
+    if (re.test(s)) {
+      s = s.replace(re, '').trim()
+      break
+    }
+  }
+  return s || String(name || '').trim()
+}
+
+const WECOM_PRESALES_CHAT_SUFFIX = '-售前分析'
+
+/** @typedef {'newProduct'|'newCustomer'|'upgrade'} WecomPushCategory */
+
+/**
+ * 根据线索类型 XSFL（resolveClueSummary 里的 clueType）划分建群/卡片样式
+ * @param {string|null|undefined} xsfl
+ * @returns {WecomPushCategory}
+ */
+function resolveWecomPushCategoryFromXsfl(xsfl) {
+  const t = String(xsfl || '').trim()
+  if (t === '新产品') return 'newProduct'
+  if (t === '新客户') return 'newCustomer'
+  return 'upgrade'
+}
+
+function wecomChatNamePrefixForCategory(category) {
+  if (category === 'newProduct') return '【新品】'
+  if (category === 'newCustomer') return '【新客】'
+  return '【升级】'
+}
+
+/**
+ * 默认企微建群名：【新品|新客|升级】+ `communication_reports.lead_name` + `-售前分析`（XSFL 来自第三方，与 resolveClueSummary.clueType 一致）。`lead_name` 为空时中间段用「售前」占位；可去掉名称前导日期。
+ * @param {object|null} report 交流报备（至少含 lead_name；无报备时传 null）
+ * @param {string|null|undefined} xsfl 线索类型 XSFL
+ */
+function buildDefaultWecomPresalesChatName(report, xsfl) {
+  const category = resolveWecomPushCategoryFromXsfl(xsfl)
+  const prefix = wecomChatNamePrefixForCategory(category)
+  const leadRaw = report && report.lead_name != null ? String(report.lead_name).trim() : ''
+  const stripped = stripLeadingTimeFromLabel(leadRaw)
+  const bodySource = stripped || leadRaw || '售前'
+  const maxBody = Math.max(
+    4,
+    48 - Array.from(prefix).length - Array.from(WECOM_PRESALES_CHAT_SUFFIX).length
+  )
+  const body = trimToLength(bodySource, maxBody)
+  return `${prefix}${body}${WECOM_PRESALES_CHAT_SUFFIX}`
+}
+
+/**
+ * 企微 textcard 仅支持 div.gray / div.normal / div.highlight 三类样式。
+ * 三种线索类型对应不同强调色组合（highlight 为企微橙色强调）。
+ * @param {WecomPushCategory} category
+ * @returns {{ description: string, btntxt: string, category: WecomPushCategory }}
+ */
+function buildWecomVideoCardStyle(category) {
+  const fromEnvDesc = process.env.PRESALES_VIDEO_WECOM_CARD_DESCRIPTION
+  if (fromEnvDesc != null && String(fromEnvDesc).trim() !== '') {
+    return {
+      category,
+      description: String(fromEnvDesc).trim(),
+      btntxt: defaultCardBtntxt()
+    }
+  }
+  const fromEnvBtn = process.env.PRESALES_VIDEO_WECOM_CARD_BTNTXT
+  const envBtn =
+    fromEnvBtn != null && String(fromEnvBtn).trim() !== '' ? String(fromEnvBtn).trim().slice(0, 4) : ''
+  if (category === 'newProduct') {
+    return {
+      category,
+      description:
+        '<div class="highlight">【新品】售前交流视频</div><div class="normal">新产品线索 · 点击按钮在浏览器中观看回放</div>',
+      btntxt: envBtn || '观看'
+    }
+  }
+  if (category === 'newCustomer') {
+    return {
+      category,
+      description:
+        '<div class="highlight">【新客】售前交流视频</div><div class="gray">新客户首次交流</div><div class="normal">点击按钮查看本次交流回放</div>',
+      btntxt: envBtn || '查看'
+    }
+  }
+  return {
+    category,
+    description:
+      '<div class="gray">【升级】售前交流视频</div><div class="highlight">版本升级线索 · 点击查看回放</div>',
+    btntxt: envBtn || '播放'
+  }
 }
 
 async function collectLeaderChainUserIds(prisma, startUserId) {
@@ -306,6 +443,25 @@ async function resolveCommunicationReportForTranscription(prisma, tr) {
 }
 
 /**
+ * 列表/弹窗首屏：与推送视频建群默认名一致（报备 lead_name + XSFL 前缀），供前端展示。
+ * @param {import('@prisma/client').PrismaClient} prisma
+ * @param {{ id: string, report_id?: string|null, session_id?: string|null, name?: string|null, original_file_name?: string|null, customer_name?: string|null }} tr
+ */
+async function getDefaultPushVideoChatNameForTranscription(prisma, tr) {
+  try {
+    const report = await resolveCommunicationReportForTranscription(prisma, tr)
+    const clueSummary = await resolveClueSummary(report)
+    return buildDefaultWecomPresalesChatName(report, clueSummary && clueSummary.clueType)
+  } catch (e) {
+    logger.warn(
+      `[presales-video] getDefaultPushVideoChatNameForTranscription 失败 tid=${tr && tr.id}:`,
+      e && e.message
+    )
+    return buildDefaultWecomPresalesChatName(null, null)
+  }
+}
+
+/**
  * communication_reports.our_participants 中的中文姓名 → org_user.user_id（按 user_name 精确匹配、未删除）
  */
 async function resolveParticipantNamesToUserIds(prisma, names) {
@@ -345,8 +501,18 @@ function formatDateOnlyZh(raw) {
   return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
 }
 
+/** 交流发生日期：优先 com_date；无有效值则 report_date */
+function pickReportComDateOrReportDate(report) {
+  if (!report) return null
+  if (report.com_date != null && report.com_date !== '') {
+    const d = new Date(report.com_date)
+    if (!Number.isNaN(d.getTime())) return report.com_date
+  }
+  return report.report_date != null ? report.report_date : null
+}
+
 function inferDayPeriod(report) {
-  const pick = report && (report.start_at || report.report_date)
+  const pick = report && (report.start_at || pickReportComDateOrReportDate(report))
   if (!pick) return ''
   const t = Date.parse(String(pick))
   if (Number.isNaN(t)) return ''
@@ -360,7 +526,8 @@ function inferDayPeriod(report) {
 
 async function calcLeadReportNth(prisma, report) {
   if (!report) return null
-  const reportDate = report.report_date ? new Date(report.report_date) : null
+  const effectiveRaw = pickReportComDateOrReportDate(report)
+  const reportDate = effectiveRaw ? new Date(effectiveRaw) : null
   const createdAt = report.created_at ? new Date(report.created_at) : null
 
   const keyWhere = report.lead_id
@@ -392,12 +559,12 @@ async function calcLeadReportNth(prisma, report) {
 
 function formatReportMarkdown(report, nth) {
   if (!report) {
-    return (
-      '**交流报备**\n' +
-      '> 未匹配到报备记录。\n' +
-      '> 常见原因：① 转录「客户名称」为空，且文件名/标题与报备里的客户或线索名称无重合；② 库中尚无对应交流报备。\n' +
-      '> 处理：在语音转写里补全该转录的客户名称，或保证企微报备中的客户/线索名与文件名中的客户关键词一致；也可先在企微发送标准「交流报备」模板入库后再推送。'
-    )
+    return [
+      '【交流报备】',
+      '未匹配到报备记录。',
+      '常见原因：① 转录「客户名称」为空，且文件名/标题与报备里的客户或线索名称无重合；② 库中尚无对应交流报备。',
+      '处理：在语音转写里补全该转录的客户名称，或保证企微报备中的客户/线索名与文件名中的客户关键词一致；也可先在企微发送标准「交流报备」模板入库后再推送。'
+    ].join('\n')
   }
   const rawContent = String(report.main_content || '').trim()
   const nthText = Number.isFinite(nth) && nth > 0 ? nth : 'N'
@@ -434,19 +601,60 @@ function pickFirstValueFromObjects(objs, keys) {
   return ''
 }
 
-function pickAnyMeaningfulField(obj) {
-  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return ''
-  for (const [k, v] of Object.entries(obj)) {
-    if (v == null) continue
-    if (typeof v !== 'string' && typeof v !== 'number') continue
-    const key = String(k || '').toLowerCase()
-    if (key.includes('id') || key.includes('time') || key.includes('date')) continue
-    const text = String(v).trim()
-    if (text) return text
-  }
-  return ''
+function getFollowUpListArray(root) {
+  if (!root || typeof root !== 'object' || Array.isArray(root)) return []
+  if (Array.isArray(root.followUpList)) return root.followUpList
+  if (Array.isArray(root.follow_up_list)) return root.follow_up_list
+  if (Array.isArray(root.FOLLOWUPLIST)) return root.FOLLOWUPLIST
+  return []
 }
 
+function parseClueDateMs(raw) {
+  const s = String(raw || '').trim()
+  if (!s) return 0
+  const t = Date.parse(s)
+  return Number.isNaN(t) ? 0 : t
+}
+
+/** 单条跟进用于排序的时间：取 CREATETIME 与 GJRQ 中较晚者 */
+function followUpItemSortKey(item) {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) return -1
+  const ct = parseClueDateMs(pickFirstValue(item, ['CREATETIME', 'createtime', 'create_time', 'CREATE_TIME']))
+  const gj = parseClueDateMs(pickFirstValue(item, ['GJRQ', 'gjrq']))
+  return Math.max(ct, gj)
+}
+
+/** 跟进列表里时间最新的一条（避免接口数组正序/倒序不一致） */
+function pickLatestFollowUpListItem(list) {
+  if (!Array.isArray(list) || list.length === 0) return null
+  let best = null
+  let bestKey = -1
+  for (const item of list) {
+    if (item == null || typeof item !== 'object' || Array.isArray(item)) continue
+    const k = followUpItemSortKey(item)
+    if (k >= bestKey) {
+      bestKey = k
+      best = item
+    }
+  }
+  return best
+}
+
+/**
+ * 阶段文案：followUpList 中时间最新一条的 XSJD；XSJD 为空则「日常跟进」。
+ * 无跟进列表、或 clue 为空、或无法解析出有效条目时，一律「日常跟进」（不再用 MQJDNAME 兜底）。
+ */
+function extractStageXsjdFromFollowUpList(clue) {
+  const list = getFollowUpListArray(clue)
+  if (list.length === 0) return '日常跟进'
+  const item = pickLatestFollowUpListItem(list)
+  if (!item) return '日常跟进'
+  const xsjd = pickFirstValue(item, ['XSJD', 'xsjd', 'xs_jd'])
+  if (xsjd) return String(xsjd).trim()
+  return '日常跟进'
+}
+
+/** 221 信息：followUpLogList 全部 ACTIONTYPE，中文逗号拼接 */
 function extractInfo221FromFollowUpLogList(clue) {
   const root = clue && typeof clue === 'object' ? clue : null
   if (!root) return ''
@@ -457,30 +665,13 @@ function extractInfo221FromFollowUpLogList(clue) {
       : Array.isArray(root.FOLLOWUPLOGLIST)
         ? root.FOLLOWUPLOGLIST
         : []
-  if (followUpLogList.length === 0) return ''
-  // 通常最后一条是最新跟进，优先展示最新一条内容
-  const latest = followUpLogList[followUpLogList.length - 1]
-  if (latest == null) return ''
-  if (typeof latest === 'string' || typeof latest === 'number') {
-    return String(latest).trim()
+  const parts = []
+  for (const row of followUpLogList) {
+    if (row == null || typeof row !== 'object' || Array.isArray(row)) continue
+    const actionType = pickFirstValue(row, ['ACTIONTYPE', 'actionType', 'action_type'])
+    if (actionType) parts.push(String(actionType).trim())
   }
-  const hit = pickFirstValue(latest, [
-    'FOLLOWUPCONTENT',
-    'followUpContent',
-    'follow_up_content',
-    'CONTENT',
-    'content',
-    'REMARK',
-    'remark',
-    'NOTE',
-    'note',
-    'DESCRIPTION',
-    'description',
-    'SUMMARY',
-    'summary'
-  ])
-  if (hit) return hit
-  return pickAnyMeaningfulField(latest)
+  return parts.join('，')
 }
 
 function formatDateZh(raw) {
@@ -576,7 +767,24 @@ async function fetchClueFullInfo(xsbh) {
       root ||
       null
     const lvl2 = safeObj(lvl1 && lvl1.data) || safeObj(lvl1 && lvl1.result) || lvl1
-    return safeObj(lvl2) || null
+    const parsed = safeObj(lvl2) || null
+    const xsbhLog = String(xsbh || '').trim()
+    try {
+      const raw = parsed == null ? 'null' : JSON.stringify(parsed)
+      const maxRaw = process.env.PRESALES_VIDEO_CLUE_FULL_INFO_LOG_MAX_CHARS
+      const max =
+        maxRaw != null && String(maxRaw).trim() !== '' ? parseInt(String(maxRaw).trim(), 10) : 12000
+      const cap = Number.isFinite(max) && max > 500 ? max : 12000
+      const body =
+        raw.length > cap ? `${raw.slice(0, cap)}…(truncated,totalChars=${raw.length})` : raw
+      logger.info(`[presales-video] 线索完整信息接口返回 xsbh=${xsbhLog} parsedJson=${body}`)
+    } catch (logErr) {
+      logger.warn(
+        `[presales-video] 线索完整信息返回体打日志失败 xsbh=${xsbhLog}:`,
+        logErr && logErr.message
+      )
+    }
+    return parsed
   } finally {
     clearTimeout(timer)
   }
@@ -634,21 +842,9 @@ async function resolveClueSummary(report) {
       'clueType',
       'xslx'
     ]) || '暂无'
-  const stage =
-    pickFirstValueFromObjects(candidates, [
-      'MQJDNAME',
-      'stageName',
-      'stage_name',
-      'currentStage',
-      'current_stage',
-      'phaseName',
-      'jdmc'
-    ]) || '暂无'
-  const info221FromLogs = extractInfo221FromFollowUpLogList(clue)
-  const info221 =
-    info221FromLogs ||
-    pickFirstValueFromObjects(candidates, ['INFO221', 'info221', 'info_221', 'x221', 'i221']) ||
-    '暂无'
+  const stage = extractStageXsjdFromFollowUpList(clue)
+  const info221Raw = extractInfo221FromFollowUpLogList(clue)
+  const info221 = info221Raw && String(info221Raw).trim() ? String(info221Raw).trim() : '暂无'
   const xsbhFinal =
     pickFirstValueFromObjects(candidates, ['XSBH', 'xsbh', 'leadCode', 'lead_code', 'clueNum']) || xsbh
   return { leadName, setupTimeRaw, clueType, stage, info221, xsbhFinal, clueRaw: clue }
@@ -659,7 +855,7 @@ function formatReportMarkdownForExistingChat(report, nth, clueSummary) {
   const nthText = Number.isFinite(nth) && nth > 0 ? nth : 'N'
   const leadName = String(report.lead_name || report.customer_name || '未知').trim()
   const communicationForm = String(report.communication_form || '暂无').trim()
-  const dateZh = formatDateOnlyZh(report.report_date)
+  const dateZh = formatDateOnlyZh(pickReportComDateOrReportDate(report))
   const period = inferDayPeriod(report)
   const datePart = period ? `${dateZh},${period}` : dateZh
   const clientNames = splitParticipantNames(report.client_participants)
@@ -685,16 +881,27 @@ function formatReportMarkdownForExistingChat(report, nth, clueSummary) {
   ].join('\n')
 }
 
-function formatVideoMarkdown(transcription, videoTask) {
+function formatVideoText(transcription, videoTask, playUrl) {
   const name = escapeMdLine(transcription.original_file_name || transcription.name || '转录')
+  const url = playUrl != null ? String(playUrl).trim() : ''
+  if (url && /^https?:\/\//i.test(url)) {
+    return ['【售前视频】', `转录：${name}`, `观看链接：${url}`].join('\n')
+  }
   const v = videoTask && videoTask.video_address && String(videoTask.video_address).trim()
   if (!v) {
-    return `**售前视频**\n转录：${name}\n> 当前无 \`video_address\`（请确认工作流 video 回调已写入库）。`
+    return ['【售前视频】', `转录：${name}`, '当前无 video_address（请确认工作流 video 回调已写入库）。'].join(
+      '\n'
+    )
   }
   if (/^https?:\/\//i.test(v)) {
-    return `**售前视频**\n转录：${name}\n视频链接：[点击打开](${v})`
+    return ['【售前视频】', `转录：${name}`, `观看链接：${v}`].join('\n')
   }
-  return `**售前视频**\n转录：${name}\n服务器路径：\`${escapeMdLine(v)}\``
+  return ['【售前视频】', `转录：${name}`, `服务器路径：${escapeMdLine(v)}`].join('\n')
+}
+
+/** @deprecated 保留导出名；请使用 formatVideoText */
+function formatVideoMarkdown(transcription, videoTask, playUrl) {
+  return formatVideoText(transcription, videoTask, playUrl)
 }
 
 /** 卡片跳转用原始串：优先 http(s) 的 reserve_5（如 m3u8），否则 video_address */
@@ -801,8 +1008,8 @@ function defaultCardBtntxt() {
 }
 
 /**
- * 与即将发往群内的两段 Markdown 一致（不含视频文本卡片，卡片仍由服务端生成）。
- * @returns {Promise<{ willReuseChat: boolean, reportMatched: boolean, clueMarkdown: string, reportMarkdown: string, sendsClueBlockFirst: boolean }>}
+ * 与即将发往群内的两段纯文本一致（不含末尾售前视频 textcard，卡片仍由服务端生成）。
+ * @returns {Promise<{ willReuseChat: boolean, reportMatched: boolean, clueMarkdown: string, reportMarkdown: string, sendsClueBlockFirst: boolean, defaultChatName: string, wecomPushCategory: WecomPushCategory }>} defaultChatName：【新品|新客|升级】+ `report.lead_name`（空则「售前」）+ `-售前分析`
  */
 async function getPresalesVideoPushMarkdownPreview({ prisma, transcriptionId }) {
   const tr = await prisma.transcriptions.findUnique({ where: { id: transcriptionId } })
@@ -827,13 +1034,17 @@ async function getPresalesVideoPushMarkdownPreview({ prisma, transcriptionId }) 
   const reportMarkdown = willReuseChat
     ? formatReportMarkdownForExistingChat(report, nth, clueSummary)
     : formatReportMarkdown(report, nth)
+  const pushCategory = resolveWecomPushCategoryFromXsfl(clueSummary && clueSummary.clueType)
+  const defaultChatName = buildDefaultWecomPresalesChatName(report, clueSummary && clueSummary.clueType)
 
   return {
     willReuseChat,
     reportMatched: Boolean(report),
     clueMarkdown,
     reportMarkdown,
-    sendsClueBlockFirst: !willReuseChat && Boolean(clueMarkdown.trim())
+    sendsClueBlockFirst: !willReuseChat && Boolean(clueMarkdown.trim()),
+    defaultChatName,
+    wecomPushCategory: pushCategory
   }
 }
 
@@ -843,10 +1054,10 @@ async function getPresalesVideoPushMarkdownPreview({ prisma, transcriptionId }) 
  * @param {string} ctx.transcriptionId
  * @param {string|string[]} ctx.userIdsRaw 逗号分隔或数组
  * @param {string} [ctx.cardTitle] 可选，企微 textcard 的 title；不传则用转录音频文件名（去后缀）或「售前视频」
- * @param {string} [ctx.chatName] 可选，新建应用群发会话的名称；不传则「线索/客户名或文件名」截断 + 「-售前分析」
- * @param {string} [ctx.clueMarkdown] 若调用方传入该键，则以传入文本作为首段线索 Markdown（新建群时先发）；空字符串表示跳过首段
- * @param {string} [ctx.reportMarkdown] 若调用方传入该键，则以传入文本作为报备摘要 Markdown（必发第二条）
- * @param {string} [ctx.reportAnalysisMarkdown] 可选；音频时长 < splitSec（默认 10 分钟）时作为「推送报告」正文单独发群（可多条）；若未传且为短音频则服务端尝试 readAnalysisForPushEdit
+ * @param {string} [ctx.chatName] 可选，新建应用群发会话的名称；不传则按 XSFL 为【新品|新客|升级】+ 报备 lead_name +「-售前分析」
+ * @param {string} [ctx.clueMarkdown] 若调用方传入该键，则以传入文本作为首段线索纯文本（新建群时先发）；空字符串表示跳过首段
+ * @param {string} [ctx.reportMarkdown] 若调用方传入该键，则以传入文本作为报备摘要纯文本（必发第二条）
+ * @param {string} [ctx.reportAnalysisMarkdown] 可选；音频时长 < splitSec（默认 10 分钟）时作为分析报告正文单独发群（可多条 text）；若未传且为短音频则服务端尝试 readAnalysisForPushEdit。发送前会转为纯文本（去 Markdown 语法）。
  * @returns {Promise<{ chatid: string, reportMatched: boolean, userCount: number, videoPushedAsMedia?: boolean, videoPushedAsCard?: boolean }>}
  */
 async function pushPresalesVideoToWecomAppChat(ctx) {
@@ -891,15 +1102,14 @@ async function pushPresalesVideoToWecomAppChat(ctx) {
     report = await findLatestMatchingReport(prisma, tr)
   }
 
+  const clueSummary = await resolveClueSummary(report)
+  const pushCategory = resolveWecomPushCategoryFromXsfl(clueSummary && clueSummary.clueType)
+  const cardStyle = buildWecomVideoCardStyle(pushCategory)
   const leadKey = presalesVideoGroupSettingsService.makeLeadKey(report)
   const mappedChat = leadKey
     ? await presalesVideoGroupSettingsService.getLeadChatByKey(leadKey)
     : null
-  const preferredLeadName =
-    (report && report.lead_name && String(report.lead_name).trim()) ||
-    (report && report.customer_name && String(report.customer_name).trim()) ||
-    escapeMdLine(tr.original_file_name || tr.name || transcriptionId)
-  const defaultChatName = `${trimToLength(preferredLeadName, 36)}-售前分析`
+  const defaultChatName = buildDefaultWecomPresalesChatName(report, clueSummary && clueSummary.clueType)
   const chatNameOverride =
     chatNameRaw != null && String(chatNameRaw).trim() !== ''
       ? String(chatNameRaw).trim()
@@ -968,7 +1178,6 @@ async function pushPresalesVideoToWecomAppChat(ctx) {
   }
 
   const nth = await calcLeadReportNth(prisma, report)
-  const clueSummary = await resolveClueSummary(report)
   const reportWithSummary =
     report && clueSummary ? { ...report, __clueSummary: clueSummary } : report
   let clueMd = await buildClueSummaryMarkdown(reportWithSummary)
@@ -984,9 +1193,9 @@ async function pushPresalesVideoToWecomAppChat(ctx) {
   }
 
   if (!reusedExistingChat && clueMd && String(clueMd).trim()) {
-    await wecomAppChatApi.sendAppChatMarkdown(chatid, clueMd)
+    await wecomAppChatApi.sendAppChatText(chatid, normalizePushBodyForText(clueMd))
   }
-  await wecomAppChatApi.sendAppChatMarkdown(chatid, md1)
+  await wecomAppChatApi.sendAppChatText(chatid, normalizePushBodyForText(md1))
 
   const splitSec = getPushVideoReportSplitSec()
   const durSec = tr.audio_duration != null ? Number(tr.audio_duration) : NaN
@@ -1003,10 +1212,9 @@ async function pushPresalesVideoToWecomAppChat(ctx) {
     if (ar.ok && ar.content) analysisExtra = String(ar.content).trim()
   }
   if (isShortAudio && analysisExtra) {
-    const head = '## 售前分析报告（与「推送报告」正文一致）\n\n'
-    await sendAppChatMarkdownChunked(chatid, head + analysisExtra)
+    await sendAppChatTextChunked(chatid, analysisExtra)
     logger.info(
-      `[presales-video] 短音频(<${splitSec}s)已追加分析报告 Markdown 入群 transcription=${transcriptionId} chatid=${chatid} len=${analysisExtra.length}`
+      `[presales-video] 短音频(<${splitSec}s)已追加分析报告（纯文本）入群 transcription=${transcriptionId} chatid=${chatid} len=${analysisExtra.length}`
     )
   }
 
@@ -1027,25 +1235,29 @@ async function pushPresalesVideoToWecomAppChat(ctx) {
     try {
       await wecomAppChatApi.sendAppChatTextCard(chatid, {
         title,
-        description: defaultCardDescription(),
+        description: cardStyle.description,
         url: cardUrl,
-        btntxt: defaultCardBtntxt()
+        btntxt: cardStyle.btntxt
       })
       videoPushedAsCard = true
     } catch (e) {
       const errLine = escapeMdLine((e && e.message) || String(e))
-      await wecomAppChatApi.sendAppChatMarkdown(
+      await wecomAppChatApi.sendAppChatText(
         chatid,
-        `${formatVideoMarkdown(tr, videoTask)}\n> 发送文本卡片失败：${errLine}`
+        normalizePushBodyForText(
+          `${formatVideoText(tr, videoTask, cardUrl)}\n发送文本卡片失败：${errLine}`
+        )
       )
     }
   }
 
   if (cardTpl) {
     if (!execId) {
-      await wecomAppChatApi.sendAppChatMarkdown(
+      await wecomAppChatApi.sendAppChatText(
         chatid,
-        `${formatVideoMarkdown(tr, videoTask)}\n> 卡片链接模板需要 \`execute_id\`（与库表 \`psv_video_info.id\` 一致）。请先**提交工作流**并等待 \`video_create\` 回调写入后再推送。`
+        normalizePushBodyForText(
+          `${formatVideoText(tr, videoTask)}\n提示：卡片链接模板需要 execute_id（与库表 psv_video_info.id 一致）。请先提交工作流并等待 video_create 回调写入后再推送。`
+        )
       )
     } else {
       const idForCard = presalesVideoTaskService.clipExecuteIdForPsvVideoInfo(execId)
@@ -1056,17 +1268,21 @@ async function pushPresalesVideoToWecomAppChat(ctx) {
       if (/^https?:\/\//i.test(cardUrl)) {
         await sendCardWithUrl(cardUrl)
       } else {
-        await wecomAppChatApi.sendAppChatMarkdown(
+        await wecomAppChatApi.sendAppChatText(
           chatid,
-          `${formatVideoMarkdown(tr, videoTask)}\n> 卡片 URL 模板展开后不是合法 http(s) 链接，请检查环境变量。`
+          normalizePushBodyForText(
+            `${formatVideoText(tr, videoTask)}\n提示：卡片 URL 模板展开后不是合法 http(s) 链接，请检查环境变量。`
+          )
         )
       }
     }
   } else if (rawLink) {
     if (isWindowsStyleFilePath(rawLink) && !/^https?:\/\//i.test(rawLink)) {
-      await wecomAppChatApi.sendAppChatMarkdown(
+      await wecomAppChatApi.sendAppChatText(
         chatid,
-        `${formatVideoMarkdown(tr, videoTask)}\n> 当前为 Windows 本地路径，无法在卡片中作为可点击链接。请改为 http(s) 地址，或配置 \`PRESALES_VIDEO_PSV_INFO_BASE_URL\` / \`PRESALES_VIDEO_WECOM_PUSH_PUBLIC_BASE_URL\` 做路径拼接；或使用 \`PRESALES_VIDEO_WECOM_CARD_URL_TEMPLATE\`（\`{id}\` = execute_id）。`
+        normalizePushBodyForText(
+          `${formatVideoText(tr, videoTask)}\n提示：当前为 Windows 本地路径，无法在卡片中作为可点击链接。请改为 http(s) 地址，或配置 PRESALES_VIDEO_PSV_INFO_BASE_URL / PRESALES_VIDEO_WECOM_PUSH_PUBLIC_BASE_URL；或使用 PRESALES_VIDEO_WECOM_CARD_URL_TEMPLATE（{id} = execute_id）。`
+        )
       )
     } else {
       const originOv = wecomCardPublicOriginOverride()
@@ -1074,14 +1290,19 @@ async function pushPresalesVideoToWecomAppChat(ctx) {
       if (/^https?:\/\//i.test(cardUrl)) {
         await sendCardWithUrl(cardUrl)
       } else {
-        await wecomAppChatApi.sendAppChatMarkdown(
+        await wecomAppChatApi.sendAppChatText(
           chatid,
-          `${formatVideoMarkdown(tr, videoTask)}\n> 无法生成 http(s) 卡片链接。请配置 \`PRESALES_VIDEO_PSV_INFO_BASE_URL\`（或 HOST+PORT+SCHEME），或 \`PRESALES_VIDEO_WECOM_PUSH_PUBLIC_BASE_URL\` 做路径拼接；或使用带 \`{id}\` 的播放页模板。`
+          normalizePushBodyForText(
+            `${formatVideoText(tr, videoTask)}\n提示：无法生成 http(s) 卡片链接。请配置 PRESALES_VIDEO_PSV_INFO_BASE_URL（或 HOST+PORT+SCHEME）、PRESALES_VIDEO_WECOM_PUSH_PUBLIC_BASE_URL，或使用带 {id} 的播放页模板。`
+          )
         )
       }
     }
   } else {
-    await wecomAppChatApi.sendAppChatMarkdown(chatid, formatVideoMarkdown(tr, videoTask))
+    await wecomAppChatApi.sendAppChatText(
+      chatid,
+      normalizePushBodyForText(formatVideoText(tr, videoTask))
+    )
   }
 
   return {
@@ -1100,8 +1321,8 @@ const PRESALES_VIDEO_RXKF_USERID =
   String(process.env.PRESALES_VIDEO_RXKF_USERID || 'rxkf01').trim() || 'rxkf01'
 
 /**
- * 不建群、不调外部报备/线索接口：仅向指定成员（默认 rxkf01）发送与群内推送相同的可点击文本卡片（同一套 URL 解析逻辑）。
- * 会写入 reserve_4：伪 chatId（前缀 old + 8 位随机数），供卡片模板 {chatId} 从 reserve_4 解析。
+ * 不建群、不调外部报备/线索接口：仅向指定成员（默认 rxkf01）发送可点击文本卡片（同一套 URL 解析逻辑）。
+ * 会写入 reserve_4：伪 chatId（前缀 old + 8 位随机数），供模板 {chatId} 从 reserve_4 解析。
  * 依赖自建应用 message/send，需 WECOM_AGENT_ID。
  */
 async function sendPresalesVideoCardToRxkfOnly(ctx) {
@@ -1132,6 +1353,14 @@ async function sendPresalesVideoCardToRxkfOnly(ctx) {
     cardTitleRaw != null && String(cardTitleRaw).trim() !== ''
       ? String(cardTitleRaw).trim()
       : null
+
+  let report = await findReportByKnownIds(prisma, tr)
+  if (!report) report = await findReportBySyncLog(prisma, transcriptionId)
+  if (!report) report = await findLatestMatchingReport(prisma, tr)
+  const clueSummary = await resolveClueSummary(report)
+  const cardStyle = buildWecomVideoCardStyle(
+    resolveWecomPushCategoryFromXsfl(clueSummary && clueSummary.clueType)
+  )
 
   const rawLink = pickRawVideoLinkForWecomCard(videoTask)
   const execId =
@@ -1191,9 +1420,9 @@ async function sendPresalesVideoCardToRxkfOnly(ctx) {
 
   await wecomAppChatApi.sendApplicationTextCardToUser(PRESALES_VIDEO_RXKF_USERID, {
     title,
-    description: defaultCardDescription(),
+    description: cardStyle.description,
     url: cardUrl,
-    btntxt: defaultCardBtntxt()
+    btntxt: cardStyle.btntxt
   })
 
   logger.info(
@@ -1213,10 +1442,21 @@ module.exports = {
   resolvePushVideoUserIds,
   findLatestMatchingReport,
   formatReportMarkdown,
+  formatVideoText,
   formatVideoMarkdown,
+  markdownLikeToPlainText,
+  normalizePushBodyForText,
   extractWecomAppChatIdFromReserve4,
   fillWecomCardUrlTemplate,
   getPresalesVideoPushMarkdownPreview,
   pushPresalesVideoToWecomAppChat,
-  sendPresalesVideoCardToRxkfOnly
+  sendPresalesVideoCardToRxkfOnly,
+  stripMarkdownHashForWecomAnalysisBody,
+  buildDefaultWecomPresalesChatName,
+  getDefaultPushVideoChatNameForTranscription,
+  buildWecomVideoCardStyle,
+  resolveWecomPushCategoryFromXsfl,
+  stripLeadingTimeFromLabel,
+  /** 调试用：根据报备线索编号拉「线索完整信息」并解析出 info221（221信息）等 */
+  resolveClueSummary
 }

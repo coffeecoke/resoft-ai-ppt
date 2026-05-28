@@ -211,6 +211,15 @@
       color: var(--primary-color, #1890ff);
       background: #fff;
     }
+    .pv-actions .btn.pv-act-delete {
+      color: #cf1322;
+      border-color: #ffa39e;
+    }
+    .pv-actions .btn.pv-act-delete:hover {
+      color: #fff;
+      background: #ff4d4f;
+      border-color: #ff4d4f;
+    }
     .pv-pagination {
       display: flex;
       flex-wrap: wrap;
@@ -915,7 +924,7 @@
             placeholder="留空则使用转录音频文件名（去后缀），与改版前一致"
           />
           <p class="pv-push-video-hint" style="margin-top: 6px; margin-bottom: 0;">
-            群内<strong>可点击的视频卡片</strong>标题默认原为：转录的 <code style="font-size:11px;">original_file_name</code> 或 <code style="font-size:11px;">name</code>（去掉扩展名），否则为「售前视频」。此处填写后将<strong>覆盖</strong>默认值。
+            群内<strong>可点击的视频卡片</strong>标题默认：转录的 <code style="font-size:11px;">original_file_name</code> 或 <code style="font-size:11px;">name</code>（去掉扩展名），否则为「售前视频」。此处填写后将<strong>覆盖</strong>默认值。
           </p>
         </div>
         <div class="pv-push-video-field" style="margin-bottom: 12px;">
@@ -926,7 +935,7 @@
             maxlength="50"
             autocomplete="off"
             spellcheck="false"
-            placeholder="留空则自动：客户/线索名或文件名（截断）-售前分析"
+            placeholder="留空则自动：【新品|新客|升级】+ 报备 lead_name + -售前分析（与列表/预览一致）"
           />
           <p class="pv-push-video-hint" style="margin-top: 6px; margin-bottom: 0;">
             仅<strong>首次为该线索创建</strong>群发会话时使用；名称最长约 50 字（超长由服务端截断）。复用已有群时<strong>不会改名</strong>。
@@ -943,7 +952,7 @@
         </p>
         <div class="pv-push-video-field pv-push-md-preview-wrap">
           <p class="pv-push-video-hint" style="margin-bottom: 8px;">
-            <strong>群内推送正文（企微 Markdown）</strong>以下为送入群会话的文本预览，可直接修改；点击「保存推送」以<strong>此处编辑后的内容</strong>为准。（末尾仍会发送可点击的<strong>售前视频卡片</strong>，卡片标题见上文。）
+            <strong>群内推送正文（企微纯文本 text）</strong>以下为送入群会话的文本预览，可直接修改；点击「保存推送」以<strong>此处编辑后的内容</strong>为准。（末尾仍会发送可点击的<strong>售前视频卡片</strong>，卡片标题见上文。）
           </p>
           <p id="pv-push-md-preview-status" class="pv-push-video-hint" style="margin-top: 0;">正在加载正文预览…</p>
           <label for="pv-push-md-clue">① 线索说明（仅<strong>新建</strong>群发会话时作为<strong>第一条</strong>发出；复用已有群不会发本段）</label>
@@ -964,7 +973,7 @@
           ></textarea>
           <div id="pv-push-report-analysis-block" style="display: none;">
             <label for="pv-push-md-report-analysis" style="display: block; margin-top: 12px;">
-              ③ 售前分析报告全文（与「推送报告」一致；仅录音时长短于系统分界时显示；将<strong>单独一条或多条</strong>消息发入同一群，在②之后、视频卡片之前）
+              ③ 售前分析报告全文（与「推送报告」一致；仅短于分界时长时显示；在②之后单独发入群；发送前会转为<strong>纯文本</strong>（去掉 Markdown 标题、加粗等语法））
             </label>
             <p id="pv-push-report-analysis-hint" class="pv-push-video-hint" style="margin-top: 0; margin-bottom: 8px;"></p>
             <textarea

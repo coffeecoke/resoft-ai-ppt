@@ -107,10 +107,12 @@ function normalizeRoleValue(raw) {
     s === 'our_side' ||
     s === 'our side' ||
     s === '我方' ||
-    s === '我方/供应商' ||
-    s === '供应商'
+    s === '我方/供应商'
   ) {
     return 'our_side'
+  }
+  if (s === 'vendor' || s === '厂商' || s === '厂商方' || s === '供应商') {
+    return 'vendor'
   }
   return ''
 }
@@ -118,6 +120,7 @@ function normalizeRoleValue(raw) {
 function roleLabelZh(role) {
   if (role === 'customer') return '客户方'
   if (role === 'our_side') return '我方'
+  if (role === 'vendor') return '厂商'
   return ''
 }
 

@@ -1,0 +1,4847 @@
+{
+  "generatedAt": "2026-05-18T11:49:22.787Z",
+  "stats": {
+    "product": "一表通",
+    "transcriptionTotal": 532,
+    "meetingCountWithQa": 142,
+    "sessionCountLinked": 0,
+    "uniqueCustomerCount": 0,
+    "qaPairTotal": 2169,
+    "customerQuestions": 1639,
+    "ourSideQuestions": 178,
+    "unknownSourceQuestions": 352,
+    "ruleValuableCustomerQuestions": 1626,
+    "answeredCount": 642,
+    "approvedCount": 1
+  },
+  "ruleValuableSample": [
+    {
+      "id": "81403a67-e88f-4d3f-9320-d8bcc4efbe07",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "请问这个东西还能进行学习吗？以后在公司条线中，是否需要指定专人每天校验并将信息发送到数据仓库，确保在安全区或校验区？",
+      "category": "2.3",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "f4ffbc3e-379b-449d-95a5-24905bb994b7",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "如果这个数据出现问题，刚才演示中提到有一次有三千多条反馈，之后进行了三四千条信息的修改。系统会根据新规则进行校验和筛选。那么，我们公司目前容易出现的错误主要有哪些？",
+      "category": "3.2",
+      "intent": "I2",
+      "source": "rule"
+    },
+    {
+      "id": "91c1638a-618b-4fdc-94ff-3824b3d77b76",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "如果公司底层数据源录入错误，数仓中是否可以直接修改？如果监管审核未通过，导致数据无法使用，结果会受到影响吗？",
+      "category": "3.2",
+      "intent": "I2",
+      "source": "rule"
+    },
+    {
+      "id": "2de23dc0-2a78-4673-bf45-7c02af28fcea",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "在可信区时，商业银行是否无法进行修改？",
+      "category": "3.2",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "66ac6af3-6a2d-4081-a70b-1f5c9d0d0642",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "如果数据无法通过校验，是否仍然允许进行修改？",
+      "category": "0.0",
+      "intent": "I5",
+      "source": "rule"
+    },
+    {
+      "id": "f0108005-7bfa-4eac-a7e7-783a1a736784",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "请问今天总局各级之间调阅数据的权限和行为规则是什么？",
+      "category": "3.2",
+      "intent": "I2",
+      "source": "rule"
+    },
+    {
+      "id": "22da6aaf-4f16-44f1-a77e-0c9d69c670a5",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "请问集市的建设是否基于一表通系统？",
+      "category": "2.3",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "3fe842cb-561f-4904-8593-de8a0f114e39",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "请详细介绍一下管的功能和概念。",
+      "category": "2.3",
+      "intent": "I2",
+      "source": "rule"
+    },
+    {
+      "id": "654a90b6-4baa-424b-b05f-24d856c53d10",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "类似于售票系统，但这是一个监管方向的数仓。请问它的功能和结构是怎样的？",
+      "category": "2.2",
+      "intent": "I5",
+      "source": "rule"
+    },
+    {
+      "id": "72bd21df-6f41-428b-95b2-2de96f785a90",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "关于跨数据校验的问题。以辽宁局为例，医保系统建成后，是否立即具备跨数据校验功能？",
+      "category": "2.3",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "4a99c2a9-7486-4ded-9399-565f83b5d7bf",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "昨天那位厂商提到有一个银监所库的概念，他锁库后我们就无法再进行申报，请问他们是如何锁定我们的库的？",
+      "category": "3.1",
+      "intent": "I2",
+      "source": "rule"
+    },
+    {
+      "id": "9d381505-9800-41cd-9981-080376191069",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "请问联调需要准备两套环境吗？如果只用一套环境是否可以？这样会不会花费太多？",
+      "category": "4.1",
+      "intent": "I3",
+      "source": "rule"
+    },
+    {
+      "id": "82ffabdc-b4f2-4673-84f5-61fa4631869c",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "如果出现这种情况，公司会收费吗？",
+      "category": "4.1",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "ef845566-c114-434c-a114-76db41e52bb0",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "公司收费吗？",
+      "category": "4.1",
+      "intent": "I5",
+      "source": "rule"
+    },
+    {
+      "id": "19b8120c-0b70-4cfd-af04-0f0ece8eba4d",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "这个产品可以进行演示吗？",
+      "category": "2.3",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "7783d5da-5b38-48ad-b113-3663c3169176",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "他这个关联是按照业务关联的方式进行的，是横向拆分的吗？",
+      "category": "2.2",
+      "intent": "I5",
+      "source": "rule"
+    },
+    {
+      "id": "6f3f1cad-0fd5-462e-8019-d55986319db8",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "请问我们在分行管理中，只有大连地区可能存在拆分，其他地区都没有拆分，且这7家分行都属于一级行。我们在划分时，实际上这7家分行不用考虑，只需管理一家。请问这种情况如何操作？",
+      "category": "3.3",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "7e825ad5-b3ae-405c-b84a-50dae32df65f",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "要满足你的报送需求吗？在你之前进行报送之前，你是否遇到无法导入的情况？你看见我了吗？",
+      "category": "2.3",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "25d0e9d5-96dc-43c0-adaf-5811c9827aca",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "是否存在一表通转换后的空间？",
+      "category": "2.3",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "cb0872ab-d91b-400f-854c-ef0ca924baf1",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "请问，刚开始讲的时候提到一秒钟，资本充足率是无法在一秒钟内得出的，对吗？",
+      "category": "2.1",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "5907bd84-f13c-4219-bc03-17b0dad19188",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "我还想问一下刚才界面中的配置，关于数据和其他内容可以调整吗？",
+      "category": "2.3",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "74fb5fdb-8443-459e-8445-642495e069fe",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "是否可以进行确权？",
+      "category": "2.3",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "5f8fee1a-abff-46c3-9a85-6d430789d101",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "请问你能介绍一下我们这个系统的功能吗？这个系统是2017年开发的，你刚才提到的功能在我们这里都能实现。",
+      "category": "3.3",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "9a976070-1d55-431d-87e2-10cad565e705",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "我不太清楚。这表格肯定可以，现在都是从总账里获取。",
+      "category": "2.3",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "6e5ceef3-7410-4afb-8f29-6a558229c31a",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "外资行在中国的分行需要报这个吗？",
+      "category": "3.1",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "0bf26a24-9d07-430e-8ce2-b91b2dad9cec",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "外资银行在中国的分行需要报告资本充足率吗？",
+      "category": "0.0",
+      "intent": "I5",
+      "source": "rule"
+    },
+    {
+      "id": "30302b90-f31a-4a02-950e-793942876829",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "他们的报送范围是否包括国外在中国的银行分行？",
+      "category": "3.1",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "36d0868d-60fd-4de5-8438-1fd856cce7d8",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "他们的系统是跟国外的系统一样吗？还是说现在开始建设国内系统？",
+      "category": "0.0",
+      "intent": "I5",
+      "source": "rule"
+    },
+    {
+      "id": "2fb5ad6c-e2a2-44d9-aab3-b824515568e4",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "你们提供WiFi吗？我可以用自己的网络吗？",
+      "category": "0.0",
+      "intent": "I5",
+      "source": "rule"
+    },
+    {
+      "id": "1204bff4-7844-4363-84c9-7a1c0a9857f2",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "这怎么处理？",
+      "category": "0.0",
+      "intent": "I5",
+      "source": "rule"
+    },
+    {
+      "id": "6f3ed475-a83e-4e00-94b5-958a105bd91a",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "我想问一下你们这个项目是否按照相关标准建设的？",
+      "category": "3.1",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "a378dc6a-8229-4394-bcd7-1d91f425dce9",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "基础设施部分是由你们打包建设的吗？",
+      "category": "5.5",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "6dd38a0a-786e-41fa-96f3-b66a606d3f2d",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "基础设施是这样的，郭总向他展示的内容包括两部分，一部分是应用，另一部分是底层的基础设施。我们希望与各位老师交流一下，结合行业的技术路线，提出一个更完整的方案，由我们来负责制定。",
+      "category": "5.5",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "dd8a06a8-37a0-4a02-8b72-40f035a8c6c0",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "我还需要寻找其他方案吗？",
+      "category": "5.5",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "33f776c7-1c6d-4adf-a5f6-556d6e5ba069",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "将来这个整个部署由你们来负责吗？",
+      "category": "5.5",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "147d61d3-7cab-46b6-8dec-9e4e48a09501",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "后期的运维由谁提供？是购买他们的授权还是直接购买他们的服务？",
+      "category": "6.1",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "d48e866f-f099-4e48-adcd-df985e92f616",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "我需要分开签合同还是与谁签合同？",
+      "category": "1.3",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "c383a853-509b-43bf-a6bd-0cd577d820fc",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "您的那个，比如说这个整个核心区的实施方案里是否包含前面的网关设备？",
+      "category": "5.5",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "7ebc8654-452f-4812-9076-85e6df267294",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "这个培训平台的未来维护由曹仁月负责，还是说你们会将源码共享给我们科技公司？",
+      "category": "6.1",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "2ca86885-0587-4c0a-8cd1-ccaaa8b17b27",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "这项服务的费用是多少？",
+      "category": "4.1",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "983478f1-d82d-46b8-b74f-48baaa07b78c",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "大家的情况差不多，你只需要告诉我扣我多少钱就行，我只关心这几个问题。",
+      "category": "4.2",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "e2e66565-0d8b-4a9c-81cb-12bdc73bb61b",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "可以，有范围的，你不用管。",
+      "category": "4.2",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "7a168cf8-6df2-414b-aee0-c8c582827294",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "一人月是指什么？",
+      "category": "5.3",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "dd352da0-eb8f-4e49-85cd-e20f68a6361b",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "源码能共享给我吗？",
+      "category": "6.3",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "ce67da0d-dd2a-488d-b3cd-cd5cff4e8067",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "这个项目的总体预算大概在多少钱左右？",
+      "category": "4.1",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "a8b40a74-b8c8-44f3-a190-973776cf876f",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "你们的整体设想是将我行所有基础数据整理出来，以便未来无论是对人民银行还是监管机构，都可以对外报告吗？",
+      "category": "2.3",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "60fcd5d2-b64d-4b7e-b902-90c9c42a1835",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "两者之间的合作关系是怎样的？也就是说，未来如果继续合作会如何发展？",
+      "category": "1.3",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "146d673d-2549-4494-a014-e6e34afe6275",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "个人的收入账明细最多为150万，这个意思是指每期的金额吗？",
+      "category": "2.3",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "34e1f573-fc44-4c85-80aa-86ee97889fee",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "请问你们与上游系统的对接由谁负责？",
+      "category": "5.3",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "8537f362-56a6-4886-8a86-58f80b60a1b4",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "如果上游系统无法满足字段覆盖的要求，是不是意味着需要对上游系统进行改装？",
+      "category": "3.3",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "d8a1a4cc-11db-4c10-873d-d47e9ee62f28",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "如果我现在使用的资产管理系统无法满足我们的需求，是否需要进行系统升级和改造？",
+      "category": "3.3",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "90b0fefd-5550-40d1-ade7-4c8b237f5550",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "部分他们的基础数据源是否也需要推送到我们那个超市集市里？",
+      "category": "5.6",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "32117ae2-6126-4b70-a7af-3bbd6c771083",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "如果到时候需要投入资金，是否还需要再走一趟？",
+      "category": "0.0",
+      "intent": "I5",
+      "source": "rule"
+    },
+    {
+      "id": "fde2ba11-cd21-4997-b35b-dd4a1a93e943",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "这是一个整体的事项，您知道吧？就是说因为一版通这个事项，我需要升级我的资产管理系统，对吧？",
+      "category": "0.0",
+      "intent": "I5",
+      "source": "rule"
+    },
+    {
+      "id": "e0a94132-5eea-4371-94d2-7cd335a24534",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "我们是否应该整体推进这项工作？",
+      "category": "0.0",
+      "intent": "I5",
+      "source": "rule"
+    },
+    {
+      "id": "f82903aa-b247-44c3-85a1-936f78169e05",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "这个项目需要在招投标结束后确定厂商或牵头方，然后由BA与我们一起完成相关文档。",
+      "category": "0.0",
+      "intent": "I5",
+      "source": "rule"
+    },
+    {
+      "id": "baa7a59a-71c9-4570-bfbf-783a4d3a5335",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "这个需求还不确定，应该先把需求整理出来。",
+      "category": "0.0",
+      "intent": "I5",
+      "source": "rule"
+    },
+    {
+      "id": "44d22389-8899-4c76-b1ae-c2e1c7d3f57e",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "替代我现在所有的系统吗？我目前有几个系统都需要升级，想知道是否可以将它们整合完成。",
+      "category": "2.3",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "3a7d9c62-cf59-4280-90e9-028b1a56615d",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "之前我们理解的报送方式是各城市自行报送，比如北京、上海报送，对吗？以后实现一表通后，监管由access负责，我们系统由总局、北京局还是上海局管理？",
+      "category": "1.4",
+      "intent": "I2",
+      "source": "rule"
+    },
+    {
+      "id": "a3e1dff2-b192-4fea-b185-05f1c3037f56",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "我再提个问题，刚才你提到的内容可以详细说明吗？",
+      "category": "0.0",
+      "intent": "I5",
+      "source": "rule"
+    },
+    {
+      "id": "db81e085-6251-4ae3-a954-f1b6866abacc",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "试点的要求是什么？",
+      "category": "3.1",
+      "intent": "I2",
+      "source": "rule"
+    },
+    {
+      "id": "8deec891-db22-4cda-97bf-00d625b7eff1",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "我们这个情况，建议我的接口接在哪里？",
+      "category": "2.4",
+      "intent": "I4",
+      "source": "rule"
+    },
+    {
+      "id": "24db4b58-3798-44d2-969f-9f04a9bc2e3b",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "比如说我们如果是可信区，是否需要将这个接口开放给其他城市？",
+      "category": "2.4",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "c1da6bab-fd0a-4de8-9405-85c559aaa0c4",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "请问按照你们在其他银行落地一表通的经验，系统建设完成并验收后，银行数据报送的时间安排是怎样的？是否必须在T+1完成，还是有一定的弹性？",
+      "category": "3.1",
+      "intent": "I2",
+      "source": "rule"
+    },
+    {
+      "id": "62220fcd-3544-4b2b-9e81-fb9ac2dbad9a",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "监管尚未到可信区获取数据，他们如何进行验证？",
+      "category": "1.4",
+      "intent": "I2",
+      "source": "rule"
+    },
+    {
+      "id": "7115357a-b53e-41a3-b72e-ae9cd0ec261d",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "百分之多少可以转表？",
+      "category": "2.3",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "de6ab78a-32a2-44f6-a22e-b4ea8b80289e",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "提到说如果一次的质量达到一定程度之后，有可能会停报，然后使用一表通来代替。请问您的数据质量是如何评估的？是根据本行数据与一表通数据的一致性来判断质量是否达到可信度，从而可以填报，还是有一个通用模型来衡量数据的质量？",
+      "category": "3.2",
+      "intent": "I2",
+      "source": "rule"
+    },
+    {
+      "id": "f435594e-6f52-4b99-8780-52c63fc9ad0f",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "逻辑层与明细报表的关系是怎样的？明细报表是从逻辑层生成的吗，还是直接从主题层到明细？从图上看，汇总层和明细报表似乎是并列的。请问具体情况如何？",
+      "category": "2.2",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "32638133-3a4a-4da9-b89d-384450b4e9e9",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "我担心后续的transaction和financial数据对账时，逻辑层最好是统一输出，这样后续的校验会更方便进行。",
+      "category": "3.2",
+      "intent": "I3",
+      "source": "rule"
+    },
+    {
+      "id": "af4800e1-1eab-4885-934f-108a521b8c3c",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "脚本是一个逻辑层，但我不太清楚主题层包含哪些内容。比如说全量客户信息，实际上我们没有对应的系统，这个主题层具体指什么？",
+      "category": "2.2",
+      "intent": "I2",
+      "source": "rule"
+    },
+    {
+      "id": "47ec62c7-d451-45a1-95d8-13a2f2713e45",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "我们在中国的地方这个方面有哪些具体情况？",
+      "category": "0.0",
+      "intent": "I5",
+      "source": "rule"
+    },
+    {
+      "id": "59b654c7-461f-4a72-9a19-5e94f95a1ef3",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "你们已经经过的主题城市是什么？",
+      "category": "0.0",
+      "intent": "I5",
+      "source": "rule"
+    },
+    {
+      "id": "9e18df95-1498-4bf4-bc57-43e29e426371",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "这个概念是指我们的一个29米的区域吗？",
+      "category": "0.0",
+      "intent": "I5",
+      "source": "rule"
+    },
+    {
+      "id": "d1465710-2d86-4eb1-8d51-4334807b6685",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "形式标签是什么？",
+      "category": "0.0",
+      "intent": "I5",
+      "source": "rule"
+    },
+    {
+      "id": "17852415-baac-4fb5-8525-a87e869e6fa3",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "请问这个可信度的可信区存活时间有要求吗？需要24小时全天候吗？",
+      "category": "2.1",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "02ec11d1-4174-4399-a8bf-e72252e01626",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "如果出现断开或其他问题，是否需要进行报备？",
+      "category": "6.1",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "853d57cd-4908-426e-b334-d666252e51cb",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "刚才你说他可以修改，请问具体指什么内容？",
+      "category": "0.0",
+      "intent": "I5",
+      "source": "rule"
+    },
+    {
+      "id": "88bca54b-4dfa-4a3c-af4d-427095f2c511",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "可信区的IP和IPO的要求是什么？",
+      "category": "0.0",
+      "intent": "I5",
+      "source": "rule"
+    },
+    {
+      "id": "bb48b50e-5656-4a50-8232-b70ff361ad8d",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "为什么在核心区监管可以动我的数据，所以我们的原始数据还要留备份？",
+      "category": "3.2",
+      "intent": "I3",
+      "source": "rule"
+    },
+    {
+      "id": "d642ac61-83ba-4f8a-863b-ee5d5fe04130",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "如果这样部署的好处是什么？会在扫描时跳转到监管那边去。之前您介绍说120平台有一些功能会被替代，但我这边只了解IT的报表。根据名字我推断不出具体内容。如果按这种方式，可信区以后建联的机构也不再取数了吗？",
+      "category": "1.4",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "068f770a-2192-4977-aa1f-b2539dc36b4f",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "那是不是意味着以后广州他们也要进入这个可信区，建联的监管机构也要在里面取数据？",
+      "category": "1.4",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "dd88c2e7-459a-44bd-984f-6b850d4bc64b",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "在报送应用层面，有哪些新的功能设计？",
+      "category": "2.3",
+      "intent": "I2",
+      "source": "rule"
+    },
+    {
+      "id": "94b1f1bc-3cea-495d-ba60-635198d3590c",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "我觉得最大的问题是我听错了。老师说我们要先填写一表通，然后再将一表通转化成1104和14。这可能是你们为新客户制定的方案，对吗？",
+      "category": "2.3",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "aade568f-9a71-4146-b304-1e0fd49b0590",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "我们数据的起始点在哪里？是从头开始的吗？",
+      "category": "2.3",
+      "intent": "I2",
+      "source": "rule"
+    },
+    {
+      "id": "bb45b9d0-1953-4aea-82e5-17a6c0aa6f8f",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "我们行内有一个讨论点，就是要不要建立本地数据仓库，包括数据集合等方面，您的看法如何？",
+      "category": "3.3",
+      "intent": "I4",
+      "source": "rule"
+    },
+    {
+      "id": "30ce0658-ca82-4a8b-91c2-e173b44943be",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "我不太理解实时补录的概念。如果按照之前的模式，补录次数每月大概10次左右，觉得一次补录就可以接受。但如果采用T+0+1的模式，这种方式就难以复用。是否有更好的方案？",
+      "category": "3.3",
+      "intent": "I4",
+      "source": "rule"
+    },
+    {
+      "id": "3436632b-7715-4c98-9e75-88bbef8695f8",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "我是否可以将这些流程实现自动化？对我来说，这已经是一回事了。既然一表通已经变得如此复杂，我有什么理由不去奥特美BOPAL和内心系统呢？",
+      "category": "2.3",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "b6d42984-a179-4cad-a9e5-00ee93417576",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "如果你们具备这个能力，那将是一个极大的卖点。我们一直在讨论在ES的1104和一表通之间选择，一表通可以取代EC，1141104也部分取代了EC。那么为什么AML出现错误，我还需要花时间去解决。",
+      "category": "3.3",
+      "intent": "I2",
+      "source": "rule"
+    },
+    {
+      "id": "3ab0af8e-cb9c-48b2-8bdf-f0570542bf1c",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "这个项目大概需要多长时间才能实现？",
+      "category": "5.2",
+      "intent": "I2",
+      "source": "rule"
+    },
+    {
+      "id": "807a8599-1f45-48a0-8366-2ee197850908",
+      "customer": "未知",
+      "session": "20250604-董明达-张家口银行-张家口银行新建一表通.m4a",
+      "question": "如果后续出现类似问题，一般是如何协调的？",
+      "category": "6.1",
+      "intent": "I2",
+      "source": "rule"
+    },
+    {
+      "id": "4013d7b9-6a1b-42b8-bdee-d1aef423c98e",
+      "customer": "未知",
+      "session": "20250604-董明达-张家口银行-张家口银行新建一表通.m4a",
+      "question": "咱们的人资支持后续有问题，这些人员到不到位，大概多少人？",
+      "category": "5.3",
+      "intent": "I2",
+      "source": "rule"
+    },
+    {
+      "id": "5bf5cd37-7625-4d8a-95cd-9708c6072c2d",
+      "customer": "未知",
+      "session": "20250604-董明达-张家口银行-张家口银行新建一表通.m4a",
+      "question": "补录这块的权限是放到部署端，还是分支行？",
+      "category": "3.2",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "84ef8478-207a-45db-83f0-8d6e38248b0e",
+      "customer": "未知",
+      "session": "20250604-董明达-张家口银行-张家口银行新建一表通.m4a",
+      "question": "我想进行数据转换操作。",
+      "category": "0.0",
+      "intent": "I5",
+      "source": "rule"
+    },
+    {
+      "id": "4545f8fd-e220-460a-a0c7-6a5d05c10a61",
+      "customer": "未知",
+      "session": "20250604-董明达-张家口银行-张家口银行新建一表通.m4a",
+      "question": "这块在垦区那地方转换是吧？",
+      "category": "3.1",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "e0fee823-51ef-4f64-9acb-22e03716dc24",
+      "customer": "未知",
+      "session": "20250604-董明达-张家口银行-张家口银行新建一表通.m4a",
+      "question": "他这个报送跟异地报备有什么区别？比如说利率报备，如果前一天的报不上去，第二天也不能报，这是为什么？",
+      "category": "3.1",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "89e39b4f-00ba-4163-bb13-a82b65d46bd5",
+      "customer": "未知",
+      "session": "20250604-董明达-张家口银行-张家口银行新建一表通.m4a",
+      "question": "如果我今天的数据出现问题，处理时间较长，但第二天的数据没有问题，我可以先报第二天的数据吗？",
+      "category": "3.1",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "37b014cb-14f4-4817-b7ee-df17e964d715",
+      "customer": "未知",
+      "session": "20250604-董明达-张家口银行-张家口银行新建一表通.m4a",
+      "question": "现在纽约市场的报道时间大概是几点到几点？今天能报完大概最晚到什么时候？",
+      "category": "3.1",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "4c1e00bd-206b-474e-a0de-fc8212ef9053",
+      "customer": "未知",
+      "session": "20250604-董明达-张家口银行-张家口银行新建一表通.m4a",
+      "question": "在查询时，是否会根据错误类型进行分类？",
+      "category": "2.3",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "53fd5ed3-6eb5-4614-a2e2-5e62305c213f",
+      "customer": "未知",
+      "session": "20250604-董明达-张家口银行-张家口银行新建一表通.m4a",
+      "question": "他算兼容性吗？",
+      "category": "2.4",
+      "intent": "I1",
+      "source": "rule"
+    },
+    {
+      "id": "bc1c7934-b4ca-497b-b15a-0a665494be17",
+      "customer": "未知",
+      "session": "20250604-董明达-张家口银行-张家口银行新建一表通.m4a",
+      "question": "我们预计什么时候开始招标？",
+      "category": "0.0",
+      "intent": "I5",
+      "source": "rule"
+    }
+  ],
+  "aiValuableQuestions": [
+    {
+      "idx": 1,
+      "id": "81403a67-e88f-4d3f-9320-d8bcc4efbe07",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "请问这个东西还能进行学习吗？以后在公司条线中，是否需要指定专人每天校验并将信息发送到数据仓库，确保在安全区或校验区？",
+      "category": "2.3",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "日常校验流程与人员配置",
+      "reason": "涉及系统上线后的日常运维流程、人员分工及操作规范，属于实施落地环节的关键问题。"
+    },
+    {
+      "idx": 2,
+      "id": "f4ffbc3e-379b-449d-95a5-24905bb994b7",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "如果这个数据出现问题，刚才演示中提到有一次有三千多条反馈，之后进行了三四千条信息的修改。系统会根据新规则进行校验和筛选。那么，我们公司目前容易出现的错误主要有哪些？",
+      "category": "3.2",
+      "intent": "I2",
+      "value": "medium",
+      "theme": "常见数据错误类型咨询",
+      "reason": "客户试图了解行业共性痛点，便于评估自身数据质量风险，有助于售前进行针对性痛点分析。"
+    },
+    {
+      "idx": 3,
+      "id": "91c1638a-618b-4fdc-94ff-3824b3d77b76",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "如果公司底层数据源录入错误，数仓中是否可以直接修改？如果监管审核未通过，导致数据无法使用，结果会受到影响吗？",
+      "category": "3.2",
+      "intent": "I2",
+      "value": "high",
+      "theme": "数据修改机制与监管审核影响",
+      "reason": "核心数据治理逻辑，涉及一表通数据修改原则（源头修改vs终端修改）及监管报送流程。"
+    },
+    {
+      "idx": 4,
+      "id": "2de23dc0-2a78-4673-bf45-7c02af28fcea",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "在可信区时，商业银行是否无法进行修改？",
+      "category": "3.2",
+      "intent": "I1",
+      "value": "high",
+      "theme": "可信区数据修改权限",
+      "reason": "涉及一表通核心架构'监管可信区'的数据安全与权限控制机制，是架构设计的关键点。"
+    },
+    {
+      "idx": 5,
+      "id": "66ac6af3-6a2d-4081-a70b-1f5c9d0d0642",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "如果数据无法通过校验，是否仍然允许进行修改？",
+      "category": "0.0",
+      "intent": "I5",
+      "value": "medium",
+      "theme": "校验失败后的数据修正流程",
+      "reason": "涉及系统功能操作流程和数据修正机制，是业务人员关注的实操细节。"
+    },
+    {
+      "idx": 6,
+      "id": "f0108005-7bfa-4eac-a7e7-783a1a736784",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "请问今天总局各级之间调阅数据的权限和行为规则是什么？",
+      "category": "3.2",
+      "intent": "I2",
+      "value": "medium",
+      "theme": "监管端数据调阅权限规则",
+      "reason": "涉及监管对接机制和数据权限管理，客户关注监管侧如何使用数据。"
+    },
+    {
+      "idx": 7,
+      "id": "22da6aaf-4f16-44f1-a77e-0c9d69c670a5",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "请问集市的建设是否基于一表通系统？",
+      "category": "2.3",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "数据集市与一表通架构关系",
+      "reason": "涉及系统架构规划和数据流向设计，客户关注系统定位及对现有架构的影响。"
+    },
+    {
+      "idx": 9,
+      "id": "654a90b6-4baa-424b-b05f-24d856c53d10",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "类似于售票系统，但这是一个监管方向的数仓。请问它的功能和结构是怎样的？",
+      "category": "2.2",
+      "intent": "I5",
+      "value": "medium",
+      "theme": "系统功能定位与架构形态",
+      "reason": "客户试图理解系统整体定位（监管数仓）和架构，属于选型决策的基础信息。"
+    },
+    {
+      "idx": 10,
+      "id": "72bd21df-6f41-428b-95b2-2de96f785a90",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "关于跨数据校验的问题。以辽宁局为例，医保系统建成后，是否立即具备跨数据校验功能？",
+      "category": "2.3",
+      "intent": "I1",
+      "value": "high",
+      "theme": "跨系统/跨数据校验功能",
+      "reason": "涉及高级校验功能和具体业务场景（医保数据），是体现产品能力差异化的关键点。"
+    },
+    {
+      "idx": 11,
+      "id": "4a99c2a9-7486-4ded-9399-565f83b5d7bf",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "昨天那位厂商提到有一个银监所库的概念，他锁库后我们就无法再进行申报，请问他们是如何锁定我们的库的？",
+      "category": "3.1",
+      "intent": "I2",
+      "value": "high",
+      "theme": "监管锁库机制询问",
+      "reason": "涉及竞品对比和监管报送流程中的关键控制节点（锁库），客户关注度高且易产生误解。"
+    },
+    {
+      "idx": 12,
+      "id": "9d381505-9800-41cd-9981-080376191069",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "请问联调需要准备两套环境吗？如果只用一套环境是否可以？这样会不会花费太多？",
+      "category": "4.1",
+      "intent": "I3",
+      "value": "high",
+      "theme": "联调环境准备与成本",
+      "reason": "涉及实施部署方案、硬件资源准备及项目预算成本，是项目落地的关键问题。"
+    },
+    {
+      "idx": 13,
+      "id": "82ffabdc-b4f2-4673-84f5-61fa4631869c",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "如果出现这种情况，公司会收费吗？",
+      "category": "4.1",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "特定场景下的收费政策",
+      "reason": "涉及商务预算和合同范围界定，客户关注隐性成本。"
+    },
+    {
+      "idx": 16,
+      "id": "7783d5da-5b38-48ad-b113-3663c3169176",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "他这个关联是按照业务关联的方式进行的，是横向拆分的吗？",
+      "category": "2.2",
+      "intent": "I5",
+      "value": "medium",
+      "theme": "数据关联与拆分方式",
+      "reason": "涉及数据模型设计和技术架构细节，客户关注数据处理的底层逻辑。"
+    },
+    {
+      "idx": 17,
+      "id": "6f3f1cad-0fd5-462e-8019-d55986319db8",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "请问我们在分行管理中，只有大连地区可能存在拆分，其他地区都没有拆分，且这7家分行都属于一级行。我们在划分时，实际上这7家分行不用考虑，只需管理一家。请问这种情况如何操作？",
+      "category": "3.3",
+      "intent": "I1",
+      "value": "high",
+      "theme": "分行管理模式与系统适配",
+      "reason": "涉及客户具体管理现状（多分行管理）和系统功能适配方案，是典型的业务场景咨询。"
+    },
+    {
+      "idx": 19,
+      "id": "25d0e9d5-96dc-43c0-adaf-5811c9827aca",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "是否存在一表通转换后的空间？",
+      "category": "2.3",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "数据转换存储空间",
+      "reason": "涉及技术架构中的存储资源规划，属于技术细节咨询。"
+    },
+    {
+      "idx": 20,
+      "id": "cb0872ab-d91b-400f-854c-ef0ca924baf1",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "请问，刚开始讲的时候提到一秒钟，资本充足率是无法在一秒钟内得出的，对吗？",
+      "category": "2.1",
+      "intent": "I1",
+      "value": "high",
+      "theme": "系统性能指标质疑",
+      "reason": "涉及系统性能（计算耗时）这一关键技术指标，客户对性能有疑虑，需重点解答。"
+    },
+    {
+      "idx": 21,
+      "id": "5907bd84-f13c-4219-bc03-17b0dad19188",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "我还想问一下刚才界面中的配置，关于数据和其他内容可以调整吗？",
+      "category": "2.3",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "界面配置灵活性",
+      "reason": "涉及系统功能配置的灵活性和可扩展性，影响用户体验。"
+    },
+    {
+      "idx": 22,
+      "id": "74fb5fdb-8443-459e-8445-642495e069fe",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "是否可以进行确权？",
+      "category": "2.3",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "数据确权功能",
+      "reason": "涉及数据治理核心功能'确权'，是数据资产管理的重要环节。"
+    },
+    {
+      "idx": 25,
+      "id": "6e5ceef3-7410-4afb-8f29-6a558229c31a",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "外资行在中国的分行需要报这个吗？",
+      "category": "3.1",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "监管报送范围界定",
+      "reason": "涉及监管合规范围（外资行分行），是项目立项和范围界定的前提。"
+    },
+    {
+      "idx": 26,
+      "id": "0bf26a24-9d07-430e-8ce2-b91b2dad9cec",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "外资银行在中国的分行需要报告资本充足率吗？",
+      "category": "0.0",
+      "intent": "I5",
+      "value": "medium",
+      "theme": "外资行报送具体指标",
+      "reason": "涉及具体监管指标（资本充足率）的报送要求，属于合规细节咨询。"
+    },
+    {
+      "idx": 27,
+      "id": "30302b90-f31a-4a02-950e-793942876829",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "他们的报送范围是否包括国外在中国的银行分行？",
+      "category": "3.1",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "报送主体范围确认",
+      "reason": "确认项目实施范围和监管对象，涉及合规边界。"
+    },
+    {
+      "idx": 28,
+      "id": "36d0868d-60fd-4de5-8438-1fd856cce7d8",
+      "customer": "未知",
+      "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+      "question": "他们的系统是跟国外的系统一样吗？还是说现在开始建设国内系统？",
+      "category": "0.0",
+      "intent": "I5",
+      "value": "medium",
+      "theme": "外资行系统建设策略",
+      "reason": "涉及特定客户群体（外资行）的现状和系统建设规划，有助于方案定制。"
+    },
+    {
+      "idx": 31,
+      "id": "6f3ed475-a83e-4e00-94b5-958a105bd91a",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "我想问一下你们这个项目是否按照相关标准建设的？",
+      "category": "3.1",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "项目建设标准合规性",
+      "reason": "涉及项目合规性和建设标准，是客户选型决策的关注点。"
+    },
+    {
+      "idx": 32,
+      "id": "a378dc6a-8229-4394-bcd7-1d91f425dce9",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "基础设施部分是由你们打包建设的吗？",
+      "category": "5.5",
+      "intent": "I1",
+      "value": "high",
+      "theme": "基础设施建设责任划分",
+      "reason": "涉及项目实施范围和分工边界（基础设施vs软件），直接影响合同范围。"
+    },
+    {
+      "idx": 34,
+      "id": "dd8a06a8-37a0-4a02-8b72-40f035a8c6c0",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "我还需要寻找其他方案吗？",
+      "category": "5.5",
+      "intent": "I1",
+      "value": "high",
+      "theme": "选型决策咨询",
+      "reason": "直接反映客户的购买决策心理，涉及竞品对比或方案替代性分析。"
+    },
+    {
+      "idx": 35,
+      "id": "33f776c7-1c6d-4adf-a5f6-556d6e5ba069",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "将来这个整个部署由你们来负责吗？",
+      "category": "5.5",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "部署实施责任",
+      "reason": "涉及项目实施交付的责任划分。"
+    },
+    {
+      "idx": 36,
+      "id": "147d61d3-7cab-46b6-8dec-9e4e48a09501",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "后期的运维由谁提供？是购买他们的授权还是直接购买他们的服务？",
+      "category": "6.1",
+      "intent": "I1",
+      "value": "high",
+      "theme": "运维模式与商务采购方式",
+      "reason": "涉及后期运维服务模式和商务采购模式（买断vs服务），是合同关键条款。"
+    },
+    {
+      "idx": 37,
+      "id": "d48e866f-f099-4e48-adcd-df985e92f616",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "我需要分开签合同还是与谁签合同？",
+      "category": "1.3",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "合同签署方式",
+      "reason": "涉及商务流程和合同主体，客户关注签约便利性。"
+    },
+    {
+      "idx": 38,
+      "id": "c383a853-509b-43bf-a6bd-0cd577d820fc",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "您的那个，比如说这个整个核心区的实施方案里是否包含前面的网关设备？",
+      "category": "5.5",
+      "intent": "I1",
+      "value": "high",
+      "theme": "实施方案硬件范围",
+      "reason": "涉及具体技术架构组件（网关）和实施范围界定，影响项目预算。"
+    },
+    {
+      "idx": 39,
+      "id": "7ebc8654-452f-4812-9076-85e6df267294",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "这个培训平台的未来维护由曹仁月负责，还是说你们会将源码共享给我们科技公司？",
+      "category": "6.1",
+      "intent": "I1",
+      "value": "high",
+      "theme": "运维责任与源码交付",
+      "reason": "涉及核心交付物（源码）归属和运维责任划分，是关键商务和技术谈判点。"
+    },
+    {
+      "idx": 40,
+      "id": "2ca86885-0587-4c0a-8cd1-ccaaa8b17b27",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "这项服务的费用是多少？",
+      "category": "4.1",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "服务费用咨询",
+      "reason": "涉及项目预算，客户关注具体成本。"
+    },
+    {
+      "idx": 41,
+      "id": "983478f1-d82d-46b8-b74f-48baaa07b78c",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "大家的情况差不多，你只需要告诉我扣我多少钱就行，我只关心这几个问题。",
+      "category": "4.2",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "项目预算关注",
+      "reason": "直接反映客户对预算成本的强烈关注，是商务谈判的关键信号。"
+    },
+    {
+      "idx": 43,
+      "id": "7a168cf8-6df2-414b-aee0-c8c582827294",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "一人月是指什么？",
+      "category": "5.3",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "计价单位咨询",
+      "reason": "涉及商务报价术语解释，影响成本核算。"
+    },
+    {
+      "idx": 44,
+      "id": "dd352da0-eb8f-4e49-85cd-e20f68a6361b",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "源码能共享给我吗？",
+      "category": "6.3",
+      "intent": "I1",
+      "value": "high",
+      "theme": "源码交付可能性",
+      "reason": "涉及核心知识产权和交付物范围，通常是谈判难点。"
+    },
+    {
+      "idx": 45,
+      "id": "ce67da0d-dd2a-488d-b3cd-cd5cff4e8067",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "这个项目的总体预算大概在多少钱左右？",
+      "category": "4.1",
+      "intent": "I1",
+      "value": "high",
+      "theme": "项目总体预算咨询",
+      "reason": "直接涉及项目预算规模，是决策关键因素。"
+    },
+    {
+      "idx": 46,
+      "id": "a8b40a74-b8c8-44f3-a190-973776cf876f",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "你们的整体设想是将我行所有基础数据整理出来，以便未来无论是对人民银行还是监管机构，都可以对外报告吗？",
+      "category": "2.3",
+      "intent": "I1",
+      "value": "high",
+      "theme": "系统建设目标与数据架构规划",
+      "reason": "涉及客户对系统整体架构和数据治理目标的理解，属于高层规划咨询。"
+    },
+    {
+      "idx": 47,
+      "id": "60fcd5d2-b64d-4b7e-b902-90c9c42a1835",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "两者之间的合作关系是怎样的？也就是说，未来如果继续合作会如何发展？",
+      "category": "1.3",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "未来合作模式",
+      "reason": "涉及长期合作规划和商务关系维护。"
+    },
+    {
+      "idx": 48,
+      "id": "146d673d-2549-4494-a014-e6e34afe6275",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "个人的收入账明细最多为150万，这个意思是指每期的金额吗？",
+      "category": "2.3",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "业务数据标准咨询",
+      "reason": "涉及具体业务指标（收入账明细）的数据标准定义，属于业务规则细节。"
+    },
+    {
+      "idx": 49,
+      "id": "34e1f573-fc44-4c85-80aa-86ee97889fee",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "请问你们与上游系统的对接由谁负责？",
+      "category": "5.3",
+      "intent": "I1",
+      "value": "high",
+      "theme": "上游系统对接责任",
+      "reason": "涉及项目实施中工作量最大的数据对接环节的责任划分，是实施风险点。"
+    },
+    {
+      "idx": 50,
+      "id": "8537f362-56a6-4886-8a86-58f80b60a1b4",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "如果上游系统无法满足字段覆盖的要求，是不是意味着需要对上游系统进行改装？",
+      "category": "3.3",
+      "intent": "I1",
+      "value": "high",
+      "theme": "上游系统改造需求",
+      "reason": "涉及数据治理实施难点和上游系统改造风险，是项目关键痛点。"
+    },
+    {
+      "idx": 51,
+      "id": "d8a1a4cc-11db-4c10-873d-d47e9ee62f28",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "如果我现在使用的资产管理系统无法满足我们的需求，是否需要进行系统升级和改造？",
+      "category": "3.3",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "上游系统改造需求",
+      "reason": "涉及一表通建设对上游源系统（资产管理系统）的影响评估与改造边界。"
+    },
+    {
+      "idx": 52,
+      "id": "90b0fefd-5550-40d1-ade7-4c8b237f5550",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "部分他们的基础数据源是否也需要推送到我们那个超市集市里？",
+      "category": "5.6",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "数据流向与集市建设",
+      "reason": "涉及基础数据源与数据集市（超市集市）的数据架构与推送逻辑。"
+    },
+    {
+      "idx": 53,
+      "id": "32117ae2-6126-4b70-a7af-3bbd6c771083",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "如果到时候需要投入资金，是否还需要再走一趟？",
+      "category": "0.0",
+      "intent": "I5",
+      "value": "medium",
+      "theme": "资金投入流程",
+      "reason": "涉及项目预算审批流程与客户内部决策机制。"
+    },
+    {
+      "idx": 58,
+      "id": "44d22389-8899-4c76-b1ae-c2e1c7d3f57e",
+      "customer": "未知",
+      "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+      "question": "替代我现在所有的系统吗？我目前有几个系统都需要升级，想知道是否可以将它们整合完成。",
+      "category": "2.3",
+      "intent": "I1",
+      "value": "high",
+      "theme": "系统整合与替代策略",
+      "reason": "涉及一表通建设与现有存量系统的整合策略及替代关系，是架构规划的核心问题。"
+    },
+    {
+      "idx": 59,
+      "id": "3a7d9c62-cf59-4280-90e9-028b1a56615d",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "之前我们理解的报送方式是各城市自行报送，比如北京、上海报送，对吗？以后实现一表通后，监管由access负责，我们系统由总局、北京局还是上海局管理？",
+      "category": "1.4",
+      "intent": "I2",
+      "value": "high",
+      "theme": "监管报送架构与管辖",
+      "reason": "涉及外资银行（德意志银行）多地监管架构下的报送模式与管辖权划分，属于核心业务场景。"
+    },
+    {
+      "idx": 61,
+      "id": "db81e085-6251-4ae3-a954-f1b6866abacc",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "试点的要求是什么？",
+      "category": "3.1",
+      "intent": "I2",
+      "value": "medium",
+      "theme": "试点准入要求",
+      "reason": "涉及一表通试点项目的准入标准与合规要求。"
+    },
+    {
+      "idx": 62,
+      "id": "8deec891-db22-4cda-97bf-00d625b7eff1",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "我们这个情况，建议我的接口接在哪里？",
+      "category": "2.4",
+      "intent": "I4",
+      "value": "medium",
+      "theme": "接口部署方案",
+      "reason": "涉及具体的技术实施细节，即接口部署位置的建议。"
+    },
+    {
+      "idx": 63,
+      "id": "24db4b58-3798-44d2-969f-9f04a9bc2e3b",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "比如说我们如果是可信区，是否需要将这个接口开放给其他城市？",
+      "category": "2.4",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "可信区网络与接口配置",
+      "reason": "涉及可信区部署架构下的网络开放与接口安全配置。"
+    },
+    {
+      "idx": 64,
+      "id": "c1da6bab-fd0a-4de8-9405-85c559aaa0c4",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "请问按照你们在其他银行落地一表通的经验，系统建设完成并验收后，银行数据报送的时间安排是怎样的？是否必须在T+1完成，还是有一定的弹性？",
+      "category": "3.1",
+      "intent": "I2",
+      "value": "high",
+      "theme": "报送时效与性能要求",
+      "reason": "涉及一表通数据报送的时效性（T+1弹性）与性能指标，是客户关注的核心运维指标。"
+    },
+    {
+      "idx": 65,
+      "id": "62220fcd-3544-4b2b-9e81-fb9ac2dbad9a",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "监管尚未到可信区获取数据，他们如何进行验证？",
+      "category": "1.4",
+      "intent": "I2",
+      "value": "medium",
+      "theme": "监管数据验证机制",
+      "reason": "涉及监管端如何获取及验证数据的业务流程，关乎报送合规性。"
+    },
+    {
+      "idx": 66,
+      "id": "7115357a-b53e-41a3-b72e-ae9cd0ec261d",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "百分之多少可以转表？",
+      "category": "2.3",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "数据转表自动化率",
+      "reason": "涉及一表通核心价值点——自动生成监管报表的覆盖率与能力。"
+    },
+    {
+      "idx": 67,
+      "id": "de6ab78a-32a2-44f6-a22e-b4ea8b80289e",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "提到说如果一次的质量达到一定程度之后，有可能会停报，然后使用一表通来代替。请问您的数据质量是如何评估的？是根据本行数据与一表通数据的一致性来判断质量是否达到可信度，从而可以填报，还是有一个通用模型来衡量数据的质量？",
+      "category": "3.2",
+      "intent": "I2",
+      "value": "high",
+      "theme": "数据质量评估标准",
+      "reason": "深入探讨数据质量的评估模型、校验逻辑及替代传统报送的标准，属于核心数据治理问题。"
+    },
+    {
+      "idx": 68,
+      "id": "f435594e-6f52-4b99-8780-52c63fc9ad0f",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "逻辑层与明细报表的关系是怎样的？明细报表是从逻辑层生成的吗，还是直接从主题层到明细？从图上看，汇总层和明细报表似乎是并列的。请问具体情况如何？",
+      "category": "2.2",
+      "intent": "I1",
+      "value": "high",
+      "theme": "系统架构层级关系",
+      "reason": "涉及一表通逻辑层、主题层、汇总层与明细报表的架构关系，是产品方案的核心技术细节。"
+    },
+    {
+      "idx": 69,
+      "id": "32638133-3a4a-4da9-b89d-384450b4e9e9",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "我担心后续的transaction和financial数据对账时，逻辑层最好是统一输出，这样后续的校验会更方便进行。",
+      "category": "3.2",
+      "intent": "I3",
+      "value": "medium",
+      "theme": "数据对账与逻辑层设计",
+      "reason": "涉及跨系统（交易与财务）数据对账逻辑及逻辑层统一输出的技术实现。"
+    },
+    {
+      "idx": 70,
+      "id": "af4800e1-1eab-4885-934f-108a521b8c3c",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "脚本是一个逻辑层，但我不太清楚主题层包含哪些内容。比如说全量客户信息，实际上我们没有对应的系统，这个主题层具体指什么？",
+      "category": "2.2",
+      "intent": "I2",
+      "value": "medium",
+      "theme": "数据主题层定义",
+      "reason": "涉及数据模型中主题层的具体定义与内容范围，属于产品功能细节。"
+    },
+    {
+      "idx": 72,
+      "id": "59b654c7-461f-4a72-9a19-5e94f95a1ef3",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "你们已经经过的主题城市是什么？",
+      "category": "0.0",
+      "intent": "I5",
+      "value": "medium",
+      "theme": "实施案例与经验",
+      "reason": "涉及厂商过往实施案例与试点城市经验，是选型决策的重要依据。"
+    },
+    {
+      "idx": 74,
+      "id": "d1465710-2d86-4eb1-8d51-4334807b6685",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "形式标签是什么？",
+      "category": "0.0",
+      "intent": "I5",
+      "value": "medium",
+      "theme": "产品功能概念解释",
+      "reason": "涉及具体产品功能（形式标签）的定义与理解。"
+    },
+    {
+      "idx": 75,
+      "id": "17852415-baac-4fb5-8525-a87e869e6fa3",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "请问这个可信度的可信区存活时间有要求吗？需要24小时全天候吗？",
+      "category": "2.1",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "可信区运维可用性要求",
+      "reason": "涉及可信区系统的运维SLA要求（如存活时间、24小时可用性）。"
+    },
+    {
+      "idx": 76,
+      "id": "02ec11d1-4174-4399-a8bf-e72252e01626",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "如果出现断开或其他问题，是否需要进行报备？",
+      "category": "6.1",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "运维故障报备流程",
+      "reason": "涉及系统异常情况下的运维管理流程与合规报备要求。"
+    },
+    {
+      "idx": 78,
+      "id": "88bca54b-4dfa-4a3c-af4d-427095f2c511",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "可信区的IP和IPO的要求是什么？",
+      "category": "0.0",
+      "intent": "I5",
+      "value": "medium",
+      "theme": "网络配置与IP要求",
+      "reason": "涉及可信区部署的具体网络技术细节（IP、IPO要求）。"
+    },
+    {
+      "idx": 79,
+      "id": "bb48b50e-5656-4a50-8232-b70ff361ad8d",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "为什么在核心区监管可以动我的数据，所以我们的原始数据还要留备份？",
+      "category": "3.2",
+      "intent": "I3",
+      "value": "high",
+      "theme": "数据安全与备份策略",
+      "reason": "涉及监管核心区数据操作权限、数据安全风险及备份策略，是安全合规的关键问题。"
+    },
+    {
+      "idx": 80,
+      "id": "d642ac61-83ba-4f8a-863b-ee5d5fe04130",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "如果这样部署的好处是什么？会在扫描时跳转到监管那边去。之前您介绍说120平台有一些功能会被替代，但我这边只了解IT的报表。根据名字我推断不出具体内容。如果按这种方式，可信区以后建联的机构也不再取数了吗？",
+      "category": "1.4",
+      "intent": "I1",
+      "value": "high",
+      "theme": "部署架构优势与平台演进",
+      "reason": "涉及特定部署模式的业务价值、平台功能替代关系及未来演进路线。"
+    },
+    {
+      "idx": 81,
+      "id": "068f770a-2192-4977-aa1f-b2539dc36b4f",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "那是不是意味着以后广州他们也要进入这个可信区，建联的监管机构也要在里面取数据？",
+      "category": "1.4",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "多地监管接入架构",
+      "reason": "涉及多地监管机构接入同一可信区的架构可行性与规划。"
+    },
+    {
+      "idx": 82,
+      "id": "dd88c2e7-459a-44bd-984f-6b850d4bc64b",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "在报送应用层面，有哪些新的功能设计？",
+      "category": "2.3",
+      "intent": "I2",
+      "value": "medium",
+      "theme": "报送应用功能设计",
+      "reason": "涉及报送应用层面的具体功能设计与用户体验。"
+    },
+    {
+      "idx": 83,
+      "id": "94b1f1bc-3cea-495d-ba60-635198d3590c",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "我觉得最大的问题是我听错了。老师说我们要先填写一表通，然后再将一表通转化成1104和14。这可能是你们为新客户制定的方案，对吗？",
+      "category": "2.3",
+      "intent": "I1",
+      "value": "high",
+      "theme": "报送流程与方案策略",
+      "reason": "涉及一表通与传统报表（1104、客户风险）的生成逻辑与填报流程策略，是方案设计的核心。"
+    },
+    {
+      "idx": 84,
+      "id": "aade568f-9a71-4146-b304-1e0fd49b0590",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "我们数据的起始点在哪里？是从头开始的吗？",
+      "category": "2.3",
+      "intent": "I2",
+      "value": "medium",
+      "theme": "数据实施范围与起点",
+      "reason": "涉及项目实施的数据范围界定与初始化工作。"
+    },
+    {
+      "idx": 85,
+      "id": "bb45b9d0-1953-4aea-82e5-17a6c0aa6f8f",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "我们行内有一个讨论点，就是要不要建立本地数据仓库，包括数据集合等方面，您的看法如何？",
+      "category": "3.3",
+      "intent": "I4",
+      "value": "high",
+      "theme": "本地数据仓库建设咨询",
+      "reason": "涉及客户IT架构规划痛点（是否建设本地数仓），需要售前提供架构咨询建议。"
+    },
+    {
+      "idx": 86,
+      "id": "30ce0658-ca82-4a8b-91c2-e173b44943be",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "我不太理解实时补录的概念。如果按照之前的模式，补录次数每月大概10次左右，觉得一次补录就可以接受。但如果采用T+0+1的模式，这种方式就难以复用。是否有更好的方案？",
+      "category": "3.3",
+      "intent": "I4",
+      "value": "medium",
+      "theme": "数据补录机制与方案",
+      "reason": "涉及实时补录与T+0/T+1模式的冲突处理及解决方案。"
+    },
+    {
+      "idx": 87,
+      "id": "3436632b-7715-4c98-9e75-88bbef8695f8",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "我是否可以将这些流程实现自动化？对我来说，这已经是一回事了。既然一表通已经变得如此复杂，我有什么理由不去奥特美BOPAL和内心系统呢？",
+      "category": "2.3",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "流程自动化与系统替代考量",
+      "reason": "涉及自动化实现程度及客户对现有系统替代/自建的决策思考。"
+    },
+    {
+      "idx": 88,
+      "id": "b6d42984-a179-4cad-a9e5-00ee93417576",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "如果你们具备这个能力，那将是一个极大的卖点。我们一直在讨论在ES的1104和一表通之间选择，一表通可以取代EC，1141104也部分取代了EC。那么为什么AML出现错误，我还需要花时间去解决。",
+      "category": "3.3",
+      "intent": "I2",
+      "value": "high",
+      "theme": "竞品替代与核心卖点",
+      "reason": "涉及与竞品（EC、ES等）的对比、替代关系及核心卖点分析，是选型关键。"
+    },
+    {
+      "idx": 89,
+      "id": "3ab0af8e-cb9c-48b2-8bdf-f0570542bf1c",
+      "customer": "未知",
+      "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+      "question": "这个项目大概需要多长时间才能实现？",
+      "category": "5.2",
+      "intent": "I2",
+      "value": "medium",
+      "theme": "项目实施周期",
+      "reason": "涉及项目时间计划与交付周期预估。"
+    },
+    {
+      "idx": 90,
+      "id": "807a8599-1f45-48a0-8366-2ee197850908",
+      "customer": "未知",
+      "session": "20250604-董明达-张家口银行-张家口银行新建一表通.m4a",
+      "question": "如果后续出现类似问题，一般是如何协调的？",
+      "category": "6.1",
+      "intent": "I2",
+      "value": "medium",
+      "theme": "项目实施协调机制",
+      "reason": "涉及项目实施过程中的问题协调与解决机制。"
+    },
+    {
+      "idx": 91,
+      "id": "4013d7b9-6a1b-42b8-bdee-d1aef423c98e",
+      "customer": "未知",
+      "session": "20250604-董明达-张家口银行-张家口银行新建一表通.m4a",
+      "question": "咱们的人资支持后续有问题，这些人员到不到位，大概多少人？",
+      "category": "5.3",
+      "intent": "I2",
+      "value": "medium",
+      "theme": "项目人力投入保障",
+      "reason": "涉及厂商的人力资源投入与保障能力。"
+    },
+    {
+      "idx": 92,
+      "id": "5bf5cd37-7625-4d8a-95cd-9708c6072c2d",
+      "customer": "未知",
+      "session": "20250604-董明达-张家口银行-张家口银行新建一表通.m4a",
+      "question": "补录这块的权限是放到部署端，还是分支行？",
+      "category": "3.2",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "补录功能权限管理",
+      "reason": "涉及补录功能的权限分配与部署架构设计。"
+    },
+    {
+      "idx": 95,
+      "id": "e0fee823-51ef-4f64-9acb-22e03716dc24",
+      "customer": "未知",
+      "session": "20250604-董明达-张家口银行-张家口银行新建一表通.m4a",
+      "question": "他这个报送跟异地报备有什么区别？比如说利率报备，如果前一天的报不上去，第二天也不能报，这是为什么？",
+      "category": "3.1",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "报送与报备业务差异",
+      "reason": "涉及不同监管报送业务（如利率报备）的逻辑差异与处理机制。"
+    },
+    {
+      "idx": 96,
+      "id": "89e39b4f-00ba-4163-bb13-a82b65d46bd5",
+      "customer": "未知",
+      "session": "20250604-董明达-张家口银行-张家口银行新建一表通.m4a",
+      "question": "如果我今天的数据出现问题，处理时间较长，但第二天的数据没有问题，我可以先报第二天的数据吗？",
+      "category": "3.1",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "报送数据时序处理逻辑",
+      "reason": "涉及数据报送过程中出现异常时的时序处理逻辑与灵活性。"
+    },
+    {
+      "idx": 97,
+      "id": "37b014cb-14f4-4817-b7ee-df17e964d715",
+      "customer": "未知",
+      "session": "20250604-董明达-张家口银行-张家口银行新建一表通.m4a",
+      "question": "现在纽约市场的报道时间大概是几点到几点？今天能报完大概最晚到什么时候？",
+      "category": "3.1",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "报送时间窗口要求",
+      "reason": "涉及具体的监管报送时间窗口与截止时间要求。"
+    },
+    {
+      "idx": 98,
+      "id": "4c1e00bd-206b-474e-a0de-fc8212ef9053",
+      "customer": "未知",
+      "session": "20250604-董明达-张家口银行-张家口银行新建一表通.m4a",
+      "question": "在查询时，是否会根据错误类型进行分类？",
+      "category": "2.3",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "数据错误分类功能",
+      "reason": "涉及产品功能细节，即数据质量检核结果的分类展示。"
+    },
+    {
+      "idx": 100,
+      "id": "bc1c7934-b4ca-497b-b15a-0a665494be17",
+      "customer": "未知",
+      "session": "20250604-董明达-张家口银行-张家口银行新建一表通.m4a",
+      "question": "我们预计什么时候开始招标？",
+      "category": "0.0",
+      "intent": "I5",
+      "value": "medium",
+      "theme": "客户招标时间计划",
+      "reason": "涉及客户的采购预算周期与招标时间表。"
+    },
+    {
+      "idx": 102,
+      "id": "499b19d6-e1b8-48bd-8c8e-a3ed99fe6571",
+      "customer": "未知",
+      "session": "20250605-颜悦-第一银行上海分行-第一银行上海一表通建设.m4a",
+      "question": "一表通的接口规范是否类似于East？是否达到最细？",
+      "category": "2.4",
+      "intent": "I1",
+      "value": "high",
+      "theme": "一表通接口规范与EAST对比及颗粒度",
+      "reason": "涉及核心技术标准对比，客户关注数据采集的深度和接口差异，直接影响实施方案设计。"
+    },
+    {
+      "idx": 103,
+      "id": "98923975-5ecf-4177-b646-508a7481407d",
+      "customer": "未知",
+      "session": "20250605-颜悦-第一银行上海分行-第一银行上海一表通建设.m4a",
+      "question": "你所说的可信区域，指的是我有一块区域可以让监管机构读取资料，对吗？",
+      "category": "2.3",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "可信区架构定义确认",
+      "reason": "客户对一表通核心架构概念（可信区）进行确认，涉及监管报送模式的理解。"
+    },
+    {
+      "idx": 104,
+      "id": "10d80f85-a46d-4fd9-a45e-f038589a234d",
+      "customer": "未知",
+      "session": "20250605-颜悦-第一银行上海分行-第一银行上海一表通建设.m4a",
+      "question": "请问他是否意味着可以通过转换方式，将可信区域的数据直接转成104的格式？",
+      "category": "3.1",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "可信区数据转换报送格式",
+      "reason": "涉及数据加工流程，确认可信区数据如何转化为监管报送格式（如104表）。"
+    },
+    {
+      "idx": 105,
+      "id": "83b29bfa-24b6-4776-9cce-2023bf4849cd",
+      "customer": "未知",
+      "session": "20250605-颜悦-第一银行上海分行-第一银行上海一表通建设.m4a",
+      "question": "请问一表通的方案是否意味着监管机构可以自行在可信区进行资料查询或采集？这是否意味着我们不再需要打包，操作方式与现在的EAST和1204报送方式不同？",
+      "category": "2.3",
+      "intent": "I1",
+      "value": "high",
+      "theme": "一表通报送模式变革与现有方式对比",
+      "reason": "核心业务流程确认，客户关注监管直连查询模式与传统打包报送模式的本质区别。"
+    },
+    {
+      "idx": 106,
+      "id": "5b6fffbf-db7e-4838-aafe-d474790644a1",
+      "customer": "未知",
+      "session": "20250605-颜悦-第一银行上海分行-第一银行上海一表通建设.m4a",
+      "question": "以后如果使用可信的兴趣，你们前端会提供一个可以让我们查看兴趣资料的功能吗？",
+      "category": "2.3",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "可信区数据查看功能",
+      "reason": "涉及产品功能需求，客户关注银行端对可信区数据的可视化和查询能力。"
+    },
+    {
+      "idx": 107,
+      "id": "787afa07-5829-480d-b7be-208631a4aea9",
+      "customer": "未知",
+      "session": "20250605-颜悦-第一银行上海分行-第一银行上海一表通建设.m4a",
+      "question": "你们是否直接使用资料库的方式，让用户可以查询某个范围的资料？",
+      "category": "2.3",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "数据查询方式与技术实现",
+      "reason": "涉及技术细节，确认系统是否提供直接的数据库查询功能。"
+    },
+    {
+      "idx": 108,
+      "id": "f4d3f832-323e-4acb-9f28-ffbbfc41e7ab",
+      "customer": "未知",
+      "session": "20250605-颜悦-第一银行上海分行-第一银行上海一表通建设.m4a",
+      "question": "这次如果要进行操作，资料分析部分需要做得更透彻一些。因为我希望上级提供的资料是最原始的，所有加工都在我们这边完成，避免在上面进行加工。你明白我的意思吗？",
+      "category": "3.3",
+      "intent": "I4",
+      "value": "high",
+      "theme": "数据加工逻辑与原始数据报送需求",
+      "reason": "揭示客户核心痛点，希望掌握数据加工主导权，避免监管端二次加工带来的不可控风险。"
+    },
+    {
+      "idx": 113,
+      "id": "3f95568e-a213-4c2c-8980-e13dfe783c02",
+      "customer": "未知",
+      "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+      "question": "如果我们为他们统一代报，如何解决方案的复杂度问题？",
+      "category": "5.4",
+      "intent": "I3",
+      "value": "high",
+      "theme": "统一代报场景下的方案复杂度",
+      "reason": "针对农信/村镇银行特定业务场景（代报），涉及方案架构的适配性和复杂度控制。"
+    },
+    {
+      "idx": 116,
+      "id": "fa69ec48-03ef-4f3f-b600-8cf9f7d0ce91",
+      "customer": "未知",
+      "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+      "question": "我们需要做三套系统，一套是原有的业务系统，另一套是针对私人银行的系统，因为我们还有一家私人银行使用不同的业务系统。",
+      "category": "3.3",
+      "intent": "I5",
+      "value": "medium",
+      "theme": "多业务系统现状与实施范围",
+      "reason": "揭示客户IT现状复杂性（多套业务系统），影响项目实施范围和数据采集难度。"
+    },
+    {
+      "idx": 117,
+      "id": "267f6f21-b489-4d07-aad0-9084a1812f7e",
+      "customer": "未知",
+      "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+      "question": "在业务解读方面有专家吗？",
+      "category": "1.2",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "业务规则解读专家支持",
+      "reason": "涉及售前咨询能力和实施服务内容，客户关注厂商的业务专业性。"
+    },
+    {
+      "idx": 118,
+      "id": "29978aa6-aeb9-4778-a778-b5a632fa4623",
+      "customer": "未知",
+      "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+      "question": "他们驻场的时间一般是多长？你们通常支持的案例持续时间是多少？",
+      "category": "5.3",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "驻场时长与项目周期",
+      "reason": "涉及项目实施计划和资源投入评估。"
+    },
+    {
+      "idx": 119,
+      "id": "488deb01-a370-4469-8e46-142ee0ce9819",
+      "customer": "未知",
+      "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+      "question": "你我肯定按需，不会从头到尾全部操作。请问在类似案例中，通常需要多长时间完成？",
+      "category": "1.1",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "项目实施周期预估",
+      "reason": "客户关注时间成本和项目进度安排。"
+    },
+    {
+      "idx": 120,
+      "id": "07a9df6f-f461-46a5-a741-ef4e716f1c18",
+      "customer": "未知",
+      "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+      "question": "这个专家解读数据到哪一层，是送到原系统的库表，还是送到界面？",
+      "category": "2.3",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "数据解读服务的交付层级",
+      "reason": "涉及数据治理服务的具体交付形式（库表还是界面），影响客户使用体验。"
+    },
+    {
+      "idx": 121,
+      "id": "40618f34-13d2-4b1f-a817-8ca50b9e094a",
+      "customer": "未知",
+      "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+      "question": "请问你们这边的系统是输到哪一层？如果输到数据库层，我们可以看到，但到业务部门这一层可能相对较弱。",
+      "category": "2.3",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "系统数据输出层级与业务可用性",
+      "reason": "关注数据对业务部门的价值传递，涉及数据应用层能力。"
+    },
+    {
+      "idx": 123,
+      "id": "5d16a44c-6143-4b74-9f02-92111c19c306",
+      "customer": "未知",
+      "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+      "question": "我担心你们这边数据，发现这些数据类问题，是否有好的解决方案？能否提供一些建议？",
+      "category": "1.1",
+      "intent": "I1",
+      "value": "high",
+      "theme": "数据质量问题发现与解决建议",
+      "reason": "直击客户痛点（数据质量），涉及核心实施难点和厂商解决方案能力。"
+    },
+    {
+      "idx": 124,
+      "id": "29d85740-49de-4316-9301-67a2e69ce364",
+      "customer": "未知",
+      "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+      "question": "你如何实现数据智能？是通过数据抽取和人工修改，还是采用其他方式？这种方式工作量较大吗？",
+      "category": "3.2",
+      "intent": "I3",
+      "value": "high",
+      "theme": "数据智能实现方式与工作量",
+      "reason": "涉及产品核心功能（自动化/智能化）的技术实现路径和实施效率。"
+    },
+    {
+      "idx": 125,
+      "id": "36d99a56-6a86-4009-8dde-9a6c4bc17f1b",
+      "customer": "未知",
+      "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+      "question": "1204这个项目我一直想统一取出进行加工，但没有找到可以借鉴的银行或公司解决方案，不知道是否有相关的方案。",
+      "category": "1.1",
+      "intent": "I1",
+      "value": "high",
+      "theme": "监管报送数据统一加工方案咨询",
+      "reason": "客户明确痛点（统一加工难），寻求行业最佳实践，是售前切入的关键机会。"
+    },
+    {
+      "idx": 127,
+      "id": "2d5dcfb7-7eaa-4e3b-a39c-ab8e33f9197b",
+      "customer": "未知",
+      "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+      "question": "核验结果是要在报送区传过去，还是由可信区自行处理？",
+      "category": "2.3",
+      "intent": "I1",
+      "value": "high",
+      "theme": "数据核验流程与区域职责划分",
+      "reason": "涉及一表通核心架构流程，确认核验环节是在报送端还是可信区完成。"
+    },
+    {
+      "idx": 128,
+      "id": "d082d599-6d56-47e5-a22e-3359f1729877",
+      "customer": "未知",
+      "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+      "question": "我完成报送端的操作后，需要再次送给对方，他还需要再次运行吗？",
+      "category": "2.3",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "报送端操作后的流程交互",
+      "reason": "涉及具体操作流程和系统交互逻辑。"
+    },
+    {
+      "idx": 129,
+      "id": "98dfcb84-e59b-45cf-88bf-0697570bd7a2",
+      "customer": "未知",
+      "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+      "question": "关于这个可能性我再问你，数据是否都存储在银行本地？假如前期口径制定得准确，但没有及时发现问题，数据推到办公区后再进行整治，之后再提取新数据，香港是否会因此质疑我们以前的数据库管理方式？",
+      "category": "3.1",
+      "intent": "I3",
+      "value": "high",
+      "theme": "数据存储位置与监管合规风险",
+      "reason": "涉及数据安全、合规风险及监管态度，是客户核心顾虑点。"
+    },
+    {
+      "idx": 130,
+      "id": "e70e4d12-bc21-44b9-a9eb-4211be608367",
+      "customer": "未知",
+      "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+      "question": "我是否会覆盖之前的重报数据？",
+      "category": "2.3",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "历史数据覆盖逻辑",
+      "reason": "涉及数据版本管理和报送逻辑细节。"
+    },
+    {
+      "idx": 131,
+      "id": "f46ddee0-5963-4677-85f4-19dfb64b4fb1",
+      "customer": "未知",
+      "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+      "question": "你不是在整改时，还需要覆盖原有数据。也就是说，数据进入可依据的数据后，存入对应的表格。在检查脚本时，可以在脚本中写入相应的操作，将数据写入。",
+      "category": "3.2",
+      "intent": "I3",
+      "value": "medium",
+      "theme": "数据整改与覆盖逻辑确认",
+      "reason": "确认技术实现细节，涉及数据写入和脚本处理方式。"
+    },
+    {
+      "idx": 132,
+      "id": "c6436e93-7741-454a-b1ae-718d55c6bc38",
+      "customer": "未知",
+      "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+      "question": "你的意思是他要做溯源，连续性会不会出现问题？",
+      "category": "3.2",
+      "intent": "I3",
+      "value": "medium",
+      "theme": "数据溯源与连续性问题",
+      "reason": "涉及数据治理核心能力（溯源）及数据质量监控。"
+    },
+    {
+      "idx": 134,
+      "id": "1a14d1d6-e45c-4edb-b87b-7573d989fc89",
+      "customer": "未知",
+      "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+      "question": "他上线之后是否会提供一个数据治理的周期或缓和期？我记得之前听其他同学提过，是否存在这样的安排？",
+      "category": "3.1",
+      "intent": "I1",
+      "value": "high",
+      "theme": "上线后数据治理缓冲期安排",
+      "reason": "涉及监管合规策略和项目风险控制，客户关注上线后的容错空间。"
+    },
+    {
+      "idx": 135,
+      "id": "4321344a-3bc1-49c6-8abf-e72cdc9b98f7",
+      "customer": "未知",
+      "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+      "question": "我计划在2026年12月底之前进行申报，但2027年的第一次数据存在问题，是否会因此受到处罚？是否存在数据治理措施？",
+      "category": "3.1",
+      "intent": "I3",
+      "value": "high",
+      "theme": "申报时间计划与合规处罚风险",
+      "reason": "明确客户时间表（2026年底），并涉及核心合规顾虑（处罚风险）。"
+    },
+    {
+      "idx": 137,
+      "id": "b3761777-4092-4be9-bdc1-3af4545611c9",
+      "customer": "未知",
+      "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+      "question": "这次我们计算的人员不包括从数据源到监管决策层的买品，谁负责这个环节？",
+      "category": "1.3",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "项目实施范围与人员分工边界",
+      "reason": "明确责任边界，涉及实施落地的组织保障。"
+    },
+    {
+      "idx": 138,
+      "id": "8bcd1054-ba4a-4db9-9299-9afae2f637c7",
+      "customer": "未知",
+      "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+      "question": "这个业务部门需要参加吗？",
+      "category": "1.3",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "业务部门参与度",
+      "reason": "涉及项目推进的组织协调问题。"
+    },
+    {
+      "idx": 140,
+      "id": "496b0091-744f-46e7-a2f4-936972d52e30",
+      "customer": "未知",
+      "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+      "question": "我不知道你这个监管报送需要哪些数据。",
+      "category": "2.3",
+      "intent": "I5",
+      "value": "medium",
+      "theme": "监管报送数据需求咨询",
+      "reason": "客户对监管报送数据范围存在认知盲区，需要售前引导。"
+    },
+    {
+      "idx": 141,
+      "id": "70001ad1-036c-4f45-ad8b-60338eebd16d",
+      "customer": "未知",
+      "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+      "question": "请问您觉得目前在数据治理方面，哪家公司表现较好？",
+      "category": "0.0",
+      "intent": "I2",
+      "value": "high",
+      "theme": "数据治理厂商选型咨询",
+      "reason": "涉及市场评价和选型参考，是关键决策点。"
+    },
+    {
+      "idx": 144,
+      "id": "eb9d8e29-58ab-4dac-ac46-62d76236f91d",
+      "customer": "未知",
+      "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+      "question": "你们对自研的这个产品是否拥有著作权？",
+      "category": "1.1",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "产品知识产权与资质",
+      "reason": "涉及合规性采购要求和厂商实力评估。"
+    },
+    {
+      "idx": 145,
+      "id": "1b7ef76f-5eb3-4ecb-be49-dcfdfbf64cd1",
+      "customer": "未知",
+      "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+      "question": "你现在这个团队负责监管和银行的代理商吗？",
+      "category": "1.2",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "团队职责与代理模式",
+      "reason": "涉及服务支持渠道和责任主体确认。"
+    },
+    {
+      "idx": 146,
+      "id": "9f172a9a-6350-4a91-a5c7-b701afcb3e28",
+      "customer": "未知",
+      "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+      "question": "你们擅长做的项目多吗？",
+      "category": "1.1",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "厂商项目经验评估",
+      "reason": "评估厂商实施能力和经验丰富度。"
+    },
+    {
+      "idx": 147,
+      "id": "5590f17d-5ba9-4c94-b97b-0fe4f7eb3ab2",
+      "customer": "未知",
+      "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+      "question": "科荣在第一年刚完成徽商银行的项目后被罚款了400多万元，这是什么原因？",
+      "category": "1.1",
+      "intent": "I2",
+      "value": "high",
+      "theme": "竞品案例风险与失败原因分析",
+      "reason": "涉及竞品分析、项目风险意识，客户关注实施风险和厂商避坑能力。"
+    },
+    {
+      "idx": 149,
+      "id": "51be7434-2a84-4ffe-a4b1-b001b1250905",
+      "customer": "未知",
+      "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+      "question": "这校验的规则是自带的还是可配置的？",
+      "category": "2.3",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "校验规则配置灵活性",
+      "reason": "涉及产品功能架构和易用性。"
+    },
+    {
+      "idx": 150,
+      "id": "de17f9ac-9f02-4699-8ecf-84b2be5a45f5",
+      "customer": "未知",
+      "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+      "question": "这个产品可以通过互联网连接吗？",
+      "category": "2.4",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "产品网络连接方式与部署架构",
+      "reason": "涉及网络架构和安全合规要求。"
+    },
+    {
+      "idx": 152,
+      "id": "08688d2f-98b1-4361-b077-e952c9aee33d",
+      "customer": "未知",
+      "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+      "question": "你们的监管级别有哪些？是否存在黑色监管级？",
+      "category": "0.0",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "安全监管级别询问",
+      "reason": "涉及系统安全合规与监管等级划分，属于非功能性需求。"
+    },
+    {
+      "idx": 153,
+      "id": "d4ad395f-3dfa-44f9-bfbe-fbf766b5bb47",
+      "customer": "未知",
+      "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+      "question": "如果只是单纯完成100多个任务，6个月可以吗，包括监管机制改造？",
+      "category": "5.2",
+      "intent": "I1",
+      "value": "high",
+      "theme": "实施周期与监管改造可行性",
+      "reason": "涉及项目工期、任务量评估及监管机制改造，直接关系项目落地计划。"
+    },
+    {
+      "idx": 154,
+      "id": "287e8266-d81f-4655-a7a9-ffb79552f610",
+      "customer": "未知",
+      "session": "20250814-郑相宜-汇丰银行-汇丰银行一表通建设.m4a",
+      "question": "请提供你们的实施周期大致情况以及资源推荐。",
+      "category": "5.2",
+      "intent": "I2",
+      "value": "medium",
+      "theme": "实施周期与资源投入",
+      "reason": "涉及项目实施计划与人力配置，属于常规售前咨询。"
+    },
+    {
+      "idx": 155,
+      "id": "d8f8c36b-bf0b-4ba4-9283-2380030341ff",
+      "customer": "未知",
+      "session": "20250814-郑相宜-汇丰银行-汇丰银行一表通建设.m4a",
+      "question": "请问这个溯源工具的覆盖范围是怎样的？我想了解它是否能实现从数据产生到报表的端到端穿透，特别是在业务开展和录入环节的追溯。我们监管要求能追溯报表字段的来龙去脉，想知道这个工具是否能覆盖我们平台内部数据库以及其他系统的溯源。",
+      "category": "2.3",
+      "intent": "I2",
+      "value": "high",
+      "theme": "数据溯源工具覆盖范围",
+      "reason": "涉及端到端数据溯源、穿透式监管等核心功能需求，是监管报送的关键能力。"
+    },
+    {
+      "idx": 156,
+      "id": "ef7a4e7a-d556-463d-8871-4b71cf41d2d5",
+      "customer": "未知",
+      "session": "20250814-郑相宜-汇丰银行-汇丰银行一表通建设.m4a",
+      "question": "我在2025年8月份产出了这个报表，之后在2025年10月份时，我还想了解这个报表的加工过程以及数据来源。由于中间可能对代码进行了修改，基于代码的溯源可能不准确。请问有什么方法可以帮助我定位导致报送问题的源头数据？",
+      "category": "2.3",
+      "intent": "I3",
+      "value": "high",
+      "theme": "历史数据溯源与代码版本管理",
+      "reason": "涉及代码变更后的历史数据回溯痛点，技术场景具体，对产品能力要求高。"
+    },
+    {
+      "idx": 157,
+      "id": "4fad45b7-f182-4a41-9007-d3c7798add93",
+      "customer": "未知",
+      "session": "20250814-郑相宜-汇丰银行-汇丰银行一表通建设.m4a",
+      "question": "基于你的代码，但你的代码已经发生变化。在8月至10月之间，可能已经部署了一些新的变更。我们在溯源时还能基于历史代码进行追溯吗？",
+      "category": "3.2",
+      "intent": "I3",
+      "value": "high",
+      "theme": "历史代码溯源能力",
+      "reason": "针对代码变更场景下的溯源技术实现追问，属于深度技术细节。"
+    },
+    {
+      "idx": 159,
+      "id": "a984048f-ab28-4cdf-a5d6-280e354da283",
+      "customer": "未知",
+      "session": "20250814-郑相宜-汇丰银行-汇丰银行一表通建设.m4a",
+      "question": "能否从用户角度考虑，例如我们以后采用T+1报送方式，当多个团队的用户登录时，在哪个界面可以查看其名下有多少数据掉落，以及如何进行修改？这是T+1的情况。如果采用T+0方式，用户在流程中需要补录的数据是否有对应的界面可以操作？",
+      "category": "2.3",
+      "intent": "I1",
+      "value": "high",
+      "theme": "T+0/T+1报送流程与用户界面",
+      "reason": "涉及不同报送模式下的用户操作界面、数据掉落处理及补录流程，核心业务场景。"
+    },
+    {
+      "idx": 160,
+      "id": "57d7e1b6-9dc2-474d-89e8-b6b4000af7e6",
+      "customer": "未知",
+      "session": "20250814-郑相宜-汇丰银行-汇丰银行一表通建设.m4a",
+      "question": "我想进一步确认，同一行中的不同字段可以分配给不同部门的用户，对吗？",
+      "category": "2.3",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "字段级权限分配",
+      "reason": "涉及数据确权与细粒度权限控制功能。"
+    },
+    {
+      "idx": 161,
+      "id": "3f26edf1-281c-4de8-84d7-0b542d0bb4ab",
+      "customer": "未知",
+      "session": "20250814-郑相宜-汇丰银行-汇丰银行一表通建设.m4a",
+      "question": "可以不需要分，但修改的内容需要分开，因为修改后需要先查看整体，才能对自己关注的字段进行调整。我之前提到的按照列区分主要是在修改环节。",
+      "category": "2.3",
+      "intent": "I5",
+      "value": "medium",
+      "theme": "数据修改流程与权限控制",
+      "reason": "涉及数据修改环节的协作流程与列级权限控制，属于具体功能交互细节。"
+    },
+    {
+      "idx": 162,
+      "id": "74fb8546-6802-4bfe-b4a9-d2982a2ea0a0",
+      "customer": "未知",
+      "session": "20250814-郑相宜-汇丰银行-汇丰银行一表通建设.m4a",
+      "question": "区里的数据我们银行的人也可以查看吗？",
+      "category": "2.3",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "监管区数据可见性权限",
+      "reason": "涉及银行人员对监管区数据的访问权限，关乎数据安全与业务流程。"
+    },
+    {
+      "idx": 163,
+      "id": "8c153dbe-e807-4d10-9819-6c4098e28c14",
+      "customer": "未知",
+      "session": "20250814-郑相宜-汇丰银行-汇丰银行一表通建设.m4a",
+      "question": "请问你们这个界面是否有一键转化功能与1104的对比？",
+      "category": "2.3",
+      "intent": "I1",
+      "value": "high",
+      "theme": "一表通与1104报表转化功能",
+      "reason": "涉及一表通与现有监管报送体系（1104）的衔接与转化，属于核心功能需求。"
+    },
+    {
+      "idx": 164,
+      "id": "51dc5fb6-25e3-409d-8d57-459fb73d4254",
+      "customer": "未知",
+      "session": "20250814-郑相宜-汇丰银行-汇丰银行一表通建设.m4a",
+      "question": "你们的补录功能在哪里？是T+1还是T+0？",
+      "category": "2.3",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "补录功能与时效性",
+      "reason": "涉及补录功能的具体位置及T+0/T+1模式支持，属于基础功能咨询。"
+    },
+    {
+      "idx": 165,
+      "id": "ba3b26aa-7047-426d-9995-3580b4aec2bd",
+      "customer": "未知",
+      "session": "20250814-郑相宜-汇丰银行-汇丰银行一表通建设.m4a",
+      "question": "我们的数据校验是在报送区进行的，对吗？",
+      "category": "2.3",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "数据校验节点确认",
+      "reason": "涉及数据质量校验发生的具体架构位置（报送区），确认技术流程。"
+    },
+    {
+      "idx": 166,
+      "id": "fea4c69f-1e28-4e17-99ef-8ccb0aba356c",
+      "customer": "未知",
+      "session": "20250814-郑相宜-汇丰银行-汇丰银行一表通建设.m4a",
+      "question": "当交易规则出现问题，比如数据质量出现异常时，贵方如何通过数据源和前述的确权模块定位到具体的前端数据源？",
+      "category": "2.3",
+      "intent": "I1",
+      "value": "high",
+      "theme": "异常数据定位与确权机制",
+      "reason": "涉及数据质量异常时的源头定位及确权模块联动，解决核心痛点。"
+    },
+    {
+      "idx": 167,
+      "id": "2ed66a45-7db1-47ab-8713-9b103a84d77d",
+      "customer": "未知",
+      "session": "20250814-郑相宜-汇丰银行-汇丰银行一表通建设.m4a",
+      "question": "你们可以预估使用你们产品后，数据到达可信区大概需要多长时间吗？请结合类似客户的实际案例说明。",
+      "category": "2.1",
+      "intent": "I1",
+      "value": "high",
+      "theme": "数据时效性与案例参考",
+      "reason": "涉及数据入可信区的性能指标（时效性）及同类案例，关乎选型决策。"
+    },
+    {
+      "idx": 168,
+      "id": "a0ef8fc0-acb7-4d36-9b7a-8ae691672526",
+      "customer": "未知",
+      "session": "20250814-郑相宜-汇丰银行-汇丰银行一表通建设.m4a",
+      "question": "我们现在打算进行招投标，涉及报送区和可信区。请问如果使用你们的产品，对数据区有什么要求吗？比如数据需要在什么时间点传送到你们的准备区。",
+      "category": "5.5",
+      "intent": "I1",
+      "value": "high",
+      "theme": "招投标范围与数据接口要求",
+      "reason": "涉及招投标边界、数据区架构要求及接口时间点，直接影响方案设计。"
+    },
+    {
+      "idx": 169,
+      "id": "e6b2ba4e-e397-4fba-b436-92ef0385bb5e",
+      "customer": "未知",
+      "session": "20250814-郑相宜-汇丰银行-汇丰银行一表通建设.m4a",
+      "question": "永兴这边，你们的可信区产品是自研的还是用建信金科的代理？",
+      "category": "1.1",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "产品自研与供应商背景",
+      "reason": "涉及产品核心来源（自研/代理）及竞品对比，影响选型判断。"
+    },
+    {
+      "idx": 170,
+      "id": "cc1ffd75-c25b-4e6f-b3a4-03e4ad185dae",
+      "customer": "未知",
+      "session": "20250819-唐克-龙江银行-龙江银行一表通建设.m4a",
+      "question": "你们没有省级中心的案例，你们是几个？昆山农商股份制吗？",
+      "category": "1.1",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "案例情况与客户类型",
+      "reason": "涉及标杆案例（省级中心）及客户性质确认，属于选型参考因素。"
+    },
+    {
+      "idx": 172,
+      "id": "c086879e-b45e-495a-9f34-cfae74013cd1",
+      "customer": "未知",
+      "session": "20250819-唐克-龙江银行-龙江银行一表通建设.m4a",
+      "question": "东华不是从事监管工作，为什么他有这么多案例？",
+      "category": "1.1",
+      "intent": "I2",
+      "value": "medium",
+      "theme": "竞品案例分析",
+      "reason": "涉及对竞争对手（东华）的市场表现疑问，属于竞品分析维度。"
+    },
+    {
+      "idx": 173,
+      "id": "b8935c78-2f3c-43dd-897e-434b00b1ae2b",
+      "customer": "未知",
+      "session": "20250819-唐克-龙江银行-龙江银行一表通建设.m4a",
+      "question": "债务，实际上是指什么？",
+      "category": "0.0",
+      "intent": "I5",
+      "value": "medium",
+      "theme": "业务术语定义",
+      "reason": "涉及具体业务指标（债务）的确认，影响业务理解。"
+    },
+    {
+      "idx": 175,
+      "id": "60f25db9-16e9-41f9-9477-02f1319d3b16",
+      "customer": "未知",
+      "session": "20250911-田军-湖北农信-湖北农信一表通.m4a",
+      "question": "我们有个问题，就是我看到原来ODS向监管报告的系统都是国产化的，比如利率报备、二代征信等系统。这些系统国产化后，都是由你们提示的，对吗？",
+      "category": "2.4",
+      "intent": "I1",
+      "value": "high",
+      "theme": "信创国产化与接口架构",
+      "reason": "涉及国产化替代背景下的系统架构与接口提供方式，属于关键技术路线。"
+    },
+    {
+      "idx": 176,
+      "id": "3bf1b907-90fc-47f3-9278-aa9a2ed67d48",
+      "customer": "未知",
+      "session": "20250911-田军-湖北农信-湖北农信一表通.m4a",
+      "question": "请确认一下这个事项。由于涉及到我们是否还需要继续使用原来根据报备提供的接口，原本你们说不再提供，而是全部通过L型接口提供。请问是否还需要继续供给原接口？",
+      "category": "2.4",
+      "intent": "I1",
+      "value": "high",
+      "theme": "接口标准迁移策略",
+      "reason": "涉及L型接口与原接口的供给策略，属于关键技术决策点。"
+    },
+    {
+      "idx": 177,
+      "id": "9bd7d647-b9db-4e1b-b6e9-a6884e768ec7",
+      "customer": "未知",
+      "session": "20250911-田军-湖北农信-湖北农信一表通.m4a",
+      "question": "你现在的工作量是多少？价格是否足够？",
+      "category": "4.1",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "工作量评估与预算",
+      "reason": "涉及项目报价与工作量评估，属于商务决策因素。"
+    },
+    {
+      "idx": 178,
+      "id": "72b37652-266f-49e7-ab24-74127dc4d271",
+      "customer": "未知",
+      "session": "20250911-田军-湖北农信-湖北农信一表通.m4a",
+      "question": "那这个整个系统上的东西还是你的东西，是你的还是他的？",
+      "category": "0.0",
+      "intent": "I5",
+      "value": "medium",
+      "theme": "系统归属与边界",
+      "reason": "涉及系统建设后的归属权问题，影响商务条款。"
+    },
+    {
+      "idx": 179,
+      "id": "29e22665-e57e-4e41-8da8-415237e20bce",
+      "customer": "未知",
+      "session": "20250911-田军-湖北农信-湖北农信一表通.m4a",
+      "question": "他现在是在Oracle上运行吗？",
+      "category": "2.2",
+      "intent": "I5",
+      "value": "medium",
+      "theme": "数据库运行环境",
+      "reason": "涉及底层数据库技术栈，属于技术架构细节。"
+    },
+    {
+      "idx": 180,
+      "id": "9aaf1d96-a1cc-4a84-ba7b-39ac9981429d",
+      "customer": "未知",
+      "session": "20250911-田军-湖北农信-湖北农信一表通.m4a",
+      "question": "现阶段按照我们原有的思路，基本上都是平替。例如，反洗钱也是平替。请问平替是什么意思？",
+      "category": "2.3",
+      "intent": "I2",
+      "value": "medium",
+      "theme": "业务术语定义（平替）",
+      "reason": "涉及“平替”概念的理解，影响实施策略的共识。"
+    },
+    {
+      "idx": 181,
+      "id": "b2113c87-e4d5-422b-b2be-a550853f1161",
+      "customer": "未知",
+      "session": "20250911-田军-湖北农信-湖北农信一表通.m4a",
+      "question": "你觉得直接从贴片层或者原层取数的周期和费用大概是多少？",
+      "category": "4.1",
+      "intent": "I1",
+      "value": "high",
+      "theme": "取数方案与成本周期估算",
+      "reason": "涉及贴源层取数的技术方案、实施周期及费用，核心成本考量。"
+    },
+    {
+      "idx": 182,
+      "id": "c03a2831-ec8a-4bfa-abba-63c964beec64",
+      "customer": "未知",
+      "session": "20250911-田军-湖北农信-湖北农信一表通.m4a",
+      "question": "按揭方案的工价费用大概是多少，周期有多长？两个周期的改造费用是多少？这个改造周期的费用是多少？",
+      "category": "4.1",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "改造费用与周期估算",
+      "reason": "涉及具体业务场景（按揭）的改造费用与工期，属于预算规划。"
+    },
+    {
+      "idx": 183,
+      "id": "1d7e7ba3-be21-46c4-a99e-bb0997c79ae3",
+      "customer": "未知",
+      "session": "20250911-田军-湖北农信-湖北农信一表通.m4a",
+      "question": "我不知道补偿金额是多少。如果你的项目需要补偿1200万元，实际上补偿大约是1000多万元，是这样吗？",
+      "category": "4.1",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "项目预算与成本补偿",
+      "reason": "涉及项目具体金额与补偿机制讨论，属于商务谈判细节。"
+    },
+    {
+      "idx": 184,
+      "id": "f58d890f-8b3c-4766-8edf-957359a1fa65",
+      "customer": "未知",
+      "session": "20250911-田军-湖北农信-湖北农信一表通.m4a",
+      "question": "如果按照他说，软件整改建成的决定计划实际上来不及，应该怎么处理？",
+      "category": "0.0",
+      "intent": "I5",
+      "value": "high",
+      "theme": "项目进度风险应对",
+      "reason": "涉及工期紧张时的应对策略，属于项目风险管理。"
+    },
+    {
+      "idx": 186,
+      "id": "2d5cf1af-bec5-4836-85ea-443754ee7796",
+      "customer": "未知",
+      "session": "20250911-田军-湖北农信-湖北农信一表通.m4a",
+      "question": "这两个方案中，方案一的优势和劣势是什么？",
+      "category": "0.0",
+      "intent": "I2",
+      "value": "high",
+      "theme": "方案对比分析",
+      "reason": "涉及不同建设方案的优劣势对比，直接关联选型决策。"
+    },
+    {
+      "idx": 187,
+      "id": "71484f80-aba2-4bf2-9b0d-f2741a1b366e",
+      "customer": "未知",
+      "session": "20250917-张瑶瑶-台湾银行上海-台湾银行上海一表通新建.m4a",
+      "question": "在设计和作业方面，产品需要申请汇总。如果将其包装成原系统的改造，可以吗？",
+      "category": "3.3",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "项目立项策略",
+      "reason": "涉及项目包装与立项审批的策略，影响项目启动方式。"
+    },
+    {
+      "idx": 190,
+      "id": "10b254e8-d4cc-4900-8512-1931c3dbe2bf",
+      "customer": "未知",
+      "session": "20250917-张瑶瑶-台湾银行上海-台湾银行上海一表通新建.m4a",
+      "question": "请问是否可以考虑帮我们优化一下，因为目前无法通过手工操作完成这些工作？",
+      "category": "3.3",
+      "intent": "I4",
+      "value": "medium",
+      "theme": "自动化优化需求",
+      "reason": "涉及手工操作痛点与系统优化需求，体现客户真实痛点。"
+    },
+    {
+      "idx": 191,
+      "id": "9186e898-1b4a-4f01-b8b8-29d10e87a654",
+      "customer": "未知",
+      "session": "20250917-张瑶瑶-台湾银行上海-台湾银行上海一表通新建.m4a",
+      "question": "不是让我们自己选择何时完成吗？",
+      "category": "5.2",
+      "intent": "I1",
+      "value": "medium",
+      "theme": "进度安排自主权",
+      "reason": "涉及项目实施过程中的时间节点控制权，属于流程细节。"
+    },
+    {
+      "idx": 193,
+      "id": "f0089bca-94d7-4c67-8b93-ace0d69db01c",
+      "customer": "未知",
+      "session": "20250917-张瑶瑶-台湾银行上海-台湾银行上海一表通新建.m4a",
+      "question": "抄表工作仍未有人负责，是否需要安排人员？",
+      "category": "2.3",
+      "intent": "I3",
+      "value": "medium",
+      "theme": "人员分工安排",
+      "reason": "涉及填报工作的责任归属与人力安排，影响实施计划。"
+    },
+    {
+      "idx": 194,
+      "id": "250dd9b8-2d13-491e-828b-cdf969711fcd",
+      "customer": "未知",
+      "session": "20250917-张瑶瑶-台湾银行上海-台湾银行上海一表通新建.m4a",
+      "question": "数据质量问题具体指什么？",
+      "category": "3.2",
+      "intent": "I5",
+      "value": "medium",
+      "theme": "数据质量定义",
+      "reason": "涉及数据质量问题的具体界定，属于业务规则确认。"
+    },
+    {
+      "idx": 198,
+      "id": "e7e6d342-23da-45b7-9bc6-edc8db9681b2",
+      "customer": "未知",
+      "session": "20250917-张瑶瑶-台湾银行上海-台湾银行上海一表通新建.m4a",
+      "question": "那一块的技术成熟要求很高，如果一个厂商过来讲都讲不清楚，我这边是过不了的。",
+      "category": "1.1",
+      "intent": "I5",
+      "value": "medium",
+      "theme": "厂商技术能力要求",
+      "reason": "涉及客户对供应商技术成熟度的考核标准，影响选型评分。"
+    }
+  ],
+  "valuableByTheme": {
+    "日常校验流程与人员配置": [
+      {
+        "idx": 1,
+        "id": "81403a67-e88f-4d3f-9320-d8bcc4efbe07",
+        "customer": "未知",
+        "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+        "question": "请问这个东西还能进行学习吗？以后在公司条线中，是否需要指定专人每天校验并将信息发送到数据仓库，确保在安全区或校验区？",
+        "category": "2.3",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "日常校验流程与人员配置",
+        "reason": "涉及系统上线后的日常运维流程、人员分工及操作规范，属于实施落地环节的关键问题。"
+      }
+    ],
+    "常见数据错误类型咨询": [
+      {
+        "idx": 2,
+        "id": "f4ffbc3e-379b-449d-95a5-24905bb994b7",
+        "customer": "未知",
+        "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+        "question": "如果这个数据出现问题，刚才演示中提到有一次有三千多条反馈，之后进行了三四千条信息的修改。系统会根据新规则进行校验和筛选。那么，我们公司目前容易出现的错误主要有哪些？",
+        "category": "3.2",
+        "intent": "I2",
+        "value": "medium",
+        "theme": "常见数据错误类型咨询",
+        "reason": "客户试图了解行业共性痛点，便于评估自身数据质量风险，有助于售前进行针对性痛点分析。"
+      }
+    ],
+    "数据修改机制与监管审核影响": [
+      {
+        "idx": 3,
+        "id": "91c1638a-618b-4fdc-94ff-3824b3d77b76",
+        "customer": "未知",
+        "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+        "question": "如果公司底层数据源录入错误，数仓中是否可以直接修改？如果监管审核未通过，导致数据无法使用，结果会受到影响吗？",
+        "category": "3.2",
+        "intent": "I2",
+        "value": "high",
+        "theme": "数据修改机制与监管审核影响",
+        "reason": "核心数据治理逻辑，涉及一表通数据修改原则（源头修改vs终端修改）及监管报送流程。"
+      }
+    ],
+    "可信区数据修改权限": [
+      {
+        "idx": 4,
+        "id": "2de23dc0-2a78-4673-bf45-7c02af28fcea",
+        "customer": "未知",
+        "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+        "question": "在可信区时，商业银行是否无法进行修改？",
+        "category": "3.2",
+        "intent": "I1",
+        "value": "high",
+        "theme": "可信区数据修改权限",
+        "reason": "涉及一表通核心架构'监管可信区'的数据安全与权限控制机制，是架构设计的关键点。"
+      }
+    ],
+    "校验失败后的数据修正流程": [
+      {
+        "idx": 5,
+        "id": "66ac6af3-6a2d-4081-a70b-1f5c9d0d0642",
+        "customer": "未知",
+        "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+        "question": "如果数据无法通过校验，是否仍然允许进行修改？",
+        "category": "0.0",
+        "intent": "I5",
+        "value": "medium",
+        "theme": "校验失败后的数据修正流程",
+        "reason": "涉及系统功能操作流程和数据修正机制，是业务人员关注的实操细节。"
+      }
+    ],
+    "监管端数据调阅权限规则": [
+      {
+        "idx": 6,
+        "id": "f0108005-7bfa-4eac-a7e7-783a1a736784",
+        "customer": "未知",
+        "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+        "question": "请问今天总局各级之间调阅数据的权限和行为规则是什么？",
+        "category": "3.2",
+        "intent": "I2",
+        "value": "medium",
+        "theme": "监管端数据调阅权限规则",
+        "reason": "涉及监管对接机制和数据权限管理，客户关注监管侧如何使用数据。"
+      }
+    ],
+    "数据集市与一表通架构关系": [
+      {
+        "idx": 7,
+        "id": "22da6aaf-4f16-44f1-a77e-0c9d69c670a5",
+        "customer": "未知",
+        "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+        "question": "请问集市的建设是否基于一表通系统？",
+        "category": "2.3",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "数据集市与一表通架构关系",
+        "reason": "涉及系统架构规划和数据流向设计，客户关注系统定位及对现有架构的影响。"
+      }
+    ],
+    "系统功能定位与架构形态": [
+      {
+        "idx": 9,
+        "id": "654a90b6-4baa-424b-b05f-24d856c53d10",
+        "customer": "未知",
+        "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+        "question": "类似于售票系统，但这是一个监管方向的数仓。请问它的功能和结构是怎样的？",
+        "category": "2.2",
+        "intent": "I5",
+        "value": "medium",
+        "theme": "系统功能定位与架构形态",
+        "reason": "客户试图理解系统整体定位（监管数仓）和架构，属于选型决策的基础信息。"
+      }
+    ],
+    "跨系统/跨数据校验功能": [
+      {
+        "idx": 10,
+        "id": "72bd21df-6f41-428b-95b2-2de96f785a90",
+        "customer": "未知",
+        "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+        "question": "关于跨数据校验的问题。以辽宁局为例，医保系统建成后，是否立即具备跨数据校验功能？",
+        "category": "2.3",
+        "intent": "I1",
+        "value": "high",
+        "theme": "跨系统/跨数据校验功能",
+        "reason": "涉及高级校验功能和具体业务场景（医保数据），是体现产品能力差异化的关键点。"
+      }
+    ],
+    "监管锁库机制询问": [
+      {
+        "idx": 11,
+        "id": "4a99c2a9-7486-4ded-9399-565f83b5d7bf",
+        "customer": "未知",
+        "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+        "question": "昨天那位厂商提到有一个银监所库的概念，他锁库后我们就无法再进行申报，请问他们是如何锁定我们的库的？",
+        "category": "3.1",
+        "intent": "I2",
+        "value": "high",
+        "theme": "监管锁库机制询问",
+        "reason": "涉及竞品对比和监管报送流程中的关键控制节点（锁库），客户关注度高且易产生误解。"
+      }
+    ],
+    "联调环境准备与成本": [
+      {
+        "idx": 12,
+        "id": "9d381505-9800-41cd-9981-080376191069",
+        "customer": "未知",
+        "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+        "question": "请问联调需要准备两套环境吗？如果只用一套环境是否可以？这样会不会花费太多？",
+        "category": "4.1",
+        "intent": "I3",
+        "value": "high",
+        "theme": "联调环境准备与成本",
+        "reason": "涉及实施部署方案、硬件资源准备及项目预算成本，是项目落地的关键问题。"
+      }
+    ],
+    "特定场景下的收费政策": [
+      {
+        "idx": 13,
+        "id": "82ffabdc-b4f2-4673-84f5-61fa4631869c",
+        "customer": "未知",
+        "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+        "question": "如果出现这种情况，公司会收费吗？",
+        "category": "4.1",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "特定场景下的收费政策",
+        "reason": "涉及商务预算和合同范围界定，客户关注隐性成本。"
+      }
+    ],
+    "数据关联与拆分方式": [
+      {
+        "idx": 16,
+        "id": "7783d5da-5b38-48ad-b113-3663c3169176",
+        "customer": "未知",
+        "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+        "question": "他这个关联是按照业务关联的方式进行的，是横向拆分的吗？",
+        "category": "2.2",
+        "intent": "I5",
+        "value": "medium",
+        "theme": "数据关联与拆分方式",
+        "reason": "涉及数据模型设计和技术架构细节，客户关注数据处理的底层逻辑。"
+      }
+    ],
+    "分行管理模式与系统适配": [
+      {
+        "idx": 17,
+        "id": "6f3f1cad-0fd5-462e-8019-d55986319db8",
+        "customer": "未知",
+        "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+        "question": "请问我们在分行管理中，只有大连地区可能存在拆分，其他地区都没有拆分，且这7家分行都属于一级行。我们在划分时，实际上这7家分行不用考虑，只需管理一家。请问这种情况如何操作？",
+        "category": "3.3",
+        "intent": "I1",
+        "value": "high",
+        "theme": "分行管理模式与系统适配",
+        "reason": "涉及客户具体管理现状（多分行管理）和系统功能适配方案，是典型的业务场景咨询。"
+      }
+    ],
+    "数据转换存储空间": [
+      {
+        "idx": 19,
+        "id": "25d0e9d5-96dc-43c0-adaf-5811c9827aca",
+        "customer": "未知",
+        "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+        "question": "是否存在一表通转换后的空间？",
+        "category": "2.3",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "数据转换存储空间",
+        "reason": "涉及技术架构中的存储资源规划，属于技术细节咨询。"
+      }
+    ],
+    "系统性能指标质疑": [
+      {
+        "idx": 20,
+        "id": "cb0872ab-d91b-400f-854c-ef0ca924baf1",
+        "customer": "未知",
+        "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+        "question": "请问，刚开始讲的时候提到一秒钟，资本充足率是无法在一秒钟内得出的，对吗？",
+        "category": "2.1",
+        "intent": "I1",
+        "value": "high",
+        "theme": "系统性能指标质疑",
+        "reason": "涉及系统性能（计算耗时）这一关键技术指标，客户对性能有疑虑，需重点解答。"
+      }
+    ],
+    "界面配置灵活性": [
+      {
+        "idx": 21,
+        "id": "5907bd84-f13c-4219-bc03-17b0dad19188",
+        "customer": "未知",
+        "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+        "question": "我还想问一下刚才界面中的配置，关于数据和其他内容可以调整吗？",
+        "category": "2.3",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "界面配置灵活性",
+        "reason": "涉及系统功能配置的灵活性和可扩展性，影响用户体验。"
+      }
+    ],
+    "数据确权功能": [
+      {
+        "idx": 22,
+        "id": "74fb5fdb-8443-459e-8445-642495e069fe",
+        "customer": "未知",
+        "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+        "question": "是否可以进行确权？",
+        "category": "2.3",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "数据确权功能",
+        "reason": "涉及数据治理核心功能'确权'，是数据资产管理的重要环节。"
+      }
+    ],
+    "监管报送范围界定": [
+      {
+        "idx": 25,
+        "id": "6e5ceef3-7410-4afb-8f29-6a558229c31a",
+        "customer": "未知",
+        "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+        "question": "外资行在中国的分行需要报这个吗？",
+        "category": "3.1",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "监管报送范围界定",
+        "reason": "涉及监管合规范围（外资行分行），是项目立项和范围界定的前提。"
+      }
+    ],
+    "外资行报送具体指标": [
+      {
+        "idx": 26,
+        "id": "0bf26a24-9d07-430e-8ce2-b91b2dad9cec",
+        "customer": "未知",
+        "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+        "question": "外资银行在中国的分行需要报告资本充足率吗？",
+        "category": "0.0",
+        "intent": "I5",
+        "value": "medium",
+        "theme": "外资行报送具体指标",
+        "reason": "涉及具体监管指标（资本充足率）的报送要求，属于合规细节咨询。"
+      }
+    ],
+    "报送主体范围确认": [
+      {
+        "idx": 27,
+        "id": "30302b90-f31a-4a02-950e-793942876829",
+        "customer": "未知",
+        "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+        "question": "他们的报送范围是否包括国外在中国的银行分行？",
+        "category": "3.1",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "报送主体范围确认",
+        "reason": "确认项目实施范围和监管对象，涉及合规边界。"
+      }
+    ],
+    "外资行系统建设策略": [
+      {
+        "idx": 28,
+        "id": "36d0868d-60fd-4de5-8438-1fd856cce7d8",
+        "customer": "未知",
+        "session": "20250515-刘佳-阜新银行-阜新银行一表通建设 - 副本.m4a",
+        "question": "他们的系统是跟国外的系统一样吗？还是说现在开始建设国内系统？",
+        "category": "0.0",
+        "intent": "I5",
+        "value": "medium",
+        "theme": "外资行系统建设策略",
+        "reason": "涉及特定客户群体（外资行）的现状和系统建设规划，有助于方案定制。"
+      }
+    ],
+    "项目建设标准合规性": [
+      {
+        "idx": 31,
+        "id": "6f3ed475-a83e-4e00-94b5-958a105bd91a",
+        "customer": "未知",
+        "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+        "question": "我想问一下你们这个项目是否按照相关标准建设的？",
+        "category": "3.1",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "项目建设标准合规性",
+        "reason": "涉及项目合规性和建设标准，是客户选型决策的关注点。"
+      }
+    ],
+    "基础设施建设责任划分": [
+      {
+        "idx": 32,
+        "id": "a378dc6a-8229-4394-bcd7-1d91f425dce9",
+        "customer": "未知",
+        "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+        "question": "基础设施部分是由你们打包建设的吗？",
+        "category": "5.5",
+        "intent": "I1",
+        "value": "high",
+        "theme": "基础设施建设责任划分",
+        "reason": "涉及项目实施范围和分工边界（基础设施vs软件），直接影响合同范围。"
+      }
+    ],
+    "选型决策咨询": [
+      {
+        "idx": 34,
+        "id": "dd8a06a8-37a0-4a02-8b72-40f035a8c6c0",
+        "customer": "未知",
+        "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+        "question": "我还需要寻找其他方案吗？",
+        "category": "5.5",
+        "intent": "I1",
+        "value": "high",
+        "theme": "选型决策咨询",
+        "reason": "直接反映客户的购买决策心理，涉及竞品对比或方案替代性分析。"
+      }
+    ],
+    "部署实施责任": [
+      {
+        "idx": 35,
+        "id": "33f776c7-1c6d-4adf-a5f6-556d6e5ba069",
+        "customer": "未知",
+        "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+        "question": "将来这个整个部署由你们来负责吗？",
+        "category": "5.5",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "部署实施责任",
+        "reason": "涉及项目实施交付的责任划分。"
+      }
+    ],
+    "运维模式与商务采购方式": [
+      {
+        "idx": 36,
+        "id": "147d61d3-7cab-46b6-8dec-9e4e48a09501",
+        "customer": "未知",
+        "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+        "question": "后期的运维由谁提供？是购买他们的授权还是直接购买他们的服务？",
+        "category": "6.1",
+        "intent": "I1",
+        "value": "high",
+        "theme": "运维模式与商务采购方式",
+        "reason": "涉及后期运维服务模式和商务采购模式（买断vs服务），是合同关键条款。"
+      }
+    ],
+    "合同签署方式": [
+      {
+        "idx": 37,
+        "id": "d48e866f-f099-4e48-adcd-df985e92f616",
+        "customer": "未知",
+        "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+        "question": "我需要分开签合同还是与谁签合同？",
+        "category": "1.3",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "合同签署方式",
+        "reason": "涉及商务流程和合同主体，客户关注签约便利性。"
+      }
+    ],
+    "实施方案硬件范围": [
+      {
+        "idx": 38,
+        "id": "c383a853-509b-43bf-a6bd-0cd577d820fc",
+        "customer": "未知",
+        "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+        "question": "您的那个，比如说这个整个核心区的实施方案里是否包含前面的网关设备？",
+        "category": "5.5",
+        "intent": "I1",
+        "value": "high",
+        "theme": "实施方案硬件范围",
+        "reason": "涉及具体技术架构组件（网关）和实施范围界定，影响项目预算。"
+      }
+    ],
+    "运维责任与源码交付": [
+      {
+        "idx": 39,
+        "id": "7ebc8654-452f-4812-9076-85e6df267294",
+        "customer": "未知",
+        "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+        "question": "这个培训平台的未来维护由曹仁月负责，还是说你们会将源码共享给我们科技公司？",
+        "category": "6.1",
+        "intent": "I1",
+        "value": "high",
+        "theme": "运维责任与源码交付",
+        "reason": "涉及核心交付物（源码）归属和运维责任划分，是关键商务和技术谈判点。"
+      }
+    ],
+    "服务费用咨询": [
+      {
+        "idx": 40,
+        "id": "2ca86885-0587-4c0a-8cd1-ccaaa8b17b27",
+        "customer": "未知",
+        "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+        "question": "这项服务的费用是多少？",
+        "category": "4.1",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "服务费用咨询",
+        "reason": "涉及项目预算，客户关注具体成本。"
+      }
+    ],
+    "项目预算关注": [
+      {
+        "idx": 41,
+        "id": "983478f1-d82d-46b8-b74f-48baaa07b78c",
+        "customer": "未知",
+        "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+        "question": "大家的情况差不多，你只需要告诉我扣我多少钱就行，我只关心这几个问题。",
+        "category": "4.2",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "项目预算关注",
+        "reason": "直接反映客户对预算成本的强烈关注，是商务谈判的关键信号。"
+      }
+    ],
+    "计价单位咨询": [
+      {
+        "idx": 43,
+        "id": "7a168cf8-6df2-414b-aee0-c8c582827294",
+        "customer": "未知",
+        "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+        "question": "一人月是指什么？",
+        "category": "5.3",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "计价单位咨询",
+        "reason": "涉及商务报价术语解释，影响成本核算。"
+      }
+    ],
+    "源码交付可能性": [
+      {
+        "idx": 44,
+        "id": "dd352da0-eb8f-4e49-85cd-e20f68a6361b",
+        "customer": "未知",
+        "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+        "question": "源码能共享给我吗？",
+        "category": "6.3",
+        "intent": "I1",
+        "value": "high",
+        "theme": "源码交付可能性",
+        "reason": "涉及核心知识产权和交付物范围，通常是谈判难点。"
+      }
+    ],
+    "项目总体预算咨询": [
+      {
+        "idx": 45,
+        "id": "ce67da0d-dd2a-488d-b3cd-cd5cff4e8067",
+        "customer": "未知",
+        "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+        "question": "这个项目的总体预算大概在多少钱左右？",
+        "category": "4.1",
+        "intent": "I1",
+        "value": "high",
+        "theme": "项目总体预算咨询",
+        "reason": "直接涉及项目预算规模，是决策关键因素。"
+      }
+    ],
+    "系统建设目标与数据架构规划": [
+      {
+        "idx": 46,
+        "id": "a8b40a74-b8c8-44f3-a190-973776cf876f",
+        "customer": "未知",
+        "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+        "question": "你们的整体设想是将我行所有基础数据整理出来，以便未来无论是对人民银行还是监管机构，都可以对外报告吗？",
+        "category": "2.3",
+        "intent": "I1",
+        "value": "high",
+        "theme": "系统建设目标与数据架构规划",
+        "reason": "涉及客户对系统整体架构和数据治理目标的理解，属于高层规划咨询。"
+      }
+    ],
+    "未来合作模式": [
+      {
+        "idx": 47,
+        "id": "60fcd5d2-b64d-4b7e-b902-90c9c42a1835",
+        "customer": "未知",
+        "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+        "question": "两者之间的合作关系是怎样的？也就是说，未来如果继续合作会如何发展？",
+        "category": "1.3",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "未来合作模式",
+        "reason": "涉及长期合作规划和商务关系维护。"
+      }
+    ],
+    "业务数据标准咨询": [
+      {
+        "idx": 48,
+        "id": "146d673d-2549-4494-a014-e6e34afe6275",
+        "customer": "未知",
+        "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+        "question": "个人的收入账明细最多为150万，这个意思是指每期的金额吗？",
+        "category": "2.3",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "业务数据标准咨询",
+        "reason": "涉及具体业务指标（收入账明细）的数据标准定义，属于业务规则细节。"
+      }
+    ],
+    "上游系统对接责任": [
+      {
+        "idx": 49,
+        "id": "34e1f573-fc44-4c85-80aa-86ee97889fee",
+        "customer": "未知",
+        "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+        "question": "请问你们与上游系统的对接由谁负责？",
+        "category": "5.3",
+        "intent": "I1",
+        "value": "high",
+        "theme": "上游系统对接责任",
+        "reason": "涉及项目实施中工作量最大的数据对接环节的责任划分，是实施风险点。"
+      }
+    ],
+    "上游系统改造需求": [
+      {
+        "idx": 50,
+        "id": "8537f362-56a6-4886-8a86-58f80b60a1b4",
+        "customer": "未知",
+        "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+        "question": "如果上游系统无法满足字段覆盖的要求，是不是意味着需要对上游系统进行改装？",
+        "category": "3.3",
+        "intent": "I1",
+        "value": "high",
+        "theme": "上游系统改造需求",
+        "reason": "涉及数据治理实施难点和上游系统改造风险，是项目关键痛点。"
+      },
+      {
+        "idx": 51,
+        "id": "d8a1a4cc-11db-4c10-873d-d47e9ee62f28",
+        "customer": "未知",
+        "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+        "question": "如果我现在使用的资产管理系统无法满足我们的需求，是否需要进行系统升级和改造？",
+        "category": "3.3",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "上游系统改造需求",
+        "reason": "涉及一表通建设对上游源系统（资产管理系统）的影响评估与改造边界。"
+      }
+    ],
+    "数据流向与集市建设": [
+      {
+        "idx": 52,
+        "id": "90b0fefd-5550-40d1-ade7-4c8b237f5550",
+        "customer": "未知",
+        "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+        "question": "部分他们的基础数据源是否也需要推送到我们那个超市集市里？",
+        "category": "5.6",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "数据流向与集市建设",
+        "reason": "涉及基础数据源与数据集市（超市集市）的数据架构与推送逻辑。"
+      }
+    ],
+    "资金投入流程": [
+      {
+        "idx": 53,
+        "id": "32117ae2-6126-4b70-a7af-3bbd6c771083",
+        "customer": "未知",
+        "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+        "question": "如果到时候需要投入资金，是否还需要再走一趟？",
+        "category": "0.0",
+        "intent": "I5",
+        "value": "medium",
+        "theme": "资金投入流程",
+        "reason": "涉及项目预算审批流程与客户内部决策机制。"
+      }
+    ],
+    "系统整合与替代策略": [
+      {
+        "idx": 58,
+        "id": "44d22389-8899-4c76-b1ae-c2e1c7d3f57e",
+        "customer": "未知",
+        "session": "20250509-刘春玲-铁岭银行-铁岭银行一表通建设.m4a",
+        "question": "替代我现在所有的系统吗？我目前有几个系统都需要升级，想知道是否可以将它们整合完成。",
+        "category": "2.3",
+        "intent": "I1",
+        "value": "high",
+        "theme": "系统整合与替代策略",
+        "reason": "涉及一表通建设与现有存量系统的整合策略及替代关系，是架构规划的核心问题。"
+      }
+    ],
+    "监管报送架构与管辖": [
+      {
+        "idx": 59,
+        "id": "3a7d9c62-cf59-4280-90e9-028b1a56615d",
+        "customer": "未知",
+        "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+        "question": "之前我们理解的报送方式是各城市自行报送，比如北京、上海报送，对吗？以后实现一表通后，监管由access负责，我们系统由总局、北京局还是上海局管理？",
+        "category": "1.4",
+        "intent": "I2",
+        "value": "high",
+        "theme": "监管报送架构与管辖",
+        "reason": "涉及外资银行（德意志银行）多地监管架构下的报送模式与管辖权划分，属于核心业务场景。"
+      }
+    ],
+    "试点准入要求": [
+      {
+        "idx": 61,
+        "id": "db81e085-6251-4ae3-a954-f1b6866abacc",
+        "customer": "未知",
+        "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+        "question": "试点的要求是什么？",
+        "category": "3.1",
+        "intent": "I2",
+        "value": "medium",
+        "theme": "试点准入要求",
+        "reason": "涉及一表通试点项目的准入标准与合规要求。"
+      }
+    ],
+    "接口部署方案": [
+      {
+        "idx": 62,
+        "id": "8deec891-db22-4cda-97bf-00d625b7eff1",
+        "customer": "未知",
+        "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+        "question": "我们这个情况，建议我的接口接在哪里？",
+        "category": "2.4",
+        "intent": "I4",
+        "value": "medium",
+        "theme": "接口部署方案",
+        "reason": "涉及具体的技术实施细节，即接口部署位置的建议。"
+      }
+    ],
+    "可信区网络与接口配置": [
+      {
+        "idx": 63,
+        "id": "24db4b58-3798-44d2-969f-9f04a9bc2e3b",
+        "customer": "未知",
+        "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+        "question": "比如说我们如果是可信区，是否需要将这个接口开放给其他城市？",
+        "category": "2.4",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "可信区网络与接口配置",
+        "reason": "涉及可信区部署架构下的网络开放与接口安全配置。"
+      }
+    ],
+    "报送时效与性能要求": [
+      {
+        "idx": 64,
+        "id": "c1da6bab-fd0a-4de8-9405-85c559aaa0c4",
+        "customer": "未知",
+        "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+        "question": "请问按照你们在其他银行落地一表通的经验，系统建设完成并验收后，银行数据报送的时间安排是怎样的？是否必须在T+1完成，还是有一定的弹性？",
+        "category": "3.1",
+        "intent": "I2",
+        "value": "high",
+        "theme": "报送时效与性能要求",
+        "reason": "涉及一表通数据报送的时效性（T+1弹性）与性能指标，是客户关注的核心运维指标。"
+      }
+    ],
+    "监管数据验证机制": [
+      {
+        "idx": 65,
+        "id": "62220fcd-3544-4b2b-9e81-fb9ac2dbad9a",
+        "customer": "未知",
+        "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+        "question": "监管尚未到可信区获取数据，他们如何进行验证？",
+        "category": "1.4",
+        "intent": "I2",
+        "value": "medium",
+        "theme": "监管数据验证机制",
+        "reason": "涉及监管端如何获取及验证数据的业务流程，关乎报送合规性。"
+      }
+    ],
+    "数据转表自动化率": [
+      {
+        "idx": 66,
+        "id": "7115357a-b53e-41a3-b72e-ae9cd0ec261d",
+        "customer": "未知",
+        "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+        "question": "百分之多少可以转表？",
+        "category": "2.3",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "数据转表自动化率",
+        "reason": "涉及一表通核心价值点——自动生成监管报表的覆盖率与能力。"
+      }
+    ],
+    "数据质量评估标准": [
+      {
+        "idx": 67,
+        "id": "de6ab78a-32a2-44f6-a22e-b4ea8b80289e",
+        "customer": "未知",
+        "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+        "question": "提到说如果一次的质量达到一定程度之后，有可能会停报，然后使用一表通来代替。请问您的数据质量是如何评估的？是根据本行数据与一表通数据的一致性来判断质量是否达到可信度，从而可以填报，还是有一个通用模型来衡量数据的质量？",
+        "category": "3.2",
+        "intent": "I2",
+        "value": "high",
+        "theme": "数据质量评估标准",
+        "reason": "深入探讨数据质量的评估模型、校验逻辑及替代传统报送的标准，属于核心数据治理问题。"
+      }
+    ],
+    "系统架构层级关系": [
+      {
+        "idx": 68,
+        "id": "f435594e-6f52-4b99-8780-52c63fc9ad0f",
+        "customer": "未知",
+        "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+        "question": "逻辑层与明细报表的关系是怎样的？明细报表是从逻辑层生成的吗，还是直接从主题层到明细？从图上看，汇总层和明细报表似乎是并列的。请问具体情况如何？",
+        "category": "2.2",
+        "intent": "I1",
+        "value": "high",
+        "theme": "系统架构层级关系",
+        "reason": "涉及一表通逻辑层、主题层、汇总层与明细报表的架构关系，是产品方案的核心技术细节。"
+      }
+    ],
+    "数据对账与逻辑层设计": [
+      {
+        "idx": 69,
+        "id": "32638133-3a4a-4da9-b89d-384450b4e9e9",
+        "customer": "未知",
+        "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+        "question": "我担心后续的transaction和financial数据对账时，逻辑层最好是统一输出，这样后续的校验会更方便进行。",
+        "category": "3.2",
+        "intent": "I3",
+        "value": "medium",
+        "theme": "数据对账与逻辑层设计",
+        "reason": "涉及跨系统（交易与财务）数据对账逻辑及逻辑层统一输出的技术实现。"
+      }
+    ],
+    "数据主题层定义": [
+      {
+        "idx": 70,
+        "id": "af4800e1-1eab-4885-934f-108a521b8c3c",
+        "customer": "未知",
+        "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+        "question": "脚本是一个逻辑层，但我不太清楚主题层包含哪些内容。比如说全量客户信息，实际上我们没有对应的系统，这个主题层具体指什么？",
+        "category": "2.2",
+        "intent": "I2",
+        "value": "medium",
+        "theme": "数据主题层定义",
+        "reason": "涉及数据模型中主题层的具体定义与内容范围，属于产品功能细节。"
+      }
+    ],
+    "实施案例与经验": [
+      {
+        "idx": 72,
+        "id": "59b654c7-461f-4a72-9a19-5e94f95a1ef3",
+        "customer": "未知",
+        "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+        "question": "你们已经经过的主题城市是什么？",
+        "category": "0.0",
+        "intent": "I5",
+        "value": "medium",
+        "theme": "实施案例与经验",
+        "reason": "涉及厂商过往实施案例与试点城市经验，是选型决策的重要依据。"
+      }
+    ],
+    "产品功能概念解释": [
+      {
+        "idx": 74,
+        "id": "d1465710-2d86-4eb1-8d51-4334807b6685",
+        "customer": "未知",
+        "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+        "question": "形式标签是什么？",
+        "category": "0.0",
+        "intent": "I5",
+        "value": "medium",
+        "theme": "产品功能概念解释",
+        "reason": "涉及具体产品功能（形式标签）的定义与理解。"
+      }
+    ],
+    "可信区运维可用性要求": [
+      {
+        "idx": 75,
+        "id": "17852415-baac-4fb5-8525-a87e869e6fa3",
+        "customer": "未知",
+        "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+        "question": "请问这个可信度的可信区存活时间有要求吗？需要24小时全天候吗？",
+        "category": "2.1",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "可信区运维可用性要求",
+        "reason": "涉及可信区系统的运维SLA要求（如存活时间、24小时可用性）。"
+      }
+    ],
+    "运维故障报备流程": [
+      {
+        "idx": 76,
+        "id": "02ec11d1-4174-4399-a8bf-e72252e01626",
+        "customer": "未知",
+        "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+        "question": "如果出现断开或其他问题，是否需要进行报备？",
+        "category": "6.1",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "运维故障报备流程",
+        "reason": "涉及系统异常情况下的运维管理流程与合规报备要求。"
+      }
+    ],
+    "网络配置与IP要求": [
+      {
+        "idx": 78,
+        "id": "88bca54b-4dfa-4a3c-af4d-427095f2c511",
+        "customer": "未知",
+        "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+        "question": "可信区的IP和IPO的要求是什么？",
+        "category": "0.0",
+        "intent": "I5",
+        "value": "medium",
+        "theme": "网络配置与IP要求",
+        "reason": "涉及可信区部署的具体网络技术细节（IP、IPO要求）。"
+      }
+    ],
+    "数据安全与备份策略": [
+      {
+        "idx": 79,
+        "id": "bb48b50e-5656-4a50-8232-b70ff361ad8d",
+        "customer": "未知",
+        "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+        "question": "为什么在核心区监管可以动我的数据，所以我们的原始数据还要留备份？",
+        "category": "3.2",
+        "intent": "I3",
+        "value": "high",
+        "theme": "数据安全与备份策略",
+        "reason": "涉及监管核心区数据操作权限、数据安全风险及备份策略，是安全合规的关键问题。"
+      }
+    ],
+    "部署架构优势与平台演进": [
+      {
+        "idx": 80,
+        "id": "d642ac61-83ba-4f8a-863b-ee5d5fe04130",
+        "customer": "未知",
+        "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+        "question": "如果这样部署的好处是什么？会在扫描时跳转到监管那边去。之前您介绍说120平台有一些功能会被替代，但我这边只了解IT的报表。根据名字我推断不出具体内容。如果按这种方式，可信区以后建联的机构也不再取数了吗？",
+        "category": "1.4",
+        "intent": "I1",
+        "value": "high",
+        "theme": "部署架构优势与平台演进",
+        "reason": "涉及特定部署模式的业务价值、平台功能替代关系及未来演进路线。"
+      }
+    ],
+    "多地监管接入架构": [
+      {
+        "idx": 81,
+        "id": "068f770a-2192-4977-aa1f-b2539dc36b4f",
+        "customer": "未知",
+        "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+        "question": "那是不是意味着以后广州他们也要进入这个可信区，建联的监管机构也要在里面取数据？",
+        "category": "1.4",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "多地监管接入架构",
+        "reason": "涉及多地监管机构接入同一可信区的架构可行性与规划。"
+      }
+    ],
+    "报送应用功能设计": [
+      {
+        "idx": 82,
+        "id": "dd88c2e7-459a-44bd-984f-6b850d4bc64b",
+        "customer": "未知",
+        "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+        "question": "在报送应用层面，有哪些新的功能设计？",
+        "category": "2.3",
+        "intent": "I2",
+        "value": "medium",
+        "theme": "报送应用功能设计",
+        "reason": "涉及报送应用层面的具体功能设计与用户体验。"
+      }
+    ],
+    "报送流程与方案策略": [
+      {
+        "idx": 83,
+        "id": "94b1f1bc-3cea-495d-ba60-635198d3590c",
+        "customer": "未知",
+        "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+        "question": "我觉得最大的问题是我听错了。老师说我们要先填写一表通，然后再将一表通转化成1104和14。这可能是你们为新客户制定的方案，对吗？",
+        "category": "2.3",
+        "intent": "I1",
+        "value": "high",
+        "theme": "报送流程与方案策略",
+        "reason": "涉及一表通与传统报表（1104、客户风险）的生成逻辑与填报流程策略，是方案设计的核心。"
+      }
+    ],
+    "数据实施范围与起点": [
+      {
+        "idx": 84,
+        "id": "aade568f-9a71-4146-b304-1e0fd49b0590",
+        "customer": "未知",
+        "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+        "question": "我们数据的起始点在哪里？是从头开始的吗？",
+        "category": "2.3",
+        "intent": "I2",
+        "value": "medium",
+        "theme": "数据实施范围与起点",
+        "reason": "涉及项目实施的数据范围界定与初始化工作。"
+      }
+    ],
+    "本地数据仓库建设咨询": [
+      {
+        "idx": 85,
+        "id": "bb45b9d0-1953-4aea-82e5-17a6c0aa6f8f",
+        "customer": "未知",
+        "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+        "question": "我们行内有一个讨论点，就是要不要建立本地数据仓库，包括数据集合等方面，您的看法如何？",
+        "category": "3.3",
+        "intent": "I4",
+        "value": "high",
+        "theme": "本地数据仓库建设咨询",
+        "reason": "涉及客户IT架构规划痛点（是否建设本地数仓），需要售前提供架构咨询建议。"
+      }
+    ],
+    "数据补录机制与方案": [
+      {
+        "idx": 86,
+        "id": "30ce0658-ca82-4a8b-91c2-e173b44943be",
+        "customer": "未知",
+        "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+        "question": "我不太理解实时补录的概念。如果按照之前的模式，补录次数每月大概10次左右，觉得一次补录就可以接受。但如果采用T+0+1的模式，这种方式就难以复用。是否有更好的方案？",
+        "category": "3.3",
+        "intent": "I4",
+        "value": "medium",
+        "theme": "数据补录机制与方案",
+        "reason": "涉及实时补录与T+0/T+1模式的冲突处理及解决方案。"
+      }
+    ],
+    "流程自动化与系统替代考量": [
+      {
+        "idx": 87,
+        "id": "3436632b-7715-4c98-9e75-88bbef8695f8",
+        "customer": "未知",
+        "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+        "question": "我是否可以将这些流程实现自动化？对我来说，这已经是一回事了。既然一表通已经变得如此复杂，我有什么理由不去奥特美BOPAL和内心系统呢？",
+        "category": "2.3",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "流程自动化与系统替代考量",
+        "reason": "涉及自动化实现程度及客户对现有系统替代/自建的决策思考。"
+      }
+    ],
+    "竞品替代与核心卖点": [
+      {
+        "idx": 88,
+        "id": "b6d42984-a179-4cad-a9e5-00ee93417576",
+        "customer": "未知",
+        "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+        "question": "如果你们具备这个能力，那将是一个极大的卖点。我们一直在讨论在ES的1104和一表通之间选择，一表通可以取代EC，1141104也部分取代了EC。那么为什么AML出现错误，我还需要花时间去解决。",
+        "category": "3.3",
+        "intent": "I2",
+        "value": "high",
+        "theme": "竞品替代与核心卖点",
+        "reason": "涉及与竞品（EC、ES等）的对比、替代关系及核心卖点分析，是选型关键。"
+      }
+    ],
+    "项目实施周期": [
+      {
+        "idx": 89,
+        "id": "3ab0af8e-cb9c-48b2-8bdf-f0570542bf1c",
+        "customer": "未知",
+        "session": "20250603-郑相宜-德意志银行-德意志银行新建一表通.m4a",
+        "question": "这个项目大概需要多长时间才能实现？",
+        "category": "5.2",
+        "intent": "I2",
+        "value": "medium",
+        "theme": "项目实施周期",
+        "reason": "涉及项目时间计划与交付周期预估。"
+      }
+    ],
+    "项目实施协调机制": [
+      {
+        "idx": 90,
+        "id": "807a8599-1f45-48a0-8366-2ee197850908",
+        "customer": "未知",
+        "session": "20250604-董明达-张家口银行-张家口银行新建一表通.m4a",
+        "question": "如果后续出现类似问题，一般是如何协调的？",
+        "category": "6.1",
+        "intent": "I2",
+        "value": "medium",
+        "theme": "项目实施协调机制",
+        "reason": "涉及项目实施过程中的问题协调与解决机制。"
+      }
+    ],
+    "项目人力投入保障": [
+      {
+        "idx": 91,
+        "id": "4013d7b9-6a1b-42b8-bdee-d1aef423c98e",
+        "customer": "未知",
+        "session": "20250604-董明达-张家口银行-张家口银行新建一表通.m4a",
+        "question": "咱们的人资支持后续有问题，这些人员到不到位，大概多少人？",
+        "category": "5.3",
+        "intent": "I2",
+        "value": "medium",
+        "theme": "项目人力投入保障",
+        "reason": "涉及厂商的人力资源投入与保障能力。"
+      }
+    ],
+    "补录功能权限管理": [
+      {
+        "idx": 92,
+        "id": "5bf5cd37-7625-4d8a-95cd-9708c6072c2d",
+        "customer": "未知",
+        "session": "20250604-董明达-张家口银行-张家口银行新建一表通.m4a",
+        "question": "补录这块的权限是放到部署端，还是分支行？",
+        "category": "3.2",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "补录功能权限管理",
+        "reason": "涉及补录功能的权限分配与部署架构设计。"
+      }
+    ],
+    "报送与报备业务差异": [
+      {
+        "idx": 95,
+        "id": "e0fee823-51ef-4f64-9acb-22e03716dc24",
+        "customer": "未知",
+        "session": "20250604-董明达-张家口银行-张家口银行新建一表通.m4a",
+        "question": "他这个报送跟异地报备有什么区别？比如说利率报备，如果前一天的报不上去，第二天也不能报，这是为什么？",
+        "category": "3.1",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "报送与报备业务差异",
+        "reason": "涉及不同监管报送业务（如利率报备）的逻辑差异与处理机制。"
+      }
+    ],
+    "报送数据时序处理逻辑": [
+      {
+        "idx": 96,
+        "id": "89e39b4f-00ba-4163-bb13-a82b65d46bd5",
+        "customer": "未知",
+        "session": "20250604-董明达-张家口银行-张家口银行新建一表通.m4a",
+        "question": "如果我今天的数据出现问题，处理时间较长，但第二天的数据没有问题，我可以先报第二天的数据吗？",
+        "category": "3.1",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "报送数据时序处理逻辑",
+        "reason": "涉及数据报送过程中出现异常时的时序处理逻辑与灵活性。"
+      }
+    ],
+    "报送时间窗口要求": [
+      {
+        "idx": 97,
+        "id": "37b014cb-14f4-4817-b7ee-df17e964d715",
+        "customer": "未知",
+        "session": "20250604-董明达-张家口银行-张家口银行新建一表通.m4a",
+        "question": "现在纽约市场的报道时间大概是几点到几点？今天能报完大概最晚到什么时候？",
+        "category": "3.1",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "报送时间窗口要求",
+        "reason": "涉及具体的监管报送时间窗口与截止时间要求。"
+      }
+    ],
+    "数据错误分类功能": [
+      {
+        "idx": 98,
+        "id": "4c1e00bd-206b-474e-a0de-fc8212ef9053",
+        "customer": "未知",
+        "session": "20250604-董明达-张家口银行-张家口银行新建一表通.m4a",
+        "question": "在查询时，是否会根据错误类型进行分类？",
+        "category": "2.3",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "数据错误分类功能",
+        "reason": "涉及产品功能细节，即数据质量检核结果的分类展示。"
+      }
+    ],
+    "客户招标时间计划": [
+      {
+        "idx": 100,
+        "id": "bc1c7934-b4ca-497b-b15a-0a665494be17",
+        "customer": "未知",
+        "session": "20250604-董明达-张家口银行-张家口银行新建一表通.m4a",
+        "question": "我们预计什么时候开始招标？",
+        "category": "0.0",
+        "intent": "I5",
+        "value": "medium",
+        "theme": "客户招标时间计划",
+        "reason": "涉及客户的采购预算周期与招标时间表。"
+      }
+    ],
+    "一表通接口规范与EAST对比及颗粒度": [
+      {
+        "idx": 102,
+        "id": "499b19d6-e1b8-48bd-8c8e-a3ed99fe6571",
+        "customer": "未知",
+        "session": "20250605-颜悦-第一银行上海分行-第一银行上海一表通建设.m4a",
+        "question": "一表通的接口规范是否类似于East？是否达到最细？",
+        "category": "2.4",
+        "intent": "I1",
+        "value": "high",
+        "theme": "一表通接口规范与EAST对比及颗粒度",
+        "reason": "涉及核心技术标准对比，客户关注数据采集的深度和接口差异，直接影响实施方案设计。"
+      }
+    ],
+    "可信区架构定义确认": [
+      {
+        "idx": 103,
+        "id": "98923975-5ecf-4177-b646-508a7481407d",
+        "customer": "未知",
+        "session": "20250605-颜悦-第一银行上海分行-第一银行上海一表通建设.m4a",
+        "question": "你所说的可信区域，指的是我有一块区域可以让监管机构读取资料，对吗？",
+        "category": "2.3",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "可信区架构定义确认",
+        "reason": "客户对一表通核心架构概念（可信区）进行确认，涉及监管报送模式的理解。"
+      }
+    ],
+    "可信区数据转换报送格式": [
+      {
+        "idx": 104,
+        "id": "10d80f85-a46d-4fd9-a45e-f038589a234d",
+        "customer": "未知",
+        "session": "20250605-颜悦-第一银行上海分行-第一银行上海一表通建设.m4a",
+        "question": "请问他是否意味着可以通过转换方式，将可信区域的数据直接转成104的格式？",
+        "category": "3.1",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "可信区数据转换报送格式",
+        "reason": "涉及数据加工流程，确认可信区数据如何转化为监管报送格式（如104表）。"
+      }
+    ],
+    "一表通报送模式变革与现有方式对比": [
+      {
+        "idx": 105,
+        "id": "83b29bfa-24b6-4776-9cce-2023bf4849cd",
+        "customer": "未知",
+        "session": "20250605-颜悦-第一银行上海分行-第一银行上海一表通建设.m4a",
+        "question": "请问一表通的方案是否意味着监管机构可以自行在可信区进行资料查询或采集？这是否意味着我们不再需要打包，操作方式与现在的EAST和1204报送方式不同？",
+        "category": "2.3",
+        "intent": "I1",
+        "value": "high",
+        "theme": "一表通报送模式变革与现有方式对比",
+        "reason": "核心业务流程确认，客户关注监管直连查询模式与传统打包报送模式的本质区别。"
+      }
+    ],
+    "可信区数据查看功能": [
+      {
+        "idx": 106,
+        "id": "5b6fffbf-db7e-4838-aafe-d474790644a1",
+        "customer": "未知",
+        "session": "20250605-颜悦-第一银行上海分行-第一银行上海一表通建设.m4a",
+        "question": "以后如果使用可信的兴趣，你们前端会提供一个可以让我们查看兴趣资料的功能吗？",
+        "category": "2.3",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "可信区数据查看功能",
+        "reason": "涉及产品功能需求，客户关注银行端对可信区数据的可视化和查询能力。"
+      }
+    ],
+    "数据查询方式与技术实现": [
+      {
+        "idx": 107,
+        "id": "787afa07-5829-480d-b7be-208631a4aea9",
+        "customer": "未知",
+        "session": "20250605-颜悦-第一银行上海分行-第一银行上海一表通建设.m4a",
+        "question": "你们是否直接使用资料库的方式，让用户可以查询某个范围的资料？",
+        "category": "2.3",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "数据查询方式与技术实现",
+        "reason": "涉及技术细节，确认系统是否提供直接的数据库查询功能。"
+      }
+    ],
+    "数据加工逻辑与原始数据报送需求": [
+      {
+        "idx": 108,
+        "id": "f4d3f832-323e-4acb-9f28-ffbbfc41e7ab",
+        "customer": "未知",
+        "session": "20250605-颜悦-第一银行上海分行-第一银行上海一表通建设.m4a",
+        "question": "这次如果要进行操作，资料分析部分需要做得更透彻一些。因为我希望上级提供的资料是最原始的，所有加工都在我们这边完成，避免在上面进行加工。你明白我的意思吗？",
+        "category": "3.3",
+        "intent": "I4",
+        "value": "high",
+        "theme": "数据加工逻辑与原始数据报送需求",
+        "reason": "揭示客户核心痛点，希望掌握数据加工主导权，避免监管端二次加工带来的不可控风险。"
+      }
+    ],
+    "统一代报场景下的方案复杂度": [
+      {
+        "idx": 113,
+        "id": "3f95568e-a213-4c2c-8980-e13dfe783c02",
+        "customer": "未知",
+        "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+        "question": "如果我们为他们统一代报，如何解决方案的复杂度问题？",
+        "category": "5.4",
+        "intent": "I3",
+        "value": "high",
+        "theme": "统一代报场景下的方案复杂度",
+        "reason": "针对农信/村镇银行特定业务场景（代报），涉及方案架构的适配性和复杂度控制。"
+      }
+    ],
+    "多业务系统现状与实施范围": [
+      {
+        "idx": 116,
+        "id": "fa69ec48-03ef-4f3f-b600-8cf9f7d0ce91",
+        "customer": "未知",
+        "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+        "question": "我们需要做三套系统，一套是原有的业务系统，另一套是针对私人银行的系统，因为我们还有一家私人银行使用不同的业务系统。",
+        "category": "3.3",
+        "intent": "I5",
+        "value": "medium",
+        "theme": "多业务系统现状与实施范围",
+        "reason": "揭示客户IT现状复杂性（多套业务系统），影响项目实施范围和数据采集难度。"
+      }
+    ],
+    "业务规则解读专家支持": [
+      {
+        "idx": 117,
+        "id": "267f6f21-b489-4d07-aad0-9084a1812f7e",
+        "customer": "未知",
+        "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+        "question": "在业务解读方面有专家吗？",
+        "category": "1.2",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "业务规则解读专家支持",
+        "reason": "涉及售前咨询能力和实施服务内容，客户关注厂商的业务专业性。"
+      }
+    ],
+    "驻场时长与项目周期": [
+      {
+        "idx": 118,
+        "id": "29978aa6-aeb9-4778-a778-b5a632fa4623",
+        "customer": "未知",
+        "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+        "question": "他们驻场的时间一般是多长？你们通常支持的案例持续时间是多少？",
+        "category": "5.3",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "驻场时长与项目周期",
+        "reason": "涉及项目实施计划和资源投入评估。"
+      }
+    ],
+    "项目实施周期预估": [
+      {
+        "idx": 119,
+        "id": "488deb01-a370-4469-8e46-142ee0ce9819",
+        "customer": "未知",
+        "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+        "question": "你我肯定按需，不会从头到尾全部操作。请问在类似案例中，通常需要多长时间完成？",
+        "category": "1.1",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "项目实施周期预估",
+        "reason": "客户关注时间成本和项目进度安排。"
+      }
+    ],
+    "数据解读服务的交付层级": [
+      {
+        "idx": 120,
+        "id": "07a9df6f-f461-46a5-a741-ef4e716f1c18",
+        "customer": "未知",
+        "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+        "question": "这个专家解读数据到哪一层，是送到原系统的库表，还是送到界面？",
+        "category": "2.3",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "数据解读服务的交付层级",
+        "reason": "涉及数据治理服务的具体交付形式（库表还是界面），影响客户使用体验。"
+      }
+    ],
+    "系统数据输出层级与业务可用性": [
+      {
+        "idx": 121,
+        "id": "40618f34-13d2-4b1f-a817-8ca50b9e094a",
+        "customer": "未知",
+        "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+        "question": "请问你们这边的系统是输到哪一层？如果输到数据库层，我们可以看到，但到业务部门这一层可能相对较弱。",
+        "category": "2.3",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "系统数据输出层级与业务可用性",
+        "reason": "关注数据对业务部门的价值传递，涉及数据应用层能力。"
+      }
+    ],
+    "数据质量问题发现与解决建议": [
+      {
+        "idx": 123,
+        "id": "5d16a44c-6143-4b74-9f02-92111c19c306",
+        "customer": "未知",
+        "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+        "question": "我担心你们这边数据，发现这些数据类问题，是否有好的解决方案？能否提供一些建议？",
+        "category": "1.1",
+        "intent": "I1",
+        "value": "high",
+        "theme": "数据质量问题发现与解决建议",
+        "reason": "直击客户痛点（数据质量），涉及核心实施难点和厂商解决方案能力。"
+      }
+    ],
+    "数据智能实现方式与工作量": [
+      {
+        "idx": 124,
+        "id": "29d85740-49de-4316-9301-67a2e69ce364",
+        "customer": "未知",
+        "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+        "question": "你如何实现数据智能？是通过数据抽取和人工修改，还是采用其他方式？这种方式工作量较大吗？",
+        "category": "3.2",
+        "intent": "I3",
+        "value": "high",
+        "theme": "数据智能实现方式与工作量",
+        "reason": "涉及产品核心功能（自动化/智能化）的技术实现路径和实施效率。"
+      }
+    ],
+    "监管报送数据统一加工方案咨询": [
+      {
+        "idx": 125,
+        "id": "36d99a56-6a86-4009-8dde-9a6c4bc17f1b",
+        "customer": "未知",
+        "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+        "question": "1204这个项目我一直想统一取出进行加工，但没有找到可以借鉴的银行或公司解决方案，不知道是否有相关的方案。",
+        "category": "1.1",
+        "intent": "I1",
+        "value": "high",
+        "theme": "监管报送数据统一加工方案咨询",
+        "reason": "客户明确痛点（统一加工难），寻求行业最佳实践，是售前切入的关键机会。"
+      }
+    ],
+    "数据核验流程与区域职责划分": [
+      {
+        "idx": 127,
+        "id": "2d5dcfb7-7eaa-4e3b-a39c-ab8e33f9197b",
+        "customer": "未知",
+        "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+        "question": "核验结果是要在报送区传过去，还是由可信区自行处理？",
+        "category": "2.3",
+        "intent": "I1",
+        "value": "high",
+        "theme": "数据核验流程与区域职责划分",
+        "reason": "涉及一表通核心架构流程，确认核验环节是在报送端还是可信区完成。"
+      }
+    ],
+    "报送端操作后的流程交互": [
+      {
+        "idx": 128,
+        "id": "d082d599-6d56-47e5-a22e-3359f1729877",
+        "customer": "未知",
+        "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+        "question": "我完成报送端的操作后，需要再次送给对方，他还需要再次运行吗？",
+        "category": "2.3",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "报送端操作后的流程交互",
+        "reason": "涉及具体操作流程和系统交互逻辑。"
+      }
+    ],
+    "数据存储位置与监管合规风险": [
+      {
+        "idx": 129,
+        "id": "98dfcb84-e59b-45cf-88bf-0697570bd7a2",
+        "customer": "未知",
+        "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+        "question": "关于这个可能性我再问你，数据是否都存储在银行本地？假如前期口径制定得准确，但没有及时发现问题，数据推到办公区后再进行整治，之后再提取新数据，香港是否会因此质疑我们以前的数据库管理方式？",
+        "category": "3.1",
+        "intent": "I3",
+        "value": "high",
+        "theme": "数据存储位置与监管合规风险",
+        "reason": "涉及数据安全、合规风险及监管态度，是客户核心顾虑点。"
+      }
+    ],
+    "历史数据覆盖逻辑": [
+      {
+        "idx": 130,
+        "id": "e70e4d12-bc21-44b9-a9eb-4211be608367",
+        "customer": "未知",
+        "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+        "question": "我是否会覆盖之前的重报数据？",
+        "category": "2.3",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "历史数据覆盖逻辑",
+        "reason": "涉及数据版本管理和报送逻辑细节。"
+      }
+    ],
+    "数据整改与覆盖逻辑确认": [
+      {
+        "idx": 131,
+        "id": "f46ddee0-5963-4677-85f4-19dfb64b4fb1",
+        "customer": "未知",
+        "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+        "question": "你不是在整改时，还需要覆盖原有数据。也就是说，数据进入可依据的数据后，存入对应的表格。在检查脚本时，可以在脚本中写入相应的操作，将数据写入。",
+        "category": "3.2",
+        "intent": "I3",
+        "value": "medium",
+        "theme": "数据整改与覆盖逻辑确认",
+        "reason": "确认技术实现细节，涉及数据写入和脚本处理方式。"
+      }
+    ],
+    "数据溯源与连续性问题": [
+      {
+        "idx": 132,
+        "id": "c6436e93-7741-454a-b1ae-718d55c6bc38",
+        "customer": "未知",
+        "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+        "question": "你的意思是他要做溯源，连续性会不会出现问题？",
+        "category": "3.2",
+        "intent": "I3",
+        "value": "medium",
+        "theme": "数据溯源与连续性问题",
+        "reason": "涉及数据治理核心能力（溯源）及数据质量监控。"
+      }
+    ],
+    "上线后数据治理缓冲期安排": [
+      {
+        "idx": 134,
+        "id": "1a14d1d6-e45c-4edb-b87b-7573d989fc89",
+        "customer": "未知",
+        "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+        "question": "他上线之后是否会提供一个数据治理的周期或缓和期？我记得之前听其他同学提过，是否存在这样的安排？",
+        "category": "3.1",
+        "intent": "I1",
+        "value": "high",
+        "theme": "上线后数据治理缓冲期安排",
+        "reason": "涉及监管合规策略和项目风险控制，客户关注上线后的容错空间。"
+      }
+    ],
+    "申报时间计划与合规处罚风险": [
+      {
+        "idx": 135,
+        "id": "4321344a-3bc1-49c6-8abf-e72cdc9b98f7",
+        "customer": "未知",
+        "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+        "question": "我计划在2026年12月底之前进行申报，但2027年的第一次数据存在问题，是否会因此受到处罚？是否存在数据治理措施？",
+        "category": "3.1",
+        "intent": "I3",
+        "value": "high",
+        "theme": "申报时间计划与合规处罚风险",
+        "reason": "明确客户时间表（2026年底），并涉及核心合规顾虑（处罚风险）。"
+      }
+    ],
+    "项目实施范围与人员分工边界": [
+      {
+        "idx": 137,
+        "id": "b3761777-4092-4be9-bdc1-3af4545611c9",
+        "customer": "未知",
+        "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+        "question": "这次我们计算的人员不包括从数据源到监管决策层的买品，谁负责这个环节？",
+        "category": "1.3",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "项目实施范围与人员分工边界",
+        "reason": "明确责任边界，涉及实施落地的组织保障。"
+      }
+    ],
+    "业务部门参与度": [
+      {
+        "idx": 138,
+        "id": "8bcd1054-ba4a-4db9-9299-9afae2f637c7",
+        "customer": "未知",
+        "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+        "question": "这个业务部门需要参加吗？",
+        "category": "1.3",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "业务部门参与度",
+        "reason": "涉及项目推进的组织协调问题。"
+      }
+    ],
+    "监管报送数据需求咨询": [
+      {
+        "idx": 140,
+        "id": "496b0091-744f-46e7-a2f4-936972d52e30",
+        "customer": "未知",
+        "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+        "question": "我不知道你这个监管报送需要哪些数据。",
+        "category": "2.3",
+        "intent": "I5",
+        "value": "medium",
+        "theme": "监管报送数据需求咨询",
+        "reason": "客户对监管报送数据范围存在认知盲区，需要售前引导。"
+      }
+    ],
+    "数据治理厂商选型咨询": [
+      {
+        "idx": 141,
+        "id": "70001ad1-036c-4f45-ad8b-60338eebd16d",
+        "customer": "未知",
+        "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+        "question": "请问您觉得目前在数据治理方面，哪家公司表现较好？",
+        "category": "0.0",
+        "intent": "I2",
+        "value": "high",
+        "theme": "数据治理厂商选型咨询",
+        "reason": "涉及市场评价和选型参考，是关键决策点。"
+      }
+    ],
+    "产品知识产权与资质": [
+      {
+        "idx": 144,
+        "id": "eb9d8e29-58ab-4dac-ac46-62d76236f91d",
+        "customer": "未知",
+        "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+        "question": "你们对自研的这个产品是否拥有著作权？",
+        "category": "1.1",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "产品知识产权与资质",
+        "reason": "涉及合规性采购要求和厂商实力评估。"
+      }
+    ],
+    "团队职责与代理模式": [
+      {
+        "idx": 145,
+        "id": "1b7ef76f-5eb3-4ecb-be49-dcfdfbf64cd1",
+        "customer": "未知",
+        "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+        "question": "你现在这个团队负责监管和银行的代理商吗？",
+        "category": "1.2",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "团队职责与代理模式",
+        "reason": "涉及服务支持渠道和责任主体确认。"
+      }
+    ],
+    "厂商项目经验评估": [
+      {
+        "idx": 146,
+        "id": "9f172a9a-6350-4a91-a5c7-b701afcb3e28",
+        "customer": "未知",
+        "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+        "question": "你们擅长做的项目多吗？",
+        "category": "1.1",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "厂商项目经验评估",
+        "reason": "评估厂商实施能力和经验丰富度。"
+      }
+    ],
+    "竞品案例风险与失败原因分析": [
+      {
+        "idx": 147,
+        "id": "5590f17d-5ba9-4c94-b97b-0fe4f7eb3ab2",
+        "customer": "未知",
+        "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+        "question": "科荣在第一年刚完成徽商银行的项目后被罚款了400多万元，这是什么原因？",
+        "category": "1.1",
+        "intent": "I2",
+        "value": "high",
+        "theme": "竞品案例风险与失败原因分析",
+        "reason": "涉及竞品分析、项目风险意识，客户关注实施风险和厂商避坑能力。"
+      }
+    ],
+    "校验规则配置灵活性": [
+      {
+        "idx": 149,
+        "id": "51be7434-2a84-4ffe-a4b1-b001b1250905",
+        "customer": "未知",
+        "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+        "question": "这校验的规则是自带的还是可配置的？",
+        "category": "2.3",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "校验规则配置灵活性",
+        "reason": "涉及产品功能架构和易用性。"
+      }
+    ],
+    "产品网络连接方式与部署架构": [
+      {
+        "idx": 150,
+        "id": "de17f9ac-9f02-4699-8ecf-84b2be5a45f5",
+        "customer": "未知",
+        "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+        "question": "这个产品可以通过互联网连接吗？",
+        "category": "2.4",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "产品网络连接方式与部署架构",
+        "reason": "涉及网络架构和安全合规要求。"
+      }
+    ],
+    "安全监管级别询问": [
+      {
+        "idx": 152,
+        "id": "08688d2f-98b1-4361-b077-e952c9aee33d",
+        "customer": "未知",
+        "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+        "question": "你们的监管级别有哪些？是否存在黑色监管级？",
+        "category": "0.0",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "安全监管级别询问",
+        "reason": "涉及系统安全合规与监管等级划分，属于非功能性需求。"
+      }
+    ],
+    "实施周期与监管改造可行性": [
+      {
+        "idx": 153,
+        "id": "d4ad395f-3dfa-44f9-bfbe-fbf766b5bb47",
+        "customer": "未知",
+        "session": "20250801-梁宏-安徽农信-安徽农信一表通建设.m4a",
+        "question": "如果只是单纯完成100多个任务，6个月可以吗，包括监管机制改造？",
+        "category": "5.2",
+        "intent": "I1",
+        "value": "high",
+        "theme": "实施周期与监管改造可行性",
+        "reason": "涉及项目工期、任务量评估及监管机制改造，直接关系项目落地计划。"
+      }
+    ],
+    "实施周期与资源投入": [
+      {
+        "idx": 154,
+        "id": "287e8266-d81f-4655-a7a9-ffb79552f610",
+        "customer": "未知",
+        "session": "20250814-郑相宜-汇丰银行-汇丰银行一表通建设.m4a",
+        "question": "请提供你们的实施周期大致情况以及资源推荐。",
+        "category": "5.2",
+        "intent": "I2",
+        "value": "medium",
+        "theme": "实施周期与资源投入",
+        "reason": "涉及项目实施计划与人力配置，属于常规售前咨询。"
+      }
+    ],
+    "数据溯源工具覆盖范围": [
+      {
+        "idx": 155,
+        "id": "d8f8c36b-bf0b-4ba4-9283-2380030341ff",
+        "customer": "未知",
+        "session": "20250814-郑相宜-汇丰银行-汇丰银行一表通建设.m4a",
+        "question": "请问这个溯源工具的覆盖范围是怎样的？我想了解它是否能实现从数据产生到报表的端到端穿透，特别是在业务开展和录入环节的追溯。我们监管要求能追溯报表字段的来龙去脉，想知道这个工具是否能覆盖我们平台内部数据库以及其他系统的溯源。",
+        "category": "2.3",
+        "intent": "I2",
+        "value": "high",
+        "theme": "数据溯源工具覆盖范围",
+        "reason": "涉及端到端数据溯源、穿透式监管等核心功能需求，是监管报送的关键能力。"
+      }
+    ],
+    "历史数据溯源与代码版本管理": [
+      {
+        "idx": 156,
+        "id": "ef7a4e7a-d556-463d-8871-4b71cf41d2d5",
+        "customer": "未知",
+        "session": "20250814-郑相宜-汇丰银行-汇丰银行一表通建设.m4a",
+        "question": "我在2025年8月份产出了这个报表，之后在2025年10月份时，我还想了解这个报表的加工过程以及数据来源。由于中间可能对代码进行了修改，基于代码的溯源可能不准确。请问有什么方法可以帮助我定位导致报送问题的源头数据？",
+        "category": "2.3",
+        "intent": "I3",
+        "value": "high",
+        "theme": "历史数据溯源与代码版本管理",
+        "reason": "涉及代码变更后的历史数据回溯痛点，技术场景具体，对产品能力要求高。"
+      }
+    ],
+    "历史代码溯源能力": [
+      {
+        "idx": 157,
+        "id": "4fad45b7-f182-4a41-9007-d3c7798add93",
+        "customer": "未知",
+        "session": "20250814-郑相宜-汇丰银行-汇丰银行一表通建设.m4a",
+        "question": "基于你的代码，但你的代码已经发生变化。在8月至10月之间，可能已经部署了一些新的变更。我们在溯源时还能基于历史代码进行追溯吗？",
+        "category": "3.2",
+        "intent": "I3",
+        "value": "high",
+        "theme": "历史代码溯源能力",
+        "reason": "针对代码变更场景下的溯源技术实现追问，属于深度技术细节。"
+      }
+    ],
+    "T+0/T+1报送流程与用户界面": [
+      {
+        "idx": 159,
+        "id": "a984048f-ab28-4cdf-a5d6-280e354da283",
+        "customer": "未知",
+        "session": "20250814-郑相宜-汇丰银行-汇丰银行一表通建设.m4a",
+        "question": "能否从用户角度考虑，例如我们以后采用T+1报送方式，当多个团队的用户登录时，在哪个界面可以查看其名下有多少数据掉落，以及如何进行修改？这是T+1的情况。如果采用T+0方式，用户在流程中需要补录的数据是否有对应的界面可以操作？",
+        "category": "2.3",
+        "intent": "I1",
+        "value": "high",
+        "theme": "T+0/T+1报送流程与用户界面",
+        "reason": "涉及不同报送模式下的用户操作界面、数据掉落处理及补录流程，核心业务场景。"
+      }
+    ],
+    "字段级权限分配": [
+      {
+        "idx": 160,
+        "id": "57d7e1b6-9dc2-474d-89e8-b6b4000af7e6",
+        "customer": "未知",
+        "session": "20250814-郑相宜-汇丰银行-汇丰银行一表通建设.m4a",
+        "question": "我想进一步确认，同一行中的不同字段可以分配给不同部门的用户，对吗？",
+        "category": "2.3",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "字段级权限分配",
+        "reason": "涉及数据确权与细粒度权限控制功能。"
+      }
+    ],
+    "数据修改流程与权限控制": [
+      {
+        "idx": 161,
+        "id": "3f26edf1-281c-4de8-84d7-0b542d0bb4ab",
+        "customer": "未知",
+        "session": "20250814-郑相宜-汇丰银行-汇丰银行一表通建设.m4a",
+        "question": "可以不需要分，但修改的内容需要分开，因为修改后需要先查看整体，才能对自己关注的字段进行调整。我之前提到的按照列区分主要是在修改环节。",
+        "category": "2.3",
+        "intent": "I5",
+        "value": "medium",
+        "theme": "数据修改流程与权限控制",
+        "reason": "涉及数据修改环节的协作流程与列级权限控制，属于具体功能交互细节。"
+      }
+    ],
+    "监管区数据可见性权限": [
+      {
+        "idx": 162,
+        "id": "74fb8546-6802-4bfe-b4a9-d2982a2ea0a0",
+        "customer": "未知",
+        "session": "20250814-郑相宜-汇丰银行-汇丰银行一表通建设.m4a",
+        "question": "区里的数据我们银行的人也可以查看吗？",
+        "category": "2.3",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "监管区数据可见性权限",
+        "reason": "涉及银行人员对监管区数据的访问权限，关乎数据安全与业务流程。"
+      }
+    ],
+    "一表通与1104报表转化功能": [
+      {
+        "idx": 163,
+        "id": "8c153dbe-e807-4d10-9819-6c4098e28c14",
+        "customer": "未知",
+        "session": "20250814-郑相宜-汇丰银行-汇丰银行一表通建设.m4a",
+        "question": "请问你们这个界面是否有一键转化功能与1104的对比？",
+        "category": "2.3",
+        "intent": "I1",
+        "value": "high",
+        "theme": "一表通与1104报表转化功能",
+        "reason": "涉及一表通与现有监管报送体系（1104）的衔接与转化，属于核心功能需求。"
+      }
+    ],
+    "补录功能与时效性": [
+      {
+        "idx": 164,
+        "id": "51dc5fb6-25e3-409d-8d57-459fb73d4254",
+        "customer": "未知",
+        "session": "20250814-郑相宜-汇丰银行-汇丰银行一表通建设.m4a",
+        "question": "你们的补录功能在哪里？是T+1还是T+0？",
+        "category": "2.3",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "补录功能与时效性",
+        "reason": "涉及补录功能的具体位置及T+0/T+1模式支持，属于基础功能咨询。"
+      }
+    ],
+    "数据校验节点确认": [
+      {
+        "idx": 165,
+        "id": "ba3b26aa-7047-426d-9995-3580b4aec2bd",
+        "customer": "未知",
+        "session": "20250814-郑相宜-汇丰银行-汇丰银行一表通建设.m4a",
+        "question": "我们的数据校验是在报送区进行的，对吗？",
+        "category": "2.3",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "数据校验节点确认",
+        "reason": "涉及数据质量校验发生的具体架构位置（报送区），确认技术流程。"
+      }
+    ],
+    "异常数据定位与确权机制": [
+      {
+        "idx": 166,
+        "id": "fea4c69f-1e28-4e17-99ef-8ccb0aba356c",
+        "customer": "未知",
+        "session": "20250814-郑相宜-汇丰银行-汇丰银行一表通建设.m4a",
+        "question": "当交易规则出现问题，比如数据质量出现异常时，贵方如何通过数据源和前述的确权模块定位到具体的前端数据源？",
+        "category": "2.3",
+        "intent": "I1",
+        "value": "high",
+        "theme": "异常数据定位与确权机制",
+        "reason": "涉及数据质量异常时的源头定位及确权模块联动，解决核心痛点。"
+      }
+    ],
+    "数据时效性与案例参考": [
+      {
+        "idx": 167,
+        "id": "2ed66a45-7db1-47ab-8713-9b103a84d77d",
+        "customer": "未知",
+        "session": "20250814-郑相宜-汇丰银行-汇丰银行一表通建设.m4a",
+        "question": "你们可以预估使用你们产品后，数据到达可信区大概需要多长时间吗？请结合类似客户的实际案例说明。",
+        "category": "2.1",
+        "intent": "I1",
+        "value": "high",
+        "theme": "数据时效性与案例参考",
+        "reason": "涉及数据入可信区的性能指标（时效性）及同类案例，关乎选型决策。"
+      }
+    ],
+    "招投标范围与数据接口要求": [
+      {
+        "idx": 168,
+        "id": "a0ef8fc0-acb7-4d36-9b7a-8ae691672526",
+        "customer": "未知",
+        "session": "20250814-郑相宜-汇丰银行-汇丰银行一表通建设.m4a",
+        "question": "我们现在打算进行招投标，涉及报送区和可信区。请问如果使用你们的产品，对数据区有什么要求吗？比如数据需要在什么时间点传送到你们的准备区。",
+        "category": "5.5",
+        "intent": "I1",
+        "value": "high",
+        "theme": "招投标范围与数据接口要求",
+        "reason": "涉及招投标边界、数据区架构要求及接口时间点，直接影响方案设计。"
+      }
+    ],
+    "产品自研与供应商背景": [
+      {
+        "idx": 169,
+        "id": "e6b2ba4e-e397-4fba-b436-92ef0385bb5e",
+        "customer": "未知",
+        "session": "20250814-郑相宜-汇丰银行-汇丰银行一表通建设.m4a",
+        "question": "永兴这边，你们的可信区产品是自研的还是用建信金科的代理？",
+        "category": "1.1",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "产品自研与供应商背景",
+        "reason": "涉及产品核心来源（自研/代理）及竞品对比，影响选型判断。"
+      }
+    ],
+    "案例情况与客户类型": [
+      {
+        "idx": 170,
+        "id": "cc1ffd75-c25b-4e6f-b3a4-03e4ad185dae",
+        "customer": "未知",
+        "session": "20250819-唐克-龙江银行-龙江银行一表通建设.m4a",
+        "question": "你们没有省级中心的案例，你们是几个？昆山农商股份制吗？",
+        "category": "1.1",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "案例情况与客户类型",
+        "reason": "涉及标杆案例（省级中心）及客户性质确认，属于选型参考因素。"
+      }
+    ],
+    "竞品案例分析": [
+      {
+        "idx": 172,
+        "id": "c086879e-b45e-495a-9f34-cfae74013cd1",
+        "customer": "未知",
+        "session": "20250819-唐克-龙江银行-龙江银行一表通建设.m4a",
+        "question": "东华不是从事监管工作，为什么他有这么多案例？",
+        "category": "1.1",
+        "intent": "I2",
+        "value": "medium",
+        "theme": "竞品案例分析",
+        "reason": "涉及对竞争对手（东华）的市场表现疑问，属于竞品分析维度。"
+      }
+    ],
+    "业务术语定义": [
+      {
+        "idx": 173,
+        "id": "b8935c78-2f3c-43dd-897e-434b00b1ae2b",
+        "customer": "未知",
+        "session": "20250819-唐克-龙江银行-龙江银行一表通建设.m4a",
+        "question": "债务，实际上是指什么？",
+        "category": "0.0",
+        "intent": "I5",
+        "value": "medium",
+        "theme": "业务术语定义",
+        "reason": "涉及具体业务指标（债务）的确认，影响业务理解。"
+      }
+    ],
+    "信创国产化与接口架构": [
+      {
+        "idx": 175,
+        "id": "60f25db9-16e9-41f9-9477-02f1319d3b16",
+        "customer": "未知",
+        "session": "20250911-田军-湖北农信-湖北农信一表通.m4a",
+        "question": "我们有个问题，就是我看到原来ODS向监管报告的系统都是国产化的，比如利率报备、二代征信等系统。这些系统国产化后，都是由你们提示的，对吗？",
+        "category": "2.4",
+        "intent": "I1",
+        "value": "high",
+        "theme": "信创国产化与接口架构",
+        "reason": "涉及国产化替代背景下的系统架构与接口提供方式，属于关键技术路线。"
+      }
+    ],
+    "接口标准迁移策略": [
+      {
+        "idx": 176,
+        "id": "3bf1b907-90fc-47f3-9278-aa9a2ed67d48",
+        "customer": "未知",
+        "session": "20250911-田军-湖北农信-湖北农信一表通.m4a",
+        "question": "请确认一下这个事项。由于涉及到我们是否还需要继续使用原来根据报备提供的接口，原本你们说不再提供，而是全部通过L型接口提供。请问是否还需要继续供给原接口？",
+        "category": "2.4",
+        "intent": "I1",
+        "value": "high",
+        "theme": "接口标准迁移策略",
+        "reason": "涉及L型接口与原接口的供给策略，属于关键技术决策点。"
+      }
+    ],
+    "工作量评估与预算": [
+      {
+        "idx": 177,
+        "id": "9bd7d647-b9db-4e1b-b6e9-a6884e768ec7",
+        "customer": "未知",
+        "session": "20250911-田军-湖北农信-湖北农信一表通.m4a",
+        "question": "你现在的工作量是多少？价格是否足够？",
+        "category": "4.1",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "工作量评估与预算",
+        "reason": "涉及项目报价与工作量评估，属于商务决策因素。"
+      }
+    ],
+    "系统归属与边界": [
+      {
+        "idx": 178,
+        "id": "72b37652-266f-49e7-ab24-74127dc4d271",
+        "customer": "未知",
+        "session": "20250911-田军-湖北农信-湖北农信一表通.m4a",
+        "question": "那这个整个系统上的东西还是你的东西，是你的还是他的？",
+        "category": "0.0",
+        "intent": "I5",
+        "value": "medium",
+        "theme": "系统归属与边界",
+        "reason": "涉及系统建设后的归属权问题，影响商务条款。"
+      }
+    ],
+    "数据库运行环境": [
+      {
+        "idx": 179,
+        "id": "29e22665-e57e-4e41-8da8-415237e20bce",
+        "customer": "未知",
+        "session": "20250911-田军-湖北农信-湖北农信一表通.m4a",
+        "question": "他现在是在Oracle上运行吗？",
+        "category": "2.2",
+        "intent": "I5",
+        "value": "medium",
+        "theme": "数据库运行环境",
+        "reason": "涉及底层数据库技术栈，属于技术架构细节。"
+      }
+    ],
+    "业务术语定义（平替）": [
+      {
+        "idx": 180,
+        "id": "9aaf1d96-a1cc-4a84-ba7b-39ac9981429d",
+        "customer": "未知",
+        "session": "20250911-田军-湖北农信-湖北农信一表通.m4a",
+        "question": "现阶段按照我们原有的思路，基本上都是平替。例如，反洗钱也是平替。请问平替是什么意思？",
+        "category": "2.3",
+        "intent": "I2",
+        "value": "medium",
+        "theme": "业务术语定义（平替）",
+        "reason": "涉及“平替”概念的理解，影响实施策略的共识。"
+      }
+    ],
+    "取数方案与成本周期估算": [
+      {
+        "idx": 181,
+        "id": "b2113c87-e4d5-422b-b2be-a550853f1161",
+        "customer": "未知",
+        "session": "20250911-田军-湖北农信-湖北农信一表通.m4a",
+        "question": "你觉得直接从贴片层或者原层取数的周期和费用大概是多少？",
+        "category": "4.1",
+        "intent": "I1",
+        "value": "high",
+        "theme": "取数方案与成本周期估算",
+        "reason": "涉及贴源层取数的技术方案、实施周期及费用，核心成本考量。"
+      }
+    ],
+    "改造费用与周期估算": [
+      {
+        "idx": 182,
+        "id": "c03a2831-ec8a-4bfa-abba-63c964beec64",
+        "customer": "未知",
+        "session": "20250911-田军-湖北农信-湖北农信一表通.m4a",
+        "question": "按揭方案的工价费用大概是多少，周期有多长？两个周期的改造费用是多少？这个改造周期的费用是多少？",
+        "category": "4.1",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "改造费用与周期估算",
+        "reason": "涉及具体业务场景（按揭）的改造费用与工期，属于预算规划。"
+      }
+    ],
+    "项目预算与成本补偿": [
+      {
+        "idx": 183,
+        "id": "1d7e7ba3-be21-46c4-a99e-bb0997c79ae3",
+        "customer": "未知",
+        "session": "20250911-田军-湖北农信-湖北农信一表通.m4a",
+        "question": "我不知道补偿金额是多少。如果你的项目需要补偿1200万元，实际上补偿大约是1000多万元，是这样吗？",
+        "category": "4.1",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "项目预算与成本补偿",
+        "reason": "涉及项目具体金额与补偿机制讨论，属于商务谈判细节。"
+      }
+    ],
+    "项目进度风险应对": [
+      {
+        "idx": 184,
+        "id": "f58d890f-8b3c-4766-8edf-957359a1fa65",
+        "customer": "未知",
+        "session": "20250911-田军-湖北农信-湖北农信一表通.m4a",
+        "question": "如果按照他说，软件整改建成的决定计划实际上来不及，应该怎么处理？",
+        "category": "0.0",
+        "intent": "I5",
+        "value": "high",
+        "theme": "项目进度风险应对",
+        "reason": "涉及工期紧张时的应对策略，属于项目风险管理。"
+      }
+    ],
+    "方案对比分析": [
+      {
+        "idx": 186,
+        "id": "2d5cf1af-bec5-4836-85ea-443754ee7796",
+        "customer": "未知",
+        "session": "20250911-田军-湖北农信-湖北农信一表通.m4a",
+        "question": "这两个方案中，方案一的优势和劣势是什么？",
+        "category": "0.0",
+        "intent": "I2",
+        "value": "high",
+        "theme": "方案对比分析",
+        "reason": "涉及不同建设方案的优劣势对比，直接关联选型决策。"
+      }
+    ],
+    "项目立项策略": [
+      {
+        "idx": 187,
+        "id": "71484f80-aba2-4bf2-9b0d-f2741a1b366e",
+        "customer": "未知",
+        "session": "20250917-张瑶瑶-台湾银行上海-台湾银行上海一表通新建.m4a",
+        "question": "在设计和作业方面，产品需要申请汇总。如果将其包装成原系统的改造，可以吗？",
+        "category": "3.3",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "项目立项策略",
+        "reason": "涉及项目包装与立项审批的策略，影响项目启动方式。"
+      }
+    ],
+    "自动化优化需求": [
+      {
+        "idx": 190,
+        "id": "10b254e8-d4cc-4900-8512-1931c3dbe2bf",
+        "customer": "未知",
+        "session": "20250917-张瑶瑶-台湾银行上海-台湾银行上海一表通新建.m4a",
+        "question": "请问是否可以考虑帮我们优化一下，因为目前无法通过手工操作完成这些工作？",
+        "category": "3.3",
+        "intent": "I4",
+        "value": "medium",
+        "theme": "自动化优化需求",
+        "reason": "涉及手工操作痛点与系统优化需求，体现客户真实痛点。"
+      }
+    ],
+    "进度安排自主权": [
+      {
+        "idx": 191,
+        "id": "9186e898-1b4a-4f01-b8b8-29d10e87a654",
+        "customer": "未知",
+        "session": "20250917-张瑶瑶-台湾银行上海-台湾银行上海一表通新建.m4a",
+        "question": "不是让我们自己选择何时完成吗？",
+        "category": "5.2",
+        "intent": "I1",
+        "value": "medium",
+        "theme": "进度安排自主权",
+        "reason": "涉及项目实施过程中的时间节点控制权，属于流程细节。"
+      }
+    ],
+    "人员分工安排": [
+      {
+        "idx": 193,
+        "id": "f0089bca-94d7-4c67-8b93-ace0d69db01c",
+        "customer": "未知",
+        "session": "20250917-张瑶瑶-台湾银行上海-台湾银行上海一表通新建.m4a",
+        "question": "抄表工作仍未有人负责，是否需要安排人员？",
+        "category": "2.3",
+        "intent": "I3",
+        "value": "medium",
+        "theme": "人员分工安排",
+        "reason": "涉及填报工作的责任归属与人力安排，影响实施计划。"
+      }
+    ],
+    "数据质量定义": [
+      {
+        "idx": 194,
+        "id": "250dd9b8-2d13-491e-828b-cdf969711fcd",
+        "customer": "未知",
+        "session": "20250917-张瑶瑶-台湾银行上海-台湾银行上海一表通新建.m4a",
+        "question": "数据质量问题具体指什么？",
+        "category": "3.2",
+        "intent": "I5",
+        "value": "medium",
+        "theme": "数据质量定义",
+        "reason": "涉及数据质量问题的具体界定，属于业务规则确认。"
+      }
+    ],
+    "厂商技术能力要求": [
+      {
+        "idx": 198,
+        "id": "e7e6d342-23da-45b7-9bc6-edc8db9681b2",
+        "customer": "未知",
+        "session": "20250917-张瑶瑶-台湾银行上海-台湾银行上海一表通新建.m4a",
+        "question": "那一块的技术成熟要求很高，如果一个厂商过来讲都讲不清楚，我这边是过不了的。",
+        "category": "1.1",
+        "intent": "I5",
+        "value": "medium",
+        "theme": "厂商技术能力要求",
+        "reason": "涉及客户对供应商技术成熟度的考核标准，影响选型评分。"
+      }
+    ]
+  }
+}

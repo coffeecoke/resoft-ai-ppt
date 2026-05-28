@@ -748,13 +748,20 @@ router.get('/video/config', async (req, res) => {
 
 router.put('/video/config', async (req, res) => {
   try {
-    const { pollingInterval, maxConcurrent, scanLimit, scanWindowHours, autoContinueAfterRoleConfirm } =
-      req.body || {}
+    const {
+      pollingInterval,
+      maxConcurrent,
+      scanLimit,
+      scanWindowHours,
+      autoPushRoleConfirmCard,
+      autoContinueAfterRoleConfirm
+    } = req.body || {}
     const updated = await videoGenerationBatchService.updateConfig({
       pollingInterval,
       maxConcurrent,
       scanLimit,
       scanWindowHours,
+      autoPushRoleConfirmCard,
       autoContinueAfterRoleConfirm
     })
     res.json({ success: true, message: '视频跑批配置已更新', data: updated })

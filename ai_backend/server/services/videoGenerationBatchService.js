@@ -17,6 +17,9 @@ class VideoGenerationBatchService {
       maxConcurrent: 1,
       scanLimit: 50,
       scanWindowHours: 72,
+      /** 转录完成后是否自动发企微「说话人角色确认」卡片；默认 false，仅在管理端勾选后推送 */
+      autoPushRoleConfirmCard: false,
+      /** 仅在已发角色确认卡片后生效：是否自动跑后续流水线 */
       autoContinueAfterRoleConfirm: true
     }
     this.statistics = {
@@ -93,6 +96,19 @@ class VideoGenerationBatchService {
     if (newConfig.maxConcurrent != null) next.maxConcurrent = Number(newConfig.maxConcurrent)
     if (newConfig.scanLimit != null) next.scanLimit = Number(newConfig.scanLimit)
     if (newConfig.scanWindowHours != null) next.scanWindowHours = Number(newConfig.scanWindowHours)
+    if (newConfig.autoPushRoleConfirmCard != null) {
+      const raw = newConfig.autoPushRoleConfirmCard
+      if (typeof raw === 'boolean') {
+        next.autoPushRoleConfirmCard = raw
+      } else if (typeof raw === 'string') {
+        const v = raw.trim().toLowerCase()
+        if (v === 'true' || v === '1') next.autoPushRoleConfirmCard = true
+        else if (v === 'false' || v === '0') next.autoPushRoleConfirmCard = false
+        else throw new Error('自动推送角色确认卡片必须是 true/false')
+      } else {
+        next.autoPushRoleConfirmCard = Boolean(raw)
+      }
+    }
     if (newConfig.autoContinueAfterRoleConfirm != null) {
       const raw = newConfig.autoContinueAfterRoleConfirm
       if (typeof raw === 'boolean') {
@@ -117,6 +133,9 @@ class VideoGenerationBatchService {
     }
     if (!Number.isFinite(next.scanWindowHours) || next.scanWindowHours < 0 || next.scanWindowHours > 720) {
       throw new Error('扫描时间窗口(小时)必须在 0-720，0 表示不限制')
+    }
+    if (typeof next.autoPushRoleConfirmCard !== 'boolean') {
+      throw new Error('自动推送角色确认卡片必须是布尔值')
     }
     if (typeof next.autoContinueAfterRoleConfirm !== 'boolean') {
       throw new Error('自动继续开关必须是布尔值')
@@ -158,7 +177,10 @@ class VideoGenerationBatchService {
   async getStatistics() {
     const pending = await this.countPendingRecords()
     const completed = await prisma.log_sync_status.count({
-      where: { sync_type: SYNC_TYPE, status: { in: ['confirming', 'completed'] } }
+      where: {
+        sync_type: SYNC_TYPE,
+        status: { in: ['transcribed', 'confirming', 'completed'] }
+      }
     })
     return {
       ...this.statistics,
@@ -223,12 +245,18 @@ class VideoGenerationBatchService {
         sync_params: syncParams,
         start_time: new Date(),
         status,
-        end_time: status === 'failed' || status === 'confirming' || status === 'completed' ? new Date() : null
+        end_time:
+          status === 'failed' || status === 'transcribed' || status === 'confirming' || status === 'completed'
+            ? new Date()
+            : null
       },
       update: {
         status,
         sync_params: syncParams,
-        end_time: status === 'failed' || status === 'confirming' || status === 'completed' ? new Date() : null,
+        end_time:
+          status === 'failed' || status === 'transcribed' || status === 'confirming' || status === 'completed'
+            ? new Date()
+            : null,
         error_message: extra.error_message ? String(extra.error_message).slice(0, 1000) : null
       }
     })
@@ -295,6 +323,22 @@ class VideoGenerationBatchService {
           reportId: crmRow.report_id ? String(crmRow.report_id).slice(0, 50) : null,
       createdBy: fromUser
     })
+
+    if (!this.config.autoPushRoleConfirmCard) {
+      await this.upsertSyncStatus(crmRow, 'transcribed', {
+        transcription_id: transcription.id
+      })
+      await this.updateCrmRowStatusIfPossible(crmRow.id, '已转录')
+      this.addLog('info', `转录已落库，未自动推送角色确认卡片（可在「售前视频」页手动发送）${crmId}`, {
+        transcriptionId: transcription.id,
+        wecomUserId: fromUser
+      })
+      this.addLog('success', `处理完成（仅转录）${crmId}`, {
+        transcriptionId: transcription.id,
+        fromUser
+      })
+      return
+    }
 
     if (this.config.autoContinueAfterRoleConfirm) {
       await presalesVideoPipelineOrchestrator.startPipelineRun({

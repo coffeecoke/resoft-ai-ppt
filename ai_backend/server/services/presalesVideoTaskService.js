@@ -2,7 +2,7 @@
  * 售前视频生成主任务：Coze 上传与工作流信息落库
  *
  * analysis_content 回调成功时，内容除入库外会写入本地 .md（目录见 PRESALES_VIDEO_ANALYSIS_MD_DIR），文件名为录音显示名安全化 + .md（original_file_name / name），成功落盘路径写入 reserve_3（最长 500 字符，超出截断）
- * video_create 成功回调可选 body.playlist_url / playlistUrl：播放列表（如 m3u8）等写入 reserve_5（最长 500，超出截断）；可选 body.duration（或 video_duration）：写入 psv_video_info.duration（秒，Decimal）；同时 upsert psv_video_info：id=execute_id；title=转录名去路径与常见后缀；url 与 reserve_5 同值（有 playlist 时）；cover 与 url 同源路径但最后一档改为 cover.jpg（如 …/index.m3u8 → …/cover.jpg，由完整 playlist 串计算）。无 playlist 时 url 仍走 buildPresalesVideoPublicPlayUrl(主视频)，cover 同规则由主视频 URL 推导。
+ * video_create 成功回调可选 body.playlist_url / playlistUrl：播放列表（如 m3u8）等写入 reserve_5（最长 500，超出截断）；可选 body.duration（或 video_duration）：写入 psv_video_info.duration（秒，Decimal）；同时 upsert psv_video_info：id=execute_id；title=转录名去路径与常见后缀；url 与 reserve_5 同值（有 playlist 时）；cover 与 url 同源路径但最后一档改为 cover.jpg（如 …/index.m3u8 → …/cover.jpg，由完整 playlist 串计算）。无 playlist 时 url 仍走 buildPresalesVideoPublicPlayUrl(主视频)，cover 同规则由主视频 URL 推导。**category**：按第三方线索 XSFL，「新产品」「新客户」原样写入，否则写「升级」。
  */
 
 const fs = require('fs/promises')
@@ -110,7 +110,54 @@ const VIDEO_ADDRESS_MAX_LEN = 2000
 const LAST_ERROR_MAX_LEN = 2000
 const RESERVE3_MAX_LEN = 500
 const RESERVE5_MAX_LEN = 500
-/** psv_video_info 与库表 VarChar 一致 */
+/** psv_video_info.category：VarChar(64) */
+const PSV_VIDEO_CATEGORY_MAX = 64
+
+/** XSFL（线索类型）→ psv_video_info.category：仅「新产品」「新客户」原样；否则「升级」 */
+function mapXsflToPsvVideoCategory(xsfl) {
+  const t = String(xsfl || '').trim()
+  if (t === '新产品' || t === '新客户') return t
+  return '升级'
+}
+
+function clipPsvVideoCategory(val) {
+  const raw = val == null ? '' : String(val).trim()
+  const s = (raw === '' ? '升级' : raw).slice(0, PSV_VIDEO_CATEGORY_MAX)
+  return s || '升级'
+}
+
+/**
+ * 通过报备 lead_code/lead_id 调 resolveClueSummary（含第三方 getClueFullInfo）取 XSFL → category
+ */
+async function resolvePsvVideoCategoryForUpsert(transcriptionId) {
+  let reportStub = null
+  try {
+    const tr = await prisma.transcriptions.findUnique({
+      where: { id: String(transcriptionId || '') },
+      select: { report_id: true, session_id: true }
+    })
+    const rid = String(tr?.report_id || tr?.session_id || '').trim()
+    if (rid) {
+      reportStub = await prisma.communication_reports.findUnique({
+        where: { id: rid },
+        select: { lead_code: true, lead_id: true }
+      })
+    }
+  } catch (_) {
+    /* ignore */
+  }
+  if (!reportStub) return '升级'
+  try {
+    const { resolveClueSummary } = require('./presalesVideoWecomPushService')
+    const summary = await resolveClueSummary(reportStub)
+    const xsfl = summary && summary.clueType != null ? String(summary.clueType).trim() : ''
+    return mapXsflToPsvVideoCategory(xsfl)
+  } catch (e) {
+    logger.warn('[presales-video-task] psv_video_info.category 解析 XSFL 失败:', e && e.message)
+    return '升级'
+  }
+}
+
 const PSV_VIDEO_INFO_ID_MAX = 64
 const PSV_VIDEO_INFO_URL_MAX = 512
 const PSV_VIDEO_INFO_TITLE_MAX = 255
@@ -299,11 +346,14 @@ async function upsertPsvVideoInfoOnVideoCreate(executeId, transcriptionId, mainV
 
   const durationVal = parsePsvDurationSeconds(durationSeconds)
 
+  const categoryDb = clipPsvVideoCategory(await resolvePsvVideoCategoryForUpsert(transcriptionId))
+
   const createData = {
     id,
     title: titleDb,
     url,
-    cover: cover || null
+    cover: cover || null,
+    category: categoryDb
   }
   if (durationVal != null) createData.duration = durationVal
 
@@ -311,6 +361,7 @@ async function upsertPsvVideoInfoOnVideoCreate(executeId, transcriptionId, mainV
     title: titleDb,
     url,
     cover: cover || null,
+    category: categoryDb,
     updated_at: new Date()
   }
   if (durationVal != null) updateData.duration = durationVal
@@ -540,9 +591,12 @@ async function buildFrequencySection(transcriptionId) {
 
     function pickDateFromReport(r) {
       if (!r) return null
-      // 优先 com_date（业务交流日期）；无则从 main_content 正则解析
       if (r.com_date) {
         const d = new Date(r.com_date)
+        if (!Number.isNaN(d.getTime())) return d
+      }
+      if (r.report_date) {
+        const d = new Date(r.report_date)
         if (!Number.isNaN(d.getTime())) return d
       }
       if (r.main_content) {

@@ -11,8 +11,11 @@
     "import-bidding": "node scripts/import-bidding-keyword-exports.js",
     "resume-extract": "python python_services/resume_split/resume_split_extract.py",
     "resume-import": "node scripts/import-bid-resume-records.js --latest",
+    "resume-merge-canonical": "node scripts/merge-bid-resume-person-canonical.js",
+    "resume-enrich-canonical-ai": "node scripts/enrich-bid-resume-canonical-ai.js",
     "resume-probe-docx": "python python_services/resume_split/resume_split_extract.py --probe-docx",
-    "resume-batch-root": "node scripts/run-resume-batch-root.js"
+    "resume-batch-root": "node scripts/run-resume-batch-root.js",
+    "test:clue-221": "node scripts/test-clue-221-info.js"
   },
   "keywords": [
     "document",

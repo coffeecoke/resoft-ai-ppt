@@ -40,6 +40,17 @@
       border-radius: 8px;
       box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
     }
+    /* 说话人/搜索区吸附顶部，改角色时对话列表可继续向下滚动 */
+    #pvsc-toolbar.toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      margin-bottom: 12px;
+      box-shadow: 0 2px 12px rgba(15, 23, 42, 0.1);
+    }
+    .pvsc-toolbar-head {
+      flex-shrink: 0;
+    }
     .speaker-map-hint {
       font-size: 12px;
       color: var(--muted);
@@ -70,6 +81,13 @@
       flex-direction: column;
       gap: 10px;
       width: 100%;
+    }
+    #pvsc-speaker-map.speaker-map {
+      max-height: min(42vh, 320px);
+      overflow-y: auto;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
+      padding-right: 4px;
     }
     .speaker-map-row {
       display: flex;
@@ -184,6 +202,11 @@
       background: #f6ffed;
       border: 1px solid #b7eb8f;
     }
+    .role-badge-vendor {
+      color: #ad4e00;
+      background: #fff7e6;
+      border: 1px solid #ffd591;
+    }
     .row .text {
       font-size: 14px;
       white-space: pre-wrap;
@@ -233,20 +256,22 @@
   <div id="pvsc-ok" class="msg ok" style="display: none;"></div>
 
   <div class="toolbar" id="pvsc-toolbar" style="display: none;">
-    <div class="speaker-map-hint">
-      说话人角色确认：左侧为识别出的说话人标签。默认识别占位（如 SPEAKER_1）时「统一改为」初次为空、须填展示名；已保存的真实姓名再次进入会反显。每个 speaker 须勾选「客户方/我方」，改完点击：保存确认结果
+    <div class="pvsc-toolbar-head">
+      <div class="speaker-map-hint">
+        说话人角色确认：左侧为识别出的说话人标签。默认识别占位（如 SPEAKER_1）时「统一改为」初次为空、须填展示名；已保存的真实姓名再次进入会反显。每个 speaker 须勾选「客户方/我方/厂商」，改完点击底部：保存确认结果
+      </div>
+      <div class="search-box" aria-label="关键字搜索">
+        <input
+          id="pvsc-search-input"
+          class="search-in"
+          type="text"
+          placeholder="输入关键字后点击搜索，将自动定位到内容位置"
+          autocomplete="off"
+        />
+        <button type="button" class="btn btn-secondary" id="pvsc-search-btn">搜索</button>
+      </div>
+      <div class="search-result" id="pvsc-search-result"></div>
     </div>
-    <div class="search-box" aria-label="关键字搜索">
-      <input
-        id="pvsc-search-input"
-        class="search-in"
-        type="text"
-        placeholder="输入关键字后点击搜索，将自动定位到内容位置"
-        autocomplete="off"
-      />
-      <button type="button" class="btn btn-secondary" id="pvsc-search-btn">搜索</button>
-    </div>
-    <div class="search-result" id="pvsc-search-result"></div>
     <div id="pvsc-speaker-map" class="speaker-map" aria-label="说话人批量改名"></div>
   </div>
 
@@ -278,7 +303,7 @@
     ;(function () {
       var scriptUrl =
         (window.location.origin || '') +
-        '/api/presales-video/public/speaker-confirm-page.js?v=12'
+        '/api/presales-video/public/speaker-confirm-page.js?v=13'
       var hdrs = { 'ngrok-skip-browser-warning': 'true' }
       fetch(scriptUrl, { credentials: 'same-origin', headers: hdrs })
         .then(function (r) {

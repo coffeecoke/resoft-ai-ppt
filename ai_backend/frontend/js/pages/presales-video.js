@@ -27,6 +27,75 @@ function pvLibRoot() {
 /** 推送对话 / 提交工作流 返回信息较长，Toast 多停留一会（毫秒） */
 const PV_PUSH_WORKFLOW_TOAST_MS = 10000
 
+/** 与 presalesVideoWecomPushService 建群默认名规则一致 */
+const PV_WECOM_PRESALES_CHAT_SUFFIX = '-售前分析'
+
+function pvResolveWecomPushCategoryFromXsfl(xsfl) {
+  const t = String(xsfl || '').trim()
+  if (t === '新产品') return 'newProduct'
+  if (t === '新客户') return 'newCustomer'
+  return 'upgrade'
+}
+
+function pvWecomChatNamePrefixForCategory(category) {
+  if (category === 'newProduct') return '【新品】'
+  if (category === 'newCustomer') return '【新客】'
+  return '【升级】'
+}
+
+/** 与后端 stripLeadingTimeFromLabel 一致 */
+function pvStripLeadingTimeFromLabel(name) {
+  let s = String(name || '').trim()
+  if (!s) return ''
+  const patterns = [
+    /^(\d{4})[-/年](\d{1,2})[-/月](\d{1,2})日?\s*[_\-—．.\s]*/,
+    /^(\d{4})(\d{2})(\d{2})\s*[_\-—．.\s]*/,
+    /^(\d{4}-\d{2}-\d{2})(?:\s+\d{1,2}[:：]\d{2}(?::\d{2})?)?\s*[_\-—．.\s]*/
+  ]
+  for (const re of patterns) {
+    if (re.test(s)) {
+      s = s.replace(re, '').trim()
+      break
+    }
+  }
+  return s || String(name || '').trim()
+}
+
+function pvTrimToLength(s, max) {
+  const arr = Array.from(String(s || '').trim())
+  const m = max > 0 ? max : 40
+  return arr.length <= m ? arr.join('') : `${arr.slice(0, m - 1).join('')}…`
+}
+
+/**
+ * 【新品|新客|升级】+ lead_name + -售前分析（与后端 buildDefaultWecomPresalesChatName 对齐）
+ * @param {string|null|undefined} leadNameRaw 对应 communication_reports.lead_name
+ * @param {string|null|undefined} xsfl 线索类型，与 resolveClueSummary.clueType 一致
+ */
+function pvBuildDefaultPushVideoChatName(leadNameRaw, xsfl) {
+  const category = pvResolveWecomPushCategoryFromXsfl(xsfl)
+  const prefix = pvWecomChatNamePrefixForCategory(category)
+  const leadRaw = leadNameRaw != null ? String(leadNameRaw).trim() : ''
+  const stripped = pvStripLeadingTimeFromLabel(leadRaw)
+  const bodySource = stripped || leadRaw || '售前'
+  const maxBody = Math.max(
+    4,
+    48 - Array.from(prefix).length - Array.from(PV_WECOM_PRESALES_CHAT_SUFFIX).length
+  )
+  const body = pvTrimToLength(bodySource, maxBody)
+  return `${prefix}${body}${PV_WECOM_PRESALES_CHAT_SUFFIX}`
+}
+
+/** 与后端 stripMarkdownHashForWecomAnalysisBody 一致：只去掉行首 ATX 标题的 # */
+function pvStripHashForAnalysisPush(text) {
+  const raw = String(text || '')
+  const lines = raw.split(/\r?\n/)
+  const out = lines.map((line) =>
+    line.replace(/^(\s{0,3})(#{1,6})(?:\s+(.*)|$)/, (_, indent, _h, rest) => indent + (rest || ''))
+  )
+  return out.join('\n').trim()
+}
+
 /** 与 presales_video_tasks.pipeline_status 一致（含「无记录」） */
 const PV_PIPELINE_OPTIONS = [
   { value: 'all', label: '全部状态' },
@@ -333,11 +402,45 @@ function pvRenderTable() {
             <button type="button" class="btn btn-sm pv-act-secondary" title="先打开可编辑报告正文，保存后再调用推送接口（异步 md 或旧版 JSON）" onclick="pvPushReport('${row.id}')">推送报告</button>
             <button type="button" class="btn btn-sm pv-act-secondary" title="填写企微 userid 建应用群发会话，推送报备摘要与视频" onclick="pvOpenPushVideoDialog('${row.id}')">推送视频</button>
             <button type="button" class="btn btn-sm btn-secondary" title="服务端自动串联：角色确认→推送对话→提交工作流→（等回调）→推送报告→推送视频；可不关页面" onclick="pvOpenPipelineDialog('${row.id}')">服务端流水线</button>
+            <button type="button" class="btn btn-sm btn-outline pv-act-delete" title="删除本条转录及流水线数据；不删 CRM 源录音、跑批状态、问答对" onclick="pvDeleteTranscription('${row.id}')">删除</button>
           </div>
         </td>
       </tr>`
     })
     .join('')
+}
+
+window.pvDeleteTranscription = async function (id) {
+  if (!id) return
+  const row = (pvState.list || []).find((r) => r.id === id)
+  const name = (row && (row.name || row.originalFileName)) || id
+  const pipe = row && row.videoTask && row.videoTask.pipelineStatus
+  const pipeHint = pipe ? `\n当前流水线：${pipe}` : ''
+  const ok = window.confirm(
+    `确定删除「${name}」整条转录记录？\n\n将删除：转录主表、角色/对话调整、售前视频任务、流水线记录、本地 txt/md（若非 CRM 源路径）、视频元数据（若有）。\n不会删除：CRM 源录音文件、跑批 log_sync_status、问答对 concerns、交流报备/场次。${pipeHint}\n\n此操作不可恢复。`
+  )
+  if (!ok) return
+  pvShowOverlay(true, '正在删除…')
+  try {
+    const res = await fetch(`${PV_API}/presales-video/transcriptions/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: { 'ngrok-skip-browser-warning': 'true' }
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok || !json.success) {
+      pvToast((json && json.error) || `删除失败 HTTP ${res.status}`, 'error', PV_PUSH_WORKFLOW_TOAST_MS)
+      return
+    }
+    pvToast('已删除', 'success')
+    if (pvState.list.length <= 1 && pvState.page > 1) {
+      pvState.page -= 1
+    }
+    pvLoadList()
+  } catch (e) {
+    pvToast((e && e.message) || '删除失败', 'error')
+  } finally {
+    pvShowOverlay(false)
+  }
 }
 
 function pvUpdatePagination() {
@@ -1395,7 +1498,7 @@ async function pvLoadPushMarkdownPreview(id) {
   if (!clueTa || !reportTa) return
   clueTa.value = ''
   reportTa.value = ''
-  if (st) st.textContent = '正在加载群内 Markdown 预览…'
+  if (st) st.textContent = '正在加载群内纯文本预览…'
   try {
     const res = await fetch(
       `${PV_API}/presales-video/transcriptions/${encodeURIComponent(id)}/push-content-preview`
@@ -1416,7 +1519,10 @@ async function pvLoadPushMarkdownPreview(id) {
     if (block && taAnalysis) {
       if (d.isShortAudio) {
         block.style.display = 'block'
-        taAnalysis.value = d.reportAnalysisMarkdown != null ? String(d.reportAnalysisMarkdown) : ''
+        taAnalysis.value =
+          d.reportAnalysisMarkdown != null
+            ? pvStripHashForAnalysisPush(String(d.reportAnalysisMarkdown))
+            : ''
         if (hintAnalysis) {
           const durTxt =
             dur != null && !Number.isNaN(dur) ? `当前录音约 ${Math.round(dur)} 秒` : '未获取到录音时长'
@@ -1433,7 +1539,19 @@ async function pvLoadPushMarkdownPreview(id) {
       ? '本次将复用已有群：首段「线索说明」不会发送。'
       : '本次若为新建群：先发①（若非空），再发②。'
     const miss = d.reportMatched === false ? ' 未匹配到报备时② 为系统提示文案，请核对。' : ''
-    if (st) st.textContent = reuse + miss
+    const chatNameEl = document.getElementById('pv-push-video-chat-name')
+    if (chatNameEl && d.defaultChatName) {
+      chatNameEl.value = String(d.defaultChatName)
+    }
+    const catHint =
+      d.wecomPushCategory === 'newProduct'
+        ? '（新品）'
+        : d.wecomPushCategory === 'newCustomer'
+          ? '（新客）'
+          : d.wecomPushCategory === 'upgrade'
+            ? '（升级）'
+            : ''
+    if (st) st.textContent = reuse + miss + (catHint ? ` 默认群名/卡片样式：${catHint}` : '')
   } catch (e) {
     if (st) {
       st.textContent = `预览加载失败：${e.message || e}；保存时将改用服务端自动生成正文（若不刷新预览）。`
@@ -1441,15 +1559,14 @@ async function pvLoadPushMarkdownPreview(id) {
   }
 }
 
-function pvDefaultPushVideoChatName(row, transcriptionId) {
-  const cust = row && row.customerName && String(row.customerName).trim()
-  const raw =
-    row && (row.originalFileName || row.name) ? String(row.originalFileName || row.name) : ''
-  const base = cust || pvStripFileSuffix(raw) || String(transcriptionId || '')
-  const arr = Array.from(String(base).trim())
-  const trimmed =
-    arr.length <= 36 ? arr.join('') : `${arr.slice(0, 35).join('')}…`
-  return `${trimmed}-售前分析`
+/**
+ * 推送视频弹窗打开瞬间的默认群名：优先列表接口下发的 defaultPushVideoChatName（与后端一致）。
+ */
+function pvDefaultPushVideoChatName(row) {
+  if (row && row.defaultPushVideoChatName != null && String(row.defaultPushVideoChatName).trim()) {
+    return String(row.defaultPushVideoChatName).trim()
+  }
+  return pvBuildDefaultPushVideoChatName(null, null)
 }
 
 window.pvOpenPushVideoDialog = function (id) {
@@ -1474,7 +1591,7 @@ window.pvOpenPushVideoDialog = function (id) {
     cardTitleEl.value = defTitle
   }
   if (chatNameEl) {
-    chatNameEl.value = pvDefaultPushVideoChatName(row, id)
+    chatNameEl.value = pvDefaultPushVideoChatName(row)
   }
   document.getElementById('pv-push-video-dialog')?.showModal()
   pvLoadPushVideoUsersPreview(id)
@@ -1586,7 +1703,7 @@ window.pvSubmitPushVideo = async function () {
     }
     if (pvPushVideoIsShort) {
       const ra = document.getElementById('pv-push-md-report-analysis')
-      bodyObj.reportAnalysisMarkdown = ra ? String(ra.value || '') : ''
+      bodyObj.reportAnalysisMarkdown = ra ? pvStripHashForAnalysisPush(String(ra.value || '')) : ''
     }
     const res = await fetch(
       `${PV_API}/presales-video/transcriptions/${encodeURIComponent(id)}/push-video`,

@@ -3,5 +3,6 @@
   "maxConcurrent": 1,
   "scanLimit": 50,
   "scanWindowHours": 8,
+  "autoPushRoleConfirmCard": false,
   "autoContinueAfterRoleConfirm": false
 }

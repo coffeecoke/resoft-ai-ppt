@@ -698,7 +698,7 @@
     <div class="stats-grid">
       <div class="stat-card"><div class="label">待处理记录</div><div class="value warning" id="video-stat-pending">-</div></div>
       <div class="stat-card"><div class="label">处理中</div><div class="value" id="video-stat-processing">-</div></div>
-      <div class="stat-card"><div class="label">已进入确认中</div><div class="value success" id="video-stat-completed">-</div></div>
+      <div class="stat-card"><div class="label">转录阶段完成</div><div class="value success" id="video-stat-completed">-</div></div>
       <div class="stat-card"><div class="label">总运行次数</div><div class="value" id="video-stat-total-runs">-</div></div>
       <div class="stat-card"><div class="label">成功/失败</div><div class="value"><span class="success" id="video-stat-success">-</span> / <span class="danger" id="video-stat-failed">-</span></div></div>
       <div class="stat-card"><div class="label">下次运行</div><div class="value" id="video-stat-next-run" style="font-size: 16px;">-</div></div>
@@ -728,10 +728,17 @@
           <div class="helper-text">只扫描最近 N 小时的 crm_report_file；填 0 表示不限制。</div>
         </div>
         <div class="form-row">
+          <label>自动推送角色确认卡片</label>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <input type="checkbox" id="video-config-auto-push-role-card" onchange="videoSaveConfig()">
+            <span class="helper-text">不勾选（默认）：转录仅落库，不向企微发「说话人角色确认」卡片，请在「售前视频」里手动点「角色确认」。勾选：转录完成后按下方规则发卡片。</span>
+          </div>
+        </div>
+        <div class="form-row">
           <label>确认后自动继续</label>
           <div style="display:flex; align-items:center; gap:8px;">
             <input type="checkbox" id="video-config-auto-continue" checked onchange="videoSaveConfig()">
-            <span class="helper-text">开启：角色确认后自动跑后续流程；关闭：仅发角色确认卡片，后续手动触发。</span>
+            <span class="helper-text">仅在已勾选「自动推送角色确认卡片」时生效。开启：对方在链接里保存后自动跑后续流水线；关闭：只发卡片，后续在管理端手动触发。</span>
           </div>
         </div>
         <div class="form-row">

@@ -8,6 +8,16 @@ const modelConfigService = require('./modelConfigService');
 const promptTemplateService = require('./promptTemplateService');
 const logger = require('../utils/logger');
 
+/** 估算 messages 里用户/系统文本总字符数（用于日志与流式 token 粗估） */
+function estimateMessagesInputChars (messages) {
+  if (!Array.isArray(messages)) return 0
+  let n = 0
+  for (const m of messages) {
+    if (m && m.content != null) n += String(m.content).length
+  }
+  return n
+}
+
 class AIService {
   /**
    * 为指定场景创建OpenAI客户端
@@ -74,13 +84,17 @@ class AIService {
         throw new Error('Invalid prompt format');
       }
       
-      logger.ai(sceneType, config.name, '开始调用');
-      logger.debug('提示词长度:', finalPrompt.length, '字符');
-      
       // 3. 构建消息
       const messages = options.messages || [
         { role: 'user', content: finalPrompt }
       ];
+
+      const promptCharLen = options.messages
+        ? estimateMessagesInputChars(options.messages)
+        : String(finalPrompt || '').length
+
+      logger.ai(sceneType, config.name, '开始调用');
+      logger.debug('提示词长度:', promptCharLen, '字符', options.messages ? '(messages 模式)' : '');
       
       // 4. 调用AI
       const startTime = Date.now();
@@ -151,12 +165,12 @@ class AIService {
         throw new Error('Invalid prompt format');
       }
       
-      logger.ai(sceneType, config.name, '开始流式调用');
-      
       // 3. 构建消息
       const messages = options.messages || [
         { role: 'user', content: finalPrompt }
       ];
+
+      logger.ai(sceneType, config.name, '开始流式调用');
       
       // 4. 调用AI（流式）
       const startTime = Date.now();
@@ -188,7 +202,10 @@ class AIService {
       const duration = Date.now() - startTime;
       
       // 5. 更新统计（流式调用无法准确统计token，使用字符数估算）
-      const estimatedTokens = Math.ceil((finalPrompt.length + fullContent.length) / 4);
+      const inputChars = options.messages
+        ? estimateMessagesInputChars(options.messages)
+        : String(finalPrompt || '').length
+      const estimatedTokens = Math.ceil((inputChars + fullContent.length) / 4);
       await modelConfigService.updateCallStats(config.id, estimatedTokens);
       
       logger.ai(
@@ -277,7 +294,10 @@ class AIService {
       res.end();
       
       // 5. 更新统计
-      const estimatedTokens = Math.ceil((finalPrompt.length + fullContent.length) / 4);
+      const inputChars = options.messages
+        ? estimateMessagesInputChars(options.messages)
+        : String(finalPrompt || '').length
+      const estimatedTokens = Math.ceil((inputChars + fullContent.length) / 4);
       await modelConfigService.updateCallStats(config.id, estimatedTokens);
       
       logger.ai(sceneType, config.name, 'SSE流式调用完成');

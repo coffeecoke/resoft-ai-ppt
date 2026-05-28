@@ -1,5 +1,5 @@
 /**
- * 企业微信 HTTP：gettoken + appchat 建群 + 群发 Markdown / 文本卡片 / 视频；
+ * 企业微信 HTTP：gettoken + appchat 建群 + 群发 text / Markdown / 文本卡片 / 视频；
  * 以及自建应用 message/send（成员 textcard / markdown，售前视频「说话人角色确认」与超时提醒）。
  * 需自建应用 Secret（与智能机器人 WebSocket Secret 不同），且应用可见范围内包含所选成员。
  * @see https://developer.work.weixin.qq.com/document/path/90245
@@ -211,6 +211,27 @@ async function updateAppChatAddMembers(chatid, userIds) {
 }
 
 /**
+ * 群发纯文本（客户档案等侧同步时 msgtype 为 text）
+ * @param {string} chatid
+ * @param {string} textContent 单条最长约 2048 字节（UTF-8）
+ */
+async function sendAppChatText(chatid, textContent) {
+  const token = await getAccessToken()
+  const url = `https://qyapi.weixin.qq.com/cgi-bin/appchat/send?access_token=${encodeURIComponent(token)}`
+  const content = truncateUtf8Bytes(textContent || '', 2048)
+  const body = {
+    chatid: String(chatid).trim(),
+    msgtype: 'text',
+    text: { content }
+  }
+  const j = await httpsPostJson(url, body)
+  if (j.errcode != null && j.errcode !== 0) {
+    throw new Error(formatQyApiError('appchat/send(text) 失败', j))
+  }
+  return true
+}
+
+/**
  * @param {string} chatid
  * @param {string} markdownContent
  */
@@ -313,6 +334,38 @@ async function sendApplicationTextCardToUser(touser, opts) {
   const j = await httpsPostJson(url, body)
   if (j.errcode != null && j.errcode !== 0) {
     throw new Error(formatQyApiError('message/send(textcard) 失败', j))
+  }
+  return true
+}
+
+/**
+ * 自建应用 message/send → 成员纯文本
+ * @param {string} touser
+ * @param {string} textContent 最长约 2048 字节（UTF-8）
+ */
+async function sendApplicationTextToUser(touser, textContent) {
+  const agentid = getApplicationAgentId()
+  if (!agentid) {
+    throw new Error('未配置 WECOM_AGENT_ID，无法发送应用消息 text')
+  }
+  const uid = String(touser || '').trim()
+  if (!uid) {
+    throw new Error('缺少接收人 userid')
+  }
+  const token = await getAccessToken()
+  const url = `https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token=${encodeURIComponent(token)}`
+  const content = truncateUtf8Bytes(textContent || '', 2048)
+  const body = {
+    touser: uid,
+    msgtype: 'text',
+    agentid,
+    text: { content },
+    safe: 0,
+    enable_id_trans: 0
+  }
+  const j = await httpsPostJson(url, body)
+  if (j.errcode != null && j.errcode !== 0) {
+    throw new Error(formatQyApiError('message/send(text) 失败', j))
   }
   return true
 }
@@ -525,9 +578,11 @@ module.exports = {
   getAccessToken,
   createAppChat,
   updateAppChatAddMembers,
+  sendAppChatText,
   sendAppChatMarkdown,
   sendAppChatTextCard,
   sendApplicationTextCardToUser,
+  sendApplicationTextToUser,
   sendApplicationMarkdownToUser,
   sendAppChatVideo,
   sendAppChatFile,

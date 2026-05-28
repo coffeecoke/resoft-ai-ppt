@@ -1301,6 +1301,8 @@ async function videoLoadConfig() {
       document.getElementById('video-config-concurrent').value = cfg.maxConcurrent || 1;
       document.getElementById('video-config-scan-limit').value = cfg.scanLimit || 50;
       document.getElementById('video-config-window-hours').value = cfg.scanWindowHours != null ? cfg.scanWindowHours : 72;
+      const pushCard = document.getElementById('video-config-auto-push-role-card');
+      if (pushCard) pushCard.checked = cfg.autoPushRoleConfirmCard === true;
       document.getElementById('video-config-auto-continue').checked =
         cfg.autoContinueAfterRoleConfirm !== false;
     }
@@ -1315,6 +1317,8 @@ async function videoSaveConfig() {
     const maxConcurrent = parseInt(document.getElementById('video-config-concurrent').value, 10);
     const scanLimit = parseInt(document.getElementById('video-config-scan-limit').value, 10);
     const scanWindowHours = parseInt(document.getElementById('video-config-window-hours').value, 10);
+    const pushRoleEl = document.getElementById('video-config-auto-push-role-card');
+    const autoPushRoleConfirmCard = pushRoleEl ? pushRoleEl.checked : false;
     const autoContinueAfterRoleConfirm = document.getElementById('video-config-auto-continue').checked;
     const response = await fetch(`${AUTO_API_BASE}/video/config`, {
       method: 'PUT',
@@ -1324,6 +1328,7 @@ async function videoSaveConfig() {
         maxConcurrent,
         scanLimit,
         scanWindowHours,
+        autoPushRoleConfirmCard,
         autoContinueAfterRoleConfirm
       })
     });

@@ -83,10 +83,12 @@
       s === 'our_side' ||
       s === 'our side' ||
       s === '我方' ||
-      s === '我方/供应商' ||
-      s === '供应商'
+      s === '我方/供应商'
     ) {
       return 'our_side'
+    }
+    if (s === 'vendor' || s === '厂商' || s === '厂商方' || s === '供应商') {
+      return 'vendor'
     }
     return ''
   }
@@ -94,6 +96,7 @@
   function roleLabelZh(role) {
     if (role === 'customer') return '客户方'
     if (role === 'our_side') return '我方'
+    if (role === 'vendor') return '厂商'
     return ''
   }
 
@@ -316,8 +319,21 @@
       ourSideLabel.appendChild(ourSideRadio)
       ourSideLabel.appendChild(document.createTextNode('我方'))
 
+      var vendorLabel = document.createElement('label')
+      vendorLabel.className = 'speaker-role-opt'
+      var vendorRadio = document.createElement('input')
+      vendorRadio.type = 'radio'
+      vendorRadio.name = radioName
+      vendorRadio.className = 'speaker-role-radio'
+      vendorRadio.setAttribute('data-map-speaker', fromKey)
+      vendorRadio.value = 'vendor'
+      vendorRadio.checked = currentRole === 'vendor'
+      vendorLabel.appendChild(vendorRadio)
+      vendorLabel.appendChild(document.createTextNode('厂商'))
+
       roleWrap.appendChild(customerLabel)
       roleWrap.appendChild(ourSideLabel)
+      roleWrap.appendChild(vendorLabel)
       row.appendChild(labWrap)
       row.appendChild(inp)
       row.appendChild(roleWrap)
@@ -445,7 +461,14 @@
     var roleLabel = roleLabelZh(role)
     var tr = normTime(d)
     var tx = normText(d)
-    var roleClass = role === 'customer' ? 'role-badge-customer' : role === 'our_side' ? 'role-badge-our-side' : ''
+    var roleClass =
+      role === 'customer'
+        ? 'role-badge-customer'
+        : role === 'our_side'
+          ? 'role-badge-our-side'
+          : role === 'vendor'
+            ? 'role-badge-vendor'
+            : ''
     var roleBadge = roleLabel
       ? '<span class="role-badge ' + roleClass + '">' + escapeHtml(roleLabel) + '</span>'
       : ''
@@ -795,7 +818,7 @@
     if (missingSpeakers.length > 0) {
       var first = missingSpeakers[0]
       window.alert(
-        '请先为所有 speaker 勾选角色（客户方/我方），未勾选：' +
+        '请先为所有 speaker 勾选角色（客户方/我方/厂商），未勾选：' +
           missingSpeakers.join('、')
       )
       if (elSpeakerMap && elSpeakerMap.scrollIntoView) {

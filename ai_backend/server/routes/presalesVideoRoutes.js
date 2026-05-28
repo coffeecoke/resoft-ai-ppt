@@ -38,6 +38,7 @@ const presalesVideoSpeakerLink = require('../services/presalesVideoSpeakerLink')
 const wecomAppChatApi = require('../services/wecomAppChatApi')
 const presalesVideoWecomPushService = require('../services/presalesVideoWecomPushService')
 const presalesVideoPipelineOrchestrator = require('../services/presalesVideoPipelineOrchestrator')
+const presalesVideoPurgeService = require('../services/presalesVideoPurgeService')
 const logger = require('../utils/logger')
 const { getAiBackendStaticPathPrefix } = require('../utils/aiBackendPublicPath')
 
@@ -346,6 +347,25 @@ function httpRequestFormWithHeaders(urlString, form, extraHeaders = {}) {
     req.on('error', reject)
     form.pipe(req)
   })
+}
+
+/** push-report 对外 POST 的完整请求体：字幕异步 / 报告异步 / 旧版 JSON（总长默认 48000，超出截断） */
+function logPresalesPushReportOutbound(tag, method, url, bodyObj, extra = '', maxJsonChars = 48000) {
+  let bodyStr = ''
+  try {
+    bodyStr = JSON.stringify(bodyObj)
+  } catch (e) {
+    logger.warn(`${tag} requestBody JSON.stringify 失败:`, e && e.message)
+    return
+  }
+  const suffix = extra ? ` ${extra}` : ''
+  if (bodyStr.length <= maxJsonChars) {
+    logger.info(`${tag}${suffix}\n${method} ${url}\nrequestBody=${bodyStr}`)
+  } else {
+    logger.info(
+      `${tag}${suffix}\n${method} ${url}\nrequestBody=${bodyStr.slice(0, maxJsonChars)}…(truncated totalChars=${bodyStr.length})`
+    )
+  }
 }
 
 /** 长响应体写入日志（避免单次过大） */
@@ -717,6 +737,7 @@ router.post('/workflow-callback', async (req, res) => {
  * GET /api/presales-video/transcriptions
  * 仅列出转录状态为 completed（已完成）的记录，不含待处理/上传中/转录中/失败等。
  * Query: page, pageSize, name, dateFrom, dateTo, pipelineStatus
+ * 列表项含 defaultPushVideoChatName：与推送视频默认建群名一致（服务端按报备 lead_name + XSFL 计算）。
  * pipelineStatus: 空或 all=不限；__none__=无 presales_video_tasks；其它值=流水线状态精确匹配（如 分析中）
  */
 router.get('/transcriptions', async (req, res) => {
@@ -821,6 +842,15 @@ router.get('/transcriptions', async (req, res) => {
       logger.warn('[presales-video] 列表关联 psv_video_info 失败:', e.message)
     }
 
+    const defaultChatNameByTid = new Map()
+    for (const t of list) {
+      const chatName = await presalesVideoWecomPushService.getDefaultPushVideoChatNameForTranscription(
+        prisma,
+        t
+      )
+      defaultChatNameByTid.set(t.id, chatName)
+    }
+
     const listOut = list.map((t) => {
       const taskRow = taskByTid.get(t.id)
       const baseVt = presalesVideoTaskService.toApiShape(taskRow)
@@ -848,6 +878,10 @@ router.get('/transcriptions', async (req, res) => {
         createdBy: t.created_by != null && String(t.created_by).trim() ? String(t.created_by).trim() : null,
         createdAt: t.created_at,
         hasPresalesReport: (t.presales_analysis_results && t.presales_analysis_results.length > 0) || false,
+        /** 与推送视频默认建群名一致：【新品|新客|升级】+ 报备 lead_name + -售前分析 */
+        defaultPushVideoChatName:
+          defaultChatNameByTid.get(t.id) ||
+          presalesVideoWecomPushService.buildDefaultWecomPresalesChatName(null, null),
         videoTask
       }
     })
@@ -869,6 +903,24 @@ router.get('/transcriptions', async (req, res) => {
   } catch (error) {
     logger.error('[presales-video] 列表失败:', error)
     res.status(500).json({ success: false, error: error.message || '获取列表失败' })
+  }
+})
+
+/**
+ * DELETE /api/presales-video/transcriptions/:id
+ * 删除整条转录及售前视频流水线衍生数据（级联 presales_video_tasks、pipeline_runs、dialogue_adjustments、presales_analysis_results）。
+ * 不删：CRM 源文件、log_sync_status、concerns、报备/场次/产品。
+ */
+router.delete('/transcriptions/:id', async (req, res) => {
+  try {
+    const { id } = req.params
+    const result = await presalesVideoPurgeService.purgeTranscription(id)
+    return res.json({ success: true, data: result })
+  } catch (error) {
+    const msg = error && error.message ? String(error.message) : '删除失败'
+    const status = msg.includes('不存在') ? 404 : msg.includes('仅允许') ? 400 : 500
+    logger.error(`[presales-video] 删除转录失败 id=${req.params.id}:`, error)
+    return res.status(status).json({ success: false, error: msg })
   }
 })
 
@@ -1664,7 +1716,16 @@ router.post('/transcriptions/:id/push-report', async (req, res) => {
           subHeaders.Authorization = `Bearer ${String(subTokRaw).trim()}`
         }
         logger.info(
-          `[presales-video] 推送字幕视频(短音频 duration<${splitSec}s) POST ${subtitleUrl} transcription=${id} durationSec=${durationSec}`
+          `[presales-video] 推送字幕视频(短音频 duration<${splitSec}s) POST ${subtitleUrl} transcription=${id} durationSec=${durationSec} hasAuth=${Boolean(
+            subHeaders.Authorization
+          )}`
+        )
+        logPresalesPushReportOutbound(
+          '[presales-video] push-report outbound(字幕异步)',
+          'POST',
+          subtitleUrl,
+          subPayload,
+          `transcription=${id}`
         )
         const remoteSub = await httpRequestJson('POST', subtitleUrl, subPayload, subHeaders)
         let remoteSubJson = null
@@ -1720,9 +1781,17 @@ router.post('/transcriptions/:id/push-report', async (req, res) => {
 
       const asyncUrl = String(asyncUrlRaw).trim()
       logger.info(
-        `[presales-video] 推送报告(异步) POST ${asyncUrl} transcription=${id} name=${name} execute_id=${executeId.slice(0, 60)}`
+        `[presales-video] 推送报告(异步) POST ${asyncUrl} transcription=${id} name=${name} execute_id=${executeId.slice(0, 60)} hasAuth=${Boolean(
+          asyncHeaders.Authorization
+        )}`
       )
-
+      logPresalesPushReportOutbound(
+        '[presales-video] push-report outbound(报告异步)',
+        'POST',
+        asyncUrl,
+        payload,
+        `transcription=${id}`
+      )
       const remote = await httpRequestJson('POST', asyncUrl, payload, asyncHeaders)
       let remoteJson = null
       try {
@@ -1774,7 +1843,31 @@ router.post('/transcriptions/:id/push-report', async (req, res) => {
       }
     }
 
-    const remote = await httpRequestJson('POST', pushUrl.trim(), payload)
+    let reportJsonLen = 0
+    try {
+      reportJsonLen = JSON.stringify(payload.report).length
+    } catch {
+      reportJsonLen = -1
+    }
+    const pushUrlTrim = pushUrl.trim()
+    logger.info(
+      `[presales-video] push-report outbound(旧版JSON) POST ${pushUrlTrim} transcription=${id} fileName=${payload.fileName} reportJsonChars=${reportJsonLen}`
+    )
+    logPresalesPushReportOutbound(
+      '[presales-video] push-report outbound(旧版JSON·meta)',
+      'POST',
+      pushUrlTrim,
+      {
+        transcriptionId: payload.transcriptionId,
+        fileName: payload.fileName,
+        meta: payload.meta,
+        report: payload.report
+      },
+      `transcription=${id}（report 与整包一致；单条日志总长上限见 logPresalesPushReportOutbound）`,
+      48000
+    )
+
+    const remote = await httpRequestJson('POST', pushUrlTrim, payload)
     let remoteJson = null
     try {
       remoteJson = JSON.parse(remote.body)
@@ -1828,8 +1921,8 @@ router.get('/transcriptions/:id/push-video-users', async (req, res) => {
 
 /**
  * GET /api/presales-video/transcriptions/:id/push-content-preview
- * 返回即将发往群内的两段 Markdown（线索首条 + 报备摘要），供弹窗编辑；不含视频文本卡片。
- * 另返回 splitSec / audioDurationSec / isShortAudio；短音频时尝试附带 reportAnalysisMarkdown（与「推送报告」编辑同源）。
+ * 返回即将发往群内的两段纯文本（线索首条 + 报备摘要），供弹窗编辑；不含末尾售前视频 textcard。
+ * 另返回 splitSec / audioDurationSec / isShortAudio；短音频时尝试附带 reportAnalysisMarkdown（与推送一致，会转为纯文本）。
  */
 router.get('/transcriptions/:id/push-content-preview', async (req, res) => {
   const { id } = req.params
@@ -1852,7 +1945,10 @@ router.get('/transcriptions/:id/push-content-preview', async (req, res) => {
     if (isShortAudio) {
       const ar = await presalesVideoTaskService.readAnalysisForPushEdit(id)
       if (ar.ok) {
-        reportAnalysisMarkdown = ar.content != null ? String(ar.content) : ''
+        reportAnalysisMarkdown =
+          ar.content != null
+            ? presalesVideoWecomPushService.normalizePushBodyForText(String(ar.content))
+            : ''
       } else {
         reportAnalysisLoadError = ar.message || '无法加载分析报告'
       }
@@ -1862,6 +1958,10 @@ router.get('/transcriptions/:id/push-content-preview', async (req, res) => {
       success: true,
       data: {
         ...data,
+        clueMarkdown: presalesVideoWecomPushService.normalizePushBodyForText(data.clueMarkdown || ''),
+        reportMarkdown: presalesVideoWecomPushService.normalizePushBodyForText(
+          data.reportMarkdown || ''
+        ),
         splitSec,
         audioDurationSec: durationOk ? durationSec : null,
         isShortAudio,
@@ -1884,9 +1984,9 @@ router.get('/transcriptions/:id/push-content-preview', async (req, res) => {
  * 未传 userIds 时：自动按 created_by 上级链 + 固定成员 + 匹配到的报备 our_participants（姓名→org_user.user_id）+ rxkf01。
  * 传入 userIds 时：以 Body 名单为准，不再并入固定成员/rxkf01（你可从预览里删掉固定成员）；仍应用 env PRESALES_VIDEO_GROUP_EXCLUDE_USERIDS。
  * chatName | group_name | groupName：可选，仅在新创建群发会话时使用该名称；不传则自动「线索/客户名或文件名-售前分析」。
- * clueMarkdown / reportMarkdown：可选；若传入则以传入为准（与弹窗预览编辑一致）；不传则服务端按报备自动生成。
- * reportAnalysisMarkdown：可选；音频时长 < PRESALES_VIDEO_REPORT_DURATION_SPLIT_SEC（默认 600s）时，在报备摘要之后<strong>再单独发一条或多条</strong>企微 Markdown（与「推送报告」正文同源）；未传时服务端短音频仍会尝试从 md/库读取。
- * 使用企业微信应用 API 创建/复用 appchat，向群内推送：报备 main_content + 售前视频文本卡片。
+ * clueMarkdown / reportMarkdown：可选；若传入则以传入为准（与弹窗预览编辑一致）；不传则服务端按报备自动生成；均以 msgtype=text 发送。
+ * reportAnalysisMarkdown：可选；音频时长 < PRESALES_VIDEO_REPORT_DURATION_SPLIT_SEC（默认 600s）时，在报备摘要之后再单独发一条或多条 text；未传时服务端短音频仍会尝试从 md/库读取。
+ * 使用企业微信应用 API 创建/复用 appchat，向群内推送：报备等纯文本 + 售前视频文本卡片。
  */
 router.post('/transcriptions/:id/push-video', async (req, res) => {
   const { id } = req.params

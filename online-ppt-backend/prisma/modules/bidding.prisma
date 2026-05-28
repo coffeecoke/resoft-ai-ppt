@@ -214,7 +214,8 @@ model bid_resume_records {
   manifest_path        String?  @db.VarChar(800) /// 本次 manifest.json 路径
   created_at           DateTime @default(now())
 
-  bid_resume_persons bid_resume_persons[]
+  bid_resume_persons              bid_resume_persons[]
+  bid_resume_person_canonicals    bid_resume_person_canonical[]
 
   @@index([run_batch_id], map: "idx_bidresume_batch")
   @@index([source_docx_basename], map: "idx_bidresume_srcbase")
@@ -259,7 +260,8 @@ model bid_resume_persons {
   other_image_paths          Json? /// 未归类图片路径
   created_at            DateTime @default(now())
 
-  bid_resume_records bid_resume_records? @relation(fields: [resume_record_id], references: [id], onDelete: Cascade)
+  bid_resume_records                   bid_resume_records?                   @relation(fields: [resume_record_id], references: [id], onDelete: Cascade)
+  bid_resume_person_canonical_sources bid_resume_person_canonical_source[]
 
   @@index([resume_record_id], map: "idx_bidresperson_parent")
   @@index([run_batch_id], map: "idx_bidresperson_batch")
@@ -267,5 +269,75 @@ model bid_resume_persons {
   @@index([source_docx_modified_at], map: "idx_bidresperson_src_mtime")
   @@index([person_name, source_docx_modified_at], map: "idx_bidresperson_name_mtime")
   @@index([created_at], map: "idx_bidresperson_created")
+}
+
+/// 跨历史 bid_resume_persons 去重后的「自然人主档」：以 source_docx_modified_at 最新为主行，其余行按时间补空字段
+model bid_resume_person_canonical {
+  id               String   @id @db.VarChar(50)
+  /// 聚类键：idc:… / ph:… / nm:… / solo:…
+  merge_key        String   @unique @db.VarChar(200)
+  merge_key_type   String   @db.VarChar(24) /// id_card | phone | person_name | solo
+  resume_record_id String?  @db.VarChar(50)
+  run_batch_id     String?  @db.VarChar(50)
+  source_docx_basename String   @db.VarChar(255)
+  source_docx_modified_at DateTime?
+  h1_section_title String   @db.VarChar(500)
+  l2_section_title String?  @db.VarChar(500)
+  sort_order       Int      @default(0)
+  role_label       String?  @db.VarChar(120)
+  person_name      String?  @db.VarChar(80)
+  gender           String?  @db.VarChar(20)
+  age              String?  @db.VarChar(32)
+  education_level  String?  @db.VarChar(80)
+  major            String?  @db.VarChar(200)
+  graduate_school  String?  @db.VarChar(200)
+  work_years_hint  String?  @db.VarChar(64)
+  work_duration_text String? @db.VarChar(64)
+  phone            String?  @db.VarChar(50)
+  email            String?  @db.VarChar(120)
+  id_card          String?  @db.VarChar(24)
+  degree           String?  @db.VarChar(40)
+  employer         String?  @db.VarChar(200)
+  proposed_project_role String? @db.VarChar(120)
+  project_experience    String? @db.LongText
+  raw_fragment          String? @db.LongText
+  /// 由 AI 从 raw_fragment 提炼的专业技能（条列/段落）
+  ai_professional_skills String? @db.LongText
+  /// 由 AI 从 raw_fragment 提炼的工作履历（时间线/项目要点）
+  ai_work_history        String? @db.LongText
+  ai_enriched_at         DateTime?
+  ai_enrichment_model    String? @db.VarChar(120)
+  structured_json       Json?
+  education_cert_image_paths Json?
+  work_proof_image_paths     Json?
+  other_image_paths          Json?
+  /// 合并时 source_docx_modified_at 最大且作为主快照的那条 bid_resume_persons.id
+  winning_person_id String  @db.VarChar(50)
+  source_row_count  Int     @default(0)
+  merged_at         DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  bid_resume_records                 bid_resume_records?                 @relation(fields: [resume_record_id], references: [id], onDelete: SetNull)
+  bid_resume_person_canonical_sources bid_resume_person_canonical_source[]
+
+  @@index([merge_key_type], map: "idx_bidrescanon_keytype")
+  @@index([person_name], map: "idx_bidrescanon_name")
+  @@index([winning_person_id], map: "idx_bidrescanon_winner")
+  @@index([resume_record_id], map: "idx_bidrescanon_resume_record")
+}
+
+/// canonical 与原始 bid_resume_persons 多对一溯源
+model bid_resume_person_canonical_source {
+  id                      String   @id @db.VarChar(50)
+  canonical_id            String   @db.VarChar(50)
+  person_id               String   @db.VarChar(50)
+  source_docx_modified_at DateTime?
+  created_at              DateTime @default(now())
+
+  bid_resume_person_canonical bid_resume_person_canonical @relation(fields: [canonical_id], references: [id], onDelete: Cascade)
+  bid_resume_persons          bid_resume_persons          @relation(fields: [person_id], references: [id], onDelete: Cascade)
+
+  @@unique([canonical_id, person_id], map: "uq_bidrescanonsrc_canon_person")
+  @@index([person_id], map: "idx_bidrescanonsrc_person")
 }
 
