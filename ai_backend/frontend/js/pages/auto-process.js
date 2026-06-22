@@ -15,6 +15,7 @@ let audioCurrentStatus = null;
 // 问答对提取跑批相关变量
 let qaRefreshInterval = null;
 let qaCurrentStatus = null;
+let qaTemporaryPollingUntil = 0;
 let videoRefreshInterval = null;
 let videoCurrentStatus = null;
 
@@ -950,6 +951,48 @@ async function qaLoadStatus() {
 }
 
 /**
+ * 停止问答对跑批页面轮询
+ */
+function qaStopRefreshInterval() {
+  if (qaRefreshInterval) {
+    clearInterval(qaRefreshInterval);
+    qaRefreshInterval = null;
+    window.qaRefreshInterval = null;
+  }
+}
+
+/**
+ * 根据运行状态决定是否轮询日志/统计
+ */
+function qaSyncRefreshInterval() {
+  const indicator = document.getElementById('qa-status-indicator');
+  if (!indicator) {
+    qaStopRefreshInterval();
+    return;
+  }
+
+  const shouldPoll = Boolean(qaCurrentStatus?.isRunning) || Date.now() < qaTemporaryPollingUntil;
+  if (shouldPoll && !qaRefreshInterval) {
+    qaRefreshInterval = setInterval(() => {
+      qaLoadStatus();
+      qaLoadStatistics();
+      qaLoadLogs();
+    }, 3000);
+    window.qaRefreshInterval = qaRefreshInterval;
+  } else if (!shouldPoll) {
+    qaStopRefreshInterval();
+  }
+}
+
+/**
+ * 「立即执行一次」等场景下，服务未标记 running 时也临时轮询日志
+ */
+function qaActivateTemporaryPolling(durationMs = 60 * 60 * 1000) {
+  qaTemporaryPollingUntil = Date.now() + durationMs;
+  qaSyncRefreshInterval();
+}
+
+/**
  * 更新问答对提取跑批状态UI
  */
 function qaUpdateStatusUI(status) {
@@ -962,7 +1005,10 @@ function qaUpdateStatusUI(status) {
 
   if (status.isRunning) {
     indicator.className = 'status-indicator running';
-    statusText.textContent = '运行中 - 自动扫描并提取问答对';
+    const taskName = status.currentTask?.name;
+    statusText.textContent = taskName
+      ? `运行中 - 正在处理: ${taskName}`
+      : '运行中 - 自动扫描并提取问答对';
     startBtn.disabled = true;
     stopBtn.disabled = false;
   } else {
@@ -971,6 +1017,8 @@ function qaUpdateStatusUI(status) {
     startBtn.disabled = false;
     stopBtn.disabled = true;
   }
+
+  qaSyncRefreshInterval();
 
   if (status.currentTask) {
     currentTask.style.display = 'block';
@@ -993,15 +1041,8 @@ async function qaStartProcess() {
     if (result.success) {
       showToast('✅ 问答对提取跑批已启动', 'success');
       await qaLoadStatus();
-      // 启动定时刷新
-      if (qaRefreshInterval) {
-        clearInterval(qaRefreshInterval);
-      }
-      qaRefreshInterval = setInterval(() => {
-        qaLoadStatus();
-        qaLoadStatistics();
-        qaLoadLogs();
-      }, 3000);
+      await qaLoadStatistics();
+      await qaLoadLogs();
     } else {
       showToast('启动失败: ' + result.error, 'error');
     }
@@ -1023,11 +1064,11 @@ async function qaStopProcess() {
 
     if (result.success) {
       showToast('✅ 问答对提取跑批已停止', 'success');
-      if (qaRefreshInterval) {
-        clearInterval(qaRefreshInterval);
-        qaRefreshInterval = null;
-      }
+      qaTemporaryPollingUntil = 0;
+      qaStopRefreshInterval();
       await qaLoadStatus();
+      await qaLoadStatistics();
+      await qaLoadLogs();
     } else {
       showToast('停止失败: ' + result.error, 'error');
     }
@@ -1053,7 +1094,10 @@ async function qaRunOnce() {
 
     if (result.success) {
       showToast('✅ 已触发执行', 'success');
-      await qaRefreshStatus();
+      qaActivateTemporaryPolling();
+      await qaLoadStatus();
+      await qaLoadStatistics();
+      await qaLoadLogs();
     } else {
       showToast('触发失败: ' + result.error, 'error');
     }
@@ -1073,6 +1117,7 @@ async function qaRunOnce() {
 async function qaRefreshStatus() {
   await qaLoadStatus();
   await qaLoadStatistics();
+  await qaLoadLogs();
   showToast('✅ 已刷新', 'success');
 }
 
@@ -1086,6 +1131,7 @@ async function qaLoadConfig() {
     
     if (result.success) {
       const config = result.data;
+      document.getElementById('qa-config-scan-dir').value = config.scanDirectory || '';
       document.getElementById('qa-config-interval').value = (config.pollingInterval || 300000) / 60000;
       document.getElementById('qa-config-concurrent').value = config.maxConcurrent || 1;
     }
@@ -1099,8 +1145,14 @@ async function qaLoadConfig() {
  */
 async function qaSaveConfig() {
   try {
+    const scanDirectory = document.getElementById('qa-config-scan-dir').value.trim();
     const pollingInterval = parseInt(document.getElementById('qa-config-interval').value) * 60000;
     const maxConcurrent = parseInt(document.getElementById('qa-config-concurrent').value);
+
+    if (!scanDirectory) {
+      showToast('请输入扫描目录', 'warning');
+      return;
+    }
 
     if (isNaN(pollingInterval) || pollingInterval < 60000 || pollingInterval > 86400000) {
       showToast('轮询间隔必须是1-1440分钟', 'error');
@@ -1118,6 +1170,7 @@ async function qaSaveConfig() {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
+        scanDirectory,
         pollingInterval,
         maxConcurrent
       })
@@ -1156,6 +1209,15 @@ async function qaLoadStatistics() {
       document.getElementById('qa-stat-total-runs').textContent = stats.totalRuns || 0;
       document.getElementById('qa-stat-success').textContent = stats.successfulRuns || 0;
       document.getElementById('qa-stat-failed').textContent = stats.failedRuns || 0;
+
+      if (
+        !qaCurrentStatus?.isRunning &&
+        qaTemporaryPollingUntil > 0 &&
+        (stats.processingExtractions || 0) === 0
+      ) {
+        qaTemporaryPollingUntil = 0;
+        qaSyncRefreshInterval();
+      }
     }
   } catch (error) {
     console.error('❌ 加载问答对提取跑批统计失败:', error);

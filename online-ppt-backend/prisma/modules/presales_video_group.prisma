@@ -1,0 +1,85 @@
+// ==================== 售前视频 · 企微建群发牌与 push 审计 ====================
+
+/// 全局发牌进度（单行 id=global）
+model presales_video_group_deck_state {
+  id              String   @id @db.VarChar(20)
+  active_round_id String   @db.VarChar(50)
+  deal_step       Int      @default(0)
+  deck_cursor     Int      @default(0)
+  updated_at      DateTime @updatedAt
+
+  active_round presales_video_group_deck_rounds @relation(fields: [active_round_id], references: [id], onDelete: Restrict)
+}
+
+/// 每轮洗牌记录（对外可查）
+model presales_video_group_deck_rounds {
+  id             String    @id @db.VarChar(50)
+  deal_round     Int       @unique
+  pool_size      Int
+  fixed_pool     Json
+  deck_order     Json
+  deal_pattern   Json
+  status         String    @default("active") @db.VarChar(20) /// active | completed
+  trigger_reason String    @default("init") @db.VarChar(32) /// init | round_complete | pool_changed
+  shuffled_at    DateTime  @default(now())
+  completed_at   DateTime?
+
+  deck_states presales_video_group_deck_state[]
+  push_events presales_video_push_events[]
+}
+
+/// 线索 ↔ 企微 appchat
+model presales_video_group_chats {
+  lead_key      String   @id @db.VarChar(200)
+  chatid        String   @db.VarChar(200)
+  chat_name     String?  @db.VarChar(200)
+  first_push_at DateTime @default(now())
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  @@index([chatid], map: "idx_pv_group_chats_chatid")
+}
+
+/// 一次 push-video 主记录
+model presales_video_push_events {
+  id                    String   @id @db.VarChar(50)
+  transcription_id      String   @db.VarChar(50)
+  lead_key              String?  @db.VarChar(200)
+  chatid                String?  @db.VarChar(200)
+  is_new_chat           Boolean  @default(false)
+  push_source           String   @db.VarChar(20) /// auto | manual
+  pushed_at             DateTime @default(now())
+  deal_round_id         String   @db.VarChar(50)
+  deal_round            Int
+  deal_step             Int
+  deal_size             Int
+  fixed_dealt_ids       Json
+  deck_order_snapshot   Json?
+  association_user_ids  Json
+  submitted_user_ids    Json
+  created_at            DateTime @default(now())
+
+  deal_round_ref presales_video_group_deck_rounds @relation(fields: [deal_round_id], references: [id], onDelete: Restrict)
+  members        presales_video_push_members[]
+
+  @@index([transcription_id], map: "idx_pv_push_events_transcription")
+  @@index([lead_key], map: "idx_pv_push_events_lead_key")
+  @@index([pushed_at], map: "idx_pv_push_events_pushed_at")
+}
+
+/// push 成员明细
+model presales_video_push_members {
+  id             String   @id @db.VarChar(50)
+  push_event_id  String   @db.VarChar(50)
+  user_id        String   @db.VarChar(100)
+  role           String   @db.VarChar(32) /// rxkf01 | participant | direct_leader | fixed_dealt
+  in_association Boolean  @default(true)
+  in_submitted   Boolean  @default(false)
+  wecom_action   String   @db.VarChar(32) /// create_in | appended | already_in_chat | skipped_excluded | not_submitted
+  pushed_at      DateTime @default(now())
+
+  push_event presales_video_push_events @relation(fields: [push_event_id], references: [id], onDelete: Cascade)
+
+  @@index([push_event_id], map: "idx_pv_push_members_event")
+  @@index([user_id], map: "idx_pv_push_members_user")
+}

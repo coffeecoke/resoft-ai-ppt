@@ -563,9 +563,13 @@ router.get('/qa/config', async (req, res) => {
  */
 router.put('/qa/config', async (req, res) => {
   try {
-    const { pollingInterval, maxConcurrent } = req.body
+    const { scanDirectory, pollingInterval, maxConcurrent } = req.body
     
     const newConfig = {}
+    
+    if (scanDirectory !== undefined) {
+      newConfig.scanDirectory = scanDirectory
+    }
     
     if (pollingInterval !== undefined) {
       const interval = parseInt(pollingInterval)

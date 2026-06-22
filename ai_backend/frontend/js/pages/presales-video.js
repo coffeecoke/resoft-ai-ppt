@@ -1439,11 +1439,24 @@ window.pvOpenPsvVideoPlayWindow = function () {
   }
 }
 
+function pvSetPushDealMembersNote(deal) {
+  const textEl = document.getElementById('pv-push-deal-members-text')
+  if (!textEl) return
+  const ids = Array.isArray(deal && deal.fixedDealtIds)
+    ? deal.fixedDealtIds.map((u) => String(u || '').trim()).filter(Boolean)
+    : []
+  if (ids.length === 0) {
+    textEl.textContent = '此轮发牌人员：暂无（请检查固定成员池或发牌状态）'
+    return
+  }
+  textEl.textContent = `此轮发牌人员：${ids.join(',')}`
+}
+
 async function pvLoadPipelinePushUsersPreview(id) {
   const ta = document.getElementById('pv-pipeline-push-users')
   const hint = document.getElementById('pv-pipeline-push-users-preview')
   if (!ta) return
-  if (hint) hint.textContent = '正在按 from_user + 上级链 + 固定成员计算推送人员...'
+  if (hint) hint.textContent = '正在按全部固定成员+参与人+上级计算…'
   try {
     const res = await fetch(`${PV_API}/presales-video/transcriptions/${encodeURIComponent(id)}/push-video-users`)
     const data = await res.json().catch(() => ({}))
@@ -1451,13 +1464,22 @@ async function pvLoadPipelinePushUsersPreview(id) {
       throw new Error(data.error || '加载推送人员失败')
     }
     const d = data.data || {}
-    const users = Array.isArray(d.userIds) ? d.userIds : []
+    const users = Array.isArray(d.suggestedSubmitUserIds)
+      ? d.suggestedSubmitUserIds
+      : Array.isArray(d.userIds)
+        ? d.userIds
+        : []
     ta.value = users.join(',')
     const excluded = Array.isArray(d.excludedUserIds) ? d.excludedUserIds : []
+    const deal = d.deal || {}
     if (hint) {
-      const part1 = `已自动反显 ${users.length} 人（启动流水线时将按当前文本框名单发送）`
+      const part1 = `已反显 ${users.length} 人（含全部固定成员）`
       const part2 = excluded.length > 0 ? `；env 已排除：${excluded.join(',')}` : ''
-      hint.textContent = part1 + part2
+      const dealHint =
+        deal.fixedDealtIds && deal.fixedDealtIds.length > 0
+          ? `；本步发牌：${deal.fixedDealtIds.join(',')}`
+          : ''
+      hint.textContent = part1 + part2 + dealHint
     }
   } catch (e) {
     if (hint) hint.textContent = `自动反显失败：${e.message || e}；可手动填写 userid`
@@ -1469,7 +1491,9 @@ async function pvLoadPushVideoUsersPreview(id) {
   const ta = document.getElementById('pv-push-video-users')
   const hint = document.getElementById('pv-push-video-preview')
   if (!ta) return
-  if (hint) hint.textContent = '正在按 from_user + 上级链 + 固定成员计算推送人员...'
+  if (hint) hint.textContent = '正在按全部固定成员+参与人+上级计算建群名单…'
+  const dealTextEl = document.getElementById('pv-push-deal-members-text')
+  if (dealTextEl) dealTextEl.textContent = '正在加载此轮发牌人员…'
   try {
     const res = await fetch(`${PV_API}/presales-video/transcriptions/${encodeURIComponent(id)}/push-video-users`)
     const data = await res.json().catch(() => ({}))
@@ -1477,16 +1501,23 @@ async function pvLoadPushVideoUsersPreview(id) {
       throw new Error(data.error || '加载推送人员失败')
     }
     const d = data.data || {}
-    const users = Array.isArray(d.userIds) ? d.userIds : []
+    const users = Array.isArray(d.suggestedSubmitUserIds)
+      ? d.suggestedSubmitUserIds
+      : Array.isArray(d.userIds)
+        ? d.userIds
+        : []
     ta.value = users.join(',')
     const excluded = Array.isArray(d.excludedUserIds) ? d.excludedUserIds : []
+    const deal = d.deal || {}
+    pvSetPushDealMembersNote(deal)
     if (hint) {
-      const part1 = `已自动反显 ${users.length} 人（保存推送时将按当前文本框名单发送）`
+      const part1 = `已反显建群/同步 ${users.length} 人（含全部固定成员；保存时以文本框为准）`
       const part2 = excluded.length > 0 ? `；env 已排除：${excluded.join(',')}` : ''
       hint.textContent = part1 + part2
     }
   } catch (e) {
     if (hint) hint.textContent = `自动反显失败：${e.message || e}；可手动填写 userid`
+    if (dealTextEl) dealTextEl.textContent = '此轮发牌人员：加载失败'
     ta.value = ''
   }
 }
@@ -1584,6 +1615,8 @@ window.pvOpenPushVideoDialog = function (id) {
   const chatNameEl = document.getElementById('pv-push-video-chat-name')
   if (ta) ta.value = ''
   if (hint) hint.textContent = '正在加载自动推送人员...'
+  const dealTextEl = document.getElementById('pv-push-deal-members-text')
+  if (dealTextEl) dealTextEl.textContent = '正在加载此轮发牌人员…'
   const row = pvState.list.find((r) => r.id === id)
   if (cardTitleEl) {
     const raw = row && (row.originalFileName || row.name) ? String(row.originalFileName || row.name) : ''
@@ -1684,7 +1717,7 @@ window.pvSubmitPushVideo = async function () {
     (document.getElementById('pv-push-md-clue') && document.getElementById('pv-push-md-clue').value) != null
       ? String(document.getElementById('pv-push-md-clue').value)
       : ''
-  const reportMd =
+    const reportMd =
     (document.getElementById('pv-push-md-report') && document.getElementById('pv-push-md-report').value) != null
       ? String(document.getElementById('pv-push-md-report').value)
       : ''

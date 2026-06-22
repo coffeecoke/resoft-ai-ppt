@@ -177,9 +177,9 @@ async function updateAppChatAddMembers(chatid, userIds) {
   const chatidStr = String(chatid).trim()
   const skipped60111 = []
   let addedCount = 0
+  const token = await getAccessToken()
+  const url = `https://qyapi.weixin.qq.com/cgi-bin/appchat/update?access_token=${encodeURIComponent(token)}`
   for (const uid of ids) {
-    const token = await getAccessToken()
-    const url = `https://qyapi.weixin.qq.com/cgi-bin/appchat/update?access_token=${encodeURIComponent(token)}`
     const body = {
       chatid: chatidStr,
       add_user_list: uid
@@ -216,13 +216,30 @@ async function updateAppChatAddMembers(chatid, userIds) {
  * @param {string} textContent 单条最长约 2048 字节（UTF-8）
  */
 async function sendAppChatText(chatid, textContent) {
+  return sendAppChatTextWithMention(chatid, textContent, [])
+}
+
+/**
+ * 群发纯文本并 @ 指定成员（mentioned_list 为 userid）
+ * @param {string} chatid
+ * @param {string} textContent
+ * @param {string[]} mentionedUserIds
+ */
+async function sendAppChatTextWithMention(chatid, textContent, mentionedUserIds) {
   const token = await getAccessToken()
   const url = `https://qyapi.weixin.qq.com/cgi-bin/appchat/send?access_token=${encodeURIComponent(token)}`
   const content = truncateUtf8Bytes(textContent || '', 2048)
+  const mentioned = [
+    ...new Set((mentionedUserIds || []).map((u) => String(u || '').trim()).filter(Boolean))
+  ].slice(0, 50)
+  const textPayload = { content }
+  if (mentioned.length > 0) {
+    textPayload.mentioned_list = mentioned
+  }
   const body = {
     chatid: String(chatid).trim(),
     msgtype: 'text',
-    text: { content }
+    text: textPayload
   }
   const j = await httpsPostJson(url, body)
   if (j.errcode != null && j.errcode !== 0) {
@@ -579,6 +596,7 @@ module.exports = {
   createAppChat,
   updateAppChatAddMembers,
   sendAppChatText,
+  sendAppChatTextWithMention,
   sendAppChatMarkdown,
   sendAppChatTextCard,
   sendApplicationTextCardToUser,

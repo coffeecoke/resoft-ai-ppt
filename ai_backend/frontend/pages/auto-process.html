@@ -635,6 +635,15 @@
       <h3>⚙️ 跑批配置</h3>
       <div class="config-form">
         <div class="form-row">
+          <label>扫描目录</label>
+          <input type="text" id="qa-config-scan-dir" placeholder="例如: E:/已转录">
+        </div>
+        <div class="form-row">
+          <label></label>
+          <div class="helper-text">仅处理该目录（含子目录）下音频文件对应的转录记录</div>
+        </div>
+
+        <div class="form-row">
           <label>轮询间隔（分钟）</label>
           <input type="number" id="qa-config-interval" min="1" max="1440" value="5">
         </div>

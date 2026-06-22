@@ -13,16 +13,21 @@ const path = require('path')
 const logger = require('../utils/logger')
 const transcriptionService = require('./transcriptionService')
 const transcriptionAiService = require('./transcriptionAiService')
+const audioScanService = require('./audioScanService')
 
 
 class QaAutoProcessService {
   constructor() {
     this.isRunning = false
-    this.intervalId = null
+    this.intervalId = null // 兼容旧字段
+    this.nextLoopTimer = null
+    this.heartbeatTimer = null
     this.currentTask = null
     this.config = {
+      scanDirectory: '', // 扫描目录（仅处理该目录下音频对应的转录记录）
       pollingInterval: 5 * 60 * 1000, // 默认5分钟
-      maxConcurrent: 1 // 同时处理的转录记录数量
+      maxConcurrent: 1, // 同时处理的转录记录数量
+      autoStartEnabled: false // 持久化：true 时服务重启后自动恢复跑批
     }
     this.statistics = {
       totalTranscriptions: 0,
@@ -39,6 +44,7 @@ class QaAutoProcessService {
     this.logs = [] // 最近100条日志
     this.maxLogs = 100
     this.processingQueue = new Set() // 正在处理的转录记录ID
+    this.runOnceInProgress = false // 防止定时任务与手动触发重叠执行
     
     // 加载配置
     this.loadConfig()
@@ -56,7 +62,34 @@ class QaAutoProcessService {
       logger.info(`✅ 问答对提取自动跑批配置已加载: ${configPath}`)
     } catch (error) {
       logger.warn(`⚠️ 未找到问答对提取自动跑批配置文件，使用默认配置`)
+      // 从音频扫描配置中读取目录
+      try {
+        const scanConfig = await audioScanService.getConfig()
+        if (scanConfig.scanDirectory) {
+          this.config.scanDirectory = scanConfig.scanDirectory
+        }
+      } catch (err) {
+        logger.warn(`⚠️ 读取音频扫描配置失败`)
+      }
     }
+  }
+
+  /**
+   * 获取扫描目录范围内的转录记录ID集合
+   */
+  async getScopedTranscriptionIds() {
+    if (!this.config.scanDirectory) {
+      return null
+    }
+
+    const files = await audioScanService.scanAudioFiles(this.config.scanDirectory)
+    const filesWithStatus = await audioScanService.checkFilesStatus(files)
+
+    return new Set(
+      filesWithStatus
+        .filter(f => f.transcribed && f.transcriptionId)
+        .map(f => f.transcriptionId)
+    )
   }
 
   /**
@@ -73,9 +106,86 @@ class QaAutoProcessService {
   }
 
   /**
+   * 清除定时调度（setInterval / setTimeout）
+   */
+  _clearSchedule() {
+    if (this.intervalId) {
+      clearInterval(this.intervalId)
+      this.intervalId = null
+    }
+    if (this.nextLoopTimer) {
+      clearTimeout(this.nextLoopTimer)
+      this.nextLoopTimer = null
+    }
+  }
+
+  _stopTaskHeartbeat() {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer)
+      this.heartbeatTimer = null
+    }
+  }
+
+  _startTaskHeartbeat() {
+    this._stopTaskHeartbeat()
+    this.heartbeatTimer = setInterval(() => {
+      if (!this.currentTask) return
+      const startedAt = new Date(this.currentTask.startedAt).getTime()
+      const mins = Math.max(1, Math.round((Date.now() - startedAt) / 60000))
+      this.addLog('info', `⏳ 仍在提取问答对: ${this.currentTask.name}（已运行约 ${mins} 分钟）`)
+    }, 3 * 60 * 1000)
+  }
+
+  /**
+   * 上一轮 runOnce 结束后再等待 pollingInterval，避免长任务期间反复「跳过」
+   */
+  _scheduleNextLoop() {
+    this._clearSchedule()
+    if (!this.isRunning) return
+
+    this.statistics.nextRunTime = new Date(Date.now() + this.config.pollingInterval)
+    this.nextLoopTimer = setTimeout(async () => {
+      if (!this.isRunning) return
+      try {
+        await this.runOnce()
+      } catch (error) {
+        logger.error('问答对提取跑批定时执行失败:', error)
+      } finally {
+        if (this.isRunning) {
+          this._scheduleNextLoop()
+        }
+      }
+    }, this.config.pollingInterval)
+  }
+
+  /**
+   * 服务启动后：若上次为「运行中」则自动恢复（应对进程重启 / node --watch）
+   */
+  async resumeIfNeeded() {
+    await this.loadConfig()
+
+    if (!this.config.autoStartEnabled) {
+      return { resumed: false }
+    }
+
+    if (String(process.env.QA_AUTO_PROCESS_AUTO_RESUME || '').trim().toLowerCase() === 'false') {
+      logger.info('问答对提取跑批自动恢复已禁用 (QA_AUTO_PROCESS_AUTO_RESUME=false)')
+      return { resumed: false, reason: 'disabled_by_env' }
+    }
+
+    if (this.isRunning) {
+      return { resumed: false, reason: 'already_running' }
+    }
+
+    logger.info('🔄 问答对提取跑批：检测到上次为运行状态，服务重启后自动恢复...')
+    const result = await this.start({ resumed: true })
+    return { resumed: true, ...result }
+  }
+
+  /**
    * 启动自动跑批
    */
-  async start() {
+  async start(options = {}) {
     if (this.isRunning) {
       logger.warn('⚠️ 问答对提取自动跑批服务已在运行中')
       return { success: false, message: '服务已在运行中' }
@@ -83,17 +193,20 @@ class QaAutoProcessService {
 
     logger.info('🚀 启动问答对提取自动跑批服务')
     this.isRunning = true
-    this.addLog('info', '🚀 服务已启动')
+    this.config.autoStartEnabled = true
+    await this.saveConfig()
+    this.addLog('info', options.resumed ? '🔄 服务重启后自动恢复跑批' : '🚀 服务已启动')
 
-    // 立即执行一次
-    await this.runOnce()
-
-    // 设置定时任务
-    this.intervalId = setInterval(() => {
-      this.runOnce()
-    }, this.config.pollingInterval)
-
-    this.statistics.nextRunTime = new Date(Date.now() + this.config.pollingInterval)
+    this._clearSchedule()
+    this.runOnce()
+      .catch((error) => {
+        logger.error('问答对提取跑批首次执行失败:', error)
+      })
+      .finally(() => {
+        if (this.isRunning) {
+          this._scheduleNextLoop()
+        }
+      })
 
     return { success: true, message: '服务启动成功' }
   }
@@ -109,11 +222,12 @@ class QaAutoProcessService {
 
     logger.info('🛑 停止问答对提取自动跑批服务')
     this.isRunning = false
-    
-    if (this.intervalId) {
-      clearInterval(this.intervalId)
-      this.intervalId = null
-    }
+    this.config.autoStartEnabled = false
+    await this.saveConfig()
+
+    this._clearSchedule()
+    this._stopTaskHeartbeat()
+    this.currentTask = null
 
     this.addLog('info', '🛑 服务已停止')
     this.statistics.nextRunTime = null
@@ -125,12 +239,25 @@ class QaAutoProcessService {
    * 执行一次自动处理
    */
   async runOnce() {
+    if (this.runOnceInProgress) {
+      const hint = this.currentTask?.name ? `，当前: ${this.currentTask.name}` : ''
+      logger.info(`[问答对提取跑批] 任务进行中，忽略重复触发${hint}`)
+      return { skipped: true }
+    }
+
+    this.runOnceInProgress = true
     const startTime = Date.now()
     this.statistics.lastRunTime = new Date()
     this.statistics.totalRuns++
 
     try {
       this.addLog('info', '▶️ 开始执行问答对提取自动处理任务')
+
+      if (!this.config.scanDirectory) {
+        throw new Error('未配置扫描目录')
+      }
+
+      this.addLog('info', `📁 扫描目录: ${this.config.scanDirectory}`)
 
       // 1. 扫描待处理的转录记录
       const scanResult = await this.scanTranscriptions()
@@ -173,10 +300,9 @@ class QaAutoProcessService {
 
       this.statistics.successfulRuns++
       const duration = Date.now() - startTime
-      this.addLog('success', `✅ 问答对提取自动处理任务完成，耗时 ${duration}ms`)
+      this.addLog('success', `✅ 问答对提取自动处理任务完成，耗时 ${Math.round(duration / 1000)} 秒`)
 
-      // 设置下次运行时间
-      if (this.isRunning) {
+      if (this.isRunning && !this.nextLoopTimer) {
         this.statistics.nextRunTime = new Date(Date.now() + this.config.pollingInterval)
       }
 
@@ -184,6 +310,8 @@ class QaAutoProcessService {
       this.statistics.failedRuns++
       logger.error('❌ 问答对提取自动处理任务失败:', error)
       this.addLog('error', `❌ 任务失败: ${error.message}`)
+    } finally {
+      this.runOnceInProgress = false
     }
   }
 
@@ -194,8 +322,11 @@ class QaAutoProcessService {
    */
   async scanTranscriptions() {
     try {
-      // 1. 查询所有转录记录（用于统计总数）
-      const total = await prisma.transcriptions.count()
+      const scopedIds = await this.getScopedTranscriptionIds()
+      const isInScope = (id) => !scopedIds || scopedIds.has(id)
+
+      // 1. 统计扫描目录范围内的转录记录总数
+      const total = scopedIds ? scopedIds.size : await prisma.transcriptions.count()
 
       // 2. 查询所有 dialogue_adjustments 表中有 speaker_roles 字段的记录
       const adjustmentsWithRoles = await prisma.dialogue_adjustments.findMany({
@@ -207,8 +338,12 @@ class QaAutoProcessService {
         }
       })
 
-      // 去重：使用 Set 对 transcription_id 去重
-      const transcriptionIdsWithRoles = [...new Set(adjustmentsWithRoles.map(item => item.transcription_id))]
+      // 去重：使用 Set 对 transcription_id 去重，并限定在扫描目录范围内
+      const transcriptionIdsWithRoles = [...new Set(
+        adjustmentsWithRoles
+          .map(item => item.transcription_id)
+          .filter(isInScope)
+      )]
       const withRoleJudgment = transcriptionIdsWithRoles.length
 
       // 3. 获取所有已提取问答对的 transcription_id 列表
@@ -267,6 +402,8 @@ class QaAutoProcessService {
 
     this.processingQueue.add(id)
     this.statistics.processingExtractions = this.processingQueue.size
+    this.currentTask = { id, name, startedAt: new Date().toISOString() }
+    this._startTaskHeartbeat()
 
     try {
       this.addLog('info', `❓ 开始提取问答对: ${name}`)
@@ -369,14 +506,47 @@ class QaAutoProcessService {
         throw new Error('未找到角色信息')
       }
 
+      this.addLog('info', `📊 共 ${sourceDialogues.length} 条对话，准备调用 AI 提取问答对`)
+
       // 调用AI提取问答对（使用默认模型和提示词）
+      let lastLoggedProgress = -1
       const result = await transcriptionAiService.extractQAPairs(
         sourceDialogues,
         speakerRoles,
         {
-          // 不传 modelName 和 promptId，使用默认配置
+          onExtractStart: ({ totalDialogues, totalChars, totalBatches, modelName }) => {
+            const msg = `🤖 模型=${modelName} | ${totalDialogues}条对话 | ${totalChars}字 | 分${totalBatches}批`
+            this.addLog('info', msg)
+            logger.info(`[问答对跑批] ${name} → ${msg}`)
+          },
+          onBatchProgress: ({ phase, batchIndex, totalBatches, dialogueCount, batchChars, qaPairCount, processingTimeMs, error, reason }) => {
+            const batchNo = batchIndex + 1
+            if (phase === 'start') {
+              const msg = `🔄 AI 第 ${batchNo}/${totalBatches} 批开始（${dialogueCount}条对话，${batchChars}字）`
+              this.addLog('info', msg)
+              logger.info(`[问答对跑批] ${name} → ${msg}`)
+            } else if (phase === 'done') {
+              const sec = Math.round((processingTimeMs || 0) / 1000)
+              const msg = `✅ AI 第 ${batchNo}/${totalBatches} 批完成，提取 ${qaPairCount} 个问答对（${sec}秒）`
+              this.addLog('success', msg)
+              logger.success(`[问答对跑批] ${name} → ${msg}`)
+            } else if (phase === 'skip') {
+              const msg = `⏭️ AI 第 ${batchNo}/${totalBatches} 批跳过（${reason || '无需提取'}）`
+              this.addLog('info', msg)
+              logger.info(`[问答对跑批] ${name} → ${msg}`)
+            } else if (phase === 'error') {
+              const msg = `❌ AI 第 ${batchNo}/${totalBatches} 批失败: ${error}`
+              this.addLog('error', msg)
+              logger.error(`[问答对跑批] ${name} → ${msg}`)
+            }
+          },
           onProgress: (current, total) => {
-            logger.info(`📊 问答对提取进度: ${current}/${total} (${Math.round(current/total*100)}%)`)
+            const pct = total > 0 ? Math.round((current / total) * 100) : 0
+            const bucket = Math.floor(pct / 10) * 10
+            if (bucket !== lastLoggedProgress && bucket > 0) {
+              lastLoggedProgress = bucket
+              logger.info(`[问答对跑批] ${name} → 对话进度 ${current}/${total} (${pct}%)`)
+            }
           }
         }
       )
@@ -414,6 +584,10 @@ class QaAutoProcessService {
       logger.error(`❌ 处理转录记录失败: ${name}`, error)
       this.addLog('error', `❌ 处理失败: ${name} - ${error.message}`)
     } finally {
+      if (this.currentTask?.id === id) {
+        this.currentTask = null
+        this._stopTaskHeartbeat()
+      }
       this.processingQueue.delete(id)
       this.statistics.processingExtractions = this.processingQueue.size
     }

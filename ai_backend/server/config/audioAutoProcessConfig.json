@@ -1,5 +1,5 @@
 {
-  "scanDirectory": "F:\\金数",
+  "scanDirectory": "F:\\利率报备",
   "pollingInterval": 300000,
   "maxConcurrent": 1,
   "enableAiCorrection": false,

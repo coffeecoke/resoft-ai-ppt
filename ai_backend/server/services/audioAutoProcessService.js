@@ -244,6 +244,17 @@ class AudioAutoProcessService {
     this.statistics.processingAudios = this.processingQueue.size
 
     try {
+      // 同一源文件名已有 completed 记录则跳过（避免 mp4/wav 路径不一致导致重复跑批）
+      const existing = await prisma.transcriptions.findFirst({
+        where: { original_file_name: fileName, status: 'completed' },
+        orderBy: { created_at: 'desc' },
+        select: { id: true },
+      });
+      if (existing) {
+        this.addLog('info', `⏭️ 已存在转录记录，跳过: ${fileName}`);
+        return;
+      }
+
       // 检测是否为视频文件，如果是则提取音频
       let actualAudioPath = filePath
       let extractedAudioPath = null

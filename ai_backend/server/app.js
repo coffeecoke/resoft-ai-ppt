@@ -34,6 +34,7 @@ const presalesInboundRoutes = require('./routes/presalesInboundRoutes')
 const { startWeComBot, stopWeComBot } = require('./services/wecomBotService')
 const presalesVideoPipelineOrchestrator = require('./services/presalesVideoPipelineOrchestrator')
 const presalesVideoRoleConfirmReminderService = require('./services/presalesVideoRoleConfirmReminderService')
+const qaAutoProcessService = require('./services/qaAutoProcessService')
 const { getAiBackendStaticPathPrefix } = require('./utils/aiBackendPublicPath')
 
 const app = express()
@@ -512,6 +513,14 @@ app.listen(PORT, HOST, () => {
   } else {
     console.log('  [售前视频·角色确认超时提醒] 已禁用')
   }
+
+  qaAutoProcessService.resumeIfNeeded().then((result) => {
+    if (result?.success && result?.resumed) {
+      console.log('  [问答对提取跑批] 已自动恢复（上次为运行状态）')
+    }
+  }).catch((e) => {
+    console.error('[问答对提取跑批] 自动恢复失败:', e.message || e)
+  })
 })
 
 // 错误处理

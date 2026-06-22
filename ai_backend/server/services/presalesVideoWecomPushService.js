@@ -6,6 +6,8 @@ const crypto = require('crypto')
 const wecomAppChatApi = require('./wecomAppChatApi')
 const presalesVideoTaskService = require('./presalesVideoTaskService')
 const presalesVideoGroupSettingsService = require('./presalesVideoGroupSettingsService')
+const presalesVideoGroupDealService = require('./presalesVideoGroupDealService')
+const presalesVideoPushMemberService = require('./presalesVideoPushMemberService')
 const logger = require('../utils/logger')
 
 /** 与 push-report 一致：短音频为 duration < 返回值（默认 600s=10 分钟） */
@@ -229,63 +231,56 @@ function buildWecomVideoCardStyle(category) {
   }
 }
 
-async function collectLeaderChainUserIds(prisma, startUserId) {
-  const start = String(startUserId || '').trim()
-  if (!start) return []
-  const ids = []
-  const visited = new Set()
-  let cursor = start
-  for (let i = 0; i < 20; i++) {
-    if (!cursor || visited.has(cursor)) break
-    visited.add(cursor)
-    const row = await prisma.org_user.findUnique({
-      where: { user_id: cursor },
-      select: {
-        user_id: true,
-        leader_id: true,
-        org_id: true,
-        is_deleted: true
-      }
-    })
-    if (!row || row.is_deleted) break
-    ids.push({
-      userId: String(row.user_id || '').trim(),
-      leaderId: row.leader_id ? String(row.leader_id).trim() : '',
-      orgId: row.org_id ? String(row.org_id).trim() : ''
-    })
-    cursor = row.leader_id ? String(row.leader_id).trim() : ''
-  }
-  if (ids.length === 0) return []
-  const orgIds = [...new Set(ids.map((x) => x.orgId).filter(Boolean))]
-  let activeOrg = new Set()
-  if (orgIds.length > 0) {
-    const deps = await prisma.departments.findMany({
-      where: { id: { in: orgIds }, status: 'active' },
-      select: { id: true }
-    })
-    activeOrg = new Set(deps.map((d) => String(d.id)))
-  }
-  return ids
-    .filter((x) => !x.orgId || activeOrg.has(x.orgId))
-    .map((x) => x.userId)
-    .filter(Boolean)
-}
-
-async function buildAutoUserIds(prisma, transcription, fixedMembers) {
-  const fromUser = transcription && transcription.created_by ? String(transcription.created_by).trim() : ''
-  const chain = await collectLeaderChainUserIds(prisma, fromUser)
-  const fixed = presalesVideoGroupSettingsService.normalizeUserIds(fixedMembers)
-  let reportParticipants = []
+async function resolveLeadChat(prisma, leadKey) {
+  const key = String(leadKey || '').trim()
+  if (!key) return null
   try {
-    const report = await resolveCommunicationReportForTranscription(prisma, transcription)
-    if (report && report.our_participants) {
-      const names = splitParticipantNames(report.our_participants)
-      reportParticipants = await resolveParticipantNamesToUserIds(prisma, names)
+    const row = await prisma.presales_video_group_chats.findUnique({
+      where: { lead_key: key }
+    })
+    if (row && row.chatid) {
+      return {
+        chatid: String(row.chatid).trim(),
+        name: row.chat_name ? String(row.chat_name).trim() : ''
+      }
     }
   } catch (e) {
-    logger.warn(`[presales-video] 报备 our_participants 转 userid 失败: ${e && e.message}`)
+    logger.warn(`[presales-video] 读取 group_chats 失败 leadKey=${key}: ${e && e.message}`)
   }
-  return [...new Set([...chain, ...fixed, ...reportParticipants, 'rxkf01'].filter(Boolean))]
+  return presalesVideoGroupSettingsService.getLeadChatByKey(key)
+}
+
+async function upsertLeadChatRecord(prisma, leadKey, chatid, chatName) {
+  const key = String(leadKey || '').trim()
+  const cid = String(chatid || '').trim()
+  if (!key || !cid) return
+  try {
+    await prisma.presales_video_group_chats.upsert({
+      where: { lead_key: key },
+      create: {
+        lead_key: key,
+        chatid: cid,
+        chat_name: chatName || null,
+        first_push_at: new Date()
+      },
+      update: {
+        chatid: cid,
+        chat_name: chatName || null
+      }
+    })
+  } catch (e) {
+    logger.warn(`[presales-video] upsert group_chats 失败: ${e && e.message}`)
+  }
+}
+
+async function syncLeadChatToJson(leadKey, chatid, chatName) {
+  const key = String(leadKey || '').trim()
+  const cid = String(chatid || '').trim()
+  if (!key || !cid) return
+  await presalesVideoGroupSettingsService.setLeadChatByKey(key, {
+    chatid: cid,
+    name: chatName || ''
+  })
 }
 
 async function resolvePushVideoUserIds(ctx) {
@@ -293,31 +288,48 @@ async function resolvePushVideoUserIds(ctx) {
   const tr = await prisma.transcriptions.findUnique({ where: { id: transcriptionId } })
   if (!tr) throw new Error('转录不存在')
 
-  const settings = await presalesVideoGroupSettingsService.readSettings()
-  const fixedMembers = settings.fixedMembers || []
-  const fromInput = parseUserIds(userIdsRaw)
-
-  let beforeExclude = []
-  let source = 'auto'
-  if (fromInput.length > 0) {
-    source = 'manual'
-    // 手动名单为准：仅采用文本框内的 userid，不再并入固定成员 / rxkf01（固定成员也可删掉）
-    beforeExclude = [...new Set(fromInput.filter(Boolean))]
-  } else {
-    beforeExclude = await buildAutoUserIds(prisma, tr, fixedMembers)
+  let report = await resolveCommunicationReportForTranscription(prisma, tr)
+  if (!report) {
+    report = await findReportBySyncLog(prisma, transcriptionId)
+  }
+  if (!report) {
+    report = await findLatestMatchingReport(prisma, tr)
   }
 
-  let userIds = applyExcludedUsers(beforeExclude)
-  // 自动规则仍保证 rxkf01；手动模式完全尊重用户输入（若未包含 rxkf01 则不加）
-  if (source !== 'manual' && !userIds.includes('rxkf01')) userIds.push('rxkf01')
-  userIds = [...new Set(userIds.filter(Boolean))]
+  let deal
+  try {
+    deal = await presalesVideoGroupDealService.peekNextDeal(prisma)
+  } catch (e) {
+    throw new Error(
+      `发牌状态不可用（请先执行 DB 迁移 manual_presales_video_group_deck.sql）：${e && e.message}`
+    )
+  }
+
+  const memberCtx = await presalesVideoPushMemberService.buildPushMemberContext({
+    prisma,
+    transcription: tr,
+    report,
+    fixedDealtIds: deal.fixedDealtIds,
+    userIdsRaw
+  })
+
+  const settings = await presalesVideoGroupSettingsService.readSettings()
+  const fixedMembers = settings.fixedMembers || []
 
   return {
     transcription: tr,
-    userIds,
-    source,
-    excludedUserIds: diffExcludedUsers(beforeExclude, userIds),
-    fixedMembers: presalesVideoGroupSettingsService.normalizeUserIds(fixedMembers)
+    userIds: memberCtx.submittedUserIds,
+    source: memberCtx.pushSource,
+    excludedUserIds: memberCtx.excludedUserIds,
+    fixedMembers: presalesVideoGroupSettingsService.normalizeUserIds(fixedMembers),
+    deal,
+    memberCtx,
+    suggestedSubmitUserIds: memberCtx.suggestedSubmitUserIds,
+    associationUserIds: memberCtx.associationUserIds,
+    participants: memberCtx.participants,
+    directLeaders: memberCtx.directLeaders,
+    fullFixedPool: memberCtx.fullFixedPool,
+    report
   }
 }
 
@@ -1078,12 +1090,8 @@ async function pushPresalesVideoToWecomAppChat(ctx) {
     )
   }
 
-  const resolvedUsers = await resolvePushVideoUserIds({ prisma, transcriptionId, userIdsRaw })
-  const tr = resolvedUsers.transcription
-  const userIds = resolvedUsers.userIds
-  if (userIds.length < 2) {
-    throw new Error('自动建群成员不足：至少需要2个成员（已强制包含 rxkf01）')
-  }
+  const tr_pre = await prisma.transcriptions.findUnique({ where: { id: transcriptionId } })
+  if (!tr_pre) throw new Error('转录不存在')
 
   let videoTask = null
   try {
@@ -1094,43 +1102,128 @@ async function pushPresalesVideoToWecomAppChat(ctx) {
     /* optional table */
   }
 
-  let report = await findReportByKnownIds(prisma, tr)
+  let report = await findReportByKnownIds(prisma, tr_pre)
   if (!report) {
     report = await findReportBySyncLog(prisma, transcriptionId)
   }
   if (!report) {
-    report = await findLatestMatchingReport(prisma, tr)
+    report = await findLatestMatchingReport(prisma, tr_pre)
   }
 
   const clueSummary = await resolveClueSummary(report)
   const pushCategory = resolveWecomPushCategoryFromXsfl(clueSummary && clueSummary.clueType)
   const cardStyle = buildWecomVideoCardStyle(pushCategory)
   const leadKey = presalesVideoGroupSettingsService.makeLeadKey(report)
-  const mappedChat = leadKey
-    ? await presalesVideoGroupSettingsService.getLeadChatByKey(leadKey)
-    : null
   const defaultChatName = buildDefaultWecomPresalesChatName(report, clueSummary && clueSummary.clueType)
   const chatNameOverride =
     chatNameRaw != null && String(chatNameRaw).trim() !== ''
       ? String(chatNameRaw).trim()
       : null
   const chatName = chatNameOverride || defaultChatName
-  const ownerUserId = 'rxkf01'
-  let chatid = mappedChat && mappedChat.chatid ? String(mappedChat.chatid).trim() : ''
+  const ownerUserId = presalesVideoPushMemberService.GROUP_OWNER_USERID
+
+  let chatid = ''
   let reusedExistingChat = false
-  if (!chatid) {
-    const created = await wecomAppChatApi.createAppChat({
-      name: chatName,
-      ownerUserId,
-      userIds
-    })
-    chatid = created.chatid
-    if (leadKey) {
-      await presalesVideoGroupSettingsService.setLeadChatByKey(leadKey, {
-        chatid,
-        name: chatName
+  let userIds = []
+  let memberCtx = null
+  let deal = null
+  let pushEventId = null
+  let wecomSkipped60111 = []
+  const pushMoment = new Date()
+
+  const TX_OPTS = { maxWait: 15000, timeout: 30000 }
+
+  try {
+    const prep = await prisma.$transaction(async (tx) => {
+      deal = await presalesVideoGroupDealService.consumeNextDeal(tx)
+
+      const tr = await tx.transcriptions.findUnique({ where: { id: transcriptionId } })
+      if (!tr) throw new Error('转录不存在')
+
+      memberCtx = await presalesVideoPushMemberService.buildPushMemberContext({
+        prisma: tx,
+        transcription: tr,
+        report,
+        fixedDealtIds: deal.fixedDealtIds,
+        userIdsRaw
       })
+
+      const ids = memberCtx.submittedUserIds
+      if (ids.length < 2) {
+        throw new Error('建群成员不足：至少需要2个成员（请确保含 rxkf01 或检查提交名单）')
+      }
+
+      const mappedChat = leadKey ? await resolveLeadChat(tx, leadKey) : null
+      const existingCid =
+        mappedChat && mappedChat.chatid ? String(mappedChat.chatid).trim() : ''
+
+      return { userIds: ids, existingCid, deal }
+    }, TX_OPTS)
+
+    userIds = prep.userIds
+    deal = prep.deal
+
+    let cid = prep.existingCid
+    let isNew = false
+
+    try {
+      if (!cid) {
+        const created = await wecomAppChatApi.createAppChat({
+          name: chatName,
+          ownerUserId,
+          userIds
+        })
+        cid = created.chatid
+        isNew = true
+      } else {
+        const sync = await wecomAppChatApi.updateAppChatAddMembers(cid, userIds)
+        wecomSkipped60111 = sync.skipped60111 || []
+        logger.info(
+          `[presales-video] 复用群成员已同步 chatid=${cid} 列表=${userIds.length}人 企微确认追加=${sync.addedCount} 跳过60111=${wecomSkipped60111.length}` +
+            (wecomSkipped60111.length ? ` (${wecomSkipped60111.join(',')})` : '')
+        )
+      }
+    } catch (wecomErr) {
+      try {
+        await presalesVideoGroupDealService.rollbackDealConsume(prisma, deal)
+      } catch (rbErr) {
+        logger.error('[presales-video] 企微失败后发牌回滚异常:', rbErr && rbErr.message)
+      }
+      throw wecomErr
     }
+
+    const auditResult = await prisma.$transaction(async (tx) => {
+      if (isNew && leadKey) {
+        await upsertLeadChatRecord(tx, leadKey, cid, chatName)
+      }
+      return presalesVideoPushMemberService.writePushEventAndMembers(tx, {
+        transcriptionId,
+        leadKey,
+        chatid: cid,
+        isNewChat: isNew,
+        memberCtx,
+        deal,
+        wecomSkipped60111,
+        pushedAt: pushMoment
+      })
+    }, TX_OPTS)
+
+    chatid = cid
+    reusedExistingChat = !isNew
+    pushEventId = auditResult.pushEventId
+    if (leadKey && chatid) {
+      await syncLeadChatToJson(leadKey, chatid, chatName)
+    }
+  } catch (e) {
+    if (e && e.message && e.message.includes('presales_video_group')) {
+      throw new Error(
+        `发牌/审计表未就绪，请先执行迁移：online-ppt-backend/prisma/migrations/manual_presales_video_group_deck.sql（${e.message}）`
+      )
+    }
+    throw e
+  }
+
+  if (reusedExistingChat === false && leadKey) {
     const xsbh = String((report && report.lead_code) || (report && report.lead_id) || '').trim()
     if (xsbh) {
       try {
@@ -1147,26 +1240,9 @@ async function pushPresalesVideoToWecomAppChat(ctx) {
     } else {
       logger.info(`[presales-video] saveClueChatGroup 跳过：未找到 xsbh（lead_code/lead_id） chatId=${chatid}`)
     }
-  } else {
-    reusedExistingChat = true
-    /** 复用线索已有群时，必须把本次推送名单同步进会话，否则新 userid 收不到群内消息 */
-    try {
-      const sync = await wecomAppChatApi.updateAppChatAddMembers(chatid, userIds)
-      const skip = sync.skipped60111 || []
-      logger.info(
-        `[presales-video] 复用群成员已同步 chatid=${chatid} 列表=${userIds.length}人 企微确认追加=${sync.addedCount} 跳过60111=${skip.length}` +
-          (skip.length ? ` (${skip.join(',')})` : '')
-      )
-    } catch (e) {
-      logger.error(
-        `[presales-video] 复用群追加成员失败 chatid=${chatid}:`,
-        e && e.message
-      )
-      throw e
-    }
   }
 
-  const pushMoment = new Date()
+  const tr = memberCtx.transcription
   const reserve4Stamp = `wecom_appchat:${chatid}@${pushMoment.toISOString()}`.slice(0, 500)
   try {
     await prisma.presales_video_tasks.updateMany({
@@ -1311,6 +1387,17 @@ async function pushPresalesVideoToWecomAppChat(ctx) {
     leadKey: leadKey || null,
     reportMatched: Boolean(report),
     userCount: userIds.length,
+    pushEventId,
+    pushSource: memberCtx && memberCtx.pushSource,
+    deal: deal
+      ? {
+          dealRound: deal.dealRound,
+          dealStep: deal.dealStep,
+          dealSize: deal.dealSize,
+          fixedDealtIds: deal.fixedDealtIds
+        }
+      : null,
+    associationUserIds: memberCtx ? memberCtx.associationUserIds : [],
     videoPushedAsMedia: false,
     videoPushedAsCard
   }
@@ -1437,6 +1524,47 @@ async function sendPresalesVideoCardToRxkfOnly(ctx) {
   }
 }
 
+async function getPushMembersForTranscription(prisma, transcriptionId) {
+  const tid = String(transcriptionId || '').trim()
+  if (!tid) return null
+  try {
+    const event = await prisma.presales_video_push_events.findFirst({
+      where: { transcription_id: tid },
+      orderBy: { pushed_at: 'desc' },
+      include: { members: true }
+    })
+    if (!event) return null
+    return {
+      pushEventId: event.id,
+      transcriptionId: event.transcription_id,
+      leadKey: event.lead_key,
+      chatid: event.chatid,
+      pushSource: event.push_source,
+      pushedAt: event.pushed_at,
+      deal: {
+        dealRound: event.deal_round,
+        dealStep: event.deal_step,
+        dealSize: event.deal_size,
+        fixedDealtIds: presalesVideoGroupDealService.parseJsonArray(event.fixed_dealt_ids),
+        dealRoundId: event.deal_round_id
+      },
+      associationUserIds: presalesVideoGroupDealService.parseJsonArray(event.association_user_ids),
+      submittedUserIds: presalesVideoGroupDealService.parseJsonArray(event.submitted_user_ids),
+      members: (event.members || []).map((m) => ({
+        userId: m.user_id,
+        role: m.role,
+        inAssociation: m.in_association,
+        inSubmitted: m.in_submitted,
+        wecomAction: m.wecom_action,
+        pushedAt: m.pushed_at
+      }))
+    }
+  } catch (e) {
+    logger.warn(`[presales-video] getPushMembersForTranscription 失败: ${e && e.message}`)
+    return null
+  }
+}
+
 module.exports = {
   parseUserIds,
   resolvePushVideoUserIds,
@@ -1451,6 +1579,7 @@ module.exports = {
   getPresalesVideoPushMarkdownPreview,
   pushPresalesVideoToWecomAppChat,
   sendPresalesVideoCardToRxkfOnly,
+  getPushMembersForTranscription,
   stripMarkdownHashForWecomAnalysisBody,
   buildDefaultWecomPresalesChatName,
   getDefaultPushVideoChatNameForTranscription,

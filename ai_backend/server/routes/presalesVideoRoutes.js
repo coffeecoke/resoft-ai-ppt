@@ -37,6 +37,7 @@ const presalesVideoTaskService = require('../services/presalesVideoTaskService')
 const presalesVideoSpeakerLink = require('../services/presalesVideoSpeakerLink')
 const wecomAppChatApi = require('../services/wecomAppChatApi')
 const presalesVideoWecomPushService = require('../services/presalesVideoWecomPushService')
+const presalesVideoGroupDealService = require('../services/presalesVideoGroupDealService')
 const presalesVideoPipelineOrchestrator = require('../services/presalesVideoPipelineOrchestrator')
 const presalesVideoPurgeService = require('../services/presalesVideoPurgeService')
 const logger = require('../utils/logger')
@@ -1891,7 +1892,7 @@ router.post('/transcriptions/:id/push-report', async (req, res) => {
 
 /**
  * GET /api/presales-video/transcriptions/:id/push-video-users
- * 预览推送视频成员（自动规则：created_by 上级链 + 固定成员 + 报备 our_participants（中文名经 org_user.user_name→userid）+ rxkf01，再应用 env 排除）
+ * 预览推送视频成员：rxkf01 + 报备参与人 + 直属上级 + 发牌固定成员（peek，不消耗牌堆）
  */
 router.get('/transcriptions/:id/push-video-users', async (req, res) => {
   const { id } = req.params
@@ -1901,21 +1902,135 @@ router.get('/transcriptions/:id/push-video-users', async (req, res) => {
       transcriptionId: id,
       userIdsRaw: null
     })
+    const deal = result.deal || {}
     res.json({
       success: true,
       data: {
         source: result.source,
-        userIds: result.userIds,
-        userCount: result.userIds.length,
+        userIds: result.suggestedSubmitUserIds || result.userIds,
+        suggestedSubmitUserIds: result.suggestedSubmitUserIds || result.userIds,
+        associationUserIds: result.associationUserIds || [],
+        userCount: (result.suggestedSubmitUserIds || result.userIds).length,
         excludedUserIds: result.excludedUserIds || [],
-        fixedMembers: result.fixedMembers || []
+        fixedMembers: result.fixedMembers || [],
+        participants: result.participants || [],
+        directLeaders: result.directLeaders || [],
+        fullFixedPool: result.fullFixedPool || [],
+        deal: {
+          dealRound: deal.dealRound,
+          dealStep: deal.dealStep,
+          dealSize: deal.dealSize,
+          fixedDealtIds: deal.fixedDealtIds || [],
+          deckOrder: deal.deckOrder,
+          deckCursor: deal.deckCursor,
+          dealPattern: deal.dealPattern,
+          poolSize: deal.poolSize
+        }
       }
     })
   } catch (error) {
     logger.error('[presales-video] push-video-users 预览失败:', error)
     const msg = error.message || '获取推送成员失败'
-    const clientErr = msg.includes('不存在') || msg.includes('未配置')
+    const clientErr =
+      msg.includes('不存在') || msg.includes('未配置') || msg.includes('迁移') || msg.includes('发牌')
     res.status(clientErr ? 400 : 500).json({ success: false, error: msg })
+  }
+})
+
+/**
+ * GET /api/presales-video/transcriptions/:id/push-members
+ * 查询该转录最近一次 push 的关联人员与发牌快照
+ */
+router.get('/transcriptions/:id/push-members', async (req, res) => {
+  const { id } = req.params
+  try {
+    const data = await presalesVideoWecomPushService.getPushMembersForTranscription(prisma, id)
+    if (!data) {
+      return res.status(404).json({ success: false, error: '暂无 push 记录' })
+    }
+    res.json({ success: true, data })
+  } catch (error) {
+    logger.error('[presales-video] push-members 查询失败:', error)
+    res.status(500).json({ success: false, error: error.message || '查询失败' })
+  }
+})
+
+/**
+ * GET /api/presales-video/group-deck/current
+ * 当前发牌轮次、洗牌顺序、下一步摸牌预览
+ */
+router.get('/group-deck/current', async (req, res) => {
+  try {
+    const data = await presalesVideoGroupDealService.getCurrentDeckPublic(prisma)
+    res.json({ success: true, data })
+  } catch (error) {
+    logger.error('[presales-video] group-deck/current 失败:', error)
+    const msg = error.message || '查询失败'
+    res.status(msg.includes('迁移') || msg.includes('发牌') ? 400 : 500).json({ success: false, error: msg })
+  }
+})
+
+/**
+ * GET /api/presales-video/group-deck/rounds?page=1&pageSize=20
+ */
+router.get('/group-deck/rounds', async (req, res) => {
+  try {
+    const page = req.query.page
+    const pageSize = req.query.pageSize
+    const result = await presalesVideoGroupDealService.listDeckRounds(prisma, { page, pageSize })
+    res.json({
+      success: true,
+      data: {
+        total: result.total,
+        page: result.page,
+        pageSize: result.pageSize,
+        rows: result.rows.map((r) => ({
+          id: r.id,
+          dealRound: r.deal_round,
+          poolSize: r.pool_size,
+          fixedPool: r.fixed_pool,
+          deckOrder: r.deck_order,
+          dealPattern: r.deal_pattern,
+          status: r.status,
+          triggerReason: r.trigger_reason,
+          shuffledAt: r.shuffled_at,
+          completedAt: r.completed_at
+        }))
+      }
+    })
+  } catch (error) {
+    logger.error('[presales-video] group-deck/rounds 失败:', error)
+    res.status(500).json({ success: false, error: error.message || '查询失败' })
+  }
+})
+
+/**
+ * GET /api/presales-video/group-deck/rounds/:dealRound
+ */
+router.get('/group-deck/rounds/:dealRound', async (req, res) => {
+  try {
+    const row = await presalesVideoGroupDealService.getDeckRoundByNumber(prisma, req.params.dealRound)
+    if (!row) {
+      return res.status(404).json({ success: false, error: '轮次不存在' })
+    }
+    res.json({
+      success: true,
+      data: {
+        id: row.id,
+        dealRound: row.deal_round,
+        poolSize: row.pool_size,
+        fixedPool: row.fixed_pool,
+        deckOrder: row.deck_order,
+        dealPattern: row.deal_pattern,
+        status: row.status,
+        triggerReason: row.trigger_reason,
+        shuffledAt: row.shuffled_at,
+        completedAt: row.completed_at
+      }
+    })
+  } catch (error) {
+    logger.error('[presales-video] group-deck/round 失败:', error)
+    res.status(500).json({ success: false, error: error.message || '查询失败' })
   }
 })
 
@@ -1981,8 +2096,7 @@ router.get('/transcriptions/:id/push-content-preview', async (req, res) => {
  * POST /api/presales-video/transcriptions/:id/push-video
  * Body: { userIds: "userid1,userid2" } 或 { members: ["id1","id2"] }（可选）
  *       cardTitle | card_title：可选，企微文本卡片 title；不传则沿用转录音频文件名（去后缀）或「售前视频」。
- * 未传 userIds 时：自动按 created_by 上级链 + 固定成员 + 匹配到的报备 our_participants（姓名→org_user.user_id）+ rxkf01。
- * 传入 userIds 时：以 Body 名单为准，不再并入固定成员/rxkf01（你可从预览里删掉固定成员）；仍应用 env PRESALES_VIDEO_GROUP_EXCLUDE_USERIDS。
+ * 未传 userIds 时：自动按「rxkf01 + 全部固定成员 + 报备参与人 + 直属上级」建群/同步；发牌结果仅写入审计。
  * chatName | group_name | groupName：可选，仅在新创建群发会话时使用该名称；不传则自动「线索/客户名或文件名-售前分析」。
  * clueMarkdown / reportMarkdown：可选；若传入则以传入为准（与弹窗预览编辑一致）；不传则服务端按报备自动生成；均以 msgtype=text 发送。
  * reportAnalysisMarkdown：可选；音频时长 < PRESALES_VIDEO_REPORT_DURATION_SPLIT_SEC（默认 600s）时，在报备摘要之后再单独发一条或多条 text；未传时服务端短音频仍会尝试从 md/库读取。

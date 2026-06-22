@@ -1,5 +1,6 @@
 {
-  "pollingInterval": 300000,
-  "maxConcurrent": 1
+  "scanDirectory": "F:\\利率报备",
+  "pollingInterval": 120000,
+  "maxConcurrent": 1,
+  "autoStartEnabled": false
 }
-

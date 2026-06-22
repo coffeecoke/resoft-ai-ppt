@@ -1993,25 +1993,18 @@ ${JSON.stringify(speakerRoles, null, 2)}
       logger.warn(`${batchInfo}⚠️ 模型配置的 max_tokens (${configuredMaxTokens}) 超过了建议限制 (${MAX_TOKENS_LIMIT})，已自动调整为 ${actualMaxTokens}`);
     }
 
-    logger.info(`${batchInfo}🚀 开始调用AI服务进行问答对提取...`);
-    
-    // ✅ 输出发送给AI的内容
-    logger.info(`${batchInfo}📤 ========== 发送给AI的内容 ==========`);
-    // System Prompt只在第一批或单批时输出（通常较长且固定）
-    if (!options.batchContext || options.batchContext.batchIndex === 0) {
-      logger.info(`${batchInfo}📤 System Prompt (${systemPrompt.length} 字符):`);
-      logger.info(`\n${systemPrompt}\n`);
-    }
-    // User Message每次都输出完整内容
-    logger.info(`${batchInfo}📤 User Message (${userMessage.length} 字符):`);
-    logger.info(`\n${userMessage}\n`);
-    logger.info(`${batchInfo}📤 ========================================`);
+    logger.info(`${batchInfo}🚀 调用 AI 提取问答对（${filteredDialogues.length} 条对话）...`);
+    logger.debug(`${batchInfo}📤 System Prompt (${systemPrompt.length} 字符)`);
+    logger.debug(`${batchInfo}📤 User Message (${userMessage.length} 字符)`);
+
+    const batchTimeoutMs = parseInt(process.env.QA_BATCH_AI_TIMEOUT_MS || '300000', 10) || 300000;
 
     const aiResponse = await client.chat.completions.create({
       model: actualModelName,
       messages,
       temperature: modelConfig.temperature || 0.7,
       max_tokens: actualMaxTokens,
+      timeout: batchTimeoutMs,
     });
 
     const content = aiResponse.choices[0]?.message?.content?.trim() || '';
@@ -2020,12 +2013,8 @@ ${JSON.stringify(speakerRoles, null, 2)}
       throw new Error('AI返回内容为空');
     }
 
-    // ✅ 输出AI返回的完整内容
-    logger.info(`${batchInfo}📥 ========== AI返回的内容 ==========`);
-    logger.info(`${batchInfo}📥 返回内容长度: ${content.length} 字符`);
-    logger.info(`${batchInfo}📥 完整返回内容:`);
-    logger.info(`\n${content}\n`);
-    logger.info(`${batchInfo}📥 =====================================`);
+    logger.info(`${batchInfo}📥 AI 返回 ${content.length} 字符，耗时 ${Date.now() - batchStartTime}ms`);
+    logger.debug(`${batchInfo}📥 AI 完整返回:\n${content}`);
 
     // 解析JSON数组格式
     let qaPairs = [];
@@ -2281,12 +2270,30 @@ ${JSON.stringify(speakerRoles, null, 2)}
       }
       
       logger.info(`📊 开始处理问答对提取: 总数=${totalDialogues}条, 总字符数=${totalChars}, 每批最大=${MAX_CHARS_PER_BATCH}字符或${MAX_DIALOGUES_PER_BATCH}条对话`);
-      logger.info(`📋 模型配置信息: 代码=${modelConfig.code}, 实际调用模型=${modelConfig.model_name || modelConfig.code}`);
-      logger.info(`📋 提供方=${modelConfig.provider}, API地址=${modelConfig.api_url}`);
+      logger.info(`📋 模型: ${modelConfig.name} (${modelConfig.model_name || modelConfig.code}) | 提供方=${modelConfig.provider}`);
+
+      const emitBatchProgress = (payload) => {
+        if (typeof options.onBatchProgress === 'function') {
+          options.onBatchProgress(payload);
+        }
+      };
+
+      const emitExtractStart = (totalBatches) => {
+        if (typeof options.onExtractStart === 'function') {
+          options.onExtractStart({
+            totalDialogues,
+            totalChars,
+            totalBatches,
+            modelName: modelConfig.name,
+            modelCode: modelConfig.code,
+          });
+        }
+      };
       
       // 如果总字符数不超过限制，直接处理
       if (totalChars <= MAX_CHARS_PER_BATCH) {
-        logger.info(`📦 总字符数较少（${totalChars}字符 ≤ ${MAX_CHARS_PER_BATCH}字符），直接处理，不分批`);
+        logger.info(`📦 单批处理（${totalChars} 字符，${totalDialogues} 条对话）`);
+        emitExtractStart(1);
         
         // ✅ 检查是否所有对话都是同一说话人
         const speakers = [...new Set(dialogues.map(d => d.speaker).filter(Boolean))];
@@ -2307,7 +2314,15 @@ ${JSON.stringify(speakerRoles, null, 2)}
           };
         }
         
+        emitBatchProgress({ phase: 'start', batchIndex: 0, totalBatches: 1, dialogueCount: dialogues.length, batchChars: totalChars });
         const batchResult = await this.processQABatch(dialogues, speakerRoles, systemPrompt, modelConfig, options);
+        emitBatchProgress({
+          phase: 'done',
+          batchIndex: 0,
+          totalBatches: 1,
+          qaPairCount: batchResult.qaPairs?.length || 0,
+          processingTimeMs: batchResult.processingTime || 0,
+        });
         
         return {
           success: true,
@@ -2360,7 +2375,8 @@ ${JSON.stringify(speakerRoles, null, 2)}
       }
       
       const totalBatches = batches.length;
-      logger.info(`📦 已分成 ${totalBatches} 批，将逐批处理`);
+      logger.info(`📦 已分成 ${totalBatches} 批，将逐批串行调用 AI`);
+      emitExtractStart(totalBatches);
       
       // 逐批处理
       for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
@@ -2385,7 +2401,15 @@ ${JSON.stringify(speakerRoles, null, 2)}
           // ✅ 检查是否所有对话都是同一说话人
           const batchSpeakers = [...new Set(batch.map(d => d.speaker).filter(Boolean))];
           if (batchSpeakers.length === 1) {
-            logger.info(`⏭️  同一说话人不需提取（说话人: ${batchSpeakers[0]}）`);
+            logger.info(`⏭️  第 ${batchIndex + 1}/${totalBatches} 批跳过（同一说话人: ${batchSpeakers[0]}）`);
+            emitBatchProgress({
+              phase: 'skip',
+              batchIndex,
+              totalBatches,
+              dialogueCount: batch.length,
+              batchChars,
+              reason: '同一说话人',
+            });
             
             // 跳过AI调用，返回空结果（格式与processQABatch一致）
             const batchResult = {
@@ -2408,6 +2432,14 @@ ${JSON.stringify(speakerRoles, null, 2)}
             continue; // 跳过当前批次，继续下一批（循环最后有统一的延迟逻辑）
           }
           
+          emitBatchProgress({
+            phase: 'start',
+            batchIndex,
+            totalBatches,
+            dialogueCount: batch.length,
+            batchChars,
+          });
+
           const batchResult = await this.processQABatch(batch, speakerRoles, systemPrompt, modelConfig, {
             ...options,
             batchContext: {
@@ -2420,7 +2452,14 @@ ${JSON.stringify(speakerRoles, null, 2)}
           // 合并结果
           if (batchResult && batchResult.qaPairs && Array.isArray(batchResult.qaPairs)) {
             allQAPairs.push(...batchResult.qaPairs);
-            logger.info(`✅ 第 ${batchIndex + 1}/${totalBatches} 批提取完成: ${batchResult.qaPairs.length} 个问答对`);
+            logger.info(`✅ 第 ${batchIndex + 1}/${totalBatches} 批完成: ${batchResult.qaPairs.length} 个问答对, 耗时 ${batchResult.processingTime || 0}ms`);
+            emitBatchProgress({
+              phase: 'done',
+              batchIndex,
+              totalBatches,
+              qaPairCount: batchResult.qaPairs.length,
+              processingTimeMs: batchResult.processingTime || 0,
+            });
           }
           
           // 累计处理时间
@@ -2430,6 +2469,14 @@ ${JSON.stringify(speakerRoles, null, 2)}
         } catch (batchError) {
           logger.error(`❌ 第 ${batchIndex + 1}/${totalBatches} 批处理失败:`, batchError.message);
           logger.error(`📋 失败批次: ${batch.length}条对话，${batchChars}字符`);
+          emitBatchProgress({
+            phase: 'error',
+            batchIndex,
+            totalBatches,
+            dialogueCount: batch.length,
+            batchChars,
+            error: batchError.message,
+          });
           
           // 批次处理失败，跳过该批次，继续处理下一批
           logger.warn(`⚠️ 跳过该批次，继续处理下一批`);
@@ -2449,16 +2496,7 @@ ${JSON.stringify(speakerRoles, null, 2)}
 
       // ✅ 调试：输出合并后的第一个问答对的字段（检查数据是否正确）
       if (allQAPairs.length > 0) {
-        logger.info(`🔍 ========== 合并后的问答对数据（第一个） ==========`);
-        logger.info(`📋 完整数据:`, JSON.stringify(allQAPairs[0], null, 2));
-        logger.info(`   - time_range: ${allQAPairs[0].time_range || '(null)'}`);
-        logger.info(`   - time_range1: ${allQAPairs[0].time_range1 || '(null)'}`);
-        logger.info(`   - time_range2: ${allQAPairs[0].time_range2 || '(null)'}`);
-        logger.info(`   - question_speaker: ${allQAPairs[0].question_speaker || '(null)'}`);
-        logger.info(`   - answer_speaker: ${allQAPairs[0].answer_speaker || '(null)'}`);
-        logger.info(`   - question: ${allQAPairs[0].question ? allQAPairs[0].question.substring(0, 50) + '...' : '(null)'}`);
-        logger.info(`   - answer: ${allQAPairs[0].answer ? allQAPairs[0].answer.substring(0, 50) + '...' : '(null)'}`);
-        logger.info(`==================================================`);
+        logger.debug(`🔍 合并后首个问答对: ${JSON.stringify(allQAPairs[0], null, 2)}`);
       }
 
       return {

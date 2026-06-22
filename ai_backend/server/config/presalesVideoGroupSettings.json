@@ -1,29 +1,34 @@
 {
   "fixedMembers": [
     "rxkf01",
-    "shenqiao",
-    "zhangying02"
+    "caokexin",
+    "suchenglong",
+    "fuzhaotian",
+    "guandanghai",
+    "zhangying02",
+    "zhaoqian01",
+    "tanghuan",
+    "zhaolingling",
+    "guoxiaotong",
+    "zhaomengxun",
+    "zhengyi",
+    "shenqiao"
   ],
   "leadChats": {
-    "lead_name:渤海银行应收账款改造1": {
-      "chatid": "wrMg8-CQAAnRbajmB7bk_45D4QHMstEg",
-      "name": "渤海银行应收账款改造-售前分析",
-      "updatedAt": "2026-04-23T09:47:52.945Z"
-    },
-    "lead_name:渤海银行应收账款改造": {
-      "chatid": "wrMg8-CQAApqyd7eXSbNZzA7HC_ZaPoQ",
-      "name": "渤海银行应收账款改造-售前分析",
-      "updatedAt": "2026-04-23T12:30:24.272Z"
-    },
     "lead_name:北银消费OA系统标签隐藏需求": {
       "chatid": "wrMg8-CQAAPLAKVXtpyP5a7-Lvrs3bhg",
-      "name": "【升级】北银消费OA系统标签隐藏需求-售前分析",
-      "updatedAt": "2026-05-15T11:00:56.445Z"
+      "name": "测试不需要关注【升级】北银消费OA系统标签隐藏需求-售前分析",
+      "updatedAt": "2026-06-11T07:35:33.221Z"
     },
     "lead_name:东方国际财务数据资产管理平台": {
       "chatid": "wrMg8-CQAA3JziGdGyENiiOYiuZy_yFw",
       "name": "【新品】东方国际财务数据资产管理平台-售前分析",
       "updatedAt": "2026-05-20T06:48:40.583Z"
+    },
+    "lead_name:吉致汽车金融一表通产品建设": {
+      "chatid": "wrMg8-CQAAhDy4-Piqd-C-c-KXQ2IFtg",
+      "name": "测试不需要关注【新品】吉致汽车金融一表通产品建设-售前分析",
+      "updatedAt": "2026-06-11T07:17:17.402Z"
     }
   }
 }

@@ -911,7 +911,7 @@
       </div>
       <div class="dialog-body">
         <p class="pv-push-video-hint">
-          填写企业微信成员 <strong>userid</strong>（与通讯录一致），英文逗号分隔，<strong>至少 2 人</strong>（含群主）。系统将创建「应用群发会话」、推送与转录客户名匹配的<strong>最近一条交流报备</strong>摘要，以及库中的<strong>视频链接/路径</strong>（<code>video_address</code>）。
+          填写企业微信成员 <strong>userid</strong>（英文逗号分隔）。<strong>新建群</strong>时会拉入：全部固定成员 + 交流参与人 + 直属上级 + rxkf01。复用群时同步名单内尚未在群的人。
         </p>
         <div class="pv-push-video-field" style="margin-bottom: 12px;">
           <label for="pv-push-video-card-title">卡片名称（企微文本卡片标题）</label>
@@ -941,6 +941,13 @@
             仅<strong>首次为该线索创建</strong>群发会话时使用；名称最长约 50 字（超长由服务端截断）。复用已有群时<strong>不会改名</strong>。
           </p>
         </div>
+        <p
+          id="pv-push-deal-members-note"
+          class="pv-push-video-hint"
+          style="margin-bottom: 10px; padding: 8px 10px; border-radius: 6px; background: rgba(59, 130, 246, 0.08);"
+        >
+          <strong>备注：</strong><span id="pv-push-deal-members-text">正在加载此轮发牌人员…</span>
+        </p>
         <label for="pv-push-video-users" class="sr-only">推送人员名单</label>
         <textarea
           id="pv-push-video-users"

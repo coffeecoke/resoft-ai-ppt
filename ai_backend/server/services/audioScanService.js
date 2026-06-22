@@ -149,34 +149,71 @@ class AudioScanService {
   /**
    * 批量检查文件转录状态
    */
+  /**
+   * 从多条同 original_file_name 记录中取最优一条（目录扫描展示用）
+   */
+  _pickBestTranscriptionRecord(records) {
+    if (!records || records.length === 0) return null;
+    if (records.length === 1) return records[0];
+    return records.reduce((best, cur) => {
+      const bestAt = new Date(best.created_at).getTime();
+      const curAt = new Date(cur.created_at).getTime();
+      if (curAt !== bestAt) return curAt > bestAt ? cur : best;
+      if (cur.status === 'completed' && best.status !== 'completed') return cur;
+      return best;
+    });
+  }
+
   async checkFilesStatus(files) {
     try {
       const filePaths = files.map(f => f.filePath);
-      
-      const transcriptions = await prisma.transcriptions.findMany({
-        where: {
-          audio_file_path: {
-            in: filePaths
-          }
-        },
-        select: {
-          audio_file_path: true,
-          id: true,
-          name: true,
-          status: true,
-          created_at: true
-        }
-      });
+      const fileNames = [...new Set(files.map(f => f.fileName))];
 
-      // 是否角色设置：以 dialogue_adjustments 表中 speaker_roles 有值为准
-      const transcriptionIds = transcriptions.map(t => t.id);
-      const adjustmentsWithRole = await prisma.dialogue_adjustments.findMany({
-        where: {
-          transcription_id: { in: transcriptionIds },
-          speaker_roles: { not: null }
-        },
-        select: { transcription_id: true, speaker_roles: true }
-      });
+      const [byPath, byOriginalName] = await Promise.all([
+        prisma.transcriptions.findMany({
+          where: { audio_file_path: { in: filePaths } },
+          select: {
+            audio_file_path: true,
+            original_file_name: true,
+            id: true,
+            name: true,
+            status: true,
+            created_at: true,
+          },
+        }),
+        prisma.transcriptions.findMany({
+          where: { original_file_name: { in: fileNames } },
+          select: {
+            audio_file_path: true,
+            original_file_name: true,
+            id: true,
+            name: true,
+            status: true,
+            created_at: true,
+          },
+        }),
+      ]);
+
+      const allRecords = [...byPath];
+      const seenIds = new Set(byPath.map(t => t.id));
+      for (const t of byOriginalName) {
+        if (!seenIds.has(t.id)) {
+          seenIds.add(t.id);
+          allRecords.push(t);
+        }
+      }
+
+      const transcriptionIds = allRecords.map(t => t.id);
+      const adjustmentsWithRole = transcriptionIds.length
+        ? await prisma.dialogue_adjustments.findMany({
+            where: {
+              transcription_id: { in: transcriptionIds },
+              speaker_roles: { not: null },
+            },
+            select: { transcription_id: true, speaker_roles: true },
+          })
+        : [];
+
       const transcriptionIdsWithRoleSet = new Set();
       adjustmentsWithRole.forEach(a => {
         const roleJson = a.speaker_roles ? String(a.speaker_roles).trim() : '';
@@ -185,22 +222,38 @@ class AudioScanService {
         }
       });
 
-      // 创建映射表（是否转录、是否进行角色设置）
-      const statusMap = {};
-      transcriptions.forEach(t => {
-        statusMap[t.audio_file_path] = {
-          transcribed: true,
-          transcriptionId: t.id,
-          transcriptionName: t.name,
-          status: t.status,
-          transcribedAt: t.created_at,
-          hasRoleSet: transcriptionIdsWithRoleSet.has(t.id)
-        };
+      const toStatusEntry = (t) => ({
+        transcribed: true,
+        transcriptionId: t.id,
+        transcriptionName: t.name,
+        status: t.status,
+        transcribedAt: t.created_at,
+        hasRoleSet: transcriptionIdsWithRoleSet.has(t.id),
       });
 
-      // 为每个文件添加状态（未转录的默认未设角色）
+      const statusByPath = {};
+      const byPathGroups = {};
+      for (const t of allRecords) {
+        if (!byPathGroups[t.audio_file_path]) byPathGroups[t.audio_file_path] = [];
+        byPathGroups[t.audio_file_path].push(t);
+      }
+      for (const [p, group] of Object.entries(byPathGroups)) {
+        statusByPath[p] = toStatusEntry(this._pickBestTranscriptionRecord(group));
+      }
+
+      const statusByOriginalName = {};
+      const byNameGroups = {};
+      for (const t of allRecords) {
+        if (!byNameGroups[t.original_file_name]) byNameGroups[t.original_file_name] = [];
+        byNameGroups[t.original_file_name].push(t);
+      }
+      for (const [name, group] of Object.entries(byNameGroups)) {
+        statusByOriginalName[name] = toStatusEntry(this._pickBestTranscriptionRecord(group));
+      }
+
       return files.map(file => {
-        const status = statusMap[file.filePath];
+        const status =
+          statusByPath[file.filePath] || statusByOriginalName[file.fileName];
         if (!status) {
           return { ...file, transcribed: false, hasRoleSet: false };
         }
