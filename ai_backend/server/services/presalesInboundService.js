@@ -211,7 +211,8 @@ async function runReportAndTranscribe({ reportPayload, audioRemotePath, original
     fullText: result.fullText,
     speakerCount: result.speakerCount,
     customerName: cust,
-    createdBy: createdBy != null ? String(createdBy) : null
+    createdBy: createdBy != null ? String(createdBy) : null,
+    reportId: reportId || null
   })
 
   const relAudio = toRelativePath(localAudioPath)

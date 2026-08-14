@@ -402,7 +402,7 @@ function pvRenderTable() {
             <button type="button" class="btn btn-sm pv-act-secondary" title="先打开可编辑报告正文，保存后再调用推送接口（异步 md 或旧版 JSON）" onclick="pvPushReport('${row.id}')">推送报告</button>
             <button type="button" class="btn btn-sm pv-act-secondary" title="填写企微 userid 建应用群发会话，推送报备摘要与视频" onclick="pvOpenPushVideoDialog('${row.id}')">推送视频</button>
             <button type="button" class="btn btn-sm btn-secondary" title="服务端自动串联：角色确认→推送对话→提交工作流→（等回调）→推送报告→推送视频；可不关页面" onclick="pvOpenPipelineDialog('${row.id}')">服务端流水线</button>
-            <button type="button" class="btn btn-sm btn-outline pv-act-delete" title="删除本条转录及流水线数据；不删 CRM 源录音、跑批状态、问答对" onclick="pvDeleteTranscription('${row.id}')">删除</button>
+            <button type="button" class="btn btn-sm btn-outline pv-act-delete" title="删除本条转录及流水线数据；不删 CRM 源录音、问答对；跑批状态重置为待处理" onclick="pvDeleteTranscription('${row.id}')">删除</button>
           </div>
         </td>
       </tr>`
@@ -417,7 +417,7 @@ window.pvDeleteTranscription = async function (id) {
   const pipe = row && row.videoTask && row.videoTask.pipelineStatus
   const pipeHint = pipe ? `\n当前流水线：${pipe}` : ''
   const ok = window.confirm(
-    `确定删除「${name}」整条转录记录？\n\n将删除：转录主表、角色/对话调整、售前视频任务、流水线记录、本地 txt/md（若非 CRM 源路径）、视频元数据（若有）。\n不会删除：CRM 源录音文件、跑批 log_sync_status、问答对 concerns、交流报备/场次。${pipeHint}\n\n此操作不可恢复。`
+    `确定删除「${name}」整条转录记录？\n\n将删除：转录主表、角色/对话调整、售前视频任务、流水线记录、本地 txt/md（若非 CRM 源路径）、视频元数据（若有）。\n不会删除：CRM 源录音文件、问答对 concerns、交流报备/场次。\n对应 CRM 跑批状态会重置为待处理，重新语音转文本后可再关联报备。${pipeHint}\n\n此操作不可恢复。`
   )
   if (!ok) return
   pvShowOverlay(true, '正在删除…')

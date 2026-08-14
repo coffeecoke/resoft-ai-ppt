@@ -910,7 +910,7 @@ router.get('/transcriptions', async (req, res) => {
 /**
  * DELETE /api/presales-video/transcriptions/:id
  * 删除整条转录及售前视频流水线衍生数据（级联 presales_video_tasks、pipeline_runs、dialogue_adjustments、presales_analysis_results）。
- * 不删：CRM 源文件、log_sync_status、concerns、报备/场次/产品。
+ * 不删：CRM 源文件、concerns、报备/场次/产品。对应 crm_video_batch 日志会重置为 pending。
  */
 router.delete('/transcriptions/:id', async (req, res) => {
   try {

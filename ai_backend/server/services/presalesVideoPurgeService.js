@@ -1,6 +1,7 @@
 /**
  * 售前视频生成页 · 删除整条转录及其流水线衍生数据。
- * 不删：CRM 源文件、log_sync_status、concerns、报备/场次/产品、crm_report_file 行。
+ * 不删：CRM 源文件、concerns、报备/场次/产品、crm_report_file 行。
+ * 会把对应 crm_video_batch 的 log_sync_status 重置为 pending，便于重新转录后再次关联报备。
  */
 
 const fs = require('fs/promises')
@@ -46,6 +47,111 @@ async function safeUnlink(filePath, crmPathSet, deletedFiles, skippedFiles) {
     if (e && e.code === 'ENOENT') return
     logger.warn(`[presales-video-purge] 删除文件失败 path=${n}: ${e && e.message}`)
   }
+}
+
+const CRM_VIDEO_SYNC_TYPE = 'crm_video_batch'
+
+function crmVideoBatchId(crmId) {
+  return `crm_video_${String(crmId)}`
+}
+
+function parseSyncParams(raw) {
+  if (!raw) return {}
+  if (typeof raw === 'object' && !Array.isArray(raw)) return { ...raw }
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw)
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed
+    } catch {
+      return {}
+    }
+  }
+  return {}
+}
+
+/**
+ * 删除转录后，把同一 CRM 文件的视频跑批状态打回 pending。
+ * 只重置：本条转录 ID、源文件完整路径、或全库唯一文件名 对应的日志。
+ * 若日志仍指向另一条存活转录，不重置（避免误伤未删除的正式记录）。
+ */
+async function resetCrmVideoBatchAfterPurge(tr) {
+  const tid = String((tr && tr.id) || '').trim()
+  const audioPath = String((tr && tr.audio_file_path) || '').trim()
+  const fileName = String((tr && tr.original_file_name) || '').trim()
+
+  const batchIds = new Set()
+  if (audioPath) {
+    const byPath = await prisma.crm_report_file.findMany({
+      where: { local_file_path: audioPath },
+      select: { id: true }
+    })
+    for (const f of byPath) batchIds.add(crmVideoBatchId(f.id))
+  }
+  if (fileName) {
+    const byName = await prisma.crm_report_file.findMany({
+      where: { original_file_name: fileName },
+      select: { id: true },
+      take: 2
+    })
+    if (byName.length === 1) {
+      batchIds.add(crmVideoBatchId(byName[0].id))
+    }
+  }
+
+  const logOr = []
+  if (batchIds.size > 0) logOr.push({ batch_id: { in: [...batchIds] } })
+  if (tid) {
+    logOr.push({
+      sync_params: {
+        path: ['transcription_id'],
+        equals: tid
+      }
+    })
+  }
+  if (logOr.length === 0) return 0
+
+  let rows = []
+  try {
+    rows = await prisma.log_sync_status.findMany({
+      where: { sync_type: CRM_VIDEO_SYNC_TYPE, OR: logOr }
+    })
+  } catch (e) {
+    logger.warn(`[presales-video-purge] 按 JSON 查跑批日志失败，改按 batch_id: ${e && e.message}`)
+    if (batchIds.size === 0) return 0
+    rows = await prisma.log_sync_status.findMany({
+      where: { sync_type: CRM_VIDEO_SYNC_TYPE, batch_id: { in: [...batchIds] } }
+    })
+  }
+
+  let resetCount = 0
+  for (const row of rows) {
+    const params = parseSyncParams(row.sync_params)
+    const oldTid = String(params.transcription_id || '').trim()
+    if (oldTid && oldTid !== tid) {
+      const live = await prisma.transcriptions.findUnique({
+        where: { id: oldTid },
+        select: { id: true }
+      })
+      if (live) {
+        logger.info(
+          `[presales-video-purge] 跳过重置 ${row.batch_id}：仍指向存活转录 ${oldTid}`
+        )
+        continue
+      }
+    }
+    delete params.transcription_id
+    await prisma.log_sync_status.update({
+      where: { batch_id: row.batch_id },
+      data: {
+        status: 'pending',
+        sync_params: params,
+        error_message: null,
+        end_time: null
+      }
+    })
+    resetCount += 1
+  }
+  return resetCount
 }
 
 async function supersedeActivePipelineRuns(transcriptionId) {
@@ -129,8 +235,15 @@ async function purgeTranscription(transcriptionId) {
 
   await prisma.transcriptions.delete({ where: { id } })
 
+  let crmVideoBatchReset = 0
+  try {
+    crmVideoBatchReset = await resetCrmVideoBatchAfterPurge(tr)
+  } catch (e) {
+    logger.warn(`[presales-video-purge] 重置 crm_video_batch 失败 transcription=${id}:`, e && e.message)
+  }
+
   logger.info(
-    `[presales-video-purge] 已删除转录 transcription=${id} files=${deletedFiles.length} skipped=${skippedFiles.length} pipelineSuperseded=${pipelineRunsSuperseded} psv=${psvResult.psvDeleted}`
+    `[presales-video-purge] 已删除转录 transcription=${id} files=${deletedFiles.length} skipped=${skippedFiles.length} pipelineSuperseded=${pipelineRunsSuperseded} psv=${psvResult.psvDeleted} crmBatchReset=${crmVideoBatchReset}`
   )
 
   return {
@@ -139,12 +252,14 @@ async function purgeTranscription(transcriptionId) {
     skippedFiles,
     pipelineRunsSuperseded,
     psvVideoInfoDeleted: psvResult.psvDeleted,
-    psvWatchHistoryDeleted: psvResult.watchDeleted
+    psvWatchHistoryDeleted: psvResult.watchDeleted,
+    crmVideoBatchReset
   }
 }
 
 module.exports = {
   purgeTranscription,
+  resetCrmVideoBatchAfterPurge,
   isCrmSourcePath,
   loadCrmLocalPathSet
 }

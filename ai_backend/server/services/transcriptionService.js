@@ -15,6 +15,125 @@ const {
 // ✅ 使用正确的 Prisma Client 导入方式
 const prisma = require('../utils/prisma');
 
+const CRM_VIDEO_SYNC_TYPE = 'crm_video_batch';
+
+function crmVideoBatchId(crmId) {
+  return `crm_video_${String(crmId)}`;
+}
+
+/**
+ * 语音转文本未传 reportId 时，按源文件反查 crm_report_file。
+ * 路径精确匹配优先；文件名仅当全库只有 1 条同名时才用，避免挂错报备。
+ */
+async function findCrmReportFileForSource(audioFilePath, originalFileName) {
+  const pathVal = audioFilePath != null ? String(audioFilePath).trim() : '';
+  const nameVal = originalFileName != null ? String(originalFileName).trim() : '';
+  if (pathVal) {
+    const byPath = await prisma.crm_report_file.findFirst({
+      where: { local_file_path: pathVal },
+      orderBy: { created_at: 'desc' }
+    });
+    if (byPath) return byPath;
+  }
+  if (!nameVal) return null;
+  const byName = await prisma.crm_report_file.findMany({
+    where: { original_file_name: nameVal },
+    orderBy: { created_at: 'desc' },
+    take: 2
+  });
+  if (byName.length === 1) return byName[0];
+  return null;
+}
+
+async function fillPayloadFromCrmReport(payload, data) {
+  if (payload.report_id) return null;
+  const crm = await findCrmReportFileForSource(data.audioFilePath, data.originalFileName);
+  if (!crm || !crm.report_id) return null;
+
+  payload.report_id = String(crm.report_id).slice(0, 50);
+  if (!payload.created_by && crm.from_user) {
+    payload.created_by = String(crm.from_user).trim().slice(0, 50);
+  }
+  if (!payload.customer_name) {
+    const report = await prisma.communication_reports.findUnique({
+      where: { id: String(crm.report_id) },
+      select: { customer_name: true }
+    });
+    if (report && report.customer_name) {
+      payload.customer_name = String(report.customer_name).slice(0, 255);
+    }
+  }
+  return crm;
+}
+
+function parseCrmVideoSyncParams(raw) {
+  if (!raw) return {};
+  if (typeof raw === 'object' && !Array.isArray(raw)) return { ...raw };
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
+/** 语音转文本已挂上报备时，把跑批日志写成 transcribed，避免视频跑批再转一遍出重复记录 */
+async function markCrmVideoBatchTranscribed(crm, transcriptionId) {
+  const batchId = crmVideoBatchId(crm.id);
+  const newTid = String(transcriptionId);
+  const existing = await prisma.log_sync_status.findUnique({
+    where: { batch_id: batchId }
+  });
+  if (existing) {
+    const st = String(existing.status || '');
+    const oldTid = String(parseCrmVideoSyncParams(existing.sync_params).transcription_id || '').trim();
+    const protect =
+      st === 'confirming' ||
+      st === 'completed' ||
+      (st === 'transcribed' && oldTid && oldTid !== newTid);
+    if (protect && oldTid && oldTid !== newTid) {
+      const live = await prisma.transcriptions.findUnique({
+        where: { id: oldTid },
+        select: { id: true }
+      });
+      if (live) {
+        console.warn(
+          `[transcription] 跳过回写 crm_video_batch：${batchId} 仍指向存活转录 ${oldTid} status=${st}`
+        );
+        return;
+      }
+    }
+  }
+
+  const syncParams = {
+    crm_report_file_id: String(crm.id),
+    report_id: crm.report_id || null,
+    from_user: crm.from_user || null,
+    local_file_path: crm.local_file_path || null,
+    transcription_id: newTid
+  };
+  await prisma.log_sync_status.upsert({
+    where: { batch_id: batchId },
+    create: {
+      sync_type: CRM_VIDEO_SYNC_TYPE,
+      batch_id: batchId,
+      sync_params: syncParams,
+      start_time: new Date(),
+      status: 'transcribed',
+      end_time: new Date()
+    },
+    update: {
+      status: 'transcribed',
+      sync_params: syncParams,
+      end_time: new Date(),
+      error_message: null
+    }
+  });
+}
+
 class TranscriptionService {
   constructor() {
     // Python 脚本路径（更新为新的模块化路径）
@@ -137,6 +256,13 @@ class TranscriptionService {
       updated_at: new Date()
     };
 
+    let crmRow = null;
+    try {
+      crmRow = await fillPayloadFromCrmReport(basePayload, data);
+    } catch (error) {
+      console.warn('[transcription] 反查 CRM 报备失败，继续落库:', error && error.message);
+    }
+
     let transcription;
     try {
       transcription = await prisma.transcriptions.create({ data: basePayload });
@@ -149,6 +275,15 @@ class TranscriptionService {
       const fallbackPayload = { ...basePayload };
       delete fallbackPayload.report_id;
       transcription = await prisma.transcriptions.create({ data: fallbackPayload });
+      crmRow = null;
+    }
+
+    if (crmRow && transcription && transcription.id) {
+      try {
+        await markCrmVideoBatchTranscribed(crmRow, transcription.id);
+      } catch (error) {
+        console.warn('[transcription] 回写 crm_video_batch 状态失败:', error && error.message);
+      }
     }
 
     // ✅ 转换 BigInt 为 Number，避免 JSON 序列化错误
@@ -477,29 +612,52 @@ class TranscriptionService {
    * @param {string} id - 转录记录ID
    */
   async deleteTranscription(id) {
-    // ✅ prisma 已在文件顶部导入
-    
-    // 可选：同时删除音频文件和结果文件
     const transcription = await this.getTranscriptionById(id);
-    
+    const {
+      resetCrmVideoBatchAfterPurge,
+      loadCrmLocalPathSet,
+      isCrmSourcePath
+    } = require('./presalesVideoPurgeService');
+
     if (transcription) {
       try {
-        // 删除音频文件
-        if (transcription.audio_file_path) {
-          await fs.unlink(transcription.audio_file_path).catch(() => {});
+        let crmPathSet = null;
+        try {
+          crmPathSet = await loadCrmLocalPathSet();
+        } catch (error) {
+          console.warn(
+            '[transcription] 加载 CRM 源路径失败，跳过磁盘删除以免误删源文件:',
+            error && error.message
+          );
         }
-        // 删除结果文件
-        if (transcription.result_file_path) {
-          await fs.unlink(transcription.result_file_path).catch(() => {});
+        if (crmPathSet) {
+          for (const filePath of [transcription.audio_file_path, transcription.result_file_path]) {
+            if (!filePath) continue;
+            if (isCrmSourcePath(filePath, crmPathSet)) {
+              console.warn('[transcription] 跳过删除 CRM 源文件:', filePath);
+              continue;
+            }
+            await fs.unlink(filePath).catch(() => {});
+          }
         }
       } catch (error) {
         console.error('删除文件失败:', error);
       }
     }
 
-    return await prisma.transcriptions.delete({
+    const deleted = await prisma.transcriptions.delete({
       where: { id }
     });
+
+    try {
+      await resetCrmVideoBatchAfterPurge(
+        transcription || { id, audio_file_path: null, original_file_name: null }
+      );
+    } catch (error) {
+      console.warn('[transcription] 重置 crm_video_batch 失败:', error && error.message);
+    }
+
+    return deleted;
   }
 
   /**

@@ -290,7 +290,7 @@ async function resolvePushVideoUserIds(ctx) {
 
   let report = await resolveCommunicationReportForTranscription(prisma, tr)
   if (!report) {
-    report = await findReportBySyncLog(prisma, transcriptionId)
+    report = await findReportBySyncLog(prisma, transcriptionId, tr)
   }
   if (!report) {
     report = await findLatestMatchingReport(prisma, tr)
@@ -421,25 +421,70 @@ async function findReportByKnownIds(prisma, tr) {
   return null
 }
 
-async function findReportBySyncLog(prisma, transcriptionId) {
-  const tid = String(transcriptionId || '').trim()
-  if (!tid) return null
+function parseCrmVideoSyncParams(raw) {
+  if (!raw) return null
+  if (typeof raw === 'object' && !Array.isArray(raw)) return raw
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw)
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
+function syncLogMatchesTranscription(params, tid, tr) {
+  const pTid = String((params && params.transcription_id) || '').trim()
+  if (tid && pTid && pTid === tid) return 'id'
+  if (!tr) return ''
+  const pPath = String((params && params.local_file_path) || '').trim()
+  const audio = String(tr.audio_file_path || '').trim()
+  if (pPath && audio && pPath === audio) return 'path'
+  const name = String(tr.original_file_name || tr.name || '').trim()
+  if (
+    pPath &&
+    name &&
+    (pPath.endsWith('/' + name) || pPath.endsWith('\\' + name))
+  ) {
+    return 'name'
+  }
+  return ''
+}
+
+async function findReportBySyncLog(prisma, transcriptionId, tr) {
+  const tid = String(transcriptionId || (tr && tr.id) || '').trim()
+  if (!tid && !tr) return null
   const rows = await prisma.log_sync_status.findMany({
     where: { sync_type: 'crm_video_batch' },
     orderBy: { id: 'desc' },
     take: 300,
     select: { sync_params: true }
   })
+  let nameHitReportId = ''
+  let nameHitAmbiguous = false
   for (const row of rows) {
-    const params = row && row.sync_params && typeof row.sync_params === 'object' ? row.sync_params : null
+    const params = parseCrmVideoSyncParams(row && row.sync_params)
     if (!params) continue
-    const pTid = String(params.transcription_id || '').trim()
-    if (!pTid || pTid !== tid) continue
+    const how = syncLogMatchesTranscription(params, tid, tr)
+    if (!how) continue
     const reportId = normalizeReportId(params.report_id)
-    if (!reportId) return null
-    const report = await prisma.communication_reports.findUnique({ where: { id: reportId } })
-    if (report) return report
-    return null
+    if (!reportId) {
+      if (how === 'id') return null
+      continue
+    }
+    if (how === 'id' || how === 'path') {
+      const report = await prisma.communication_reports.findUnique({ where: { id: reportId } })
+      if (report) return report
+      if (how === 'id') return null
+      continue
+    }
+    if (!nameHitReportId) nameHitReportId = reportId
+    else if (nameHitReportId !== reportId) nameHitAmbiguous = true
+  }
+  if (nameHitReportId && !nameHitAmbiguous) {
+    return prisma.communication_reports.findUnique({ where: { id: nameHitReportId } })
   }
   return null
 }
@@ -449,7 +494,7 @@ async function findReportBySyncLog(prisma, transcriptionId) {
  */
 async function resolveCommunicationReportForTranscription(prisma, tr) {
   let report = await findReportByKnownIds(prisma, tr)
-  if (!report) report = await findReportBySyncLog(prisma, tr.id)
+  if (!report) report = await findReportBySyncLog(prisma, tr && tr.id, tr)
   if (!report) report = await findLatestMatchingReport(prisma, tr)
   return report
 }
@@ -1028,7 +1073,7 @@ async function getPresalesVideoPushMarkdownPreview({ prisma, transcriptionId }) 
   if (!tr) throw new Error('转录不存在')
 
   let report = await findReportByKnownIds(prisma, tr)
-  if (!report) report = await findReportBySyncLog(prisma, transcriptionId)
+  if (!report) report = await findReportBySyncLog(prisma, transcriptionId, tr)
   if (!report) report = await findLatestMatchingReport(prisma, tr)
 
   const leadKey = presalesVideoGroupSettingsService.makeLeadKey(report)
@@ -1104,7 +1149,7 @@ async function pushPresalesVideoToWecomAppChat(ctx) {
 
   let report = await findReportByKnownIds(prisma, tr_pre)
   if (!report) {
-    report = await findReportBySyncLog(prisma, transcriptionId)
+    report = await findReportBySyncLog(prisma, transcriptionId, tr_pre)
   }
   if (!report) {
     report = await findLatestMatchingReport(prisma, tr_pre)
@@ -1442,7 +1487,7 @@ async function sendPresalesVideoCardToRxkfOnly(ctx) {
       : null
 
   let report = await findReportByKnownIds(prisma, tr)
-  if (!report) report = await findReportBySyncLog(prisma, transcriptionId)
+  if (!report) report = await findReportBySyncLog(prisma, transcriptionId, tr)
   if (!report) report = await findLatestMatchingReport(prisma, tr)
   const clueSummary = await resolveClueSummary(report)
   const cardStyle = buildWecomVideoCardStyle(
